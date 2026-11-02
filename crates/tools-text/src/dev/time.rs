@@ -255,12 +255,21 @@ pub(crate) fn parse_instant(
     if let Ok(d) = DateTime::parse_from_rfc2822(t) {
         return Ok((d.with_timezone(&Utc), "date"));
     }
+    // Explicit offsets always win over the fallback zone, with or without
+    // seconds ("2024-01-01T12:00+0200", "...12:00Z").
+    let zt = match t.strip_suffix(['Z', 'z']) {
+        Some(head) if head.contains(':') => format!("{head}+0000"),
+        _ => t.to_string(),
+    };
     for f in [
         "%Y-%m-%dT%H:%M:%S%.f%z",
         "%Y-%m-%d %H:%M:%S%.f%z",
         "%Y-%m-%d %H:%M:%S %z",
+        "%Y-%m-%dT%H:%M%z",
+        "%Y-%m-%d %H:%M%z",
+        "%Y-%m-%d %H:%M %z",
     ] {
-        if let Ok(d) = DateTime::parse_from_str(t, f) {
+        if let Ok(d) = DateTime::parse_from_str(&zt, f) {
             return Ok((d.with_timezone(&Utc), "date"));
         }
     }
@@ -726,6 +735,15 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.data["iso8601_utc"], "2023-11-14T22:13:20Z");
+        // Explicit offsets without seconds are honoured (default zone is UTC).
+        for v in [
+            "2024-01-01T12:00+0200",
+            "2024-01-01 12:00+02:00",
+            "2024-01-01T10:00Z",
+        ] {
+            let out = h.run("dev.timestamp", json!({"value": v})).await.unwrap();
+            assert_eq!(out.data["iso8601_utc"], "2024-01-01T10:00:00Z", "{v}");
+        }
         assert_eq!(out.data["local"], "2023-11-14 23:13:20");
         assert_eq!(out.data["utc_offset"], "+01:00");
         let out = h

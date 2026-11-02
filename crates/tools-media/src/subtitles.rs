@@ -153,12 +153,49 @@ fn strip_vtt_tags(text: &str) -> (String, Option<String>) {
         rest = &rest[i + j + 1..];
     }
     out.push_str(rest);
-    let out = out
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&nbsp;", " ");
-    (out, speaker)
+    (decode_char_refs(&out), speaker)
+}
+
+/// Decode WebVTT character references in one pass, so `&amp;lt;` becomes the
+/// literal `&lt;` (decoded text is never decoded again).
+fn decode_char_refs(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find('&') {
+        out.push_str(&rest[..i]);
+        let after = &rest[i + 1..];
+        let decoded = after.find(';').filter(|&e| e <= 10).and_then(|e| {
+            let name = &after[..e];
+            let c = match name {
+                "amp" => Some('&'),
+                "lt" => Some('<'),
+                "gt" => Some('>'),
+                "nbsp" => Some('\u{a0}'),
+                "lrm" => Some('\u{200e}'),
+                "rlm" => Some('\u{200f}'),
+                _ => name
+                    .strip_prefix("#x")
+                    .or_else(|| name.strip_prefix("#X"))
+                    .and_then(|h| u32::from_str_radix(h, 16).ok())
+                    .or_else(|| name.strip_prefix('#').and_then(|d| d.parse().ok()))
+                    .and_then(char::from_u32),
+            }?;
+            Some((c, e))
+        });
+        match decoded {
+            Some((c, e)) => {
+                // Keep the previous behaviour of plain spaces for &nbsp;.
+                out.push(if c == '\u{a0}' { ' ' } else { c });
+                rest = &after[e + 1..];
+            }
+            None => {
+                out.push('&');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 pub fn parse_vtt(input: &str) -> Result<Vec<Segment>, String> {
@@ -1127,6 +1164,14 @@ fn subtitles_extract() -> Arc<dyn Tool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vtt_char_refs_decode_once() {
+        let (t, _) = strip_vtt_tags(
+            "Use &amp;lt; and &amp;gt; literally &lt;b&gt; &#65;&#x42; &nbsp;x &bogus; a & b",
+        );
+        assert_eq!(t, "Use &lt; and &gt; literally <b> AB  x &bogus; a & b");
+    }
 
     const SRT: &str = "\u{feff}1\r\n00:00:01,000 --> 00:00:02,500\r\nHello <i>world</i>\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\nSecond line\r\nwith break\r\n\r\n";
 
