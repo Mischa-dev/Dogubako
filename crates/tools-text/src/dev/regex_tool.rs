@@ -60,6 +60,16 @@ impl Preview {
         }
         Ok(())
     }
+    /// Fail before appending `extra` more bytes would pass the budget.
+    fn room_for(&self, extra: usize) -> ToolResult<()> {
+        if self.s.len().saturating_add(extra) > MAX_PREVIEW_BYTES {
+            return Err(ToolError::limit(format!(
+                "the replacement preview would exceed {}",
+                human_size(MAX_PREVIEW_BYTES as u64)
+            )));
+        }
+        Ok(())
+    }
     fn push(&mut self, part: &str) -> ToolResult<()> {
         self.s.push_str(part);
         self.check()
@@ -103,6 +113,14 @@ fn regex_tester() -> Arc<dyn Tool> {
         let fancy = p.str_or("engine", "standard") == "fancy";
         let mut matches: Vec<M> = vec![];
         let names: Vec<Option<String>>;
+        // Each stored match keeps one offset pair per group; thousands of
+        // empty groups times many matches add up before any text is copied.
+        let mut stored = OutputBudget::default();
+        // `$name` / `${n}` references in the replacement: each can expand to
+        // a whole capture.
+        let dollars = p
+            .opt_str("replacement")
+            .map_or(0, |r| r.matches('$').count());
 
         let mut truncated = false;
         let replaced: Option<String> = if fancy {
@@ -132,6 +150,7 @@ fn regex_tester() -> Arc<dyn Tool> {
                     truncated = true;
                     break;
                 }
+                stored.add(c.len() * std::mem::size_of::<Option<(usize, usize)>>() + 64)?;
                 let m0 = c.get(0).unwrap();
                 matches.push(M {
                     start: m0.start(),
@@ -148,6 +167,13 @@ fn regex_tester() -> Arc<dyn Tool> {
                         let c = c.map_err(|e| ToolError::invalid("pattern", e.to_string()))?;
                         let m0 = c.get(0).unwrap();
                         out.push(&text[out.last..m0.start()])?;
+                        let widest = c
+                            .iter()
+                            .flatten()
+                            .map(|g| g.end() - g.start())
+                            .max()
+                            .unwrap_or(0);
+                        out.room_for(r.len() + dollars.saturating_mul(widest))?;
                         c.expand(r, &mut out.s);
                         out.matched(ctx, m0.end())?;
                     }
@@ -171,6 +197,7 @@ fn regex_tester() -> Arc<dyn Tool> {
                     truncated = true;
                     break;
                 }
+                stored.add(c.len() * std::mem::size_of::<Option<(usize, usize)>>() + 64)?;
                 let m0 = c.get(0).unwrap();
                 matches.push(M {
                     start: m0.start(),
@@ -186,6 +213,13 @@ fn regex_tester() -> Arc<dyn Tool> {
                     for c in re.captures_iter(text) {
                         let m0 = c.get(0).unwrap();
                         out.push(&text[out.last..m0.start()])?;
+                        let widest = c
+                            .iter()
+                            .flatten()
+                            .map(|g| g.end() - g.start())
+                            .max()
+                            .unwrap_or(0);
+                        out.room_for(r.len() + dollars.saturating_mul(widest))?;
                         c.expand(r, &mut out.s);
                         out.matched(ctx, m0.end())?;
                     }
@@ -356,6 +390,29 @@ mod tests {
                 .run(
                     "dev.regex",
                     json!({"pattern": "a", "text": text, "replacement": rep, "max_matches": 1, "engine": engine}),
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), "limit_exceeded", "{engine}");
+        }
+        // One match, but the replacement references it 100k times.
+        let one = "a".repeat(100_000);
+        let refs = "$0".repeat(100_000);
+        // Thousands of (empty) groups per match, many matches.
+        let groups = format!("{}a", "()".repeat(1000));
+        for engine in ["standard", "fancy"] {
+            let err = h
+                .run(
+                    "dev.regex",
+                    json!({"pattern": "a+", "text": one, "replacement": refs, "engine": engine}),
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), "limit_exceeded", "{engine}");
+            let err = h
+                .run(
+                    "dev.regex",
+                    json!({"pattern": groups, "text": one, "max_matches": 100000, "engine": engine}),
                 )
                 .await
                 .unwrap_err();
