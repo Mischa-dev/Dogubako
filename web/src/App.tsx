@@ -41,9 +41,10 @@ export function App() {
   useEffect(() => {
     const s = backend && asServer(backend);
     if (!s) return;
-    return s.onUnauthorized(() => {
+    const off = s.onUnauthorized(() => {
       setPhase((p) => (p.k === 'ready' && p.status.auth === 'required' ? { k: 'login', backend: p.backend, status: p.status } : p));
     });
+    return () => { off(); };
   }, [backend]);
 
   let body: React.ReactNode;

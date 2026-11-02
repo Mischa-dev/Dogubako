@@ -18,6 +18,8 @@ export interface RunHandle {
 
 export interface RunOptions {
   onUpdate?: (job: JobView) => void;
+  /** Seconds the server may hold the initial request (fast/live tools). Default 0 (stream progress). */
+  wait?: number;
 }
 
 export interface PickOptions {

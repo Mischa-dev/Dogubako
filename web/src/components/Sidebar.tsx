@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import {
-  Clock, Folder, History, House, KeyRound, LogOut, Search, Settings, Shield, Star, UserRound, Moon, Sun, ChevronsUpDown,
+  Clock, Folder, History, House, KeyRound, LogOut, Search, Settings, Shield, Star, UserRound, Moon, Sun, ChevronsUpDown, type LucideIcon,
 } from 'lucide-react';
 import { useApp } from '../lib/app';
 import { href, useRoute } from '../lib/router';
@@ -10,7 +10,7 @@ import { LogoMark } from './Logo';
 import { Kbd, Menu, MenuItem, cx, modKey } from './ui';
 
 function NavLink({ to, icon: Icon, label, active, count, onNavigate }: {
-  to: string; icon: React.ComponentType<{ size?: number; 'aria-hidden'?: boolean }>; label: string; active: boolean; count?: number; onNavigate?: () => void;
+  to: string; icon: LucideIcon; label: string; active: boolean; count?: number; onNavigate?: () => void;
 }) {
   return (
     <a href={to} className={cx('nav-link', active && 'is-active')} aria-current={active ? 'page' : undefined} onClick={onNavigate}>

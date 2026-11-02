@@ -94,7 +94,7 @@ export class HttpBackend implements Backend {
     let es: EventSource | null = null;
     let cancelled = false;
     const done = (async () => {
-      const first = await this.post<JobView>(`/tools/${encodeURIComponent(toolId)}/run`, { params, wait_seconds: 0 });
+      const first = await this.post<JobView>(`/tools/${encodeURIComponent(toolId)}/run`, { params, wait_seconds: opts.wait ?? 0 });
       jobId = first.id;
       opts.onUpdate?.(first);
       if (cancelled && !isTerminal(first.status)) {

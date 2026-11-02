@@ -5,7 +5,7 @@ import { readJson, removeKey, writeJson } from './storage';
 export class Store<T> {
   private value: T;
   private listeners = new Set<() => void>();
-  constructor(private key: string, initial: T, private validate?: (v: any) => v is T) {
+  constructor(private key: string, initial: T, validate?: (v: any) => v is T) {
     const stored = readJson<unknown>(key, undefined);
     this.value = stored !== undefined && (!validate || validate(stored)) ? (stored as T) : initial;
   }

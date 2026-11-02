@@ -1,7 +1,8 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
-const target = process.env.DOGUBAKO_API ?? 'http://127.0.0.1:8420';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const target = (globalThis as any).process?.env?.DOGUBAKO_API ?? 'http://127.0.0.1:8420';
 
 export default defineConfig({
   plugins: [react()],
