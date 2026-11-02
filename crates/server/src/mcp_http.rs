@@ -182,13 +182,17 @@ impl McpBackend for ServerBackend {
             .collect())
     }
 
-    async fn read_file(&self, file_id: &str) -> Result<(FileView, Vec<u8>), ToolError> {
+    async fn read_file(&self, file_id: &str, max: u64) -> Result<(FileView, Vec<u8>), ToolError> {
         let f = self
             .state
             .storage
             .get(&self.principal.user_id, file_id)
             .ok_or_else(|| ToolError::NotFound { id: file_id.into() })?;
-        let bytes = tokio::fs::read(&f.path).await?;
+        if f.view.size > max {
+            // Metadata already says it is too large: don't touch the file.
+            return Ok((f.view, Vec::new()));
+        }
+        let bytes = dogubako_mcp::read_capped(&f.path, max).await?;
         Ok((f.view, bytes))
     }
 }

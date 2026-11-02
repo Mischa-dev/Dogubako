@@ -59,12 +59,21 @@ fn jsonpath() -> Arc<dyn Tool> {
         let path = serde_json_path::JsonPath::parse(q)
             .map_err(|e| ToolError::invalid("query", e.to_string()))?;
         let located = path.query_located(&doc);
-        let nodes: Vec<(String, Value)> = located
-            .into_iter()
-            .map(|n| (n.location().to_string(), n.node().clone()))
-            .collect();
-        let values: Vec<Value> = nodes.iter().map(|(_, v)| v.clone()).collect();
-        let paths: Vec<Value> = nodes.iter().map(|(l, _)| json!(l)).collect();
+        // Recursive queries match every ancestor of a large value, so the
+        // copies can dwarf the document: size the result before cloning.
+        // Each location repeats its ancestors' keys, so a long key over many
+        // array items multiplies too; one location is at most a few times
+        // the document, so charging each as it is built keeps the total
+        // within the budget.
+        let mut budget = OutputBudget::default();
+        let mut paths: Vec<Value> = Vec::with_capacity(located.len());
+        for n in located.iter() {
+            budget.add(usize::try_from(json_pretty_size(n.node(), 2)).unwrap_or(usize::MAX))?;
+            let loc = n.location().to_string();
+            budget.add(loc.len())?;
+            paths.push(Value::String(loc));
+        }
+        let values: Vec<Value> = located.into_iter().map(|n| n.node().clone()).collect();
         Ok(
             ToolOutput::text_as(serde_json::to_string_pretty(&values)?, "application/json")
                 .with_data(json!({"count": values.len(), "paths": paths})),

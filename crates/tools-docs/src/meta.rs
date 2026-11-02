@@ -81,12 +81,6 @@ fn metadata_edit() -> Arc<dyn Tool> {
                     file.name
                 ));
             }
-            if clear || had_xmp {
-                // Removing the references is not enough: the old Info/XMP
-                // objects would still be written (recoverable). Drop every
-                // object no longer reachable from the trailer.
-                doc.prune_objects();
-            }
             if !changes.is_empty() {
                 let info_id = match doc.trailer.get(b"Info") {
                     Ok(Object::Reference(id)) if doc.get_dictionary(*id).is_ok() => *id,
@@ -113,6 +107,10 @@ fn metadata_edit() -> Arc<dyn Tool> {
                 }
                 info.set("ModDate", text_string(&pdf_date_now()));
             }
+            // Removing references is not enough: old Info/XMP objects and
+            // indirect values of removed or replaced fields would still be
+            // written (recoverable). Drop everything no longer reachable.
+            doc.prune_objects();
             // Report the resulting metadata.
             let mut now = serde_json::Map::new();
             if let Some(info) = doc
