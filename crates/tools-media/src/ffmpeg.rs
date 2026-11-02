@@ -1405,8 +1405,28 @@ pub async fn filter_audio_file(
     dur: Option<f64>,
     sp: (f32, f32),
 ) -> ToolResult<()> {
+    filter_audio_file_with(ctx, f, pr, af, out_ext, out, dur, sp, &[]).await
+}
+
+/// [`filter_audio_file`] with extra global FFmpeg options.
+#[allow(clippy::too_many_arguments)]
+pub async fn filter_audio_file_with(
+    ctx: &ToolContext,
+    f: &InputFile,
+    pr: &Probe,
+    af: &str,
+    out_ext: &str,
+    out: &Path,
+    dur: Option<f64>,
+    sp: (f32, f32),
+    globals: &[&str],
+) -> ToolResult<()> {
     let same = out_ext == f.extension();
-    let mut ff = Ff::new().input(&f.path);
+    let mut ff = Ff::new();
+    for g in globals {
+        ff = ff.global(g);
+    }
+    let mut ff = ff.input(&f.path);
     if same
         && pr.streams().iter().any(|s| s["codec_type"] == "video")
         && out_ext != "ogg"

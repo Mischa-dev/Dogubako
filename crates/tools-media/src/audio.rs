@@ -961,6 +961,21 @@ async fn af_batch<F>(
 where
     F: Fn(&InputFile, &Probe) -> ToolResult<(String, Option<f64>, Value)>,
 {
+    af_batch_with(ctx, p, suffix, label, &[], build).await
+}
+
+/// [`af_batch`] with extra global FFmpeg options.
+async fn af_batch_with<F>(
+    ctx: &ToolContext,
+    p: &Params,
+    suffix: &str,
+    label: &str,
+    globals: &[&str],
+    build: F,
+) -> ToolResult<ToolOutput>
+where
+    F: Fn(&InputFile, &Probe) -> ToolResult<(String, Option<f64>, Value)>,
+{
     let files = p.files("input").to_vec();
     let mut rep = Report::files(&[]);
     for (i, f) in files.iter().enumerate() {
@@ -968,7 +983,7 @@ where
         let (af, dur, item) = build(f, &pr)?;
         let ext = audio_out_ext(f, &pr);
         let out = out_path(ctx, f, suffix, &ext);
-        filter_audio_file(
+        filter_audio_file_with(
             ctx,
             f,
             &pr,
@@ -977,6 +992,7 @@ where
             &out,
             dur.or(pr.duration()),
             span(i, files.len()),
+            globals,
         )
         .await?;
         let _ = label;
@@ -1766,9 +1782,17 @@ fn denoise() -> Arc<dyn Tool> {
             ),
         });
         let af = chain.join(",");
-        af_batch(&ctx, &p, "denoised", "Denoising", |_, _| {
-            Ok((af.clone(), None, json!({"filter": af})))
-        })
+        // Single-threaded filtering: FFmpeg 9 intermittently crashes in the
+        // denoisers' per-channel threads (SIGSEGV after "Format change is not
+        // supported"); audio denoising is cheap enough without them.
+        af_batch_with(
+            &ctx,
+            &p,
+            "denoised",
+            "Denoising",
+            &["-filter_threads", "1"],
+            |_, _| Ok((af.clone(), None, json!({"filter": af}))),
+        )
         .await
     })
 }
