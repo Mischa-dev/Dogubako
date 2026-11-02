@@ -817,15 +817,27 @@ fn csv_filter_sort() -> Arc<dyn Tool> {
             t.rows.sort_by(|a, b| {
                 for (i, desc) in &keys {
                     let (x, y) = (&a[*i], &b[*i]);
-                    let o = match (parse_number(x), parse_number(y)) {
+                    // A total order: numbers < text < empty cells, each class
+                    // compared on its own (mixing numeric and natural
+                    // comparison is not transitive and can make sort panic).
+                    let class = |c: &str| {
+                        if c.trim().is_empty() {
+                            2
+                        } else if parse_number(c).is_some() {
+                            0
+                        } else {
+                            1
+                        }
+                    };
+                    let (cx, cy) = (class(x), class(y));
+                    let o = cx.cmp(&cy).then_with(|| match cx {
                         // Exact for integers beyond f64's 2^53 precision.
-                        (Some(_), Some(_)) => {
+                        0 => {
                             crate::util::compare_numbers(x, y).unwrap_or(std::cmp::Ordering::Equal)
                         }
-                        (Some(_), None) if y.trim().is_empty() => std::cmp::Ordering::Less,
-                        (None, Some(_)) if x.trim().is_empty() => std::cmp::Ordering::Greater,
-                        _ => natural_cmp(&x.to_lowercase(), &y.to_lowercase()),
-                    };
+                        1 => natural_cmp(&x.to_lowercase(), &y.to_lowercase()),
+                        _ => std::cmp::Ordering::Equal,
+                    });
                     let o = if *desc { o.reverse() } else { o };
                     if o != std::cmp::Ordering::Equal {
                         return o;
@@ -2159,6 +2171,31 @@ mod tests {
             out.text.unwrap(),
             "id\n9007199254740992\n9007199254740993\n"
         );
+        // Mixed numbers/text sort consistently (numbers, then text, then empty).
+        let out = h
+            .run(
+                "data.csv_filter_sort",
+                json!({"text": "id,n\n-2,a\n-3x,b\n,c\n-10,d\nb,e\n", "sort": "id asc", "columns": "n"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.text.unwrap(), "n\nd\na\nb\ne\nc\n");
+        // Many mixed cells: no "total order" panic.
+        let many: String = std::iter::once("id".to_string())
+            .chain((0..400).map(|i| match i % 4 {
+                0 => format!("-{i}"),
+                1 => format!("-{i}x"),
+                2 => format!("{i}.5"),
+                _ => format!("v{i}"),
+            }))
+            .collect::<Vec<_>>()
+            .join("\n");
+        h.run(
+            "data.csv_filter_sort",
+            json!({"text": many, "sort": "id asc"}),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             h.run(
                 "data.csv_filter_sort",

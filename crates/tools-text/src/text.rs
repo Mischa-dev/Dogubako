@@ -509,7 +509,7 @@ fn sort_lines() -> Arc<dyn Tool> {
             "alpha" => lines.sort_by_cached_key(|l| key(l)),
             "natural" => lines.sort_by(|a, b| natural_cmp(&key(a), &key(b)).then_with(|| a.cmp(b))),
             "numeric" => lines.sort_by(|a, b| match (leading_number(a), leading_number(b)) {
-                (Some(x), Some(y)) => x.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Equal),
+                (Some(x), Some(y)) => x.total_cmp(&y),
                 (Some(_), None) => std::cmp::Ordering::Less,
                 (None, Some(_)) => std::cmp::Ordering::Greater,
                 (None, None) => natural_cmp(&key(a), &key(b)),
