@@ -12,6 +12,21 @@ pub fn tools() -> Vec<Arc<dyn Tool>> {
 }
 
 /// Parse many common date/time spellings into a naive (wall-clock) datetime.
+/// True for numeric dates whose day/month order is ambiguous, such as
+/// `03/04/2024` or `03-04-2024 10:00` (optionally followed by a time).
+fn is_ambiguous_numeric_date(s: &str) -> bool {
+    let date = s.split_whitespace().next().unwrap_or("");
+    let Some(sep) = date.chars().find(|c| *c == '/' || *c == '-') else {
+        return false;
+    };
+    let parts: Vec<&str> = date.split(sep).collect();
+    parts.len() == 3
+        && parts.iter().all(|p| p.bytes().all(|b| b.is_ascii_digit()))
+        && (1..=2).contains(&parts[0].len())
+        && (1..=2).contains(&parts[1].len())
+        && parts[2].len() == 4
+}
+
 pub(crate) fn parse_loose(s: &str, day_first: bool) -> Option<NaiveDateTime> {
     let s = s.trim();
     if s.len() < 6 || s.len() > 64 {
@@ -235,7 +250,8 @@ pub(crate) fn parse_instant(
             Some(v) => v,
             None => (n * scale as f64) as i128,
         };
-        let secs = nanos.div_euclid(1_000_000_000) as i64;
+        let secs = i64::try_from(nanos.div_euclid(1_000_000_000))
+            .map_err(|_| ToolError::invalid(param, "timestamp out of range"))?;
         let ns = nanos.rem_euclid(1_000_000_000) as u32;
         let dt = DateTime::from_timestamp(secs, ns)
             .ok_or_else(|| ToolError::invalid(param, "timestamp out of range"))?;
@@ -483,7 +499,7 @@ fn datetime() -> Arc<dyn Tool> {
             let s = p.text(name);
             if day_first {
                 if let Some(n) = parse_loose(s, true) {
-                    if s.contains('/') {
+                    if is_ambiguous_numeric_date(s) {
                         return tz.from_local_datetime(&n).earliest().ok_or_else(|| {
                             ToolError::invalid(name, "time does not exist in this zone (DST gap)")
                         });
@@ -789,6 +805,15 @@ mod tests {
                 .code(),
             "invalid_input"
         );
+        // Seconds beyond i64 are an error, not a wrapped 1970 date.
+        let e = h
+            .run(
+                "dev.timestamp",
+                json!({"value": "18446744073709551616", "unit": "s"}),
+            )
+            .await
+            .unwrap_err();
+        assert!(e.to_string().contains("out of range"), "{e}");
         assert_eq!(
             h.run("dev.timestamp", json!({"timezone": "Mars/Base"}))
                 .await
@@ -803,6 +828,21 @@ mod tests {
         let h = TestHarness::new(crate::tools());
         let out = h.run("dev.datetime", json!({"operation": "add", "date": "2024-01-31", "duration": "1mo 1d", "format": "%Y-%m-%d"})).await.unwrap();
         assert_eq!(out.text.unwrap(), "2024-03-01");
+        // Day-first applies to hyphen-separated dates as well as slashes.
+        for d in ["03/04/2024", "03-04-2024"] {
+            let out = h
+                .run(
+                    "dev.datetime",
+                    json!({"date": d, "day_first": true, "format": "%Y-%m-%d"}),
+                )
+                .await
+                .unwrap();
+            assert_eq!(out.text.unwrap(), "2024-04-03", "{d}");
+        }
+        assert!(super::is_ambiguous_numeric_date("3-4-2024 10:00"));
+        assert!(!super::is_ambiguous_numeric_date(
+            "2024-03-04T10:00:00+02:00"
+        ));
         let out = h
             .run(
                 "dev.datetime",
