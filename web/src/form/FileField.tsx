@@ -189,6 +189,16 @@ export const FileField = memo(function FileField({ param, items, onChange, label
 
   return (
     <div className="file-field" onPaste={onPaste}>
+      {/* Kept mounted outside the drop zone: "Replace" on a selected file
+          opens it even when the zone is hidden. */}
+      <input
+        ref={input}
+        type="file"
+        hidden
+        multiple={multiple}
+        accept={param.accept?.join(',')}
+        onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; void addFiles(f); }}
+      />
       {showZone && (
         <div
           className={cx('dropzone', over && 'is-over', invalid && 'is-invalid', items.length > 0 && 'is-compact')}
@@ -215,14 +225,6 @@ export const FileField = memo(function FileField({ param, items, onChange, label
               <ClipboardPaste size={14} aria-hidden /><span>Paste</span>
             </button>
           )}
-          <input
-            ref={input}
-            type="file"
-            hidden
-            multiple={multiple}
-            accept={param.accept?.join(',')}
-            onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; void addFiles(f); }}
-          />
         </div>
       )}
       {note && <p className="field-note" role="status">{note}</p>}
