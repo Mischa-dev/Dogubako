@@ -82,3 +82,8 @@
   .home-choose svg { width: 18px; height: 18px; }
   .intent-title { font-size: var(--fs-xl); }
 }
+@media (max-width: 520px) {
+  .intent-files.is-many .bo-photo { max-width: 62%; max-height: 170px; }
+  .intent-files.is-many .intent-thing { transform: translateX(calc((var(--i) - (var(--n) - 1) / 2) * 18px)) rotate(calc((var(--i) - (var(--n) - 1) / 2) * 3deg)); }
+  .intent-files { min-height: 180px; }
+}

@@ -135,8 +135,10 @@
   .tool-page { padding-top: 12px; }
   .tool-row { flex-wrap: wrap; gap: 8px 10px; }
   .tool-tabs { order: 5; flex: 1 0 100%; }
-  .tool-subject { flex: 1; max-width: none; }
+  .tool-subject { flex: 0 1 auto; max-width: none; min-width: 0; }
+  .layout-wrap { margin-left: auto; }
   .tool-row-gap { display: none; }
+  .tool-search { display: none; } /* the phone top bar already has search */
   .stage.is-side { grid-template-columns: minmax(0, 1fr); }
   .stage-frame { height: clamp(180px, 34vh, 320px); }
   .tool-work .tool-controls { padding: 16px; }

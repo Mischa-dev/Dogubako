@@ -18,6 +18,17 @@ Nothing leaves your machine unless you host it yourself.
 * **Agent-ready, not agent-first.** Run a central server with all the heavy dependencies and give each AI agent its own scoped token: an image bot may resize and blur; a media bot may transcode and transcribe; neither can touch the other's files or your system tools.
 * **Secure by construction.** No shell is ever used; external programs run with timeouts, resource limits and optional bubblewrap sandboxing; files are id-addressed and owner-checked; network tools are SSRF-guarded; everything is audit-logged.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/home-light.png" width="49%" alt="Home: a big input, the files you worked on lately drawn on a shelf, and recent runs">
+  <img src="docs/screenshots/drop-screen-light.png" width="49%" alt="After dropping a photo: what should happen to it, with the likeliest tools numbered">
+  <img src="docs/screenshots/tool-image-result-dark.png" width="49%" alt="Compressing a photo: original and result side by side with the size change, settings below">
+  <img src="docs/screenshots/tool-live-json-dark.png" width="49%" alt="JSON formatter: input on the left, formatted output and stats on the right as you type">
+</p>
+
+More in [docs/screenshots](docs/screenshots).
+
 ## What's inside
 
 | Category | Tools | Highlights |
