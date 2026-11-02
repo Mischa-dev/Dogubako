@@ -216,18 +216,25 @@ fn html_entities() -> Arc<dyn Tool> {
 
 fn parse_hex(s: &str) -> Result<Vec<u8>, String> {
     let mut digits = String::with_capacity(s.len());
-    // Computed once: rescanning per token would make decoding quadratic.
-    let several_words = s.split_whitespace().nth(1).is_some();
-    for tok in s.split(|c: char| c.is_whitespace() || c == ',' || c == ':' || c == '-') {
-        let tok = tok
-            .trim_start_matches("0x")
-            .trim_start_matches("0X")
-            .trim_start_matches("\\x");
-        let tok = tok.replace("\\x", "");
-        if tok.len() % 2 == 1 && several_words {
+    // "\x" starts a new byte just like the separators do. The tokens are
+    // collected once so every separator decides byte boundaries the same
+    // way (and decoding stays linear).
+    let norm = s.replace("\\x", " ");
+    let toks: Vec<&str> = norm
+        .split(|c: char| c.is_whitespace() || matches!(c, ',' | ':' | '-'))
+        .filter(|t| !t.is_empty())
+        .map(|t| {
+            t.strip_prefix("0x")
+                .or_else(|| t.strip_prefix("0X"))
+                .unwrap_or(t)
+        })
+        .collect();
+    let several = toks.len() > 1;
+    for tok in toks {
+        if tok.len() % 2 == 1 && several {
             digits.push('0');
         }
-        digits.push_str(&tok);
+        digits.push_str(tok);
     }
     if let Some(bad) = digits.chars().find(|c| !c.is_ascii_hexdigit()) {
         return Err(format!("'{bad}' is not a hex digit"));
@@ -601,6 +608,16 @@ mod tests {
             super::parse_hex("abc").unwrap_err(),
             "odd number of hex digits"
         );
+        // Every supported separator keeps single-digit bytes apart, with or
+        // without whitespace.
+        for src in ["0x1,0x2", "0x1, 0x2", "1:2", "1-2", "\\x1\\x2", "0X1 0x2"] {
+            assert_eq!(super::parse_hex(src).unwrap(), vec![1, 2], "{src}");
+        }
+        assert_eq!(
+            super::parse_hex("0xdeadbeef").unwrap(),
+            vec![0xde, 0xad, 0xbe, 0xef]
+        );
+        assert_eq!(super::parse_hex("\\x41\\x42").unwrap(), b"AB".to_vec());
         let big = "a ".repeat(200_000);
         let start = std::time::Instant::now();
         assert_eq!(super::parse_hex(&big).unwrap().len(), 200_000);
