@@ -457,8 +457,12 @@ pub fn load_table(p: &Params) -> ToolResult<(Table, String)> {
     }
     let t = text.trim_start();
     if (t.starts_with('[') || t.starts_with('{')) && p.str_or("delimiter", "auto") == "auto" {
-        if let Ok(tab) = json_table(text, header_mode != "no") {
-            return Ok((tab, "data.csv".into()));
+        match json_table(text, header_mode != "no") {
+            Ok(tab) => return Ok((tab, "data.csv".into())),
+            // Valid JSON with numbers that would be rounded is an error, not
+            // a cue to read the text as CSV.
+            Err(e) if e.to_string().contains(INEXACT_NUMBER) => return Err(e),
+            Err(_) => {}
         }
     }
     Ok((
@@ -510,20 +514,28 @@ fn xlsx_exact(n: &serde_json::Number) -> bool {
 
 /// `header`: whether the first row of a JSON array-of-arrays holds the
 /// column names (arrays of objects always carry their own keys).
+const INEXACT_NUMBER: &str = "cannot be represented exactly";
+
 pub fn json_table(text: &str, header: bool) -> ToolResult<Table> {
+    let exact = |t: &str| {
+        crate::dev::formatters::check_json_numbers(t).map_err(|m| ToolError::invalid("text", m))
+    };
     let v: Value = match serde_json::from_str(text) {
-        Ok(v) => v,
+        Ok(v) => {
+            exact(text)?;
+            v
+        }
         Err(e) => {
             // NDJSON?
             let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
             if lines.len() > 1 {
-                Value::Array(
-                    lines
-                        .iter()
-                        .map(|l| serde_json::from_str(l))
-                        .collect::<Result<_, _>>()
-                        .map_err(|_| ToolError::invalid("text", format!("invalid JSON: {e}")))?,
-                )
+                let items = lines
+                    .iter()
+                    .map(|l| serde_json::from_str(l))
+                    .collect::<Result<_, _>>()
+                    .map_err(|_| ToolError::invalid("text", format!("invalid JSON: {e}")))?;
+                lines.iter().try_for_each(|l| exact(l))?;
+                Value::Array(items)
             } else {
                 return Err(ToolError::invalid("text", format!("invalid JSON: {e}")));
             }
@@ -966,7 +978,12 @@ fn json_to_csv() -> Arc<dyn Tool> {
         .ui("live");
     sync_tool(spec, |ctx, p| {
         let text = text_or_file(p, "text", "file")?;
-        let items: Vec<Value> = match serde_json::from_str::<Value>(&text) {
+        let parsed = serde_json::from_str::<Value>(&text);
+        if parsed.is_ok() {
+            crate::dev::formatters::check_json_numbers(&text)
+                .map_err(|m| ToolError::invalid("text", m))?;
+        }
+        let items: Vec<Value> = match parsed {
             Ok(Value::Array(a)) => a,
             Ok(Value::Object(m)) => match m.values().find(|x| x.is_array()) {
                 Some(Value::Array(a)) if m.len() == 1 => a.clone(),
@@ -980,9 +997,13 @@ fn json_to_csv() -> Arc<dyn Tool> {
                         .iter()
                         .enumerate()
                         .map(|(i, l)| {
-                            serde_json::from_str(l).map_err(|e| {
+                            let v = serde_json::from_str(l).map_err(|e| {
                                 ToolError::invalid("text", format!("line {}: {e}", i + 1))
-                            })
+                            })?;
+                            crate::dev::formatters::check_json_numbers(l).map_err(|m| {
+                                ToolError::invalid("text", format!("line {}: {m}", i + 1))
+                            })?;
+                            Ok(v)
                         })
                         .collect::<ToolResult<_>>()?
                 } else {
@@ -2275,6 +2296,25 @@ mod tests {
             out.text.unwrap(),
             "id,u.n,tags,extra\n1,x,a; b,\n2,,,\"y,z\"\n"
         );
+        // Numbers that would be rounded are rejected on every JSON path:
+        // a document, NDJSON, and the table loader other data tools use.
+        for text in [
+            "[{\"id\":18446744073709551617},{\"id\":18446744073709551618}]",
+            "{\"id\":18446744073709551617}\n{\"id\":18446744073709551618}",
+        ] {
+            let e = h
+                .run("data.json_to_csv", json!({"text": text}))
+                .await
+                .unwrap_err();
+            assert!(e.to_string().contains(super::INEXACT_NUMBER), "{text}: {e}");
+            let e = super::json_table(text, true).unwrap_err();
+            assert!(e.to_string().contains(super::INEXACT_NUMBER), "{text}: {e}");
+            let e = h
+                .run("data.csv_view", json!({"text": text}))
+                .await
+                .unwrap_err();
+            assert!(e.to_string().contains(super::INEXACT_NUMBER), "{text}: {e}");
+        }
         assert_eq!(
             h.run("data.json_to_csv", json!({"text": "[{bad"}))
                 .await

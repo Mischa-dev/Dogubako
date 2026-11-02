@@ -700,6 +700,18 @@ mod tests {
         );
         let out = h.run("dev.hash", json!({"text": "abc", "algorithms": ["md5"], "compare": "900150983CD24FB0D6963F7D28E17F72"})).await.unwrap();
         assert_eq!(out.data["match"], true);
+        // The uppercase option must not be folded into the lowercase one.
+        let out = h
+            .run(
+                "dev.hash",
+                json!({"text": "abc", "algorithms": ["md5"], "encoding": "HEX"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            out.data["table"]["rows"][0][1],
+            "900150983CD24FB0D6963F7D28E17F72"
+        );
         // Base64 is case-sensitive: a case-changed digest must not match.
         let b64 = |c: &str| json!({"text": "abc", "algorithms": ["sha256"], "encoding": "base64", "compare": c});
         let out = h
@@ -788,6 +800,28 @@ mod tests {
             .unwrap();
         assert_eq!(out.text.unwrap().split(' ').count(), 5);
         assert!(out.data["wordlist"].as_str().unwrap().contains("EFF"));
+        // Integers beyond i64 must be rejected, not saturated.
+        let big = h
+            .run(
+                "dev.random",
+                json!({"kind": "integer", "min": 18446744073709551614u64, "max": 18446744073709551615u64}),
+            )
+            .await;
+        assert!(big.is_err(), "{big:?}");
+        let big = h
+            .run(
+                "dev.random",
+                json!({"kind": "integer", "min": 0, "max": 1e19}),
+            )
+            .await;
+        assert!(big.is_err(), "{big:?}");
+        // Whole floats in range are still accepted.
+        h.run(
+            "dev.random",
+            json!({"kind": "integer", "min": 1.0, "max": 6.0}),
+        )
+        .await
+        .unwrap();
         let out = h
             .run("dev.random", json!({"kind": "hex", "length": 8}))
             .await

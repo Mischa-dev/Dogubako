@@ -28,6 +28,11 @@ pub struct Segment {
     /// tinydiarize: a new speaker starts after this segment.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub speaker_turn: bool,
+    /// The cue text as WebVTT markup (formatting tags live, character
+    /// references still encoded), kept when the source was WebVTT so that
+    /// escaped literal tag text is not turned back into markup on output.
+    #[serde(skip)]
+    pub vtt_markup: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -125,14 +130,20 @@ pub fn parse_srt(input: &str) -> Result<Vec<Segment>, String> {
     Ok(segs)
 }
 
-fn strip_vtt_tags(text: &str) -> (String, Option<String>) {
+/// Returns (plain text with formatting tags, speaker, WebVTT markup). The
+/// markup keeps character references encoded so literal `&lt;i&gt;` stays
+/// distinct from a real `<i>` tag.
+fn strip_vtt_tags(text: &str) -> (String, Option<String>, String) {
     let mut speaker = None;
     let mut out = String::new();
+    let mut markup = String::new();
     let mut rest = text;
     while let Some(i) = rest.find('<') {
         out.push_str(&rest[..i]);
+        markup.push_str(&rest[..i]);
         let Some(j) = rest[i..].find('>') else {
             out.push_str(&rest[i..]);
+            markup.push_str(&rest[i..].replace('<', "&lt;"));
             rest = "";
             break;
         };
@@ -149,11 +160,15 @@ fn strip_vtt_tags(text: &str) -> (String, Option<String>) {
             out.push('<');
             out.push_str(tag);
             out.push('>');
+            markup.push('<');
+            markup.push_str(tag);
+            markup.push('>');
         }
         rest = &rest[i + j + 1..];
     }
     out.push_str(rest);
-    (decode_char_refs(&out), speaker)
+    markup.push_str(rest);
+    (decode_char_refs(&out), speaker, markup)
 }
 
 /// Decode WebVTT character references in one pass, so `&amp;lt;` becomes the
@@ -211,7 +226,13 @@ pub fn parse_vtt(input: &str) -> Result<Vec<Segment>, String> {
         if k == 0 && b[0].starts_with("WEBVTT") && !b.iter().any(|l| l.contains("-->")) {
             continue;
         }
-        if b[0].starts_with("NOTE") || b[0].starts_with("STYLE") || b[0].starts_with("REGION") {
+        // A block keyword is the whole line or is followed by a space or
+        // tab; a cue identifier such as "NOTEBOOK" is not a comment.
+        let keyword = |k: &str| {
+            b[0].strip_prefix(k)
+                .is_some_and(|r| r.is_empty() || r.starts_with([' ', '\t']))
+        };
+        if keyword("NOTE") || keyword("STYLE") || keyword("REGION") {
             continue;
         }
         let Some(ti) = b.iter().position(|l| l.contains("-->")) else {
@@ -220,12 +241,13 @@ pub fn parse_vtt(input: &str) -> Result<Vec<Segment>, String> {
         let Some((start, end)) = parse_timing(b[ti]) else {
             return Err(format!("invalid timing line: '{}'", b[ti].trim()));
         };
-        let (text, speaker) = strip_vtt_tags(b[ti + 1..].join("\n").trim());
+        let (text, speaker, markup) = strip_vtt_tags(b[ti + 1..].join("\n").trim());
         segs.push(Segment {
             start,
             end,
             text,
             speaker,
+            vtt_markup: Some(markup),
             ..Default::default()
         });
     }
@@ -256,6 +278,7 @@ pub fn parse_json(input: &str) -> Result<Vec<Segment>, String> {
                 text: s["text"].as_str().unwrap_or("").trim().to_string(),
                 speaker: s["speaker"].as_str().map(String::from),
                 speaker_turn: s["speaker_turn_next"].as_bool().unwrap_or(false),
+                ..Default::default()
             })
             .collect());
     }
@@ -274,6 +297,7 @@ pub fn parse_json(input: &str) -> Result<Vec<Segment>, String> {
             text: s["text"].as_str().unwrap_or("").trim().to_string(),
             speaker: s["speaker"].as_str().map(String::from),
             speaker_turn: s["speaker_turn"].as_bool().unwrap_or(false),
+            ..Default::default()
         });
     }
     Ok(segs)
@@ -349,17 +373,22 @@ pub fn to_vtt(segs: &[Segment]) -> String {
     let marks = turn_marks(segs);
     let mut out = String::from("WEBVTT\n\n");
     for (i, s) in segs.iter().enumerate() {
-        let esc = s
-            .text
-            .trim()
-            .replace('&', "&amp;")
-            .replace('<', "&lt;")
-            .replace('>', "&gt;");
-        // keep simple formatting tags
-        let esc = ["i", "b", "u"].iter().fold(esc, |t, tag| {
-            t.replace(&format!("&lt;{tag}&gt;"), &format!("<{tag}>"))
-                .replace(&format!("&lt;/{tag}&gt;"), &format!("</{tag}>"))
-        });
+        let esc = match &s.vtt_markup {
+            Some(m) => m.trim().to_string(),
+            None => {
+                let esc = s
+                    .text
+                    .trim()
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;");
+                // keep simple formatting tags
+                ["i", "b", "u"].iter().fold(esc, |t, tag| {
+                    t.replace(&format!("&lt;{tag}&gt;"), &format!("<{tag}>"))
+                        .replace(&format!("&lt;/{tag}&gt;"), &format!("</{tag}>"))
+                })
+            }
+        };
         let text = match &s.speaker {
             Some(sp) => format!("<v {}>{esc}", sp.replace(['<', '>'], "")),
             None if marks[i] => format!("- {esc}"),
@@ -1170,7 +1199,7 @@ mod tests {
 
     #[test]
     fn vtt_char_refs_decode_once() {
-        let (t, _) = strip_vtt_tags(
+        let (t, _, _) = strip_vtt_tags(
             "Use &amp;lt; and &amp;gt; literally &lt;b&gt; &#65;&#x42; &nbsp;x &bogus; a & b",
         );
         assert_eq!(t, "Use &lt; and &gt; literally <b> AB  x &bogus; a & b");
@@ -1183,6 +1212,17 @@ mod tests {
     }
 
     const SRT: &str = "\u{feff}1\r\n00:00:01,000 --> 00:00:02,500\r\nHello <i>world</i>\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\nSecond line\r\nwith break\r\n\r\n";
+
+    #[test]
+    fn vtt_escaped_tags_stay_literal() {
+        let v = "WEBVTT\n\n00:01.000 --> 00:02.000\n&lt;i&gt;literal&lt;/i&gt; and <i>real</i>\n";
+        let segs = parse_vtt(v).unwrap();
+        let out = to_vtt(&shift(&segs, 0.0, 1.0, 0.0));
+        assert!(
+            out.contains("&lt;i&gt;literal&lt;/i&gt; and <i>real</i>"),
+            "{out}"
+        );
+    }
 
     #[test]
     fn srt_roundtrip() {
@@ -1210,6 +1250,14 @@ mod tests {
             .starts_with("WEBVTT\n\n1\n00:00:01.000 --> 00:00:02.000\n<v Alice>Hi &amp; welcome"));
         assert_eq!(parse_vtt(&out).unwrap(), s);
         assert!(parse_vtt("1\n00:00:01,000 --> 00:00:02,000\nx").is_err());
+        // Cue identifiers that merely start with a block keyword are cues;
+        // real NOTE/STYLE/REGION blocks are still skipped.
+        let v = "WEBVTT\n\nNOTEBOOK\n00:00:01.000 --> 00:00:02.000\nfirst\n\nNOTE a comment\n\nNOTE\nmulti-line\n\nSTYLES-1\n00:00:03.000 --> 00:00:04.000\nsecond\n";
+        let s = parse_vtt(v).unwrap();
+        assert_eq!(
+            s.iter().map(|x| x.text.as_str()).collect::<Vec<_>>(),
+            ["first", "second"]
+        );
     }
 
     #[test]

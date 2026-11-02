@@ -983,7 +983,7 @@ pub(crate) fn do_escape(format: &str, unescape: bool, s: &str) -> ToolResult<Str
         ("c", true) => escape::backslash_unescape(s, true).map_err(bad)?,
         ("html", false) => escape::html_escape(s, false),
         ("html", true) => escape::html_unescape(s),
-        ("xml", false) => escape::xml_escape(s),
+        ("xml", false) => escape::xml_escape(s).map_err(bad)?,
         ("xml", true) => escape::xml_unescape(s).map_err(bad)?,
         ("url", false) => escape::url_encode(s, false, false),
         ("url", true) => escape::url_decode(s, true).map_err(bad)?,
