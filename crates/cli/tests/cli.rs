@@ -250,3 +250,44 @@ async fn runaway_jq_is_stopped_by_timeout() {
     assert_eq!(r.unwrap_err().code(), "timeout");
     assert!(t.elapsed().as_secs() < 10, "took {:?}", t.elapsed());
 }
+
+#[test]
+fn artifact_on_stdout_keeps_stdout_clean() {
+    let h = tempfile::tempdir().unwrap();
+    let csv = h.path().join("sales.csv");
+    std::fs::write(&csv, "name,amount\na,1\nb,2\nc,3\n").unwrap();
+    let out = cmd(&h)
+        .args(["data", "csv-to-json"])
+        .arg(&csv)
+        .args(["-o", "-"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    // stdout is exactly the artifact; the summary went to stderr.
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v.as_array().unwrap().len(), 3);
+    assert!(String::from_utf8_lossy(&out.stderr).contains("records"));
+    // -q: nothing but the artifact at all.
+    let out = cmd(&h)
+        .args(["data", "csv-to-json", "-q"])
+        .arg(&csv)
+        .args(["-o", "-"])
+        .output()
+        .unwrap();
+    serde_json::from_slice::<Value>(&out.stdout).unwrap();
+    assert!(
+        out.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // --json: the report goes to stderr too.
+    let out = cmd(&h)
+        .args(["data", "csv-to-json", "--json"])
+        .arg(&csv)
+        .args(["-o", "-"])
+        .output()
+        .unwrap();
+    serde_json::from_slice::<Value>(&out.stdout).unwrap();
+    let report: Value = serde_json::from_slice(&out.stderr).unwrap();
+    assert_eq!(report["ok"], true);
+}
