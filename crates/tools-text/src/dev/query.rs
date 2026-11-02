@@ -178,10 +178,9 @@ pub(crate) fn run_jq(program: &str, input: &Value, max_out: usize) -> ToolResult
         })?;
     let ctx = Ctx::<data::JustLut<jaq_json::Val>>::new(&filter.lut, Vars::new([]));
     let mut out = vec![];
-    for r in filter.id.run((ctx, input)).map(unwrap_valr) {
-        if out.len() >= max_out {
-            break;
-        }
+    // take() stops the iterator once the cap is reached, so work after the
+    // last permitted result is never evaluated.
+    for r in filter.id.run((ctx, input)).map(unwrap_valr).take(max_out) {
         let v = r.map_err(|e| ToolError::invalid("filter", format!("runtime error: {e}")))?;
         let s = v.to_string();
         out.push(serde_json::from_str(&s).unwrap_or(Value::String(s)));
@@ -451,6 +450,20 @@ fn diff_json() -> Arc<dyn Tool> {
 mod tests {
     use dogubako_core::testing::TestHarness;
     use serde_json::json;
+
+    #[test]
+    fn jq_limit_stops_evaluation() {
+        // Work after the last permitted result must not run: without the cap
+        // stopping the iterator, this scans 10^8 values before returning.
+        let t = std::time::Instant::now();
+        let out = super::run_jq("1, (range(0; 1e8) | select(false))", &json!(null), 1).unwrap();
+        assert_eq!(out, vec![json!(1)]);
+        assert!(
+            t.elapsed() < std::time::Duration::from_secs(2),
+            "{:?}",
+            t.elapsed()
+        );
+    }
 
     const STORE: &str = r#"{"store":{"book":[{"title":"A","price":8},{"title":"B","price":12}]}}"#;
 
