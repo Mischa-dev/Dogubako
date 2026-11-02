@@ -1,0 +1,8 @@
+[package]
+name = "dogubako-cli"
+description = "Dogubako command-line interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
