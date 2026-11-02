@@ -280,12 +280,15 @@ pub(crate) fn parse_instant(
         return Ok((d.with_timezone(&Utc), "date"));
     }
     // Explicit offsets always win over the fallback zone, with or without
-    // seconds ("2024-01-01T12:00+0200", "...12:00Z").
+    // seconds, extended or compact ("2024-01-01T12:00+0200", "...12:00Z",
+    // "20240101T120000Z").
     let zt = match t.strip_suffix(['Z', 'z']) {
-        Some(head) if head.contains(':') => format!("{head}+0000"),
+        Some(head) if head.contains(':') || head.contains(['T', 't']) => format!("{head}+0000"),
         _ => t.to_string(),
     };
     for f in [
+        "%Y%m%dT%H%M%S%.f%z",
+        "%Y%m%dT%H%M%z",
         "%Y-%m-%dT%H:%M:%S%.f%z",
         "%Y-%m-%d %H:%M:%S%.f%z",
         "%Y-%m-%d %H:%M:%S %z",
@@ -759,6 +762,18 @@ mod tests {
         );
         assert_eq!(super::parse_duration("P1M2DT3H").unwrap().0, 1);
         assert!(super::parse_duration("banana").is_err());
+        // A compact UTC or offset form is an instant, not a local time in
+        // the fallback zone.
+        let ny: chrono_tz::Tz = "America/New_York".parse().unwrap();
+        for (src, want) in [
+            ("20240101T120000Z", "2024-01-01T12:00:00+00:00"),
+            ("20240101T1200Z", "2024-01-01T12:00:00+00:00"),
+            ("20240101T120000+0200", "2024-01-01T10:00:00+00:00"),
+            ("20240101T120000", "2024-01-01T17:00:00+00:00"),
+        ] {
+            let (dt, _) = super::parse_instant(src, ny, "auto", "value").unwrap();
+            assert_eq!(dt.to_rfc3339(), want, "{src}");
+        }
         // Non-finite numbers are rejected rather than read as the epoch.
         for bad in ["NaN", "nan", "inf", "-infinity", "1e400"] {
             for unit in ["auto", "ms"] {
