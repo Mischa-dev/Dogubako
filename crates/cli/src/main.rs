@@ -112,7 +112,7 @@ fn cli(engine: &Engine) -> Command {
             .about(format!("{} — {}", cat.label(), cat.description()))
             .subcommand_required(true);
         for spec in specs {
-            c = c.subcommand(toolcmd::command_for(spec, &engine.availability(spec)));
+            c = c.subcommand(toolcmd::command_for(spec));
         }
         cmd = cmd.subcommand(c);
     }

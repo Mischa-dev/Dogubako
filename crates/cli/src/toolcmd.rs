@@ -3,7 +3,7 @@
 use crate::render::{self, Out};
 use clap::builder::PossibleValuesParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use dogubako_core::engine::{Availability, Engine, RunRequest};
+use dogubako_core::engine::{Engine, RunRequest};
 use dogubako_core::error::ToolError;
 use dogubako_core::params::LocalFileResolver;
 use dogubako_core::policy::PermissionSet;
@@ -57,20 +57,17 @@ fn help_for(p: &ParamSpec) -> String {
     h
 }
 
-pub fn command_for(spec: &ToolSpec, avail: &Availability) -> Command {
+/// Build the clap command for a tool. Deliberately does not probe
+/// dependencies (that would spawn external programs on every invocation);
+/// availability is reported by `tools list` / `tools info` and at run time.
+pub fn command_for(spec: &ToolSpec) -> Command {
     let name = spec
         .id
         .split_once('.')
         .map(|(_, r)| r)
         .unwrap_or(&spec.id)
         .replace('_', "-");
-    let mut about = spec.name.clone();
-    if !avail.available {
-        about.push_str(&format!(
-            " [unavailable: {}]",
-            avail.reason.clone().unwrap_or_default()
-        ));
-    }
+    let about = spec.name.clone();
     let mut long_about = format!("{}\n\n{}", spec.name, spec.description);
     if !spec.requires.is_empty() {
         long_about.push_str(&format!("\n\nRequires: {}", spec.requires.join(", ")));
