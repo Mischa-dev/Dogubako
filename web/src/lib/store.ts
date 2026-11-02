@@ -101,6 +101,18 @@ export function cycleTheme() {
   setPref('theme', cur === 'dark' ? 'light' : 'dark');
 }
 
-/** A stored file chosen on the Files page to prefill the next tool's input (session only). */
+/** File(s) chosen elsewhere (Files page, drop screen, bench) to prefill the next tool's input. */
 export interface PendingInput { ref: string; name: string; size: number; mime: string }
-export const pendingInput = { value: null as PendingInput | null };
+export const pendingInput = { value: null as PendingInput | PendingInput[] | null };
+
+/** Files dropped or picked and waiting on the drop screen. Session only, so a reload keeps them. */
+const DROPPED_KEY = 'dgb.dropped';
+export function getDropped(): PendingInput[] {
+  try { const v = JSON.parse(sessionStorage.getItem(DROPPED_KEY) ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+export function setDropped(files: PendingInput[]) {
+  try { sessionStorage.setItem(DROPPED_KEY, JSON.stringify(files)); } catch { /* storage unavailable: drop screen still works for this view */ }
+  droppedMem = files;
+}
+let droppedMem: PendingInput[] = [];
+export const droppedNow = () => (droppedMem.length ? droppedMem : getDropped());

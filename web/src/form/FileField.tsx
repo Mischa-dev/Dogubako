@@ -87,21 +87,36 @@ export function useFileAdder(param: ParamSpec & { type: 'file' }, onChange: Sett
 interface DropTarget { accept?: string[]; deliver: (refs: FileRef[]) => void }
 const dropTargets: DropTarget[] = [];
 let dropUnlisten: Promise<() => void> | null = null;
+let dropFallback: ((refs: FileRef[]) => void) | null = null;
+
+function ensureNativeDrop(backend: Backend) {
+  if (dropUnlisten || !backend.onNativeDrop) return;
+  dropUnlisten = backend.onNativeDrop((refs) => {
+    for (const target of dropTargets) {
+      const ok = refs.filter((r) => acceptMatches(target.accept, r.name, r.mime));
+      if (ok.length) { target.deliver(ok); return; }
+    }
+    dropFallback?.(refs);
+  });
+}
+
+function stopNativeDropIfIdle() {
+  if (!dropTargets.length && !dropFallback && dropUnlisten) { const u = dropUnlisten; dropUnlisten = null; void u.then((f) => f()); }
+}
+
+/** Desktop: where OS drops go when no mounted file field accepts them (the drop screen). */
+export function setNativeDropFallback(backend: Backend, cb: ((refs: FileRef[]) => void) | null) {
+  dropFallback = cb;
+  if (cb) ensureNativeDrop(backend); else stopNativeDropIfIdle();
+}
 
 function registerDropTarget(backend: Backend, t: DropTarget) {
   dropTargets.push(t);
-  if (!dropUnlisten && backend.onNativeDrop) {
-    dropUnlisten = backend.onNativeDrop((refs) => {
-      for (const target of dropTargets) {
-        const ok = refs.filter((r) => acceptMatches(target.accept, r.name, r.mime));
-        if (ok.length) { target.deliver(ok); return; }
-      }
-    });
-  }
+  ensureNativeDrop(backend);
   return () => {
     const i = dropTargets.indexOf(t);
     if (i >= 0) dropTargets.splice(i, 1);
-    if (!dropTargets.length && dropUnlisten) { const u = dropUnlisten; dropUnlisten = null; void u.then((f) => f()); }
+    stopNativeDropIfIdle();
   };
 }
 

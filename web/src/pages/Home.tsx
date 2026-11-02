@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, FileUp } from 'lucide-react';
+import { pickAndOpen } from '../components/DropOverlay';
 import { useApp } from '../lib/app';
 import { href } from '../lib/router';
 import { benchItems, suggestion } from '../lib/bench';
@@ -48,6 +49,7 @@ export function HomePage({ onSearch }: { onSearch: (query?: string) => void }) {
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'ArrowDown') { e.preventDefault(); onSearch(''); } }}
           />
           <Kbd>{modKey} K</Kbd>
+          <button type="button" className="btn btn-secondary home-choose" onClick={() => void pickAndOpen()}><FileUp size={15} aria-hidden />Choose files</button>
         </div>
       </section>
 

@@ -3,6 +3,7 @@ import { ChevronDown, History, Menu as MenuIcon, PanelLeftOpen, Search } from 'l
 import { Sidebar } from './components/Sidebar';
 import { CommandPalette } from './components/CommandPalette';
 import { ToolsMenu } from './components/ToolsMenu';
+import { DropOverlay } from './components/DropOverlay';
 import { href, navigate, useRoute } from './lib/router';
 import { favorites as favStore, sidebarCollapsed, useStore } from './lib/store';
 import { useApp } from './lib/app';
@@ -13,6 +14,7 @@ import { CategoryPage, FavoritesPage, RecentPage } from './pages/Lists';
 import { NotFound } from './pages/NotFound';
 
 const ToolPage = lazy(() => import('./tools/ToolPage'));
+const IntentPage = lazy(() => import('./pages/Intent'));
 const HistoryPage = lazy(() => import('./pages/History'));
 const FilesPage = lazy(() => import('./pages/Files'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
@@ -85,6 +87,7 @@ export function Shell() {
   let page: React.ReactNode;
   switch (p0) {
     case undefined: page = <HomePage onSearch={openPalette} />; break;
+    case 'open': page = <IntentPage key={route.query.get('v') ?? ''} />; break;
     case 'tool': page = <ToolPage key={p1} toolId={p1} />; break;
     case 'category': page = <CategoryPage key={p1} categoryId={p1} />; break;
     case 'favorites': page = <FavoritesPage />; break;
@@ -124,6 +127,7 @@ export function Shell() {
         <Suspense fallback={<PageFallback />}>{page}</Suspense>
       </main>
       <CommandPalette open={palette} onClose={closePalette} initialQuery={query} />
+      <DropOverlay />
       <ToolsMenu open={toolsOpen} onClose={closeTools} anchor={hidden ? { left: 16, top: 70 } : undefined} />
     </div>
   );

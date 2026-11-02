@@ -50,6 +50,7 @@ export const href = {
   recent: '#/recent',
   history: '#/history',
   files: '#/files',
+  open: '#/open',
   settings: (s = '') => `#/settings${s ? `/${s}` : ''}`,
   account: '#/account',
   admin: (s = '') => `#/admin${s ? `/${s}` : ''}`,

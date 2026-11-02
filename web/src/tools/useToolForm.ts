@@ -30,8 +30,13 @@ function initialValues(tool: ToolInfo): FormValues {
   const base = defaultValues(tool);
   const pending = pendingInput.value;
   if (pending) {
-    const fp = tool.params.find((p) => p.type === 'file' && acceptMatches(p.accept, pending.name, pending.mime));
-    if (fp) { base[fp.name] = [fileItemFromRef(pending)]; pendingInput.value = null; }
+    const list = Array.isArray(pending) ? pending : [pending];
+    const fp = tool.params.find((p) => p.type === 'file' && list.some((f) => acceptMatches(p.accept, f.name, f.mime)));
+    if (fp && fp.type === 'file') {
+      const ok = list.filter((f) => acceptMatches(fp.accept, f.name, f.mime));
+      base[fp.name] = (fp.multiple ? ok : ok.slice(0, 1)).map(fileItemFromRef);
+      pendingInput.value = null;
+    }
   }
   if (prefs.get().rememberParams) {
     const saved = loadToolParams(tool.id);

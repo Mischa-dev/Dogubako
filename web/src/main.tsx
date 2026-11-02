@@ -11,6 +11,7 @@ import './styles/components.css';
 import './styles/layout.css';
 import './styles/tool.css';
 import './styles/home.css';
+import './styles/intent.css';
 
 initTheme();
 
