@@ -113,6 +113,9 @@ export function ToolTopRow({ tool }: { tool: ToolInfo }) {
     const el = tabsRef.current;
     if (!el) return;
     const check = () => setOverflow(el.scrollWidth > el.clientWidth + 1 && el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    // Keep the current tool's tab in view when the row is too long to show it all.
+    const on = el.querySelector<HTMLElement>('.tool-tab.is-on');
+    if (on && on.offsetLeft + on.offsetWidth > el.scrollLeft + el.clientWidth - 36) el.scrollLeft = on.offsetLeft + on.offsetWidth - el.clientWidth + 36;
     check();
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(check) : null;
     ro?.observe(el);

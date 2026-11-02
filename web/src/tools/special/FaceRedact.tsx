@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ScanFace, Trash2, Plus, Wand2, Info } from 'lucide-react';
+import { ScanFace, Trash2, Wand2, Info } from 'lucide-react';
 import type { ParamSpec } from '../../lib/types';
 import type { SpecialProps } from '../ToolPage';
 import { toolLayout, useStore } from '../../lib/store';
@@ -169,9 +169,8 @@ export default function FaceRedact({ tool, jobId, head, meta }: SpecialProps) {
           form={form}
           label="Apply redaction"
           disabled={!boxes.length || !target.availability.available}
-          disabledReason={!item ? 'Choose an image first' : !boxes.length ? 'Add at least one region' : undefined}
+          disabledReason={!item ? 'Choose an image first' : !boxes.length ? 'Draw a box over what to hide' : undefined}
           onRun={apply}
-          secondary={boxes.length === 0 && item ? <span className="muted small"><Plus size={12} aria-hidden /> Draw a box to begin</span> : null}
         />
         {meta}
       </section>
