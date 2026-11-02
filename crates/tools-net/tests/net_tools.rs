@@ -962,12 +962,11 @@ async fn tls_inspect_local() {
 #[tokio::test]
 async fn port_check_and_connectivity_local() {
     let open = spawn_http(Arc::new(|_| (200, vec![], b"ok".to_vec()))).await;
-    let closed = TcpListener::bind("127.0.0.1:0")
-        .await
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    // Bind without listening: connections are refused, and holding the
+    // socket for the whole test stops a parallel test's server reusing it.
+    let closed_sock = tokio::net::TcpSocket::new_v4().unwrap();
+    closed_sock.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let closed = closed_sock.local_addr().unwrap().port();
     let hns = harness();
     // Windows retries refused SYNs for ~2 s before reporting "connection
     // refused", so allow enough time to classify the port as closed.
