@@ -4,8 +4,10 @@ engines.toml against the snapshot in [docker] and write their exact versions.
 
     python3 -I packaging/engines/docker-lock.py     # needs Docker; writes docker-packages*.txt
 
-The Dockerfile installs exactly these `package=version` lines from the same
-snapshot, so an image build always gets the engine set that was tested.
+The Dockerfile installs exactly these `package=version` lines (the whole
+dependency closure), from deb.debian.org when it still has that version and
+from the snapshot otherwise, so an image build always gets the engine set that
+was tested.
 Bump = change [docker].snapshot, re-run this, rebuild, run the image's
 `dogubako deps`, commit.
 """
@@ -40,7 +42,7 @@ Suites: {suite}-security
 Components: main
 Check-Valid-Until: no
 EOF
-apt-get -qq update
+for i in 1 2 3 4 5; do apt-get -qq -o Acquire::Retries=5 update && break; sleep $((i*10)); done
 apt-get install -s --no-install-recommends {' '.join(packages)}
 """
     out = subprocess.run(
@@ -57,7 +59,9 @@ apt-get install -s --no-install-recommends {' '.join(packages)}
     missing = [p for p in packages if p not in versions]
     if missing:
         raise SystemExit(f"not resolvable in snapshot {snapshot}: {', '.join(missing)}")
-    return {p: versions[p] for p in packages}
+    # The whole closure, not just the named packages: with every version
+    # fixed, the image is identical whichever mirror serves the files.
+    return versions
 
 
 def write(path: Path, header: str, pins: dict[str, str]) -> None:

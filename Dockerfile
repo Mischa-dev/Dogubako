@@ -34,10 +34,23 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --release -p dogubako-cli --locked && cp target/release/dogubako /dogubako
 
-# A Debian base whose apt sources point at the pinned snapshot.
+# A Debian base that can install the pinned versions: the regular mirrors
+# first (fast, and they still carry most of them), then the snapshot for any
+# version they've since replaced. Every package is pinned to an exact version
+# (packaging/engines/docker-packages*.txt), so the result is the same either way.
 FROM ${DEBIAN_BASE} AS pinned
 ARG DEBIAN_SNAPSHOT
 RUN printf '%s\n' \
+      'Types: deb' \
+      'URIs: http://deb.debian.org/debian' \
+      'Suites: trixie trixie-updates' \
+      'Components: main' \
+      '' \
+      'Types: deb' \
+      'URIs: http://deb.debian.org/debian-security' \
+      'Suites: trixie-security' \
+      'Components: main' \
+      '' \
       'Types: deb' \
       "URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}" \
       'Suites: trixie trixie-updates' \
@@ -50,10 +63,11 @@ RUN printf '%s\n' \
       'Components: main' \
       'Check-Valid-Until: no' \
       > /etc/apt/sources.list.d/debian.sources \
-    && printf 'Acquire::Retries "5";\n' > /etc/apt/apt.conf.d/80-retries
+    && printf 'Acquire::Retries "8";\n' > /etc/apt/apt.conf.d/80-retries
 
 # whisper.cpp for offline speech recognition (MIT), built from a pinned tag.
-FROM pinned AS whisper
+# Its build tools come from the regular mirrors; only the static binary ships.
+FROM ${DEBIAN_BASE} AS whisper
 ARG WITH_WHISPER=1
 ARG WHISPER_REF=v1.7.6
 RUN mkdir -p /out && if [ "$WITH_WHISPER" = "1" ]; then \
