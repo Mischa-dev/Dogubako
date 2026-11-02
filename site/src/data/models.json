@@ -1,0 +1,128 @@
+[
+  {
+    "id": "whisper-tiny",
+    "group": "whisper",
+    "name": "Whisper tiny",
+    "description": "Fastest, lowest accuracy (75 MiB)",
+    "size_bytes": 77691713,
+    "license": "MIT (OpenAI Whisper weights)",
+    "languages": "multilingual"
+  },
+  {
+    "id": "whisper-tiny.en",
+    "group": "whisper",
+    "name": "Whisper tiny (English)",
+    "description": "Fastest English-only model (75 MiB)",
+    "size_bytes": 77704715,
+    "license": "MIT (OpenAI Whisper weights)",
+    "languages": "en"
+  },
+  {
+    "id": "whisper-base",
+    "group": "whisper",
+    "name": "Whisper base",
+    "description": "Good balance for everyday use (142 MiB)",
+    "size_bytes": 147951465,
+    "license": "MIT (OpenAI Whisper weights)",
+    "languages": "multilingual"
+  },
+  {
+    "id": "whisper-base.en",
+    "group": "whisper",
+    "name": "Whisper base (English)",
+    "description": "English-only base model (142 MiB)",
+    "size_bytes": 147964211,
+    "license": "MIT (OpenAI Whisper weights)",
+    "languages": "en"
+  },
+  {
+    "id": "whisper-small",
+    "group": "whisper",
+    "name": "Whisper small",
+    "description": "Higher accuracy, slower (466 MiB)",
+    "size_bytes": 487601967,
+    "license": "MIT (OpenAI Whisper weights)",
+    "languages": "multilingual"
+  },
+  {
+    "id": "whisper-small.en",
+    "group": "whisper",
+    "name": "Whisper small (English)",
+    "description": "English-only small model (466 MiB)",
+    "size_bytes": 487614201,
+    "license": "MIT (OpenAI Whisper weights)",
+    "languages": "en"
+  },
+  {
+    "id": "whisper-small.en-tdrz",
+    "group": "whisper",
+    "name": "Whisper small + tinydiarize",
+    "description": "English model that marks speaker turns (465 MiB)",
+    "size_bytes": 487601967,
+    "license": "MIT (OpenAI Whisper weights)",
+    "languages": "en"
+  },
+  {
+    "id": "whisper-large-v3-turbo-q5_0",
+    "group": "whisper",
+    "name": "Whisper large-v3 turbo (q5)",
+    "description": "Best accuracy per MiB, quantized (547 MiB)",
+    "size_bytes": 574041195,
+    "license": "MIT (OpenAI Whisper weights)",
+    "languages": "multilingual"
+  },
+  {
+    "id": "whisper-large-v3-turbo",
+    "group": "whisper",
+    "name": "Whisper large-v3 turbo",
+    "description": "Highest accuracy (1.5 GiB)",
+    "size_bytes": 1624555275,
+    "license": "MIT (OpenAI Whisper weights)",
+    "languages": "multilingual"
+  },
+  {
+    "id": "silero-vad",
+    "group": "whisper-vad",
+    "name": "Silero VAD v5.1.2 (ggml)",
+    "description": "Neural voice activity detection used by whisper.cpp --vad (885 KiB)",
+    "size_bytes": 885098,
+    "license": "MIT",
+    "languages": "any"
+  },
+  {
+    "id": "seeta-face",
+    "group": "face-detection",
+    "name": "SeetaFace frontal face detector",
+    "description": "Small frontal face detection model used for face blurring (1.2 MiB)",
+    "size_bytes": 1209904,
+    "license": "BSD-2-Clause",
+    "languages": ""
+  },
+  {
+    "id": "piper-en_US-lessac-medium",
+    "group": "piper",
+    "name": "Piper voice: English (US) Lessac, medium",
+    "description": "Natural US English voice for offline text-to-speech (63 MiB)",
+    "size_bytes": 63201294,
+    "license": "Blizzard / CC BY-SA (see voice card)",
+    "languages": "en-US"
+  },
+  {
+    "id": "piper-en_GB-alan-medium",
+    "group": "piper",
+    "name": "Piper voice: English (UK) Alan, medium",
+    "description": "British English voice for offline text-to-speech (63 MiB)",
+    "size_bytes": 63201294,
+    "license": "CC BY-SA 4.0 (see voice card)",
+    "languages": "en-GB"
+  },
+  {
+    "id": "piper-de_DE-thorsten-medium",
+    "group": "piper",
+    "name": "Piper voice: German Thorsten, medium",
+    "description": "German voice for offline text-to-speech (63 MiB)",
+    "size_bytes": 63201294,
+    "license": "CC0 (see voice card)",
+    "languages": "de-DE"
+  }
+]

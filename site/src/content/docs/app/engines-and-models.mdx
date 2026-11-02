@@ -1,0 +1,102 @@
+---
+title: Engines and models
+description: The external programs and local models Dogubako can use, what each one unlocks, and how to install them.
+sidebar:
+  order: 9
+---
+
+import DependencyTable from '../../../components/DependencyTable.astro';
+import ModelTable from '../../../components/ModelTable.astro';
+
+About half of Dogubako's tools are native and need nothing else. The rest
+call a mature open-source program (an **engine**) or use a small local
+machine-learning **model**. Install only what you need; everything else
+keeps working.
+
+## Checking what you have
+
+- In the app: **Settings → Dependencies** lists every engine with its status,
+  version and the install command for your system (pick macOS, Debian,
+  Fedora, Arch or Windows to see the right one).
+- On the command line: `dogubako deps`.
+- On a server: `GET /api/v1/deps`.
+
+Detection happens the first time it is needed and is then cached. After you
+install something, click the refresh button on the Dependencies page or
+restart the app (`POST /api/v1/deps/refresh` on a server).
+
+A tool whose engine is missing is never hidden. It shows a notice with the
+install command, and running it returns a `missing_dependency` error that
+names the engine.
+
+## Engines
+
+<DependencyTable />
+
+Engines marked **optional** are not required by any tool as a whole, but some
+options use them. For example, **View Image Metadata** reads every tag with
+ExifTool when it is installed and falls back to its built-in EXIF reader
+otherwise, and **Create Archive** needs 7-Zip only for `.7z` archives. Choosing
+such an option without the engine gives a `missing_dependency` error that
+names it. `bwrap` (Bubblewrap) is not used by tools at all; it sandboxes the
+other engines on Linux servers (see
+[Security](/project/security/#executing-external-programs)).
+
+### Pointing at a specific binary
+
+Set `DOGUBAKO_<ID>_PATH` to use a binary that isn't on your `PATH`, for
+example:
+
+```sh
+DOGUBAKO_FFMPEG_PATH=/opt/ffmpeg-7/bin/ffmpeg dogubako video compress talk.mov
+```
+
+```powershell
+$env:DOGUBAKO_7ZIP_PATH = "C:\Program Files\7-Zip\7z.exe"
+dogubako files archive-extract backup.7z
+```
+
+Or put binaries in Dogubako's `bin` folder (see
+[Desktop app](/app/desktop/#where-files-go)), which is searched before your
+`PATH`.
+
+### Known engine issues
+
+- **FFmpeg 9 `anlmdn`.** The non-local-means audio denoiser crashes
+  intermittently with FFmpeg 9 on Apple-silicon Macs. `audio.denoise` refuses
+  `method: anlmdn` on FFmpeg 9 and later with an `unsupported` error and
+  points you to the FFT method, which is not affected.
+- **Homebrew FFmpeg** is built without libvorbis, libass (the `subtitles`
+  filter), drawtext and animated WebP encoding. Tools that need those report
+  `unsupported` instead of failing obscurely.
+- **Tesseract languages.** Only the languages you install are available for
+  OCR. On Debian and Ubuntu, add packages such as `tesseract-ocr-deu` or
+  `tesseract-ocr-fra`.
+
+## Models
+
+Models are downloaded on request, never bundled, and stored in the `models`
+folder (`DOGUBAKO_MODELS_DIR` overrides it). Where upstream publishes a
+checksum, the download is verified against it; otherwise Dogubako records a
+local SHA-256 when it first downloads the file.
+
+```sh
+dogubako models list
+dogubako models download whisper-base
+dogubako models remove whisper-base
+```
+
+In the app, use **Settings → Models**. On a server, only admins can download
+or remove models.
+
+<ModelTable />
+
+Which Whisper model should you pick? `whisper-base` is a good default on a
+laptop. `whisper-small` is noticeably more accurate and still practical on a
+modern CPU. `whisper-large-v3-turbo-q5_0` gives near-best accuracy at a
+fraction of the full model's size. The `.en` models are English-only and a
+little more accurate for English. `whisper-small.en-tdrz` adds speaker-turn
+detection.
+
+Transcription also needs the `whisper.cpp` engine itself (`whisper-cli`), and
+text to speech needs the `piper` program as well as a voice.

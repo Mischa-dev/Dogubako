@@ -101,7 +101,7 @@ curl -H "Authorization: Bearer $TOKEN" -T video.mov "https://host/api/v1/files/r
 ### Worked example: centralized video compression
 
 ```
-agent → tools/call video_compress {"input": "f_9c…", "preset": "balanced"}
+agent → tools/call video_compress {"input": "f_9c…", "level": "balanced"}
 server: authenticates token → checks policy allows video.compress → resolves f_9c… (owned by this agent)
         → runs FFmpeg (argv only, timeout, limits) with progress → stores output as f_1a…
 agent ← {"content":[{"type":"text","text":"Output files:\n- clip-compressed.mp4 …"},
