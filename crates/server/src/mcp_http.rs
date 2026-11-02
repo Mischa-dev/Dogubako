@@ -136,10 +136,27 @@ impl McpBackend for ServerBackend {
             .into_temp_path()
             .keep()
             .map_err(|e| ToolError::failed(e.to_string()))?;
-        let mut v =
-            self.state
-                .storage
-                .store(&self.principal.user_id, name, &path, "upload", None)?;
+        let quota = self.principal.quota_bytes(self.state.cfg.user_quota_mb);
+        let stored = self.state.storage.with_quota(
+            &self.principal.user_id,
+            quota,
+            bytes.len() as u64,
+            || {
+                self.state
+                    .storage
+                    .store(&self.principal.user_id, name, &path, "upload", None)
+            },
+        );
+        let mut v = match stored {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = std::fs::remove_file(&path);
+                return Err(match e {
+                    crate::storage::QuotaError::Exceeded { .. } => ToolError::limit(e.to_string()),
+                    crate::storage::QuotaError::Io(io) => io.into(),
+                });
+            }
+        };
         v.url = v.url.map(|u| self.state.absolute(&u));
         self.state.db.audit(
             &self.principal.username,

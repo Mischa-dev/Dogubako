@@ -7,12 +7,47 @@ use dogubako_core::params::{FileResolver, InputFile};
 use dogubako_core::tool::Artifact;
 use dogubako_mcp::{ArtifactView, FileView};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct Storage {
     pub dir: PathBuf,
     pub db: Arc<Db>,
     pub retention_secs: i64,
+    /// Serializes "check quota + store" across every path that adds files
+    /// (HTTP uploads, MCP uploads, job outputs), so concurrent writers of
+    /// one account cannot together exceed its quota.
+    quota_lock: Mutex<()>,
+}
+
+/// Why a quota-checked store failed.
+#[derive(Debug)]
+pub enum QuotaError {
+    Exceeded {
+        used: u64,
+        incoming: u64,
+        quota: u64,
+    },
+    Io(std::io::Error),
+}
+
+impl std::fmt::Display for QuotaError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use dogubako_core::util::human_size;
+        match self {
+            QuotaError::Exceeded {
+                used,
+                incoming,
+                quota,
+            } => write!(
+                f,
+                "storage quota exceeded: needs {} but only {} of {} remain; delete some files first",
+                human_size(*incoming),
+                human_size(quota.saturating_sub(*used)),
+                human_size(*quota)
+            ),
+            QuotaError::Io(e) => write!(f, "storing file failed: {e}"),
+        }
+    }
 }
 
 pub fn new_file_id() -> String {
@@ -34,6 +69,7 @@ impl Storage {
             dir,
             db,
             retention_secs: (retention_hours as i64).max(1) * 3600,
+            quota_lock: Mutex::new(()),
         })
     }
 
@@ -43,6 +79,27 @@ impl Storage {
 
     fn expiry(&self) -> Option<i64> {
         Some(now() + self.retention_secs)
+    }
+
+    /// Run `store` (which adds `incoming` bytes for `owner`) only if it fits
+    /// the quota, atomically with respect to every other quota-checked store.
+    pub fn with_quota<T>(
+        &self,
+        owner: &str,
+        quota: u64,
+        incoming: u64,
+        store: impl FnOnce() -> std::io::Result<T>,
+    ) -> Result<T, QuotaError> {
+        let _guard = self.quota_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let used = self.db.storage_used(owner);
+        if used.saturating_add(incoming) > quota {
+            return Err(QuotaError::Exceeded {
+                used,
+                incoming,
+                quota,
+            });
+        }
+        store().map_err(QuotaError::Io)
     }
 
     /// Move a fully-written temporary file into storage.

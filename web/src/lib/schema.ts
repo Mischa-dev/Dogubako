@@ -131,7 +131,9 @@ export function toRunParams(tool: Pick<ToolInfo, 'params'>, values: FormValues):
         if (!isEmpty(v)) { try { out[p.name] = JSON.parse(String(v)); } catch { out[p.name] = v; } }
         break;
       case 'enum':
-        if (p.multi) { if (Array.isArray(v) && v.length) out[p.name] = v; }
+        // An explicitly empty selection is sent as [] so the engine does not
+        // substitute the default (e.g. no allowed actions for pdf.protect).
+        if (p.multi) { if (Array.isArray(v)) out[p.name] = v; }
         else if (!isEmpty(v)) out[p.name] = v;
         break;
       case 'text':

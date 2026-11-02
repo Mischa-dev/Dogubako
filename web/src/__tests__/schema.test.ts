@@ -81,6 +81,12 @@ describe('toRunParams', () => {
     expect(JSON.parse(values.regions as string)).toEqual([{ x: 1 }]);
   });
 
+  it('keeps an explicitly empty multi-choice selection', () => {
+    const mt = tool({ id: 'pdf.protect', name: 'P', params: [{ name: 'allow', label: 'Allow', type: 'enum', multi: true, options: [{ value: 'print', label: 'Print' }], default: ['print'] }] });
+    expect(toRunParams(mt, { allow: [] })).toEqual({ allow: [] });
+    expect(toRunParams(mt, { allow: ['print'] })).toEqual({ allow: ['print'] });
+  });
+
   it('never restores a (masked) secret from history', () => {
     const st = tool({ id: 'files.encrypt', name: 'E', params: [{ name: 'password', label: 'Password', type: 'secret' }, { name: 'level', label: 'Level', type: 'integer' }] });
     const { values } = fromRunParams(st, { password: '••••••', level: 5 });

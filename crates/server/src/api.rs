@@ -6,6 +6,7 @@ use crate::config::AuthMode;
 use crate::db::{now, UserRow};
 use crate::error::{ApiError, ApiResult};
 use crate::state::{AppState, DownloadState};
+use crate::storage::QuotaError;
 use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
@@ -15,6 +16,7 @@ use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use dogubako_core::engine::ToolInfo;
 use dogubako_core::spec::{Category, Permission};
+use dogubako_mcp::FileView;
 use dogubako_mcp::{JobView, ResultView};
 use futures::StreamExt;
 use serde::Deserialize;
@@ -642,12 +644,38 @@ async fn list_files(State(s): State<AppState>, p: Principal) -> Json<Value> {
     )
 }
 
+/// Early rejection before reading an upload when the account is already full.
+/// The binding check happens atomically in [`store_upload`].
 async fn check_quota(s: &AppState, p: &Principal, incoming: u64) -> ApiResult<()> {
     let used = s.db.storage_used(&p.user_id);
     if used + incoming > p.quota_bytes(s.cfg.user_quota_mb) {
         return Err(ApiError::too_large("storage quota exceeded"));
     }
     Ok(())
+}
+
+/// Store an uploaded temp file if it fits the quota (checked atomically with
+/// all other writers); the temp file is removed when it does not.
+fn store_upload(
+    s: &AppState,
+    p: &Principal,
+    name: &str,
+    path: &std::path::Path,
+    size: u64,
+) -> ApiResult<FileView> {
+    let quota = p.quota_bytes(s.cfg.user_quota_mb);
+    match s.storage.with_quota(&p.user_id, quota, size, || {
+        s.storage.store(&p.user_id, name, path, "upload", None)
+    }) {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            let _ = std::fs::remove_file(path);
+            Err(match e {
+                QuotaError::Exceeded { .. } => ApiError::too_large(e.to_string()),
+                QuotaError::Io(io) => io.into(),
+            })
+        }
+    }
 }
 
 async fn upload_multipart(
@@ -690,8 +718,7 @@ async fn upload_multipart(
         let path = tmp_path
             .keep()
             .map_err(|e| ApiError::internal(e.to_string()))?;
-        let view = s.storage.store(&p.user_id, &name, &path, "upload", None)?;
-        out.push(view);
+        out.push(store_upload(&s, &p, &name, &path, written)?);
     }
     if out.is_empty() {
         return Err(ApiError::bad_request("no file fields in upload"));
@@ -742,9 +769,7 @@ async fn upload_raw(
     let path = tmp_path
         .keep()
         .map_err(|e| ApiError::internal(e.to_string()))?;
-    let view = s
-        .storage
-        .store(&p.user_id, &q.name, &path, "upload", None)?;
+    let view = store_upload(&s, &p, &q.name, &path, written)?;
     s.db.audit(&p.username, "file.upload", &view.id, "ok", "", "raw");
     Ok(Json(serde_json::to_value(view).unwrap()))
 }

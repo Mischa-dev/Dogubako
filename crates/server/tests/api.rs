@@ -810,6 +810,23 @@ async fn job_outputs_count_against_quota() {
     let r = call(&t.app, Method::GET, "/api/v1/files", &auth, None).await;
     assert_eq!(r.body["files"].as_array().unwrap().len(), 1, "{:?}", r.body);
     assert_eq!(r.body["used"], 600 * 1024);
+    // Uploads go through the same quota check: 600 KiB more does not fit.
+    let resp = t
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/files/raw?name=big.bin")
+                .header("authorization", bearer.as_str())
+                .body(Body::from(vec![0u8; 600 * 1024]))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let r = call(&t.app, Method::GET, "/api/v1/files", &auth, None).await;
+    assert_eq!(r.body["used"], 600 * 1024);
 }
 
 #[tokio::test]

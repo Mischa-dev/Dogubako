@@ -32,7 +32,14 @@ export default function Crop({ tool, jobId }: { tool: ToolInfo; jobId?: string |
   const singleParam = useMemo(() => ({ ...fileParam, multiple: false }) as ParamSpec, [fileParam]);
   const items = (form.values[fileParam.name] as FileItem[]) ?? [];
   const item = items.find((i) => i.status === 'ready');
-  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  // Dimensions are tagged with the file they were measured from, so a
+  // replacement starts without any until its own media has loaded.
+  const [measured, setMeasured] = useState<{ w: number; h: number; ref: string } | null>(null);
+  const natural = useMemo(
+    () => (measured && item?.ref && measured.ref === item.ref ? { w: measured.w, h: measured.h } : null),
+    [measured, item?.ref],
+  );
+  const onNatural = (n: { w: number; h: number }) => { if (item?.ref) setMeasured({ ...n, ref: item.ref }); };
   const [preset, setPreset] = useState('free');
   const [sel, setSel] = useState<number | null>(0);
   const aspect = PRESETS.find((p) => p.value === preset)?.r ?? null;
@@ -91,7 +98,7 @@ export default function Crop({ tool, jobId }: { tool: ToolInfo; jobId?: string |
                 single
                 aspect={aspect}
                 natural={natural}
-                onNatural={setNatural}
+                onNatural={onNatural}
                 label={isVideo ? 'Video frame' : 'Image to crop'}
                 tone="crop"
               />
