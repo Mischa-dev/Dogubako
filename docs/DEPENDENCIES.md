@@ -71,6 +71,17 @@ and source availability follow Debian's.
 | 7-Zip | LGPL-2.1+ with unRAR restriction | RAR extraction code is freeware, not open source; RAR *creation* is never used |
 | bubblewrap | LGPL-2.0+ | Optional sandbox |
 
+### Known engine issues
+
+* **FFmpeg 9 `anlmdn`:** the non-local-means audio denoiser crashes
+  intermittently (SIGSEGV/SIGTRAP in 30–60 % of runs with Homebrew FFmpeg
+  9.0.2 on Apple-silicon macOS, with or without SIMD). `audio.denoise` refuses
+  `method: anlmdn` on FFmpeg ≥ 9 with an `unsupported` error and points to the
+  FFT method (`afftdn`), which was not affected. Other FFmpeg versions run it.
+* Homebrew's FFmpeg is built without libvorbis, libass (`subtitles` filter),
+  drawtext and animated-WebP encoding; tools that need them report
+  `unsupported` instead of failing obscurely.
+
 ## Optional models (downloaded on request, never bundled)
 
 | Model | License | Verification |

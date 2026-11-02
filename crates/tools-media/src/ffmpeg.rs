@@ -541,6 +541,22 @@ pub async fn need_filter(ctx: &ToolContext, filter: &str, purpose: &str) -> Tool
     }
 }
 
+/// Major version of the detected FFmpeg (`9.0.2`, `n7.1`, `6.1.1-3ubuntu5`);
+/// `None` for unversioned (git) builds or when it cannot be determined.
+pub fn ffmpeg_major(ctx: &ToolContext) -> Option<u32> {
+    parse_major(&ctx.deps().status("ffmpeg").version?)
+}
+
+pub fn parse_major(v: &str) -> Option<u32> {
+    let v = v.strip_prefix('n').unwrap_or(v);
+    let end = v.find(|c: char| !c.is_ascii_digit()).unwrap_or(v.len());
+    let rest = &v[end..];
+    if end == 0 || !(rest.is_empty() || rest.starts_with(['.', '-'])) {
+        return None;
+    }
+    v[..end].parse().ok()
+}
+
 /// Fail with a clear `unsupported` error when this FFmpeg build lacks an encoder.
 pub async fn need_encoder(ctx: &ToolContext, encoder: &str) -> ToolResult<()> {
     if caps(ctx).await?.enc(encoder) {
@@ -1405,28 +1421,8 @@ pub async fn filter_audio_file(
     dur: Option<f64>,
     sp: (f32, f32),
 ) -> ToolResult<()> {
-    filter_audio_file_with(ctx, f, pr, af, out_ext, out, dur, sp, &[]).await
-}
-
-/// [`filter_audio_file`] with extra global FFmpeg options.
-#[allow(clippy::too_many_arguments)]
-pub async fn filter_audio_file_with(
-    ctx: &ToolContext,
-    f: &InputFile,
-    pr: &Probe,
-    af: &str,
-    out_ext: &str,
-    out: &Path,
-    dur: Option<f64>,
-    sp: (f32, f32),
-    globals: &[&str],
-) -> ToolResult<()> {
     let same = out_ext == f.extension();
-    let mut ff = Ff::new();
-    for g in globals {
-        ff = ff.global(g);
-    }
-    let mut ff = ff.input(&f.path);
+    let mut ff = Ff::new().input(&f.path);
     if same
         && pr.streams().iter().any(|s| s["codec_type"] == "video")
         && out_ext != "ogg"
@@ -1652,6 +1648,16 @@ pub fn ff_color(hex: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn major_versions() {
+        assert_eq!(parse_major("9.0.2"), Some(9));
+        assert_eq!(parse_major("n7.1"), Some(7));
+        assert_eq!(parse_major("6.1.1-3ubuntu5"), Some(6));
+        assert_eq!(parse_major("10"), Some(10));
+        assert_eq!(parse_major("N-118000-gabcdef"), None);
+        assert_eq!(parse_major("git-2026"), None);
+    }
+
     use super::*;
 
     #[test]

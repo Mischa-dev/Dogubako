@@ -961,21 +961,6 @@ async fn af_batch<F>(
 where
     F: Fn(&InputFile, &Probe) -> ToolResult<(String, Option<f64>, Value)>,
 {
-    af_batch_with(ctx, p, suffix, label, &[], build).await
-}
-
-/// [`af_batch`] with extra global FFmpeg options.
-async fn af_batch_with<F>(
-    ctx: &ToolContext,
-    p: &Params,
-    suffix: &str,
-    label: &str,
-    globals: &[&str],
-    build: F,
-) -> ToolResult<ToolOutput>
-where
-    F: Fn(&InputFile, &Probe) -> ToolResult<(String, Option<f64>, Value)>,
-{
     let files = p.files("input").to_vec();
     let mut rep = Report::files(&[]);
     for (i, f) in files.iter().enumerate() {
@@ -983,7 +968,7 @@ where
         let (af, dur, item) = build(f, &pr)?;
         let ext = audio_out_ext(f, &pr);
         let out = out_path(ctx, f, suffix, &ext);
-        filter_audio_file_with(
+        filter_audio_file(
             ctx,
             f,
             &pr,
@@ -992,7 +977,6 @@ where
             &out,
             dur.or(pr.duration()),
             span(i, files.len()),
-            globals,
         )
         .await?;
         let _ = label;
@@ -1763,6 +1747,14 @@ fn denoise() -> Arc<dyn Tool> {
         }
         let st = p.str("strength")?;
         let method = p.str("method")?;
+        // anlmdn crashes intermittently in FFmpeg 9 (SIGSEGV/SIGTRAP in
+        // 30-60% of runs with Homebrew 9.0.2 on macOS, with or without SIMD),
+        // so it is refused there rather than producing random failures.
+        if method == "anlmdn" && ffmpeg_major(&ctx).is_some_and(|m| m >= 9) {
+            return Err(ToolError::unsupported(
+                "the non-local-means denoiser (anlmdn) is unreliable in FFmpeg 9 and crashes intermittently; use the FFT denoise method (afftdn) instead",
+            ));
+        }
         chain.push(match method {
             "anlmdn" => format!(
                 "anlmdn=s={}",
@@ -1783,15 +1775,7 @@ fn denoise() -> Arc<dyn Tool> {
             ),
         });
         let af = chain.join(",");
-        // anlmdn segfaults intermittently in FFmpeg 9's optimized (SIMD)
-        // code paths, observed with Homebrew FFmpeg 9.0.2 on arm64 macOS;
-        // the portable C implementation is used instead.
-        let globals: &[&str] = if method == "anlmdn" {
-            &["-cpuflags", "0"]
-        } else {
-            &[]
-        };
-        af_batch_with(&ctx, &p, "denoised", "Denoising", globals, |_, _| {
+        af_batch(&ctx, &p, "denoised", "Denoising", |_, _| {
             Ok((af.clone(), None, json!({"filter": af})))
         })
         .await

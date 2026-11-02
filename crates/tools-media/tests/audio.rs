@@ -250,10 +250,16 @@ async fn loudness_and_filters() {
     ] {
         let mut pr = params.clone();
         pr["input"] = json!([s(&t)]);
-        let out = h
-            .run(id, pr)
-            .await
-            .unwrap_or_else(|e| panic!("{id} {params}: {e}"));
+        let out = match h.run(id, pr).await {
+            Ok(o) => o,
+            // FFmpeg 9 builds refuse anlmdn (it crashes there); other
+            // FFmpeg versions run it.
+            Err(e) if params["method"] == "anlmdn" && e.code() == "unsupported" => {
+                assert!(e.to_string().contains("afftdn"), "{e}");
+                continue;
+            }
+            Err(e) => panic!("{id} {params}: {e}"),
+        };
         assert!((duration(&out.artifacts[0].path) - 3.0).abs() < 0.1, "{id}");
     }
     let e = h
