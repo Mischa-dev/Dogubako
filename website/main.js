@@ -184,11 +184,6 @@
     if (window.scrollY > demo.offsetTop) demo.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
-  // Ctrl/Cmd+K focuses the demo, as it opens search in the app.
-  window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#demo-file').click(); }
-  });
-
   showIntent('dune.jpg', 'image');
 
   // ------------------------------------------------------------- tour
@@ -267,7 +262,7 @@
     if (card) {
       card.classList.add('is-yours');
       card.parentElement.prepend(card);
-      $('#hero-download').textContent = 'Download for ' + $('.dl-os', card).textContent;
+      $('#hero-download').textContent = 'Get it for ' + $('.dl-os', card).textContent;
     }
   }
 })();

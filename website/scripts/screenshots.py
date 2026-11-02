@@ -25,3 +25,9 @@ for png in sorted(SRC.glob("*.png")):
     dest = OUT / (png.stem + ".webp")
     img.save(dest, "WEBP", quality=84, method=6)
     print(f"{png.name} -> {dest.relative_to(ROOT)} ({dest.stat().st_size // 1024} KB, {img.width}x{img.height})")
+
+# The social preview (og:image): PNG, because link previews don't all read WebP.
+home = Image.open(SRC / "home-light.png").convert("RGB")
+home = home.resize((1200, round(home.height * 1200 / home.width)), Image.LANCZOS).crop((0, 0, 1200, 630))
+home.save(ROOT / "website" / "og.png", optimize=True)
+print("home-light.png -> website/og.png (1200x630)")

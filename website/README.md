@@ -13,7 +13,7 @@ like one thing.
 | `index.html` | The page |
 | `styles.css` | Styles, light and dark (follows the system, with a toggle) |
 | `main.js` | Theme toggle, the drop demo, the screenshot tour and tabs |
-| `screenshots/` | WebP copies of `docs/screenshots`, made by `scripts/screenshots.py` |
+| `screenshots/`, `og.png` | WebP copies of `docs/screenshots` and the 1200×630 link preview, made by `scripts/screenshots.py` |
 | `scripts/` | Screenshot capture, sample files and the WebP conversion |
 | `CNAME` | The domain, for GitHub Pages |
 

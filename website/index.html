@@ -14,7 +14,10 @@
   <meta property="og:url" content="https://dogubako.app/">
   <meta property="og:title" content="Dogubako — your toolbox, on your own machine">
   <meta property="og:description" content="249 tools for files, media, documents and code. Free, open source, and nothing leaves your machine.">
-  <meta property="og:image" content="https://dogubako.app/screenshots/home-light.webp">
+  <meta property="og:image" content="https://dogubako.app/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Dogubako home screen: a big input and recent files drawn on a shelf">
   <meta name="twitter:card" content="summary_large_image">
 
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -52,7 +55,7 @@
       <a class="icon-btn" href="https://github.com/Mischa-dev/Dogubako" aria-label="Dogubako on GitHub" title="GitHub">
         <svg viewBox="0 0 24 24" aria-hidden="true" class="filled"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.4c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.7 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
       </a>
-      <a class="btn btn-ink btn-sm" href="#download">Download</a>
+      <a class="btn btn-ink btn-sm" href="#download">Get it</a>
     </div>
   </header>
 
@@ -63,7 +66,7 @@
       <h1>Every little tool you reach for, <span class="soft">in one box on your own machine.</span></h1>
       <p class="lede">249 tools for images, video, audio, speech, PDFs, files, text, code, data, networks, design and your system. Free and open source. Nothing leaves your computer unless you host it yourself.</p>
       <div class="hero-cta">
-        <a class="btn btn-ink" href="#download" id="hero-download">Download for your computer</a>
+        <a class="btn btn-ink" href="#download" id="hero-download">Get Dogubako</a>
         <a class="btn btn-glass" href="https://github.com/Mischa-dev/Dogubako">View on GitHub</a>
       </div>
       <p class="hero-meta mono">macOS · Windows · Linux · Docker · CLI · HTTP API · MCP</p>
@@ -73,7 +76,6 @@
         <label class="drop-input" for="demo-file">
           <span class="drop-placeholder">Drop a file, or say what you need</span>
           <span class="drop-actions">
-            <span class="kbd mono">Ctrl K</span>
             <span class="btn btn-paper btn-sm">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
               Choose files
@@ -126,12 +128,17 @@
             </div>
           </div>
 
-          <aside class="intent glass" id="intent" aria-live="polite">
+          <div class="intent glass" id="intent" aria-live="polite">
             <h2 class="intent-title">What should happen to it?</h2>
             <p class="intent-file mono" id="intent-file">dune.jpg</p>
-            <ol class="intent-list" id="intent-list"></ol>
+            <ol class="intent-list" id="intent-list">
+              <li><span class="n">1</span><span><b>Convert Images</b><span class="d">PNG, JPEG, WebP, AVIF, HEIC and more</span></span></li>
+              <li><span class="n">2</span><span><b>Compress Images</b><span class="d">Smaller files, same look</span></span></li>
+              <li><span class="n">3</span><span><b>Redact Regions</b><span class="d">Blur, pixelate or black out parts of the image</span></span></li>
+              <li><span class="n">4</span><span><b>Remove Image Metadata</b><span class="d">Strip EXIF, GPS location and comments</span></span></li>
+            </ol>
             <p class="intent-note">This page only looks at the file’s name and type. Nothing is uploaded, and the real app works the same way: everything runs on your machine.</p>
-          </aside>
+          </div>
         </div>
       </div>
     </section>
@@ -149,7 +156,7 @@
         <div class="trailer-placeholder" id="trailer-placeholder">
           <span class="play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></span>
           <p class="trailer-placeholder-title">The trailer is on its way</p>
-          <p>A 72-second look at Dogubako, from dropping a file to getting it back. It will play right here.</p>
+          <p>A short look at Dogubako, from dropping a file to getting it back. It will play right here.</p>
         </div>
       </div>
     </section>
@@ -191,7 +198,7 @@
         </article>
         <article class="feature">
           <h3>Make it yours</h3>
-          <p>Hide the sidebar, pin your favourite tools to <span class="kbd mono">Alt 1–9</span>, reorder the home screen and pick light, dark or frosted.</p>
+          <p>Hide the sidebar, pin your favorite tools to <span class="nowrap"><span class="kbd mono">Alt 1–9</span>,</span> reorder the home screen and pick light, dark or frosted.</p>
         </article>
         <article class="feature">
           <h3>Fast on every screen</h3>
@@ -228,7 +235,7 @@
         <article class="drawer"><header><h3>Design</h3><span class="count mono">9</span></header><p>Palettes and palette extraction, WCAG contrast, gradients, canvas resize, compositing and styled QR codes.</p></article>
         <article class="drawer"><header><h3>System</h3><span class="count mono">12</span></header><p>An overview dashboard for CPU, memory, disks, battery health, hardware, processes and temperatures.</p></article>
       </div>
-      <p class="center"><a class="link-arrow" href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/CAPABILITIES.md">See the full list of tools</a></p>
+      <p class="center"><a class="link-arrow" href="https://docs.dogubako.app/reference/capabilities/">See the full list of tools</a></p>
     </section>
 
     <!-- ============================================================ everywhere -->
@@ -251,8 +258,8 @@
         <div class="way" role="tabpanel" id="way-desktop" aria-labelledby="tab-desktop">
           <div class="way-copy">
             <h3>A native app for macOS, Windows and Linux</h3>
-            <p>No account, no telemetry, no paywall. Drop files onto the window and they open in the right tool. Dogubako tells you which engines are missing and gives you the exact command to install them.</p>
-            <a class="link-arrow" href="#download">Download</a>
+            <p>No account, no telemetry, no paywall. Drop files onto the window and it suggests the right tool. Dogubako tells you which engines are missing and gives you the exact command to install them.</p>
+            <a class="link-arrow" href="#download">Get the app</a>
           </div>
           <div class="way-visual"><img src="screenshots/settings-dependencies-dark.webp" width="1360" height="860" alt="Settings showing which optional engines are installed, with install commands" loading="lazy" decoding="async"></div>
         </div>
@@ -261,7 +268,7 @@
           <div class="way-copy">
             <h3>Every tool is a command</h3>
             <p>Pipe text in, point it at files, and script whole batches. Exit codes and output are stable, so it fits in shell scripts and CI.</p>
-            <a class="link-arrow" href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/CLI.md">CLI guide</a>
+            <a class="link-arrow" href="https://docs.dogubako.app/cli/overview/">CLI guide</a>
           </div>
 <pre class="code"><code><span class="c"># find a tool</span>
 <span class="p">$</span> dogubako tools search pdf
@@ -275,7 +282,7 @@
           <div class="way-copy">
             <h3>Your own server, in one command</h3>
             <p>Run Dogubako on a home server, a NAS or a VPS with all the heavy engines installed once. Reach it over your LAN or Tailscale from any browser, including your phone.</p>
-            <a class="link-arrow" href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/SELF_HOSTING.md">Self-hosting guide</a>
+            <a class="link-arrow" href="https://docs.dogubako.app/self-hosting/overview/">Self-hosting guide</a>
           </div>
 <pre class="code"><code><span class="p">$</span> docker compose up -d --build
 <span class="c"># the first-run setup token</span>
@@ -287,7 +294,7 @@
           <div class="way-copy">
             <h3>A documented HTTP API</h3>
             <p>Upload a file, run any tool, and download the result. The OpenAPI document is generated from the same tool descriptions, so it is never out of date.</p>
-            <a class="link-arrow" href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/API.md">API reference</a>
+            <a class="link-arrow" href="https://docs.dogubako.app/reference/http-api/">API reference</a>
           </div>
 <pre class="code"><code><span class="c"># every endpoint, always current</span>
 <span class="p">GET</span>  /api/v1/openapi.json
@@ -303,7 +310,7 @@
           <div class="way-copy">
             <h3>Tools for your AI agents</h3>
             <p>Plug Dogubako into any MCP client. Locally over stdio, or from a shared server over HTTP. Compact discovery keeps 249 tools from flooding the agent’s context.</p>
-            <a class="link-arrow" href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/MCP.md">MCP guide</a>
+            <a class="link-arrow" href="https://docs.dogubako.app/agents/overview/">MCP guide</a>
           </div>
 <pre class="code"><code><span class="c"># a local agent</span>
 <span class="p">$</span> claude mcp add dogubako -- \
@@ -323,7 +330,7 @@
           <p class="eyebrow">Agent-ready, not agent-first</p>
           <h2 id="agents-title">Give every agent its own key, and only the tools it needs.</h2>
           <p class="section-lede">Run one central server with the heavy engines and hand each agent a scoped token. An image bot may resize and blur. A media bot may transcode and transcribe. Neither can see the other’s files or touch your system tools.</p>
-          <a class="link-arrow" href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/SELF_HOSTING.md">Accounts and agents</a>
+          <a class="link-arrow" href="https://docs.dogubako.app/self-hosting/accounts-and-agents/">Accounts and agents</a>
         </div>
         <div class="keys" aria-label="Example agent tokens">
           <div class="key glass">
@@ -382,9 +389,9 @@
 
       <div class="from-source">
 <pre class="code"><code><span class="c"># build the desktop app</span>
-<span class="p">$</span> git clone https://github.com/Mischa-dev/Dogubako && cd Dogubako
-<span class="p">$</span> (cd web && npm ci && npm run build)
-<span class="p">$</span> (cd apps/desktop/src-tauri && cargo tauri build)
+<span class="p">$</span> git clone https://github.com/Mischa-dev/Dogubako &amp;&amp; cd Dogubako
+<span class="p">$</span> (cd web &amp;&amp; npm ci &amp;&amp; npm run build)
+<span class="p">$</span> (cd apps/desktop/src-tauri &amp;&amp; cargo tauri build)
 
 <span class="c"># or just the CLI</span>
 <span class="p">$</span> cargo install --path crates/cli</code></pre>
@@ -401,9 +408,9 @@
         <div><strong>Dogubako</strong><p>A local-first, open-source utility toolbox.</p></div>
       </div>
       <nav class="footer-cols" aria-label="Footer">
-        <div><h4>Project</h4><a href="https://github.com/Mischa-dev/Dogubako">Source code</a><a href="https://github.com/Mischa-dev/Dogubako/releases">Releases</a><a href="https://github.com/Mischa-dev/Dogubako/issues">Report a problem</a></div>
-        <div><h4>Docs</h4><a href="https://docs.dogubako.app">Documentation</a><a href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/SELF_HOSTING.md">Self-hosting</a><a href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/CLI.md">CLI</a><a href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/MCP.md">MCP</a><a href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/SECURITY.md">Security</a></div>
-        <div><h4>License</h4><a href="https://github.com/Mischa-dev/Dogubako/blob/main/LICENSE">AGPL-3.0-or-later</a><a href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/DEPENDENCIES.md">Third-party licenses</a></div>
+        <div><h2 class="footer-h">Project</h2><a href="https://github.com/Mischa-dev/Dogubako">Source code</a><a href="https://github.com/Mischa-dev/Dogubako/releases">Releases</a><a href="https://github.com/Mischa-dev/Dogubako/issues">Report a problem</a></div>
+        <div><h2 class="footer-h">Docs</h2><a href="https://docs.dogubako.app">Documentation</a><a href="https://docs.dogubako.app/self-hosting/overview/">Self-hosting</a><a href="https://docs.dogubako.app/cli/overview/">CLI</a><a href="https://docs.dogubako.app/agents/overview/">MCP</a><a href="https://docs.dogubako.app/project/security/">Security</a></div>
+        <div><h2 class="footer-h">License</h2><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a><a href="https://docs.dogubako.app/project/licensing/">Third-party licenses</a></div>
       </nav>
     </div>
     <p class="footer-fine mono">dogubako.app · made with care, runs on your machine</p>
