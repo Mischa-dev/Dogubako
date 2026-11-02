@@ -143,8 +143,11 @@ fn pretty_body(body: &str, ctype: &str) -> String {
         || body.trim_start().starts_with('{')
         || body.trim_start().starts_with('[')
     {
+        // Bodies with numbers that would be rounded are shown as received.
         if let Ok(v) = serde_json::from_str::<Value>(body) {
-            return serde_json::to_string_pretty(&v).unwrap_or_default();
+            if super::formatters::check_json_numbers(body).is_ok() {
+                return serde_json::to_string_pretty(&v).unwrap_or_default();
+            }
         }
     }
     if ct.contains("x-www-form-urlencoded") {
@@ -472,6 +475,16 @@ fn string_inspect() -> Arc<dyn Tool> {
 mod tests {
     use dogubako_core::testing::TestHarness;
     use serde_json::json;
+
+    #[test]
+    fn pretty_body_keeps_inexact_numbers() {
+        let big = "{\"id\":18446744073709551617}";
+        assert_eq!(super::pretty_body(big, "application/json"), big);
+        assert_eq!(
+            super::pretty_body("{\"id\":1}", "application/json"),
+            "{\n  \"id\": 1\n}"
+        );
+    }
 
     #[tokio::test]
     async fn colors() {

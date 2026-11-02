@@ -44,7 +44,7 @@ pub(crate) fn parse_json(text: &str, param: &str) -> ToolResult<Value> {
 /// f64, so a literal such as 18446744073709551617 or
 /// 0.10000000000000000001 would come back changed. Reject those instead of
 /// silently altering data. `text` must already be valid JSON.
-fn check_json_numbers(text: &str) -> Result<(), String> {
+pub(crate) fn check_json_numbers(text: &str) -> Result<(), String> {
     let b = text.as_bytes();
     let mut i = 0;
     while i < b.len() {
