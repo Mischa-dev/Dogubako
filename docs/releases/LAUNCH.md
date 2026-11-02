@@ -100,6 +100,20 @@ land later, because the release doesn't depend on them. `release.yml` (#7)
 calls `packaging/macos/sign-engines.sh` and `packaging/release/engine_sources.py`
 from this PR, so #7 and #9 must both be on `main` before tagging.
 
+#7 also fixes two files that came from lower PRs. Neither fix is in #1 or #2,
+so never build a release from those branches alone:
+
+- `crates/tools-files/Cargo.toml` (from #1): liblzma gets its `static`
+  feature. Without it, the desktop app and CLI link Homebrew's liblzma and
+  crash on a Mac without Homebrew. `alpha-test.yml` now checks this with `otool -L`.
+- `apps/desktop/src-tauri/tauri.conf.json` (from #2): `beforeDevCommand` and
+  `beforeBuildCommand` use `npm --prefix ../../web`, the correct path from
+  `apps/desktop`. #9 changes other lines of the same file (version, bundled
+  `LICENSE` and notices), and the two merge cleanly.
+
+Checked on 2026-11-02: #1, #2, #4, #6, #7 (1f73360), #5, #3 (b9616ae) and #9
+merge together without conflicts. #8 conflicts with #3's rebuild (see part 1).
+
 ## 3. The go (in order)
 
 1. Merge steps 1 to 6 above.
