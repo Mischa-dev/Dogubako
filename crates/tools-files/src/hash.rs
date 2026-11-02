@@ -153,18 +153,58 @@ fn checksum_verify() -> Arc<dyn Tool> {
             }
         }
         let single = expected.len() == 1 && expected[0].name.is_none();
-        let by_name: HashMap<&str, &Expected> = expected
-            .iter()
-            .filter_map(|e| e.name.as_deref().map(|n| (base_name(n), e)))
-            .collect();
+        // Several entries can share a basename (a/config.json, b/config.json).
+        let mut by_name: HashMap<&str, Vec<&Expected>> = HashMap::new();
+        for e in &expected {
+            if let Some(n) = e.name.as_deref() {
+                by_name.entry(base_name(n)).or_default().push(e);
+            }
+        }
         let mut rows = vec![];
-        let (mut ok, mut bad, mut missing) = (0, 0, 0);
+        let (mut ok, mut bad, mut missing, mut ambiguous) = (0, 0, 0, 0);
         for (i, f) in files.iter().enumerate() {
             ctx.progress(i as f32 / files.len() as f32, f.name.clone());
             let exp = if single {
                 Some(&expected[0])
             } else {
-                by_name.get(f.name.as_str()).copied()
+                match by_name.get(f.name.as_str()).map(Vec::as_slice) {
+                    None | Some([]) => None,
+                    Some([e]) => Some(*e),
+                    Some(entries) => {
+                        // Same checksum everywhere: no ambiguity. Otherwise
+                        // match by path (local inputs carry their full path).
+                        let local = f.path.to_string_lossy().replace('\\', "/");
+                        let by_path: Vec<&&Expected> = entries
+                            .iter()
+                            .filter(|e| {
+                                let n = e.name.as_deref().unwrap_or("").replace('\\', "/");
+                                let n = n.trim_start_matches("./");
+                                local.ends_with(&format!("/{n}")) || local == n
+                            })
+                            .collect();
+                        if entries.iter().all(|e| e.hash == entries[0].hash) {
+                            Some(entries[0])
+                        } else if by_path.len() == 1 {
+                            Some(*by_path[0])
+                        } else {
+                            ambiguous += 1;
+                            let names: Vec<&str> =
+                                entries.iter().filter_map(|e| e.name.as_deref()).collect();
+                            rows.push(json!([
+                                f.name,
+                                "",
+                                "",
+                                "",
+                                format!(
+                                    "ambiguous: {} different checksums listed for this name ({})",
+                                    entries.len(),
+                                    names.join(", ")
+                                )
+                            ]));
+                            continue;
+                        }
+                    }
+                }
             };
             let Some(exp) = exp else {
                 missing += 1;
@@ -205,8 +245,11 @@ fn checksum_verify() -> Arc<dyn Tool> {
                 .filter(|n| !files.iter().any(|f| f.name == *n))
                 .collect()
         };
-        let mut out = ToolOutput::text(if bad == 0 && missing == 0 {
+        let all_ok = bad == 0 && missing == 0 && ambiguous == 0;
+        let mut out = ToolOutput::text(if all_ok {
             format!("All {ok} file(s) OK")
+        } else if ambiguous > 0 {
+            format!("{ok} OK, {bad} mismatched, {missing} without checksum, {ambiguous} ambiguous")
         } else {
             format!("{ok} OK, {bad} mismatched, {missing} without checksum")
         })
@@ -214,7 +257,8 @@ fn checksum_verify() -> Arc<dyn Tool> {
             "ok": ok,
             "mismatched": bad,
             "unlisted": missing,
-            "all_ok": bad == 0 && missing == 0,
+            "ambiguous": ambiguous,
+            "all_ok": all_ok,
             "listed_but_not_provided": listed_not_given,
             "table": table(&["File", "Algorithm", "Expected", "Actual", "Result"], rows),
         }));

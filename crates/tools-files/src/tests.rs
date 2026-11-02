@@ -190,6 +190,37 @@ async fn checksum_verify() {
     assert_eq!(out.data["ok"], 1);
     assert_eq!(out.data["mismatched"], 1);
     assert_eq!(out.data["all_ok"], false);
+    // Same basename in two folders: matched by path where possible, and
+    // reported as ambiguous (never silently compared with the wrong entry).
+    std::fs::create_dir_all(h.path("a")).unwrap();
+    std::fs::create_dir_all(h.path("b")).unwrap();
+    let ca = h.path("a/config.json");
+    let cb = h.path("b/config.json");
+    std::fs::write(&ca, b"abc").unwrap();
+    std::fs::write(&cb, b"zzz").unwrap();
+    let both = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  a/config.json\n17f165d5a5ba695f27c023a83aa2b3463e23810e360b7517127e90161eebabda  b/config.json\n";
+    let out = h
+        .run(
+            "files.checksum_verify",
+            json!({"input": [s(&ca), s(&cb)], "checksums": both}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["ok"], 2, "{:?}", out.data);
+    assert_eq!(out.data["all_ok"], true);
+    let elsewhere = both
+        .replace("a/config", "x/config")
+        .replace("b/config", "y/config");
+    let out = h
+        .run(
+            "files.checksum_verify",
+            json!({"input": [s(&ca)], "checksums": elsewhere}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["ambiguous"], 1, "{:?}", out.data);
+    assert_eq!(out.data["ok"], 0);
+    assert_eq!(out.data["all_ok"], false);
     // Single bare hash, algorithm detected by length (MD5, and BLAKE3 among 64-hex candidates).
     let out = h
         .run(
