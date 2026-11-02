@@ -48,6 +48,9 @@ impl DiscoveryMode {
     }
 }
 
+/// Default largest file accepted by the `upload_file` meta-tool.
+pub const DEFAULT_MAX_UPLOAD: u64 = 50 * 1024 * 1024;
+
 /// What the MCP layer needs from its host (local CLI or hosted server).
 #[async_trait::async_trait]
 pub trait McpBackend: Send + Sync {
@@ -70,7 +73,7 @@ pub trait McpBackend: Send + Sync {
     async fn read_file(&self, file_id: &str) -> Result<(FileView, Vec<u8>), ToolError>;
     /// Maximum accepted upload size through MCP (bytes).
     fn max_upload(&self) -> u64 {
-        50 * 1024 * 1024
+        DEFAULT_MAX_UPLOAD
     }
     /// Default time a direct tool call waits before returning a job handle.
     fn default_wait(&self) -> Duration {

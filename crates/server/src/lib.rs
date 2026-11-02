@@ -17,6 +17,7 @@ pub mod state;
 pub mod storage;
 pub mod web;
 
+use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderValue, Request};
 use axum::middleware::{self, Next};
 use axum::response::Response;
@@ -49,6 +50,14 @@ async fn security_headers(req: Request<axum::body::Body>, next: Next) -> Respons
     resp
 }
 
+/// Request-body limit for `/mcp`: uploads arrive base64-encoded inside
+/// JSON-RPC, so allow 4/3 of the largest accepted upload plus envelope room.
+fn mcp_body_limit(state: &AppState) -> usize {
+    let upload =
+        (state.cfg.max_upload_mb.saturating_mul(1024 * 1024)).min(dogubako_mcp::DEFAULT_MAX_UPLOAD);
+    (upload.saturating_mul(4) / 3 + 1024 * 1024) as usize
+}
+
 /// Build the full application router.
 pub fn app(state: AppState) -> Router {
     Router::new()
@@ -57,7 +66,8 @@ pub fn app(state: AppState) -> Router {
             "/mcp",
             post(mcp_http::mcp_post)
                 .get(mcp_http::mcp_get)
-                .delete(mcp_http::mcp_delete),
+                .delete(mcp_http::mcp_delete)
+                .layer(DefaultBodyLimit::max(mcp_body_limit(&state))),
         )
         .route("/healthz", get(|| async { "ok" }))
         .fallback(web::static_handler)

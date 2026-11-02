@@ -816,6 +816,7 @@ fn gradient() -> Arc<dyn Tool> {
             _ => format!("linear-gradient({angle}deg, {})", list.join(", ")),
         };
         let img = render_gradient(w, h, kind, angle, &stops);
+        ctx.check_cancelled()?;
         let a = save_png(ctx, &img, &format!("gradient-{w}x{h}.png"))?;
         let colors: Vec<Value> = stops.iter().map(|(c, pos)| json!({"hex": hex_rgba(*c), "name": format!("{}%", (pos * 1000.0).round() / 10.0)})).collect();
         Ok(ToolOutput::files(vec![a])

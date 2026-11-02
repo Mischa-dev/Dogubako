@@ -236,13 +236,22 @@ impl Engine {
             timeout = timeout.min(t);
         }
         let cancel = req.cancel.clone();
-        let fut = tool.run(ctx, params);
-        let result = tokio::select! {
-            r = fut => r,
+        let mut fut = std::pin::pin!(tool.run(ctx, params));
+        let interrupted = tokio::select! {
+            r = &mut fut => Ok(r),
             _ = cancel.cancelled() => Err(ToolError::Cancelled),
-            _ = tokio::time::sleep(timeout) => {
+            _ = tokio::time::sleep(timeout) => Err(ToolError::Timeout { seconds: timeout.as_secs() }),
+        };
+        let result = match interrupted {
+            Ok(r) => r,
+            Err(e) => {
+                // Signal the tool, then wait until it has actually stopped:
+                // blocking workers cannot be aborted, and child processes are
+                // killed by the cancellation. Until then its scratch directory
+                // and the caller's concurrency slot stay in use.
                 cancel.cancel();
-                Err(ToolError::Timeout { seconds: timeout.as_secs() })
+                let _ = fut.await;
+                Err(e)
             }
         };
         let mut output = result?;
@@ -280,8 +289,20 @@ mod tests {
     use crate::prelude::*;
     use crate::testing::TestHarness;
 
+    static STUBBORN_DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
     fn tools() -> Vec<Arc<dyn Tool>> {
         vec![
+            sync_tool(
+                ToolSpec::new("dev.stubborn", "Stubborn", Category::Dev)
+                    .describe("blocking work that ignores cancellation")
+                    .timeout(1),
+                |_c, _p| {
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    STUBBORN_DONE.store(true, std::sync::atomic::Ordering::SeqCst);
+                    Ok(ToolOutput::text("late"))
+                },
+            ),
             async_tool(
                 ToolSpec::new("dev.slow", "Slow", Category::Dev)
                     .describe("sleeps")
@@ -342,6 +363,16 @@ mod tests {
         let e = h.run("dev.slow", json!({})).await.unwrap_err();
         assert_eq!(e.code(), "timeout");
         assert!(t.elapsed().as_secs() < 5);
+    }
+
+    #[tokio::test]
+    async fn interrupted_blocking_work_is_awaited() {
+        let h = TestHarness::new(tools());
+        let e = h.run("dev.stubborn", json!({})).await.unwrap_err();
+        assert_eq!(e.code(), "timeout");
+        // The engine only returns once the blocking worker has stopped, so
+        // its scratch dir and the caller's concurrency slot stay accounted.
+        assert!(STUBBORN_DONE.load(std::sync::atomic::Ordering::SeqCst));
     }
 
     #[tokio::test]

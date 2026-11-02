@@ -669,6 +669,19 @@ async fn mcp_endpoint() {
     )
     .await;
     assert_eq!(r.status, StatusCode::ACCEPTED);
+    // A 3 MiB upload (4 MiB as base64) exceeds axum's default 2 MiB body
+    // limit; /mcp is sized for the advertised upload allowance.
+    let b64 = "AAAA".repeat(1024 * 1024);
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &hs,
+        Some(json!({"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "dogubako_upload_file", "arguments": {"name": "zeros.bin", "content_base64": b64}}})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_ne!(r.body["result"]["isError"], true, "{:?}", r.body);
     // tools/list shows only permitted tools (plus meta tools)
     let r = call(
         &t.app,
