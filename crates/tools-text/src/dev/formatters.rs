@@ -296,7 +296,68 @@ fn yaml_to_json(v: serde_yaml_ng::Value) -> Result<Value, String> {
     })
 }
 
+/// Estimated block-YAML size of a native YAML value (indent 2 per level).
+fn yaml_size(v: &serde_yaml_ng::Value, depth: u128) -> u128 {
+    use serde_yaml_ng::Value as Y;
+    match v {
+        Y::Sequence(a) => {
+            2 + a
+                .iter()
+                .map(|x| depth * 2 + 3 + yaml_size(x, depth + 1))
+                .sum::<u128>()
+        }
+        Y::Mapping(m) => {
+            2 + m
+                .iter()
+                .map(|(k, x)| depth * 2 + 4 + yaml_size(k, depth + 1) + yaml_size(x, depth + 1))
+                .sum::<u128>()
+        }
+        Y::Tagged(t) => t.tag.to_string().len() as u128 + 2 + yaml_size(&t.value, depth),
+        Y::String(s) => s.len() as u128 + 2,
+        _ => 24,
+    }
+}
+
+/// Estimated TOML size: every nested table repeats its full dotted path in
+/// a `[a.b.c]` header, so long keys at depth grow quadratically.
+fn toml_size(v: &toml::Value, path: u128) -> u128 {
+    match v {
+        toml::Value::Table(t) => {
+            path + 4
+                + t.iter()
+                    .map(|(k, x)| {
+                        let k = k.len() as u128 + 4;
+                        k + 4 + toml_size(x, path + k)
+                    })
+                    .sum::<u128>()
+        }
+        toml::Value::Array(a) => a.iter().map(|x| path + 8 + toml_size(x, path)).sum(),
+        toml::Value::String(s) => s.len() as u128 + 2,
+        _ => 32,
+    }
+}
+
+/// [`toml_size`] for a JSON value about to be written as TOML.
+fn json_toml_size(v: &Value, path: u128) -> u128 {
+    match v {
+        Value::Object(m) => {
+            path + 4
+                + m.iter()
+                    .map(|(k, x)| {
+                        let k = k.len() as u128 + 4;
+                        k + 4 + json_toml_size(x, path + k)
+                    })
+                    .sum::<u128>()
+        }
+        Value::Array(a) => a.iter().map(|x| path + 8 + json_toml_size(x, path)).sum(),
+        Value::String(s) => s.len() as u128 + 2,
+        _ => 32,
+    }
+}
+
 pub(crate) fn to_yaml(v: &Value) -> ToolResult<String> {
+    // Block-style YAML indents each level like pretty JSON.
+    crate::util::check_generated_size(crate::util::json_pretty_size(v, 2))?;
     serde_yaml_ng::to_string(v).ctx("serializing YAML")
 }
 
@@ -341,6 +402,7 @@ fn yaml_tool() -> Arc<dyn Tool> {
         if p.str("mode")? == "validate" {
             return Ok(ToolOutput::data(data));
         }
+        crate::util::check_generated_size(docs.iter().map(|d| yaml_size(d, 0)).sum())?;
         let parts: Vec<String> = docs
             .iter()
             .map(|d| serde_yaml_ng::to_string(d).ctx("serializing YAML"))
@@ -428,6 +490,7 @@ pub(crate) fn to_toml(v: &Value) -> ToolResult<String> {
             "TOML has no null value; remove or replace null values first",
         ));
     }
+    crate::util::check_generated_size(json_toml_size(v, 0))?;
     toml::to_string_pretty(v)
         .map_err(|e| ToolError::invalid("text", format!("cannot represent as TOML: {e}")))
 }
@@ -468,6 +531,11 @@ fn toml_tool() -> Arc<dyn Tool> {
         if p.str("mode")? == "validate" {
             return Ok(ToolOutput::data(data));
         }
+        crate::util::check_generated_size(
+            t.iter()
+                .map(|(k, x)| k.len() as u128 + 8 + toml_size(x, k.len() as u128 + 4))
+                .sum(),
+        )?;
         let out = toml::to_string_pretty(&t).ctx("serializing TOML")?;
         Ok(ToolOutput::text_as(out, "application/toml").with_data(data))
     })
@@ -578,6 +646,11 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
     };
     let mut entities = EntityRules::new();
     loop {
+        // Indentation grows with depth: deeply nested tiny elements can
+        // expand many times over. Checked per event, so the overshoot is at
+        // most one line's indentation.
+        let written = writer.get_ref().len() + sub.as_ref().map_or(0, |(w, _)| w.get_ref().len());
+        crate::util::check_generated_size(written as u128)?;
         let ev = reader
             .read_event()
             .map_err(|e| err(&reader, e.to_string()))?;

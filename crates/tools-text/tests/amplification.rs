@@ -284,3 +284,46 @@ async fn table_exports_and_sparse_json_are_bounded() {
         .unwrap();
     assert!(out.artifacts.len() == 1 || out.text.is_some());
 }
+
+#[tokio::test]
+async fn deep_xml_indentation_is_bounded() {
+    let h = harness();
+    let xml = format!("{}{}", "<a>".repeat(50_000), "</a>".repeat(50_000));
+    limited(&h, "dev.xml", json!({"text": xml})).await;
+    let out = h
+        .run("dev.xml", json!({"text": "<a><b>x</b></a>"}))
+        .await
+        .unwrap();
+    assert!(out.text.unwrap().contains("  <b>x</b>"));
+}
+
+#[tokio::test]
+async fn yaml_and_toml_reformatting_is_bounded() {
+    let h = harness();
+    // Flow-style nesting re-emitted in block style indents every item.
+    let deep = format!(
+        "{}{}{}",
+        "[".repeat(120),
+        "1,".repeat(2_000_000) + "1",
+        "]".repeat(120)
+    );
+    limited(&h, "dev.yaml", json!({"text": deep})).await;
+    // Inline tables re-emitted as [a.b.c] headers repeat the whole path.
+    let key = "k".repeat(200_000);
+    let mut toml = "1".to_string();
+    for _ in 0..60 {
+        toml = format!("{{{key}={toml}}}");
+    }
+    limited(&h, "dev.toml", json!({"text": format!("{key}={toml}")})).await;
+
+    let out = h
+        .run("dev.yaml", json!({"text": "a: [1, 2]"}))
+        .await
+        .unwrap();
+    assert!(out.text.unwrap().contains("- 1"));
+    let out = h
+        .run("dev.toml", json!({"text": "a = {b = 1}"}))
+        .await
+        .unwrap();
+    assert!(out.text.unwrap().contains("b = 1"));
+}
