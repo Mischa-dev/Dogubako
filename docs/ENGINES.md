@@ -106,7 +106,22 @@ test server.
 
 The [Engines workflow](../.github/workflows/engines.yml) does all of this on a
 macOS runner whenever `packaging/engines/` changes and keeps the result as a
-build artifact.
+build artifact. The [release workflow](../.github/workflows/release.yml) does
+it for tagged releases: Apple-silicon DMG with the bundled engines, packs
+uploaded to the same (draft) release, Developer ID signing and notarization
+when the `APPLE_*` secrets are set (`DOGUBAKO_ENGINE_SIGN_CMD` re-signs every
+engine before packing) and an unsigned DMG when they aren't.
+
+`assemble.py --bundle-all` puts the on-demand engines in the app too, for test
+builds that should work without downloads; the
+[alpha test workflow](../.github/workflows/alpha-test.yml) uses it (see
+[ALPHA_TESTING.md](ALPHA_TESTING.md)).
+
+Every engine folder and pack carries `licenses/<component>/` with the license
+texts of each component shipped in it (the engine and every library it
+links). Texts a package doesn't include are kept in
+`packaging/engines/licenses/`; anything still missing gets a
+`LICENSE-INFO.txt` with the SPDX id and source link, and assemble.py warns.
 
 `fetch.py` and `assemble.py` also run on Linux (with `llvm-otool` and
 `llvm-install-name-tool`), which is useful for checking the tree, but the

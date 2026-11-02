@@ -132,6 +132,8 @@ class Folder:
         self.copied: dict[str, Path] = {}  # dylib basename -> source path
         self.machos: list[Path] = []
         self.warnings: list[str] = []
+        # Staged source folders whose files ended up here: their licenses ship too.
+        self.sources: set[str] = set()
 
     def resolve_dep(self, dep: str, origin: Path, origin_formula: str) -> Path | None:
         """Map an install name to a staged file, or None for system libraries."""
@@ -163,6 +165,7 @@ class Folder:
         shutil.copy2(real, dst)
         dst.chmod(dst.stat().st_mode | stat.S_IWUSR)
         self.copied[name] = real
+        self.sources.add(formula)
         self.relocate(dst, formula, real)
 
     def relocate(self, dst: Path, formula: str, src: Path | None = None) -> None:
@@ -247,9 +250,55 @@ class Folder:
             return
         for p in self.machos:
             subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(p)], check=True, capture_output=True)
+        # Release builds: re-sign with the Developer ID (hardened runtime)
+        # before anything is packed. The command gets the folder as its argument.
+        hook = os.environ.get("DOGUBAKO_ENGINE_SIGN_CMD")
+        if hook:
+            subprocess.run([hook, str(self.root)], check=True)
 
 
 # ---------------------------------------------------------------- engines ---
+
+
+LICENSE_NAME = re.compile(r"^(LICEN[CS]E|COPYING|COPYRIGHT|NOTICE|UNLICENSE)", re.I)
+
+
+def license_files(src: Path) -> list[Path]:
+    """License texts at the top of a keg or archive, or in its share/doc."""
+    cands = [p for p in src.iterdir() if p.is_file() and LICENSE_NAME.match(p.name)]
+    doc = src / "share" / "doc"
+    if not cands and doc.is_dir():
+        cands = [p for p in doc.rglob("*") if p.is_file() and LICENSE_NAME.match(p.name)]
+    return sorted(cands)
+
+
+def write_licenses(folder: "Folder", lock: dict, manifest: dict) -> None:
+    """Copy each shipped component's license texts to licenses/<name>/.
+
+    Components without a license file in their bottle or archive get a
+    LICENSE-INFO.txt naming the license and where its text and source live.
+    """
+    by_source = {eid: e for eid, e in manifest["engine"].items()}
+    by_formula = {e.get("formula"): e for e in manifest["engine"].values() if e.get("formula")}
+    for name in sorted(folder.sources):
+        src = STAGE / name
+        out = folder.root / "licenses" / name
+        out.mkdir(parents=True, exist_ok=True)
+        found = license_files(src) if src.is_dir() else []
+        vendored = HERE / "licenses" / name
+        if vendored.is_dir():
+            found += sorted(vendored.iterdir())
+        for f in found:
+            shutil.copy2(f, out / f.name)
+        if not found:
+            bottle = lock["bottles"].get(name, {})
+            e = by_formula.get(name) or by_source.get(name) or {}
+            spdx = bottle.get("license") or e.get("license") or "see source"
+            url = e.get("source_url") or f"https://formulae.brew.sh/formula/{name}"
+            (out / "LICENSE-INFO.txt").write_text(
+                f"{name}\nLicense: {spdx}\nThe full license text and source code are available from: {url}\n"
+            )
+            folder.warnings.append(f"{name}: no license file in its package; wrote LICENSE-INFO.txt")
 
 
 def install_engine(folder: Folder, eid: str, e: dict, locked: dict) -> dict:
@@ -261,6 +310,7 @@ def install_engine(folder: Folder, eid: str, e: dict, locked: dict) -> dict:
         src = STAGE / eid
     if not src.exists():
         raise SystemExit(f"{eid}: {src} not staged; run fetch.py {eid}")
+    folder.sources.add(src.name)
     bindir = folder.root / "bin"
     bindir.mkdir(parents=True, exist_ok=True)
     binaries = list(e.get("binaries", []))
@@ -322,6 +372,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--only", nargs="*", help="engine ids to assemble (default: all managed)")
     ap.add_argument("--no-packs", action="store_true", help="skip the on-demand packs")
+    ap.add_argument(
+        "--bundle-all",
+        action="store_true",
+        help="test builds: put the on-demand engines in the bundled folder too (no downloads needed)",
+    )
     args = ap.parse_args()
     manifest = tomllib.loads(MANIFEST.read_text())
     lock_text = LOCK.read_text()
@@ -337,16 +392,20 @@ def main() -> None:
     bundled = Folder(BUNDLED, lock)
     bundled_entries = []
     for eid, locked in lock["engines"].items():
-        if locked["tier"] != "bundled" or eid not in wanted:
+        if eid not in wanted or not (locked["tier"] == "bundled" or args.bundle_all):
+            continue
+        if args.bundle_all and locked["source"] == "build" and not (STAGE / eid).exists():
+            warnings.append(f"{eid}: built from source; run build-from-source.sh {eid} first, skipped")
             continue
         bundled_entries.append(install_engine(bundled, eid, manifest["engine"][eid], locked))
+    write_licenses(bundled, lock, manifest)
     bundled.check()
     bundled.sign()
     warnings += [f"bundled: {w}" for w in bundled.warnings]
 
     # On-demand tier: one self-contained pack each.
     packs = []
-    if not args.no_packs:
+    if not (args.no_packs or args.bundle_all):
         PACKS.mkdir(parents=True, exist_ok=True)
         for eid, locked in lock["engines"].items():
             if locked["tier"] != "on-demand" or eid not in wanted:
@@ -359,6 +418,7 @@ def main() -> None:
                 shutil.rmtree(root)
             folder = Folder(root, lock)
             entry = install_engine(folder, eid, manifest["engine"][eid], locked)
+            write_licenses(folder, lock, manifest)
             folder.check()
             folder.sign()
             (root / "engine.json").write_text(json.dumps(entry, indent=2) + "\n")

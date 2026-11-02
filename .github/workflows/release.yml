@@ -12,23 +12,68 @@ jobs:
       matrix:
         include:
           - platform: ubuntu-22.04
-          - platform: macos-latest
-            args: --target universal-apple-darwin
+          # Apple silicon only: the managed engines are arm64 (docs/ENGINES.md).
+          - platform: macos-15
+            args: --target aarch64-apple-darwin --config tauri.engines.conf.json
           - platform: windows-latest
     runs-on: ${{ matrix.platform }}
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin' || '' }}
       - if: matrix.platform == 'ubuntu-22.04'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev patchelf
       - run: npm ci
         working-directory: web
+
+      # macOS: pinned engines inside the app, on-demand packs on this release.
+      - if: startsWith(matrix.platform, 'macos')
+        uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Apple signing (optional)
+        if: startsWith(matrix.platform, 'macos')
+        # Only exported when set, so a missing secret means an unsigned build
+        # instead of a failed signing attempt with empty values.
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            val="$(printenv "$v" || true)"
+            if [ -n "$val" ]; then
+              delim="EOF_$(openssl rand -hex 8)"
+              printf '%s<<%s\n%s\n%s\n' "$v" "$delim" "$val" "$delim" >> "$GITHUB_ENV"
+            fi
+          done
+          if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then echo "::notice::No Apple signing identity: building an unsigned DMG"; fi
+          if [ -x packaging/macos/sign-engines.sh ]; then
+            echo "DOGUBAKO_ENGINE_SIGN_CMD=$PWD/packaging/macos/sign-engines.sh" >> "$GITHUB_ENV"
+          fi
+      - name: Engines
+        if: startsWith(matrix.platform, 'macos')
+        env:
+          # The app downloads on-demand engines from this release's assets.
+          DOGUBAKO_ENGINE_PACK_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+        run: |
+          python3 -I packaging/engines/lock.py --check
+          python3 -I packaging/engines/fetch.py
+          packaging/engines/build-from-source.sh whisper
+          python3 -I packaging/engines/assemble.py
+          sudo mv /opt/homebrew /opt/homebrew.hidden
+          packaging/engines/smoke.sh apps/desktop/src-tauri/engines build/engines/packs/*/
+          sudo mv /opt/homebrew.hidden /opt/homebrew
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -38,6 +83,9 @@ jobs:
           releaseName: Dogubako ${{ github.ref_name }}
           releaseDraft: true
           args: ${{ matrix.args }}
+      - name: Upload engine packs
+        if: startsWith(matrix.platform, 'macos')
+        run: gh release upload "${{ github.ref_name }}" build/engines/packs/*.tar.gz build/engines/packs/packs.json --clobber
 
   cli:
     name: CLI/server binaries (${{ matrix.target }})
