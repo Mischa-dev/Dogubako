@@ -214,17 +214,29 @@ async fn video_subtitle_tools() {
         .unwrap();
     assert!(codec(&out.artifacts[0].path, "subtitle").is_none());
 
-    let out = h.run("video.subtitles_burn", json!({"input": [s(&v)], "subtitles": s(&srt), "font_size": 18, "color": "#ffff00", "position": "top"})).await.unwrap();
-    assert!(codec(&out.artifacts[0].path, "subtitle").is_none());
-    assert_eq!(dims(&out.artifacts[0].path), (320, 240));
-    let out = h
-        .run(
-            "video.subtitles_burn",
-            json!({"input": [s(&with_subs)], "stream": 0}),
-        )
-        .await
-        .unwrap();
-    assert!(out.artifacts[0].size > 0);
+    if has_filter("subtitles") {
+        let out = h.run("video.subtitles_burn", json!({"input": [s(&v)], "subtitles": s(&srt), "font_size": 18, "color": "#ffff00", "position": "top"})).await.unwrap();
+        assert!(codec(&out.artifacts[0].path, "subtitle").is_none());
+        assert_eq!(dims(&out.artifacts[0].path), (320, 240));
+        let out = h
+            .run(
+                "video.subtitles_burn",
+                json!({"input": [s(&with_subs)], "stream": 0}),
+            )
+            .await
+            .unwrap();
+        assert!(out.artifacts[0].size > 0);
+    } else {
+        // Minimal FFmpeg builds (e.g. Homebrew) lack libass: clear error, not a crash.
+        let e = h
+            .run(
+                "video.subtitles_burn",
+                json!({"input": [s(&v)], "subtitles": s(&srt)}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(e.code(), "unsupported", "{e}");
+    }
     let e = h
         .run("video.subtitles_burn", json!({"input": [s(&v)]}))
         .await

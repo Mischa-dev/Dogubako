@@ -456,14 +456,17 @@ async fn frames_thumbs_gif() {
         .unwrap();
     let g = out.artifacts[0].path.clone();
     assert_eq!(dims(&g).0, 160);
-    let out = h
+    let webp = h
         .run(
             "video.to_gif",
             json!({"input": [s(&v)], "duration": "1", "format": "webp"}),
         )
-        .await
-        .unwrap();
-    assert_eq!(out.artifacts[0].mime, "image/webp");
+        .await;
+    if has_encoder("libwebp_anim") {
+        assert_eq!(webp.unwrap().artifacts[0].mime, "image/webp");
+    } else {
+        assert_eq!(webp.unwrap_err().code(), "unsupported");
+    }
     let out = h
         .run("video.from_gif", json!({"input": [s(&g)], "repeat": 1}))
         .await
@@ -516,8 +519,12 @@ async fn stabilize_watermark_info_hw() {
         .unwrap();
     assert_eq!(out.data["files"][0]["method"], "deshake");
 
-    let out = h.run("video.watermark", json!({"input": [s(&v)], "kind": "text", "text": "50% 'quoted' : text", "position": "top-left"})).await.unwrap();
-    assert!(out.artifacts[0].size > 0);
+    let wm = h.run("video.watermark", json!({"input": [s(&v)], "kind": "text", "text": "50% 'quoted' : text", "position": "top-left"})).await;
+    if has_filter("drawtext") {
+        assert!(wm.unwrap().artifacts[0].size > 0);
+    } else {
+        assert_eq!(wm.unwrap_err().code(), "unsupported");
+    }
     let logo = gen(
         &h,
         "logo%1.png",

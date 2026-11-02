@@ -891,6 +891,12 @@ pub(crate) async fn burn_subtitles(
             }
         };
         let is_ass = name.ends_with(".ass") || name.ends_with(".ssa");
+        crate::ffmpeg::need_filter(
+            ctx,
+            "subtitles",
+            "burning in subtitles (FFmpeg built with libass)",
+        )
+        .await?;
         let mut filter = format!("subtitles=filename={name}");
         if !is_ass || style.force {
             let align = match style.position.as_str() {

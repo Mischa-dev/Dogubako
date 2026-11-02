@@ -1924,6 +1924,7 @@ pub(crate) async fn make_gif(
                 .await?;
         }
         "webp" => {
+            crate::ffmpeg::need_encoder(ctx, "libwebp_anim").await?;
             let lp = if g.loop_ < 0 { 1 } else { g.loop_ };
             input
                 .input(&f.path)
@@ -2571,6 +2572,12 @@ fn watermark() -> Arc<dyn Tool> {
                 let ww = even(vw as f64 * size / 100.0);
                 ff = ff.input(&local).args(["-filter_complex", &format!("[1:v]scale={ww}:-1,format=rgba,colorchannelmixer=aa={op:.3}[wm];[0:v][wm]overlay={xe}:{ye}:format=auto,format=yuv420p[v]"), "-map", "[v]"]);
             } else {
+                crate::ffmpeg::need_filter(
+                    &ctx,
+                    "drawtext",
+                    "text watermarks (FFmpeg built with libfreetype)",
+                )
+                .await?;
                 std::fs::write(dir.join("wm.txt"), p.text("text").trim())?;
                 let fs = ((vh as f64 * size / 100.0) / 2.0).round().max(8.0) as i64;
                 let mut dt = format!("drawtext=textfile=wm.txt:expansion=none:fontsize={fs}:fontcolor={}@{op:.3}:x={xe}:y={ye}", ff_color(p.str_or("color", "#ffffff")));

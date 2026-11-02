@@ -522,6 +522,28 @@ pub fn parse_listing(text: &str, flag_len: usize) -> HashSet<String> {
     out
 }
 
+/// Fail with a clear `unsupported` error when this FFmpeg build lacks a filter.
+pub async fn need_filter(ctx: &ToolContext, filter: &str, purpose: &str) -> ToolResult<()> {
+    if caps(ctx).await?.filter(filter) {
+        Ok(())
+    } else {
+        Err(ToolError::unsupported(format!(
+            "this FFmpeg build has no '{filter}' filter, which is needed for {purpose}; install an FFmpeg build that includes it"
+        )))
+    }
+}
+
+/// Fail with a clear `unsupported` error when this FFmpeg build lacks an encoder.
+pub async fn need_encoder(ctx: &ToolContext, encoder: &str) -> ToolResult<()> {
+    if caps(ctx).await?.enc(encoder) {
+        Ok(())
+    } else {
+        Err(ToolError::unsupported(format!(
+            "this FFmpeg build has no '{encoder}' encoder"
+        )))
+    }
+}
+
 pub async fn caps(ctx: &ToolContext) -> ToolResult<Arc<Caps>> {
     let key = ctx.deps().path("ffmpeg").unwrap_or_default();
     if let Some(c) = caps_cache().lock().unwrap().get(&key) {

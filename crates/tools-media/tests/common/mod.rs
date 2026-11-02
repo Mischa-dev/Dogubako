@@ -146,3 +146,16 @@ pub fn has_encoder_for(fmt: &str) -> bool {
         _ => true,
     }
 }
+
+/// Whether this FFmpeg build has the named filter.
+pub fn has_filter(name: &str) -> bool {
+    Command::new("ffmpeg")
+        .args(["-hide_banner", "-filters"])
+        .output()
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .any(|l| l.split_whitespace().nth(1) == Some(name))
+        })
+        .unwrap_or(false)
+}
