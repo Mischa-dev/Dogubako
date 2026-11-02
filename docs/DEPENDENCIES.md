@@ -45,12 +45,15 @@ Bundled data files:
 | `crates/tools-image/assets/DejaVuSans.ttf` | Bitstream Vera / DejaVu (permissive; `DejaVuSans-LICENSE.txt` alongside) |
 | `crates/tools-text/data/eff_large_wordlist.txt` | EFF Large Wordlist, CC BY 3.0 US (attribution shown with generated passphrases) |
 
-## External programs (not bundled with the desktop app or CLI)
+## External programs
 
-Dogubako **invokes** these as separate processes when installed; it never links
-them. Users install them through their package manager (`dogubako deps` shows
-the commands). The Docker image installs Debian's packages, whose license terms
-and source availability follow Debian's.
+Dogubako **invokes** these as separate processes; it never links them. The
+desktop app ships or downloads pinned copies of most of them into its own
+folder, and the Docker image installs pinned Debian packages; see
+[ENGINES.md](ENGINES.md) for which, at what version, and the redistribution
+notes. The CLI and development builds use whatever is installed
+(`dogubako deps` shows install commands). Debian's packages follow Debian's
+license terms and source availability.
 
 | Program | License | Notes |
 |---|---|---|

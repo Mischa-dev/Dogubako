@@ -1,7 +1,9 @@
 //! Dogubako desktop: the shared React UI in a Tauri webview, calling the
 //! tool engine in-process (no HTTP server). See docs/FRONTEND_CONTRACT.md.
 
+use dogubako_core::deps::DepRegistry;
 use dogubako_core::engine::{Engine, EngineConfig, RunRequest};
+use dogubako_core::engines::{default_bundled_root, ManagedEngines};
 use dogubako_core::error::ToolError;
 use dogubako_core::params::LocalFileResolver;
 use dogubako_core::paths::AppDirs;
@@ -247,6 +249,42 @@ async fn model_download(app: AppHandle, state: State<'_, Desktop>, id: String) -
 }
 
 #[tauri::command]
+fn engines_list(state: State<'_, Desktop>) -> Value {
+    let m = state.engine.deps.managed();
+    json!({"mode": m.mode(), "engines": m.list()})
+}
+
+/// Download an on-demand engine into the app's own folder (pinned version,
+/// checksum-verified), then re-detect dependencies.
+#[tauri::command]
+async fn engine_install(app: AppHandle, state: State<'_, Desktop>, id: String) -> Result<(), String> {
+    let engine = state.engine.clone();
+    let eid = id.clone();
+    let result = engine
+        .deps
+        .managed()
+        .install(
+            &id,
+            move |done, total| {
+                let _ = app.emit("dogubako://engine-progress", json!({"id": eid, "done": done, "total": total}));
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string());
+    engine.deps.refresh();
+    result
+}
+
+#[tauri::command]
+fn engine_remove(state: State<'_, Desktop>, id: String) -> Result<(), String> {
+    let r = state.engine.deps.managed().remove(&id).map_err(|e| e.to_string());
+    state.engine.deps.refresh();
+    r
+}
+
+#[tauri::command]
 fn model_remove(state: State<'_, Desktop>, id: String) -> Result<(), String> {
     state.engine.models.remove(&id).map_err(|e| e.to_string())
 }
@@ -262,7 +300,11 @@ pub fn run() {
     cfg.models_dir = dirs.models.clone();
     cfg.temp_root = std::env::temp_dir().join("dogubako");
     cfg.worker_exe = std::env::current_exe().ok();
-    let engine = Arc::new(Engine::new(registry, cfg, vec![dirs.bin.clone()]));
+    // Pinned engines shipped in the app bundle, plus on-demand ones it
+    // downloads into its own folder (docs/ENGINES.md).
+    let managed = ManagedEngines::load(default_bundled_root(), dirs.data.join("engines"));
+    let deps = DepRegistry::with_managed(vec![dirs.bin.clone()], managed);
+    let engine = Arc::new(Engine::with_deps(registry, cfg, deps));
     let output_dir = dirs.data.join("outputs");
     let staging_dir = std::env::temp_dir().join("dogubako-staging");
     let _ = std::fs::create_dir_all(&output_dir);
@@ -292,7 +334,10 @@ pub fn run() {
             deps_refresh,
             models_list,
             model_download,
-            model_remove
+            model_remove,
+            engines_list,
+            engine_install,
+            engine_remove
         ])
         .run(tauri::generate_context!())
         .expect("error while running Dogubako");

@@ -6,3 +6,10 @@ web/dist/
 .DS_Store
 /data/
 apps/desktop/src-tauri/gen/
+
+# Engine staging and assembled engine folders (packaging/engines)
+/build
+/apps/desktop/src-tauri/engines
+
+# Local compose settings (may hold API keys)
+.env

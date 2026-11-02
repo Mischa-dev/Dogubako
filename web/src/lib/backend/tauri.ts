@@ -217,6 +217,12 @@ export class TauriBackend implements Backend {
   }
   async modelDownload(id: string) { await invoke('model_download', { id }); }
   async modelRemove(id: string) { await invoke('model_remove', { id }); }
+  /** Download an app-managed engine (pinned, checksum-verified) into the app's folder. */
+  async engineInstall(id: string) { await invoke('engine_install', { id }); }
+  async onEngineProgress(cb: (p: { id: string; done: number; total: number }) => void) {
+    const { listen } = await import('@tauri-apps/api/event');
+    return listen<{ id: string; done: number; total: number }>('dogubako://engine-progress', (e) => cb(e.payload));
+  }
   async onModelProgress(cb: (p: { id: string; done: number; total: number }) => void) {
     const { listen } = await import('@tauri-apps/api/event');
     return listen<{ id: string; done: number; total: number }>('dogubako://model-progress', (e) => cb(e.payload));

@@ -216,6 +216,11 @@ export interface DepInfo {
   install_hint?: string;
   install?: Partial<Record<'apt' | 'dnf' | 'pacman' | 'brew' | 'winget' | 'url', string | null>>;
   used_by?: string[];
+  /** Desktop: `bundled` / `downloaded` for the app's own engines, else `system`. */
+  source?: 'bundled' | 'downloaded' | 'system';
+  /** Desktop: engine id when the app can download this program itself. */
+  downloadable?: string;
+  download_bytes?: number;
 }
 
 export interface ModelInfo {

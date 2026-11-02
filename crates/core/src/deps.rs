@@ -4,6 +4,7 @@
 //! ...). This module knows how to find them, check versions and explain how
 //! to install them. Nothing is ever installed system-wide automatically.
 
+use crate::engines::{Lookup, ManagedEngines, Origin};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -374,6 +375,15 @@ pub struct DepStatus {
     pub license: String,
     pub install_hint: String,
     pub install: InstallHints,
+    /// Where the program was found: `bundled` / `downloaded` (the app's own
+    /// engines) or `system`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<&'static str>,
+    /// Set when the app can download this engine itself: the engine id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub downloadable: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download_bytes: Option<u64>,
 }
 
 /// Caches detection results. Cheap to clone via Arc.
@@ -382,16 +392,28 @@ pub struct DepRegistry {
     /// Checked after PATH: well-known install locations that a GUI launch
     /// may leave off PATH.
     fallback_dirs: Vec<PathBuf>,
+    managed: ManagedEngines,
     cache: RwLock<HashMap<String, DepStatus>>,
 }
 
 impl DepRegistry {
     pub fn new(extra_dirs: Vec<PathBuf>) -> Self {
+        Self::with_managed(extra_dirs, ManagedEngines::disabled())
+    }
+
+    /// Like [`DepRegistry::new`], with the app's own engines checked first
+    /// (and, in managed mode, exclusively for the engines they cover).
+    pub fn with_managed(extra_dirs: Vec<PathBuf>, managed: ManagedEngines) -> Self {
         DepRegistry {
             extra_dirs,
             fallback_dirs: platform_fallback_dirs(),
+            managed,
             cache: RwLock::new(HashMap::new()),
         }
+    }
+
+    pub fn managed(&self) -> &ManagedEngines {
+        &self.managed
     }
 
     /// Clear cached detection (after the user installs something).
@@ -423,7 +445,7 @@ impl DepRegistry {
         self.status(id).found
     }
 
-    fn find_binary(&self, spec: &DepSpec) -> Option<PathBuf> {
+    fn find_binary(&self, spec: &DepSpec) -> (Option<PathBuf>, Lookup) {
         let env_key = format!(
             "DOGUBAKO_{}_PATH",
             spec.id.to_ascii_uppercase().replace('-', "_")
@@ -431,14 +453,34 @@ impl DepRegistry {
         if let Ok(p) = std::env::var(&env_key) {
             let p = PathBuf::from(p);
             if p.is_file() {
-                return Some(p);
+                return (Some(p), Lookup::Unmanaged);
             }
         }
         let mut names: Vec<&str> = spec.binaries.to_vec();
         if !cfg!(windows) {
             names.extend_from_slice(spec.unix_only_binaries);
         }
-        search_binary(&names, &self.extra_dirs, &self.fallback_dirs)
+        let managed = self.managed.lookup(spec.id, &names);
+        if let Lookup::Found { path, .. } = &managed {
+            return (Some(path.clone()), managed);
+        }
+        if self.managed.exclusive(&managed) {
+            return (None, managed);
+        }
+        (
+            search_binary(&names, &self.extra_dirs, &self.fallback_dirs),
+            managed,
+        )
+    }
+
+    /// Extra environment for running `program` (set for the app's own engines).
+    pub fn env_for(&self, program: &Path) -> Vec<(String, std::ffi::OsString)> {
+        self.managed.env_for(program)
+    }
+
+    /// Whether a sibling binary may be searched for on PATH.
+    pub fn system_lookup_allowed(&self, id: &str) -> bool {
+        !matches!(self.status(id).source, Some("bundled" | "downloaded"))
     }
 
     fn detect(&self, id: &str) -> DepStatus {
@@ -453,10 +495,49 @@ impl DepRegistry {
                 license: String::new(),
                 install_hint: format!("unknown dependency '{id}'"),
                 install: hints!(None, None, None, None, None, ""),
+                source: None,
+                downloadable: None,
+                download_bytes: None,
             };
         };
-        let path = self.find_binary(spec);
+        let (path, managed) = self.find_binary(spec);
         let version = path.as_ref().and_then(|p| probe_version(p, spec));
+        let (source, downloadable, download_bytes, install_hint) = match managed {
+            Lookup::Found { origin, .. } => (
+                Some(match origin {
+                    Origin::Bundled => "bundled",
+                    Origin::Downloaded => "downloaded",
+                }),
+                None,
+                None,
+                install_hint(spec),
+            ),
+            Lookup::Downloadable { engine, bytes } if path.is_none() => (
+                None,
+                Some(engine.clone()),
+                Some(bytes),
+                format!(
+                    "Download {} ({}) in Settings → Dependencies; Dogubako keeps it in its own folder",
+                    spec.name,
+                    crate::util::human_size(bytes)
+                ),
+            ),
+            Lookup::Missing { .. } if path.is_none() => (
+                None,
+                None,
+                None,
+                format!(
+                    "{} should be bundled with Dogubako but is missing; reinstall the app",
+                    spec.name
+                ),
+            ),
+            _ => (
+                path.as_ref().map(|_| "system"),
+                None,
+                None,
+                install_hint(spec),
+            ),
+        };
         DepStatus {
             id: spec.id.to_string(),
             name: spec.name.to_string(),
@@ -465,8 +546,11 @@ impl DepRegistry {
             path,
             version,
             license: spec.license.to_string(),
-            install_hint: install_hint(spec),
+            install_hint,
             install: spec.install.clone(),
+            source,
+            downloadable,
+            download_bytes,
         }
     }
 }
@@ -601,5 +685,52 @@ mod fallback_tests {
         let in_extra = extra.path().join(exe_name(name));
         std::fs::write(&in_extra, b"").unwrap();
         assert_eq!(search_binary(&names, &e, &f), Some(in_extra));
+    }
+}
+
+#[cfg(test)]
+mod managed_tests {
+    use super::*;
+
+    #[test]
+    fn managed_engines_shadow_and_exclude_the_system() {
+        let t = tempfile::tempdir().unwrap();
+        let bundled = t.path().join("engines");
+        std::fs::create_dir_all(bundled.join("bin")).unwrap();
+        std::fs::write(bundled.join("bin").join(exe_name("qpdf")), b"").unwrap();
+        std::fs::write(
+            bundled.join("manifest.json"),
+            serde_json::json!({
+                "schema": 1, "target": "darwin-arm64", "lock_id": "t",
+                "bundled": [{"id": "qpdf", "deps": ["qpdf"], "version": "12", "binaries": ["qpdf"], "license": "Apache-2.0"}],
+                "on_demand": [{"id": "ghostscript", "deps": ["ghostscript"], "version": "10", "binaries": ["gs"],
+                    "license": "AGPL-3.0", "url": "https://example.invalid/gs.tar.gz", "sha256": "00",
+                    "download_bytes": 20000000, "installed_bytes": 46000000}]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        // A "system" gs that managed mode must ignore.
+        let sys = t.path().join("sys");
+        std::fs::create_dir_all(&sys).unwrap();
+        std::fs::write(sys.join(exe_name("gs")), b"").unwrap();
+        let managed = ManagedEngines::load(Some(bundled.clone()), t.path().join("installed"));
+        if managed.mode() != crate::engines::EngineMode::Managed {
+            return; // DOGUBAKO_ENGINES overrides the default in this environment
+        }
+        let reg = DepRegistry::with_managed(vec![sys], managed);
+        let q = reg.status("qpdf");
+        assert_eq!(q.source, Some("bundled"));
+        assert_eq!(q.path, Some(bundled.join("bin").join(exe_name("qpdf"))));
+        let gs = reg.status("ghostscript");
+        assert!(!gs.found, "managed engine must not come from the system");
+        assert_eq!(gs.downloadable.as_deref(), Some("ghostscript"));
+        assert!(
+            gs.install_hint.contains("Settings → Dependencies"),
+            "{}",
+            gs.install_hint
+        );
+        // Unmanaged deps keep the old lookup.
+        assert_eq!(reg.status("libreoffice").downloadable, None);
     }
 }
