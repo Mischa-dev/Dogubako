@@ -672,6 +672,29 @@ async fn metadata() {
         let out = h.run("pdf.metadata_edit", params).await.unwrap();
         assert!(!contains_marker(&out.artifacts[0].path));
     }
+    // An indirect Info value must be gone once the field is removed or
+    // replaced, not left behind as an orphaned object.
+    let ind = h.path("indirect.pdf");
+    let mut d = Document::load(&a).unwrap();
+    let author = d.add_object(Object::string_literal("SECRET-NAME"));
+    let info = d.add_object(dictionary! { "Author" => Object::Reference(author) });
+    d.trailer.set("Info", Object::Reference(info));
+    d.save(&ind).unwrap();
+    let has_name = |path: &Path| {
+        let doc = Document::load(path).unwrap();
+        doc.objects.values().any(|o| match o {
+            Object::String(b, _) => b.windows(11).any(|w| w == b"SECRET-NAME"),
+            _ => false,
+        })
+    };
+    assert!(has_name(&ind));
+    for params in [
+        json!({"input": [s(&ind)], "author": "-"}),
+        json!({"input": [s(&ind)], "author": "Someone else"}),
+    ] {
+        let out = h.run("pdf.metadata_edit", params).await.unwrap();
+        assert!(!has_name(&out.artifacts[0].path));
+    }
     let err = h
         .run("pdf.metadata_edit", json!({"input": [s(&a)]}))
         .await
