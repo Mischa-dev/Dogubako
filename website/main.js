@@ -246,6 +246,19 @@
   tabs($('.ways-tabs'));
   tabs($('.tour-tabs'));
 
+  // ------------------------------------------------------------- trailer
+  // Show the player only when the video is actually deployed next to the page.
+  const video = $('#trailer-video');
+  const src = video && $('source', video).getAttribute('src');
+  if (src) {
+    fetch(src, { method: 'HEAD' }).then((r) => {
+      if (!r.ok || !/video/.test(r.headers.get('content-type') || 'video/mp4')) return;
+      video.hidden = false;
+      $('#trailer-placeholder').hidden = true;
+      $('#trailer').classList.add('has-video');
+    }).catch(() => { /* keep the placeholder */ });
+  }
+
   // ------------------------------------------------------------- downloads
   const ua = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || '';
   const os = /mac/i.test(ua) ? 'mac' : /win/i.test(ua) ? 'windows' : /linux|x11/i.test(ua) && !/android/i.test(navigator.userAgent) ? 'linux' : '';

@@ -138,12 +138,18 @@
 
     <!-- ============================================================ trailer -->
     <section class="section trailer-section" aria-labelledby="trailer-title">
+      <h2 class="sr-only" id="trailer-title">Watch the trailer</h2>
       <div class="trailer" id="trailer">
-        <!-- PLACEHOLDER: replace this block with the trailer embed or <video> once it exists. -->
-        <div class="trailer-placeholder">
+        <!-- The trailer is copied in from trailer/dist by scripts/trailer.sh at deploy time.
+             If it isn't there, main.js keeps the "on its way" card instead of a broken player. -->
+        <video class="trailer-video" id="trailer-video" controls playsinline preload="none"
+               poster="trailer/poster.jpg" width="1920" height="1080" hidden>
+          <source src="trailer/dogubako-alpha-trailer.mp4" type="video/mp4">
+        </video>
+        <div class="trailer-placeholder" id="trailer-placeholder">
           <span class="play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></span>
-          <h2 id="trailer-title">The trailer is on its way</h2>
-          <p>A one-minute look at Dogubako, from dropping a file to getting it back. It will play right here.</p>
+          <p class="trailer-placeholder-title">The trailer is on its way</p>
+          <p>A 72-second look at Dogubako, from dropping a file to getting it back. It will play right here.</p>
         </div>
       </div>
     </section>

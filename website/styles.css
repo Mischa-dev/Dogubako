@@ -307,14 +307,17 @@ video.bo-frame { width: 100%; object-fit: cover; }
 }
 .trailer::after { content: ''; position: absolute; inset: 14px; border: 1px dashed rgba(237, 234, 228, .22); border-radius: 14px; pointer-events: none; }
 .trailer-placeholder { position: relative; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; }
-.trailer-placeholder h2 { font-size: clamp(22px, 3vw, 34px); color: #f7f6f3; }
+.trailer-placeholder-title { font-size: clamp(22px, 3vw, 34px); font-weight: 600; letter-spacing: -0.02em; color: #f7f6f3 !important; }
+.trailer-video { position: relative; z-index: 1; display: block; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.trailer-video[hidden], .trailer-placeholder[hidden] { display: none; }
+.trailer.has-video::before, .trailer.has-video::after { display: none; }
 .trailer-placeholder p { max-width: 44ch; color: rgba(237, 234, 228, .75); font-size: clamp(14px, 1.4vw, 16px); }
 .play {
   display: grid; place-items: center; width: clamp(56px, 7vw, 78px); aspect-ratio: 1; border-radius: 50%; margin-bottom: 6px;
   background: rgba(255, 255, 255, .14); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, .2);
 }
 .play svg { width: 40%; fill: #f7f6f3; margin-left: 6%; }
-@media (max-width: 560px) { .trailer-placeholder p { display: none; } }
+@media (max-width: 560px) { .trailer-placeholder p:not(.trailer-placeholder-title) { display: none; } }
 
 /* ---------------------------------------------------------------- tour */
 .tour-tabs, .ways-tabs {
