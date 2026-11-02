@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-* Rust ≥ 1.88 (`rustup`), a C compiler (some crates build bundled C: SQLite, libwebp, WebRTC VAD)
+* Rust ≥ 1.95 (`rustup`), a C compiler (some crates build bundled C: SQLite, libwebp, WebRTC VAD)
 * Node.js ≥ 20 and npm (web UI)
 * Desktop only: Tauri 2 system dependencies —
   Linux: `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev`;

@@ -4,7 +4,7 @@
 #   docker build -t dogubako .
 #   docker build --build-arg WITH_WHISPER=1 -t dogubako:whisper .   # + whisper.cpp
 
-ARG RUST_VERSION=1.90
+ARG RUST_VERSION=1.95
 ARG NODE_VERSION=22
 
 FROM node:${NODE_VERSION}-bookworm-slim AS web
