@@ -412,6 +412,26 @@ async fn combine_split_sheets() {
         .unwrap_err();
     assert_eq!(err.code(), "invalid_input");
 
+    // match_size must not resize to a huge size before the limit check:
+    // 10000x1 next to 1x10000 would scale the first to 1e8 x 1e4.
+    let wide = save(&h, "wide.png", &pattern(10_000, 1, false));
+    let tall = save(&h, "tall.png", &pattern(1, 10_000, false));
+    for dir in ["horizontal", "vertical"] {
+        let (x, y) = if dir == "horizontal" {
+            (&wide, &tall)
+        } else {
+            (&tall, &wide)
+        };
+        let err = h
+            .run(
+                "image.combine",
+                json!({"input": [s(x), s(y)], "direction": dir, "match_size": true}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "limit_exceeded", "{dir}: {err}");
+    }
+
     let out = h
         .run(
             "image.split",

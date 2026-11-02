@@ -523,6 +523,17 @@ fn watermark() -> Arc<dyn Tool> {
     })
 }
 
+/// Check a combined canvas size against the pixel limit and u32 range.
+fn canvas_dims(ctx: &ToolContext, w: u64, h: u64) -> ToolResult<(u32, u32)> {
+    check_pixels(ctx, w, h)?;
+    match (u32::try_from(w), u32::try_from(h)) {
+        (Ok(w), Ok(h)) => Ok((w, h)),
+        _ => Err(ToolError::limit(format!(
+            "combined image of {w}x{h} pixels is too large"
+        ))),
+    }
+}
+
 fn load_all(ctx: &ToolContext, files: &[InputFile]) -> ToolResult<Vec<DynamicImage>> {
     let mut v = vec![];
     for (i, f) in files.iter().enumerate() {
@@ -628,25 +639,41 @@ fn combine() -> Arc<dyn Tool> {
         };
         let canvas = match dir {
             "vertical" => {
+                // Work out every size (and the canvas) in u64 and check the
+                // limit before resizing anything.
+                let tw = imgs.iter().map(|i| i.width()).max().unwrap_or(1);
+                let sizes: Vec<(u64, u64)> = imgs
+                    .iter()
+                    .map(|i| {
+                        if p.bool("match_size") {
+                            let h = (i.height() as f64 * tw as f64 / i.width() as f64)
+                                .round()
+                                .max(1.0);
+                            (tw as u64, h.min(u64::MAX as f64) as u64)
+                        } else {
+                            (i.width() as u64, i.height() as u64)
+                        }
+                    })
+                    .collect();
+                let w = sizes.iter().map(|s| s.0).max().unwrap_or(1);
+                let h = sizes
+                    .iter()
+                    .fold(0u64, |a, s| a.saturating_add(s.1))
+                    .saturating_add(gap as u64 * (imgs.len() as u64 - 1));
+                let (w, h) = canvas_dims(ctx, w, h)?;
                 if p.bool("match_size") {
-                    let tw = imgs.iter().map(|i| i.width()).max().unwrap_or(1);
                     imgs = imgs
                         .iter()
-                        .map(|i| {
+                        .zip(&sizes)
+                        .map(|(i, s)| {
                             i.resize_exact(
-                                tw,
-                                ((i.height() as f64) * tw as f64 / i.width() as f64)
-                                    .round()
-                                    .max(1.0) as u32,
+                                s.0 as u32,
+                                s.1 as u32,
                                 image::imageops::FilterType::Lanczos3,
                             )
                         })
                         .collect();
                 }
-                let w = imgs.iter().map(|i| i.width()).max().unwrap_or(1);
-                let h: u32 =
-                    imgs.iter().map(|i| i.height()).sum::<u32>() + gap * (imgs.len() as u32 - 1);
-                check_pixels(ctx, w as u64, h as u64)?;
                 let mut c = RgbaImage::from_pixel(w, h, bg);
                 let mut y = 0i64;
                 for i in &imgs {
@@ -667,11 +694,12 @@ fn combine() -> Arc<dyn Tool> {
                 let rows = imgs.len().div_ceil(cols);
                 let cw = imgs.iter().map(|i| i.width()).max().unwrap_or(1);
                 let chh = imgs.iter().map(|i| i.height()).max().unwrap_or(1);
-                let (w, h) = (
-                    cw * cols as u32 + gap * (cols as u32 - 1),
-                    chh * rows as u32 + gap * (rows as u32 - 1),
-                );
-                check_pixels(ctx, w as u64, h as u64)?;
+                let span = |cell: u32, n: usize| {
+                    (cell as u64)
+                        .saturating_mul(n as u64)
+                        .saturating_add((gap as u64).saturating_mul(n as u64 - 1))
+                };
+                let (w, h) = canvas_dims(ctx, span(cw, cols), span(chh, rows))?;
                 let mut c = RgbaImage::from_pixel(w, h, bg);
                 for (k, i) in imgs.iter().enumerate() {
                     let i = if p.bool("match_size") {
@@ -695,25 +723,39 @@ fn combine() -> Arc<dyn Tool> {
                 c
             }
             _ => {
+                let th = imgs.iter().map(|i| i.height()).max().unwrap_or(1);
+                let sizes: Vec<(u64, u64)> = imgs
+                    .iter()
+                    .map(|i| {
+                        if p.bool("match_size") {
+                            let w = (i.width() as f64 * th as f64 / i.height() as f64)
+                                .round()
+                                .max(1.0);
+                            (w.min(u64::MAX as f64) as u64, th as u64)
+                        } else {
+                            (i.width() as u64, i.height() as u64)
+                        }
+                    })
+                    .collect();
+                let h = sizes.iter().map(|s| s.1).max().unwrap_or(1);
+                let w = sizes
+                    .iter()
+                    .fold(0u64, |a, s| a.saturating_add(s.0))
+                    .saturating_add(gap as u64 * (imgs.len() as u64 - 1));
+                let (w, h) = canvas_dims(ctx, w, h)?;
                 if p.bool("match_size") {
-                    let th = imgs.iter().map(|i| i.height()).max().unwrap_or(1);
                     imgs = imgs
                         .iter()
-                        .map(|i| {
+                        .zip(&sizes)
+                        .map(|(i, s)| {
                             i.resize_exact(
-                                ((i.width() as f64) * th as f64 / i.height() as f64)
-                                    .round()
-                                    .max(1.0) as u32,
-                                th,
+                                s.0 as u32,
+                                s.1 as u32,
                                 image::imageops::FilterType::Lanczos3,
                             )
                         })
                         .collect();
                 }
-                let h = imgs.iter().map(|i| i.height()).max().unwrap_or(1);
-                let w: u32 =
-                    imgs.iter().map(|i| i.width()).sum::<u32>() + gap * (imgs.len() as u32 - 1);
-                check_pixels(ctx, w as u64, h as u64)?;
                 let mut c = RgbaImage::from_pixel(w, h, bg);
                 let mut x = 0i64;
                 for i in &imgs {
