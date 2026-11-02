@@ -570,7 +570,13 @@ pub fn round_numbers(s: &str, precision: usize) -> String {
         } else if let Some(rest) = r.strip_prefix("-0.") {
             r = format!("-.{rest}");
         }
-        // Keep an explicit leading sign separator semantics: "+" is dropped harmlessly.
+        // A sign may have been the only separator ("1.2+3.4", "5-0.001"):
+        // if rounding dropped it, keep the numbers apart with a space.
+        if r.starts_with(|ch: char| ch.is_ascii_digit() || ch == '.')
+            && out.ends_with(|ch: char| ch.is_ascii_digit() || ch == '.')
+        {
+            out.push(' ');
+        }
         out.push_str(&r);
         // "1.0.5" → "1" + ".5" would merge into "1.5": insert a separator.
         if !r.contains('.') && i < b.len() && (b[i] == b'.' || b[i].is_ascii_digit()) {

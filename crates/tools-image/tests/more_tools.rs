@@ -227,6 +227,15 @@ async fn svg_optimize_and_render() {
         dogubako_tools_image::svg::round_numbers("1.0.5 -0.04,3e-5 2.25", 1),
         "1 .5 0,3e-5 2.2"
     );
+    // A sign that was the only separator must not be lost.
+    assert_eq!(
+        dogubako_tools_image::svg::round_numbers("M1.2+3.4L5 6", 2),
+        "M1.2 3.4L5 6"
+    );
+    assert_eq!(
+        dogubako_tools_image::svg::round_numbers("M5.5-0.001", 1),
+        "M5.5 0"
+    );
 }
 
 #[tokio::test]
