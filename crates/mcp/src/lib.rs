@@ -358,8 +358,11 @@ impl McpServer {
             .cloned();
         let progress: Option<ProgressFn> = match (progress_token, notify) {
             (Some(tok), Some(n)) => {
+                let last = std::sync::Mutex::new(None::<f64>);
                 Some(Arc::new(move |ev: dogubako_core::tool::ProgressEvent| {
-                    let mut p = json!({"progressToken": tok, "progress": ev.fraction.map(|f| (f * 100.0) as f64).unwrap_or(0.0), "total": 100.0});
+                    let progress =
+                        next_progress(&mut last.lock().unwrap(), ev.fraction.map(f64::from));
+                    let mut p = json!({"progressToken": tok, "progress": progress, "total": 100.0});
                     if let Some(m) = ev.message {
                         p["message"] = json!(m);
                     }
@@ -653,6 +656,22 @@ impl McpServer {
     }
 }
 
+/// MCP requires each progress notification to report a higher value than the
+/// last. Message-only events (no fraction) and late, lower fractions nudge the
+/// previous value up by the smallest step so their messages still go out.
+fn next_progress(last: &mut Option<f64>, fraction: Option<f64>) -> f64 {
+    let wanted = fraction
+        .filter(|f| f.is_finite())
+        .map(|f| (f * 100.0).clamp(0.0, 100.0));
+    let v = match (*last, wanted) {
+        (None, w) => w.unwrap_or(0.0),
+        (Some(l), Some(w)) if w > l => w,
+        (Some(l), _) => l.next_up(),
+    };
+    *last = Some(v);
+    v
+}
+
 fn ok_result(text: String, structured: Value) -> Value {
     json!({"content": [{"type": "text", "text": text}], "structuredContent": structured, "isError": false})
 }
@@ -743,5 +762,31 @@ pub fn job_result(job: &JobView) -> Value {
                 "isError": false
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::next_progress;
+
+    #[test]
+    fn progress_strictly_increases() {
+        let mut last = None;
+        let seq = [
+            Some(0.5),
+            None,
+            Some(0.2),
+            Some(0.8),
+            None,
+            Some(f64::NAN),
+            Some(1.0),
+        ];
+        let mut prev = f64::NEG_INFINITY;
+        for f in seq {
+            let v = next_progress(&mut last, f);
+            assert!(v > prev, "{v} after {prev}");
+            prev = v;
+        }
+        assert_eq!(prev, 100.0);
     }
 }
