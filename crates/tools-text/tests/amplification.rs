@@ -340,6 +340,16 @@ async fn table_exports_and_sparse_json_are_bounded() {
         "0,".repeat(100_000)
     );
     limited(&h, "data.json_to_csv", json!({"text": text})).await;
+    // The same over many records: each record's paths must not be kept.
+    let rec = format!("{{\"{}\":[{}0]}}", "k".repeat(100_000), "0,".repeat(999));
+    let text = format!("[{}]", vec![rec; 100].join(","));
+    let out = h.run("data.json_to_csv", json!({"text": text})).await;
+    assert!(
+        out.as_ref()
+            .map_or_else(|e| e.code() == "limit_exceeded", |_| true),
+        "{:?}",
+        out.err()
+    );
 
     // Normal exports still work.
     let out = h

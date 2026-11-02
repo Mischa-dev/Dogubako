@@ -368,7 +368,8 @@ pub fn flatten_records_with(
     let mut budget = crate::util::OutputBudget::default();
     for it in items {
         let mut pairs = vec![];
-        // Per record: the pairs are dropped after each one.
+        // Per record: once its columns are indexed, only the column number
+        // is kept, so the path copies are dropped before the next record.
         walk(
             &mut vec![],
             it,
@@ -398,7 +399,12 @@ pub fn flatten_records_with(
             idx.insert(path.clone(), cols.len());
             cols.push(name);
         }
-        flat_rows.push(pairs);
+        flat_rows.push(
+            pairs
+                .into_iter()
+                .map(|(path, v)| (idx[&path], v))
+                .collect::<Vec<_>>(),
+        );
     }
     // Rows are built full width: objects with disjoint keys make a sparse
     // table whose empty cells can outnumber the input many times over.
@@ -416,7 +422,7 @@ pub fn flatten_records_with(
         .map(|pairs| {
             let mut r = vec![String::new(); cols.len()];
             for (k, v) in pairs {
-                r[idx[&k]] = v;
+                r[k] = v;
             }
             r
         })
