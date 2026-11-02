@@ -353,6 +353,22 @@ pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
             format!("could not parse duration '{t}' (try '1d 2h', '-30m' or 'P1DT2H')"),
         )
     };
+    let too_big = || ToolError::invalid("duration", format!("duration '{t}' is too large"));
+    // Checked accumulation: an oversized amount is an error, never a panic.
+    let add_ms = |dur: Duration, ms: f64| -> ToolResult<Duration> {
+        if !ms.is_finite() || ms.abs() >= i64::MAX as f64 {
+            return Err(too_big());
+        }
+        Duration::try_milliseconds(ms as i64)
+            .and_then(|d| dur.checked_add(&d))
+            .ok_or_else(too_big)
+    };
+    let add_mo = |months: i64, n: f64| -> ToolResult<i64> {
+        if !n.is_finite() || n.abs() >= i32::MAX as f64 {
+            return Err(too_big());
+        }
+        months.checked_add(n as i64).ok_or_else(too_big)
+    };
     let (neg, body) = match t.strip_prefix('-') {
         Some(r) => (true, r.trim()),
         None => (false, t.trim_start_matches('+').trim()),
@@ -371,10 +387,10 @@ pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
             let n: f64 = num.parse().map_err(|_| bad())?;
             num.clear();
             match c {
-                'Y' => months += (n * 12.0) as i64,
-                'M' => months += n as i64,
-                'W' => dur += Duration::seconds((n * 604_800.0) as i64),
-                'D' => dur += Duration::seconds((n * 86_400.0) as i64),
+                'Y' => months = add_mo(months, n * 12.0)?,
+                'M' => months = add_mo(months, n)?,
+                'W' => dur = add_ms(dur, n * 604_800_000.0)?,
+                'D' => dur = add_ms(dur, n * 86_400_000.0)?,
                 _ => return Err(bad()),
             }
         }
@@ -386,9 +402,9 @@ pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
             let n: f64 = num.parse().map_err(|_| bad())?;
             num.clear();
             match c {
-                'H' => dur += Duration::milliseconds((n * 3_600_000.0) as i64),
-                'M' => dur += Duration::milliseconds((n * 60_000.0) as i64),
-                'S' => dur += Duration::milliseconds((n * 1000.0) as i64),
+                'H' => dur = add_ms(dur, n * 3_600_000.0)?,
+                'M' => dur = add_ms(dur, n * 60_000.0)?,
+                'S' => dur = add_ms(dur, n * 1000.0)?,
                 _ => return Err(bad()),
             }
         }
@@ -402,18 +418,14 @@ pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
             matched += c[0].len();
             let n: f64 = c[1].parse().map_err(|_| bad())?;
             match c[2].to_ascii_lowercase().as_str() {
-                "y" | "year" | "years" => months += (n * 12.0) as i64,
-                "mo" | "month" | "months" => months += n as i64,
-                "w" | "week" | "weeks" => dur += Duration::milliseconds((n * 604_800_000.0) as i64),
-                "d" | "day" | "days" => dur += Duration::milliseconds((n * 86_400_000.0) as i64),
-                "h" | "hr" | "hrs" | "hour" | "hours" => {
-                    dur += Duration::milliseconds((n * 3_600_000.0) as i64)
-                }
-                "m" | "min" | "mins" | "minute" | "minutes" => {
-                    dur += Duration::milliseconds((n * 60_000.0) as i64)
-                }
-                "ms" | "millisecond" | "milliseconds" => dur += Duration::milliseconds(n as i64),
-                _ => dur += Duration::milliseconds((n * 1000.0) as i64),
+                "y" | "year" | "years" => months = add_mo(months, n * 12.0)?,
+                "mo" | "month" | "months" => months = add_mo(months, n)?,
+                "w" | "week" | "weeks" => dur = add_ms(dur, n * 604_800_000.0)?,
+                "d" | "day" | "days" => dur = add_ms(dur, n * 86_400_000.0)?,
+                "h" | "hr" | "hrs" | "hour" | "hours" => dur = add_ms(dur, n * 3_600_000.0)?,
+                "m" | "min" | "mins" | "minute" | "minutes" => dur = add_ms(dur, n * 60_000.0)?,
+                "ms" | "millisecond" | "milliseconds" => dur = add_ms(dur, n)?,
+                _ => dur = add_ms(dur, n * 1000.0)?,
             }
         }
         let rest: String = body
@@ -431,7 +443,7 @@ pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
             return Err(bad());
         }
     }
-    let months = i32::try_from(months).map_err(|_| bad())?;
+    let months = i32::try_from(months).map_err(|_| too_big())?;
     Ok(if neg { (-months, -dur) } else { (months, dur) })
 }
 
@@ -739,6 +751,18 @@ mod tests {
         );
         assert_eq!(super::parse_duration("P1M2DT3H").unwrap().0, 1);
         assert!(super::parse_duration("banana").is_err());
+        // Oversized amounts are errors, not panics, in every unit and syntax.
+        for big in [
+            "P999999999999999D",
+            "PT99999999999999999999H",
+            "P99999999999999999999Y",
+            "P9999999999W9999999999W",
+            "999999999999999 days",
+            "99999999999999999999 ms",
+        ] {
+            let e = super::parse_duration(big).unwrap_err();
+            assert!(e.to_string().contains("too large"), "{big}: {e}");
+        }
     }
 
     #[tokio::test]
