@@ -174,6 +174,24 @@ async fn json_results_are_bounded() {
         .unwrap();
     assert_eq!(out.data["changed"], 1);
 
+    // Schema errors under a long property name don't each keep the name.
+    let key = "k".repeat(750_000);
+    let schema = json!({"properties": {key.clone(): {"items": {"type": "string"}}}});
+    let doc = format!("{{\"{key}\":[{}0]}}", "0,".repeat(999));
+    let out = h
+        .run(
+            "dev.json_schema_validate",
+            json!({"schema": schema.to_string(), "text": doc}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["errors"], 1000);
+    assert!(
+        out.data.to_string().len() < 10_000_000,
+        "{}",
+        out.data.to_string().len()
+    );
+
     // A long key over many array items: every location repeats the key.
     let text = format!(
         "{{\"{}\":[{}0]}}",

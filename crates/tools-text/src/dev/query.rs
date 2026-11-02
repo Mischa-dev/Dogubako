@@ -326,6 +326,20 @@ pub(crate) fn schema_validate(schema: &Value, instance: &Value) -> ToolResult<To
         .map_err(|e| ToolError::invalid("schema", format!("invalid schema: {e}")))?;
     let mut rows = vec![];
     let mut total = 0usize;
+    // Up to 1000 kept errors each repeat their paths (and the message can
+    // quote the value): clip each so long keys can't multiply into gigabytes.
+    // Errors are produced lazily, so only the kept text accumulates.
+    fn clip(s: String) -> String {
+        const MAX: usize = 1000;
+        if s.len() <= MAX {
+            return s;
+        }
+        let mut end = MAX;
+        while !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}…", &s[..end])
+    }
     for e in validator.iter_errors(instance) {
         total += 1;
         if rows.len() < 1000 {
@@ -334,10 +348,10 @@ pub(crate) fn schema_validate(schema: &Value, instance: &Value) -> ToolResult<To
                 json!(if path.is_empty() {
                     "/".to_string()
                 } else {
-                    path
+                    clip(path)
                 }),
-                json!(e.to_string()),
-                json!(e.schema_path().to_string()),
+                json!(clip(e.to_string())),
+                json!(clip(e.schema_path().to_string())),
             ]);
         }
     }
