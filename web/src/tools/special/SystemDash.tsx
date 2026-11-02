@@ -5,6 +5,7 @@ import { ParamForm } from '../../form/ParamForm';
 import { useToolForm } from '../useToolForm';
 import { DataTable, KeyValue, fmtNum } from '../../results/DataViews';
 import { ErrorView } from '../../results/ErrorView';
+import { Warnings } from '../../results/Warnings';
 import { Button, Meter, Segmented, Spinner } from '../../components/ui';
 import { humanizeKey, formatRelative } from '../../lib/format';
 import { isTable } from '../../lib/renderers';
@@ -133,6 +134,7 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
         </span>
       </div>
       {job?.status === 'failed' && <ErrorView error={job.error ?? { code: 'failed' }} />}
+      {job?.status === 'succeeded' && <Warnings warnings={job.result?.warnings} />}
       {lastGood && Object.keys(lastGood).length > 0 ? <Dashboard data={lastGood} /> : text ? <pre className="code-view mono">{text}</pre> : null}
     </div>
   );
