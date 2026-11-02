@@ -860,8 +860,14 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
 }
 
 pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
+    // Parsers turn a literal CR (and CRLF) into LF everywhere, and literal
+    // tabs and newlines into spaces inside attribute values, so those are
+    // written as character references to survive a round trip.
     fn esc(s: &str) -> String {
-        crate::escape::xml_escape(s)
+        crate::escape::xml_escape(s).replace('\r', "&#13;")
+    }
+    fn esc_attr(s: &str) -> String {
+        esc(s).replace('\n', "&#10;").replace('\t', "&#9;")
     }
     fn valid_name(n: &str) -> String {
         let mut s: String = n
@@ -894,7 +900,7 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
                     out.push_str(&format!(
                         " {}=\"{}\"",
                         valid_name(&k[1..]),
-                        esc(&cell_string(val))
+                        esc_attr(&cell_string(val))
                     ));
                 }
                 let children: Vec<_> = m
@@ -1458,6 +1464,22 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(v["r"]["@a"], "<A");
         assert_eq!(v["r"]["#text"], "x & B");
+        // Whitespace in attributes and CRs in text survive JSON -> XML -> JSON.
+        let src = json!({"r": {"@a": "line1\nline2\tend\r", "#text": "x\r\ny"}});
+        let xml = h
+            .run(
+                "dev.convert",
+                json!({"text": src.to_string(), "from": "json", "to": "xml"}),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        assert!(xml.contains("line1&#10;line2&#9;end&#13;"), "{xml}");
+        assert!(xml.contains("x&#13;\ny"), "{xml}");
+        let back = super::xml_to_json(&xml).unwrap();
+        assert_eq!(back["r"]["@a"], "line1\nline2\tend\r");
+        assert_eq!(back["r"]["#text"], "x\r\ny");
     }
 
     #[tokio::test]
