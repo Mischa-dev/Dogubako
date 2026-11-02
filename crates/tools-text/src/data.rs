@@ -1294,6 +1294,21 @@ fn columns() -> Arc<dyn Tool> {
                 let i = idx[0];
                 let sep = p.text("separator");
                 let sep = if sep.is_empty() { " " } else { sep };
+                // Every row grows to the widest split: one cell with many
+                // separators times many rows is a huge rectangle.
+                let widest = t
+                    .rows
+                    .iter()
+                    .map(|r| r[i].matches(sep).count() + 1)
+                    .max()
+                    .unwrap_or(1);
+                let added = (widest as u128) * (t.rows.len() as u128);
+                if added > MAX_PADDED_CELLS {
+                    return Err(ToolError::limit(format!(
+                        "splitting would create {widest} columns for {} rows ({added} cells, max {MAX_PADDED_CELLS})",
+                        t.rows.len()
+                    )));
+                }
                 let parts: Vec<Vec<String>> = t
                     .rows
                     .iter()
@@ -1408,6 +1423,7 @@ fn columns() -> Arc<dyn Tool> {
                 };
                 let rep = p.text("replace");
                 let regex_mode = p.bool("regex");
+                let mut budget = crate::util::OutputBudget::default();
                 for r in &mut t.rows {
                     for i in &idx {
                         let c = &r[*i];
@@ -1418,15 +1434,15 @@ fn columns() -> Arc<dyn Tool> {
                             // Leading/trailing only; collapsing inner whitespace
                             // is data.clean's separate operation.
                             "trim" => c.trim().to_string(),
-                            _ if regex_mode => {
-                                re.as_ref().unwrap().replace_all(c, rep).into_owned()
-                            }
                             // Literal mode: `$1` etc. in the replacement are text.
-                            _ => re
-                                .as_ref()
-                                .unwrap()
-                                .replace_all(c, regex::NoExpand(rep))
-                                .into_owned(),
+                            _ => crate::util::replace_budgeted(
+                                re.as_ref().unwrap(),
+                                c,
+                                rep,
+                                regex_mode,
+                                0,
+                                &mut budget,
+                            )?,
                         };
                     }
                 }

@@ -184,3 +184,63 @@ async fn wrap_indent_and_regex_groups_are_bounded() {
     )
     .await;
 }
+
+#[tokio::test]
+async fn replacements_and_column_splits_are_bounded() {
+    let h = harness();
+    let a = "a".repeat(100_000);
+    let b = "b".repeat(100_000);
+    let csv = format!("a\n{a}\n");
+    for regex in [false, true] {
+        limited(
+            &h,
+            "data.columns",
+            json!({"text": csv, "operation": "replace", "columns": "a", "find": "a", "replace": b, "regex": regex}),
+        )
+        .await;
+    }
+    limited(
+        &h,
+        "text.replace",
+        json!({"text": a, "find": "a", "replace": b}),
+    )
+    .await;
+    limited(
+        &h,
+        "text.regex_replace",
+        json!({"text": a, "pattern": "a", "replacement": b}),
+    )
+    .await;
+    limited(
+        &h,
+        "text.regex_replace",
+        json!({"text": a, "pattern": "a+", "replacement": "$0".repeat(100_000)}),
+    )
+    .await;
+    // One cell with 99,999 separators over 100,000 rows.
+    let wide = format!("a\n{}\n{}", "|".repeat(99_999), "x\n".repeat(99_999));
+    limited(
+        &h,
+        "data.columns",
+        json!({"text": wide, "operation": "split", "columns": "a", "separator": "|"}),
+    )
+    .await;
+
+    // Ordinary replacements are unchanged, including $ expansion.
+    let out = h
+        .run(
+            "text.regex_replace",
+            json!({"text": "ab ab", "pattern": "(a)(b)", "replacement": "$2$1", "limit": 1}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.text.as_deref(), Some("ba ab"));
+    let out = h
+        .run(
+            "text.regex_replace",
+            json!({"text": "ab", "pattern": "(a)", "replacement": "$1$", "literal": true}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.text.as_deref(), Some("$1$b"));
+}

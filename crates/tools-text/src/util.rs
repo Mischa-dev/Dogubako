@@ -50,6 +50,49 @@ pub fn json_pretty_size(v: &Value, indent: usize) -> u128 {
     go(v, 0, indent as u128)
 }
 
+/// `re.replacen(text, limit, rep)` (limit 0 = all; `expand` = whether `$1`
+/// etc. are substituted) that charges `budget` before appending each piece,
+/// so a long replacement times many matches, or `$0` repeated, fails with
+/// `limit_exceeded` instead of allocating.
+pub fn replace_budgeted(
+    re: &regex::Regex,
+    text: &str,
+    rep: &str,
+    expand: bool,
+    limit: usize,
+    budget: &mut OutputBudget,
+) -> ToolResult<String> {
+    let dollars = if expand { rep.matches('$').count() } else { 0 };
+    let mut out = String::new();
+    let mut last = 0;
+    for (n, c) in re.captures_iter(text).enumerate() {
+        if limit > 0 && n >= limit {
+            break;
+        }
+        let m = c.get(0).expect("group 0 always matches");
+        let widest = if expand {
+            c.iter().flatten().map(|g| g.len()).max().unwrap_or(0)
+        } else {
+            0
+        };
+        budget.add(
+            (m.start() - last)
+                .saturating_add(rep.len())
+                .saturating_add(dollars.saturating_mul(widest)),
+        )?;
+        out.push_str(&text[last..m.start()]);
+        if expand {
+            c.expand(rep, &mut out);
+        } else {
+            out.push_str(rep);
+        }
+        last = m.end();
+    }
+    budget.add(text.len() - last)?;
+    out.push_str(&text[last..]);
+    Ok(out)
+}
+
 /// Running total for output assembled piece by piece.
 #[derive(Default)]
 pub struct OutputBudget(u128);
