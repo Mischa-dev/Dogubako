@@ -122,7 +122,7 @@ from this PR, so #7 and #9 must both be on `main` before tagging.
    Package settings → Change visibility.
 7. Deploy the website: Actions → Website → Run workflow with `docs_live` ticked if docs.dogubako.app is up, release
    `v0.1.0-alpha.1`, `deploy` ticked. Its summary lists any copy that still
-   says "not released yet"; edit that copy on the concept first (the link
+   says "not released yet"; edit that copy in `website/` first (the link
    script only changes links).
 8. Announce.
 
