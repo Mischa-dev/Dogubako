@@ -186,7 +186,41 @@ fn tz_param(name: &str, default: &str) -> ParamSpec {
 
 /// `[-+]digits[.digits]` × `scale`, exactly (fraction digits beyond the
 /// scale's resolution are truncated). `None` for any other syntax.
+/// Rewrites exponent notation ("1.7e9", "17E-1") as a plain decimal, so it
+/// is scaled exactly like any other number. None when it isn't one.
+fn expand_exponent(t: &str) -> Option<String> {
+    let (mant, exp) = t.split_once(['e', 'E'])?;
+    let exp: i32 = exp.parse().ok().filter(|e: &i32| e.abs() <= 64)?;
+    let (sign, body) = match mant.strip_prefix(['-', '+']) {
+        Some(r) => (&mant[..1], r),
+        None => ("", mant),
+    };
+    let (int, frac) = body.split_once('.').unwrap_or((body, ""));
+    if (int.is_empty() && frac.is_empty())
+        || !int.bytes().chain(frac.bytes()).all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    let digits = format!("{int}{frac}");
+    let point = int.len() as i32 + exp; // decimal point position in `digits`
+    let plain = if point <= 0 {
+        format!("0.{}{digits}", "0".repeat((-point) as usize))
+    } else if point as usize >= digits.len() {
+        format!("{digits}{}", "0".repeat(point as usize - digits.len()))
+    } else {
+        format!(
+            "{}.{}",
+            &digits[..point as usize],
+            &digits[point as usize..]
+        )
+    };
+    Some(format!("{sign}{plain}"))
+}
+
 fn decimal_to_scaled(t: &str, scale: i128) -> Option<i128> {
+    if t.contains(['e', 'E']) {
+        return decimal_to_scaled(&expand_exponent(t)?, scale);
+    }
     let (neg, body) = match t.strip_prefix('-') {
         Some(r) => (true, r),
         None => (false, t.strip_prefix('+').unwrap_or(t)),
@@ -252,12 +286,10 @@ pub(crate) fn parse_instant(
             "ns" => 1,
             _ => 1_000_000_000,
         };
-        // Exact decimal arithmetic for plain numbers (f64 cannot hold
-        // nanosecond timestamps); floating point only for exponent forms.
-        let nanos: i128 = match decimal_to_scaled(t, scale) {
-            Some(v) => v,
-            None => (n * scale as f64) as i128,
-        };
+        // Exact decimal arithmetic for every notation (f64 cannot hold
+        // nanosecond timestamps); a number it can't scale is out of range.
+        let nanos: i128 = decimal_to_scaled(t, scale)
+            .ok_or_else(|| ToolError::invalid(param, "timestamp out of range"))?;
         let secs = i64::try_from(nanos.div_euclid(1_000_000_000))
             .map_err(|_| ToolError::invalid(param, "timestamp out of range"))?;
         let ns = nanos.rem_euclid(1_000_000_000) as u32;
@@ -774,6 +806,19 @@ mod tests {
             let (dt, _) = super::parse_instant(src, ny, "auto", "value").unwrap();
             assert_eq!(dt.to_rfc3339(), want, "{src}");
         }
+        // Exponent notation keeps every digit, like the plain decimal form.
+        for (src, unit, want) in [
+            ("1700000000000000001e0", "ns", 1_700_000_000_000_000_001i128),
+            ("1.700000000000000001e18", "ns", 1_700_000_000_000_000_001),
+            ("17e8", "s", 1_700_000_000_000_000_000),
+            ("1.7E9", "auto", 1_700_000_000_000_000_000),
+            ("17000000000000e-4", "s", 1_700_000_000_000_000_000),
+            ("-1.5e0", "s", -1_500_000_000),
+        ] {
+            let (dt, _) = super::parse_instant(src, chrono_tz::UTC, unit, "value").unwrap();
+            assert_eq!(dt.timestamp_nanos_opt().unwrap() as i128, want, "{src}");
+        }
+        assert!(super::parse_instant("1e999999", chrono_tz::UTC, "s", "value").is_err());
         // Non-finite numbers are rejected rather than read as the epoch.
         for bad in ["NaN", "nan", "inf", "-infinity", "1e400"] {
             for unit in ["auto", "ms"] {
