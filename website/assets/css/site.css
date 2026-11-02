@@ -126,6 +126,8 @@
 
 /* ---------------------------------------------------------------- base */
 *, *::before, *::after { box-sizing: border-box; }
+/* the hidden attribute always wins over a component's display (the tools search hides rows with it) */
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scroll-padding-top: calc(var(--nav-h) + 12px); }
 body {
   margin: 0; background: var(--bg); color: var(--text);
