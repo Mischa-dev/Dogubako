@@ -143,8 +143,11 @@ fn pretty_body(body: &str, ctype: &str) -> String {
         || body.trim_start().starts_with('{')
         || body.trim_start().starts_with('[')
     {
+        // Bodies with numbers that would be rounded are shown as received.
         if let Ok(v) = serde_json::from_str::<Value>(body) {
-            return serde_json::to_string_pretty(&v).unwrap_or_default();
+            if super::formatters::check_json_numbers(body).is_ok() {
+                return serde_json::to_string_pretty(&v).unwrap_or_default();
+            }
         }
     }
     if ct.contains("x-www-form-urlencoded") {
@@ -171,15 +174,29 @@ fn http_request() -> Arc<dyn Tool> {
         .ui("live");
     sync_tool(spec, |_ctx, p| {
         let raw = p.text("text").trim_start();
-        // Normalize line endings so pasted text with LF works too.
-        let norm = raw.replace("\r\n", "\n").replace('\n', "\r\n");
-        let (head, body) = match norm.find("\r\n\r\n") {
-            Some(i) => (
-                format!("{}\r\n\r\n", &norm[..i]),
-                norm[i + 4..].replace("\r\n", "\n"),
-            ),
-            None => (format!("{}\r\n\r\n", norm.trim_end()), String::new()),
+        // Split at the first blank line (CRLF or LF), then normalize line
+        // endings in the head only so pasted LF text parses; the body is kept
+        // byte for byte.
+        let mut split = None;
+        let mut off = 0;
+        for line in raw.split_inclusive('\n') {
+            if line == "\n" || line == "\r\n" {
+                split = Some((off, off + line.len()));
+                break;
+            }
+            off += line.len();
+        }
+        let (head_raw, body) = match split {
+            Some((h, b)) => (&raw[..h], raw[b..].to_string()),
+            None => (raw, String::new()),
         };
+        let head = format!(
+            "{}\r\n\r\n",
+            head_raw
+                .trim_end()
+                .replace("\r\n", "\n")
+                .replace('\n', "\r\n")
+        );
         let mut headers_buf = [httparse::EMPTY_HEADER; 256];
         let collect = |hs: &[httparse::Header]| -> Vec<(String, String)> {
             hs.iter()
@@ -270,7 +287,14 @@ fn http_request() -> Arc<dyn Tool> {
             .unwrap_or_default();
         let ctype = get(&hs, "content-type").unwrap_or_default();
         let q = crate::escape::shell_quote;
-        let mut curl = format!("curl -X {} {}", method, q(&url));
+        // --globoff: literal [] and {} in URLs; --path-as-is: keep dot
+        // segments. HEAD needs -I, since -X HEAD still waits for a body.
+        let method_opt = if method == "HEAD" {
+            "-I".to_string()
+        } else {
+            format!("-X {}", q(&method))
+        };
+        let mut curl = format!("curl --globoff --path-as-is {method_opt} {}", q(&url));
         for (k, v) in &hs {
             if k.eq_ignore_ascii_case("host") || k.eq_ignore_ascii_case("content-length") {
                 continue;
@@ -473,6 +497,16 @@ mod tests {
     use dogubako_core::testing::TestHarness;
     use serde_json::json;
 
+    #[test]
+    fn pretty_body_keeps_inexact_numbers() {
+        let big = "{\"id\":18446744073709551617}";
+        assert_eq!(super::pretty_body(big, "application/json"), big);
+        assert_eq!(
+            super::pretty_body("{\"id\":1}", "application/json"),
+            "{\n  \"id\": 1\n}"
+        );
+    }
+
     #[tokio::test]
     async fn colors() {
         let h = TestHarness::new(crate::tools());
@@ -527,8 +561,56 @@ mod tests {
             .contains("\"name\": \"it's\""));
         let curl = out.data["curl"].as_str().unwrap();
         assert!(
-            curl.starts_with("curl -X POST 'https://example.com/api/items?id=5&x=a%20b'")
-                && curl.contains("--data-raw '{\"name\":\"it'\\''s\"}'"),
+            curl.starts_with(
+                "curl --globoff --path-as-is -X POST 'https://example.com/api/items?id=5&x=a%20b'"
+            ) && curl.contains("--data-raw '{\"name\":\"it'\\''s\"}'"),
+            "{curl}"
+        );
+        let out = h
+            .run(
+                "dev.http_request",
+                json!({"text": "X`id` /x HTTP/1.1\nHost: example.com\n\n"}),
+            )
+            .await
+            .unwrap();
+        let curl = out.data["curl"].as_str().unwrap();
+        assert!(
+            curl.starts_with("curl --globoff --path-as-is -X 'X`id`' "),
+            "{curl}"
+        );
+        // CRLF inside the body is payload, not framing: keep it.
+        let out = h
+            .run(
+                "dev.http_request",
+                json!({"text": "POST /up HTTP/1.1\r\nHost: example.com\r\nContent-Type: text/plain\r\n\r\na\r\nb"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.data["body_bytes"], 4);
+        assert!(out.data["curl"]
+            .as_str()
+            .unwrap()
+            .ends_with("--data-raw 'a\r\nb'"));
+        // LF-only paste still parses.
+        let out = h
+            .run(
+                "dev.http_request",
+                json!({"text": "GET /search?filter[name]=alice HTTP/1.1\nHost: example.com\n\n"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.data["method"], "GET");
+        assert_eq!(out.data["body_bytes"], 0);
+        let out = h
+            .run(
+                "dev.http_request",
+                json!({"text": "HEAD /a/../b HTTP/1.1\nHost: example.com\n\n"}),
+            )
+            .await
+            .unwrap();
+        let curl = out.data["curl"].as_str().unwrap();
+        assert!(
+            curl.starts_with("curl --globoff --path-as-is -I https://example.com/a/../b"),
             "{curl}"
         );
         let out = h

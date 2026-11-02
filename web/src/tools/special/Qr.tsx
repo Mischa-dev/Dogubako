@@ -7,6 +7,7 @@ import { useToolForm } from '../useToolForm';
 import { useLiveRun, useToolShortcuts } from '../GenericTool';
 import { ArtifactList } from '../../results/Artifacts';
 import { ErrorView } from '../../results/ErrorView';
+import { Warnings } from '../../results/Warnings';
 import { Spinner } from '../../components/ui';
 
 /** QR generator with a live preview of the produced SVG/PNG. */
@@ -43,6 +44,7 @@ export default function Qr({ tool, jobId }: { tool: ToolInfo; jobId?: string | n
           {form.job.running && <span className="qr-busy"><Spinner size={12} /></span>}
         </div>
         {job?.status === 'failed' && <ErrorView error={job.error ?? { code: 'failed' }} />}
+        {job?.status === 'succeeded' && <Warnings warnings={job.result?.warnings} />}
         {arts.length > 0 && <ArtifactList artifacts={arts} jobId={job?.id} collapsed />}
       </div>
     </div>

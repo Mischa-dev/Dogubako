@@ -310,7 +310,13 @@ pub fn infer_value(s: &str) -> Value {
         }
         if t.chars().any(|c| c.is_ascii_digit()) && !t.contains(['x', 'X']) {
             if let Ok(f) = t.parse::<f64>() {
-                if f.is_finite() && !t.eq_ignore_ascii_case("inf") && !t.eq_ignore_ascii_case("nan")
+                // Only when the double holds the cell's exact value: cells
+                // such as 9007199254740993.0 or 0.10000000000000000001 stay text.
+                if f.is_finite()
+                    && !t.eq_ignore_ascii_case("inf")
+                    && !t.eq_ignore_ascii_case("nan")
+                    && compare_numbers(t.strip_prefix('+').unwrap_or(t), &f.to_string())
+                        == Some(std::cmp::Ordering::Equal)
                 {
                     return json!(f);
                 }
@@ -323,6 +329,18 @@ pub fn infer_value(s: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inferred_numbers_are_exact() {
+        for keep in ["9007199254740993.0", "0.10000000000000000001", "1e400"] {
+            assert_eq!(infer_value(keep), Value::String(keep.into()), "{keep}");
+        }
+        assert_eq!(infer_value("9007199254740992.0"), json!(9007199254740992.0));
+        assert_eq!(infer_value("1.50"), json!(1.5));
+        assert_eq!(infer_value("+2.5"), json!(2.5));
+        assert_eq!(infer_value("1.5e3"), json!(1500.0));
+        assert_eq!(infer_value("-0.25"), json!(-0.25));
+    }
 
     #[test]
     fn exact_number_comparison() {

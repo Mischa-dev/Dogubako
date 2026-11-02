@@ -1,11 +1,12 @@
 import { memo } from 'react';
-import { CircleCheck, TriangleAlert } from 'lucide-react';
+import { CircleCheck } from 'lucide-react';
 import type { JobView, ToolInfo } from '../lib/types';
 import { formatDuration } from '../lib/format';
 import { TextOutput } from './TextOutput';
 import { DataViews, type InputContext } from './DataViews';
 import { ArtifactList } from './Artifacts';
 import { ErrorView } from './ErrorView';
+import { Warnings } from './Warnings';
 
 export const ResultView = memo(function ResultView({ job, tool, input, live, hideData, dataFirst, collapseArtifacts }: {
   job: JobView;
@@ -33,11 +34,7 @@ export const ResultView = memo(function ResultView({ job, tool, input, live, hid
           <span>Done in {formatDuration(r.duration_ms)}</span>
         </div>
       )}
-      {r.warnings && r.warnings.length > 0 && (
-        <ul className="warnings">
-          {r.warnings.map((w, i) => <li key={i}><TriangleAlert size={13} aria-hidden />{w}</li>)}
-        </ul>
-      )}
+      <Warnings warnings={r.warnings} />
       {dataFirst && !hideData && <DataViews data={r.data} input={input} />}
       {hasText && <TextOutput text={r.text!} mime={r.text_mime ?? tool.output.text_mime} filename={filename} live={live} />}
       {!dataFirst && !hideData && <DataViews data={r.data} input={input} />}

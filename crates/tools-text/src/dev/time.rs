@@ -186,7 +186,41 @@ fn tz_param(name: &str, default: &str) -> ParamSpec {
 
 /// `[-+]digits[.digits]` × `scale`, exactly (fraction digits beyond the
 /// scale's resolution are truncated). `None` for any other syntax.
+/// Rewrites exponent notation ("1.7e9", "17E-1") as a plain decimal, so it
+/// is scaled exactly like any other number. None when it isn't one.
+fn expand_exponent(t: &str) -> Option<String> {
+    let (mant, exp) = t.split_once(['e', 'E'])?;
+    let exp: i32 = exp.parse().ok().filter(|e: &i32| e.abs() <= 64)?;
+    let (sign, body) = match mant.strip_prefix(['-', '+']) {
+        Some(r) => (&mant[..1], r),
+        None => ("", mant),
+    };
+    let (int, frac) = body.split_once('.').unwrap_or((body, ""));
+    if (int.is_empty() && frac.is_empty())
+        || !int.bytes().chain(frac.bytes()).all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    let digits = format!("{int}{frac}");
+    let point = int.len() as i32 + exp; // decimal point position in `digits`
+    let plain = if point <= 0 {
+        format!("0.{}{digits}", "0".repeat((-point) as usize))
+    } else if point as usize >= digits.len() {
+        format!("{digits}{}", "0".repeat(point as usize - digits.len()))
+    } else {
+        format!(
+            "{}.{}",
+            &digits[..point as usize],
+            &digits[point as usize..]
+        )
+    };
+    Some(format!("{sign}{plain}"))
+}
+
 fn decimal_to_scaled(t: &str, scale: i128) -> Option<i128> {
+    if t.contains(['e', 'E']) {
+        return decimal_to_scaled(&expand_exponent(t)?, scale);
+    }
     let (neg, body) = match t.strip_prefix('-') {
         Some(r) => (true, r),
         None => (false, t.strip_prefix('+').unwrap_or(t)),
@@ -223,6 +257,14 @@ pub(crate) fn parse_instant(
         return Ok((Utc::now(), "now"));
     }
     if let Ok(n) = t.parse::<f64>() {
+        // "NaN" and "inf" parse as floats but are not timestamps (a NaN
+        // would otherwise cast to 0, the Unix epoch).
+        if !n.is_finite() {
+            return Err(ToolError::invalid(
+                param,
+                format!("'{t}' is not a valid timestamp"),
+            ));
+        }
         let unit = match unit {
             "auto" => {
                 let a = n.abs();
@@ -244,12 +286,10 @@ pub(crate) fn parse_instant(
             "ns" => 1,
             _ => 1_000_000_000,
         };
-        // Exact decimal arithmetic for plain numbers (f64 cannot hold
-        // nanosecond timestamps); floating point only for exponent forms.
-        let nanos: i128 = match decimal_to_scaled(t, scale) {
-            Some(v) => v,
-            None => (n * scale as f64) as i128,
-        };
+        // Exact decimal arithmetic for every notation (f64 cannot hold
+        // nanosecond timestamps); a number it can't scale is out of range.
+        let nanos: i128 = decimal_to_scaled(t, scale)
+            .ok_or_else(|| ToolError::invalid(param, "timestamp out of range"))?;
         let secs = i64::try_from(nanos.div_euclid(1_000_000_000))
             .map_err(|_| ToolError::invalid(param, "timestamp out of range"))?;
         let ns = nanos.rem_euclid(1_000_000_000) as u32;
@@ -272,12 +312,15 @@ pub(crate) fn parse_instant(
         return Ok((d.with_timezone(&Utc), "date"));
     }
     // Explicit offsets always win over the fallback zone, with or without
-    // seconds ("2024-01-01T12:00+0200", "...12:00Z").
+    // seconds, extended or compact ("2024-01-01T12:00+0200", "...12:00Z",
+    // "20240101T120000Z").
     let zt = match t.strip_suffix(['Z', 'z']) {
-        Some(head) if head.contains(':') => format!("{head}+0000"),
+        Some(head) if head.contains(':') || head.contains(['T', 't']) => format!("{head}+0000"),
         _ => t.to_string(),
     };
     for f in [
+        "%Y%m%dT%H%M%S%.f%z",
+        "%Y%m%dT%H%M%z",
         "%Y-%m-%dT%H:%M:%S%.f%z",
         "%Y-%m-%d %H:%M:%S%.f%z",
         "%Y-%m-%d %H:%M:%S %z",
@@ -353,6 +396,22 @@ pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
             format!("could not parse duration '{t}' (try '1d 2h', '-30m' or 'P1DT2H')"),
         )
     };
+    let too_big = || ToolError::invalid("duration", format!("duration '{t}' is too large"));
+    // Checked accumulation: an oversized amount is an error, never a panic.
+    let add_ms = |dur: Duration, ms: f64| -> ToolResult<Duration> {
+        if !ms.is_finite() || ms.abs() >= i64::MAX as f64 {
+            return Err(too_big());
+        }
+        Duration::try_milliseconds(ms as i64)
+            .and_then(|d| dur.checked_add(&d))
+            .ok_or_else(too_big)
+    };
+    let add_mo = |months: i64, n: f64| -> ToolResult<i64> {
+        if !n.is_finite() || n.abs() >= i32::MAX as f64 {
+            return Err(too_big());
+        }
+        months.checked_add(n as i64).ok_or_else(too_big)
+    };
     let (neg, body) = match t.strip_prefix('-') {
         Some(r) => (true, r.trim()),
         None => (false, t.trim_start_matches('+').trim()),
@@ -371,10 +430,10 @@ pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
             let n: f64 = num.parse().map_err(|_| bad())?;
             num.clear();
             match c {
-                'Y' => months += (n * 12.0) as i64,
-                'M' => months += n as i64,
-                'W' => dur += Duration::seconds((n * 604_800.0) as i64),
-                'D' => dur += Duration::seconds((n * 86_400.0) as i64),
+                'Y' => months = add_mo(months, n * 12.0)?,
+                'M' => months = add_mo(months, n)?,
+                'W' => dur = add_ms(dur, n * 604_800_000.0)?,
+                'D' => dur = add_ms(dur, n * 86_400_000.0)?,
                 _ => return Err(bad()),
             }
         }
@@ -386,9 +445,9 @@ pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
             let n: f64 = num.parse().map_err(|_| bad())?;
             num.clear();
             match c {
-                'H' => dur += Duration::milliseconds((n * 3_600_000.0) as i64),
-                'M' => dur += Duration::milliseconds((n * 60_000.0) as i64),
-                'S' => dur += Duration::milliseconds((n * 1000.0) as i64),
+                'H' => dur = add_ms(dur, n * 3_600_000.0)?,
+                'M' => dur = add_ms(dur, n * 60_000.0)?,
+                'S' => dur = add_ms(dur, n * 1000.0)?,
                 _ => return Err(bad()),
             }
         }
@@ -402,18 +461,14 @@ pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
             matched += c[0].len();
             let n: f64 = c[1].parse().map_err(|_| bad())?;
             match c[2].to_ascii_lowercase().as_str() {
-                "y" | "year" | "years" => months += (n * 12.0) as i64,
-                "mo" | "month" | "months" => months += n as i64,
-                "w" | "week" | "weeks" => dur += Duration::milliseconds((n * 604_800_000.0) as i64),
-                "d" | "day" | "days" => dur += Duration::milliseconds((n * 86_400_000.0) as i64),
-                "h" | "hr" | "hrs" | "hour" | "hours" => {
-                    dur += Duration::milliseconds((n * 3_600_000.0) as i64)
-                }
-                "m" | "min" | "mins" | "minute" | "minutes" => {
-                    dur += Duration::milliseconds((n * 60_000.0) as i64)
-                }
-                "ms" | "millisecond" | "milliseconds" => dur += Duration::milliseconds(n as i64),
-                _ => dur += Duration::milliseconds((n * 1000.0) as i64),
+                "y" | "year" | "years" => months = add_mo(months, n * 12.0)?,
+                "mo" | "month" | "months" => months = add_mo(months, n)?,
+                "w" | "week" | "weeks" => dur = add_ms(dur, n * 604_800_000.0)?,
+                "d" | "day" | "days" => dur = add_ms(dur, n * 86_400_000.0)?,
+                "h" | "hr" | "hrs" | "hour" | "hours" => dur = add_ms(dur, n * 3_600_000.0)?,
+                "m" | "min" | "mins" | "minute" | "minutes" => dur = add_ms(dur, n * 60_000.0)?,
+                "ms" | "millisecond" | "milliseconds" => dur = add_ms(dur, n)?,
+                _ => dur = add_ms(dur, n * 1000.0)?,
             }
         }
         let rest: String = body
@@ -431,7 +486,7 @@ pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
             return Err(bad());
         }
     }
-    let months = i32::try_from(months).map_err(|_| bad())?;
+    let months = i32::try_from(months).map_err(|_| too_big())?;
     Ok(if neg { (-months, -dur) } else { (months, dur) })
 }
 
@@ -739,6 +794,53 @@ mod tests {
         );
         assert_eq!(super::parse_duration("P1M2DT3H").unwrap().0, 1);
         assert!(super::parse_duration("banana").is_err());
+        // A compact UTC or offset form is an instant, not a local time in
+        // the fallback zone.
+        let ny: chrono_tz::Tz = "America/New_York".parse().unwrap();
+        for (src, want) in [
+            ("20240101T120000Z", "2024-01-01T12:00:00+00:00"),
+            ("20240101T1200Z", "2024-01-01T12:00:00+00:00"),
+            ("20240101T120000+0200", "2024-01-01T10:00:00+00:00"),
+            ("20240101T120000", "2024-01-01T17:00:00+00:00"),
+        ] {
+            let (dt, _) = super::parse_instant(src, ny, "auto", "value").unwrap();
+            assert_eq!(dt.to_rfc3339(), want, "{src}");
+        }
+        // Exponent notation keeps every digit, like the plain decimal form.
+        for (src, unit, want) in [
+            ("1700000000000000001e0", "ns", 1_700_000_000_000_000_001i128),
+            ("1.700000000000000001e18", "ns", 1_700_000_000_000_000_001),
+            ("17e8", "s", 1_700_000_000_000_000_000),
+            ("1.7E9", "auto", 1_700_000_000_000_000_000),
+            ("17000000000000e-4", "s", 1_700_000_000_000_000_000),
+            ("-1.5e0", "s", -1_500_000_000),
+        ] {
+            let (dt, _) = super::parse_instant(src, chrono_tz::UTC, unit, "value").unwrap();
+            assert_eq!(dt.timestamp_nanos_opt().unwrap() as i128, want, "{src}");
+        }
+        assert!(super::parse_instant("1e999999", chrono_tz::UTC, "s", "value").is_err());
+        // Non-finite numbers are rejected rather than read as the epoch.
+        for bad in ["NaN", "nan", "inf", "-infinity", "1e400"] {
+            for unit in ["auto", "ms"] {
+                let e = super::parse_instant(bad, chrono_tz::UTC, unit, "value").unwrap_err();
+                assert!(
+                    e.to_string().contains("not a valid timestamp"),
+                    "{bad}: {e}"
+                );
+            }
+        }
+        // Oversized amounts are errors, not panics, in every unit and syntax.
+        for big in [
+            "P999999999999999D",
+            "PT99999999999999999999H",
+            "P99999999999999999999Y",
+            "P9999999999W9999999999W",
+            "999999999999999 days",
+            "99999999999999999999 ms",
+        ] {
+            let e = super::parse_duration(big).unwrap_err();
+            assert!(e.to_string().contains("too large"), "{big}: {e}");
+        }
     }
 
     #[tokio::test]
