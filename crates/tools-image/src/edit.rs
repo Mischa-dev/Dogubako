@@ -154,27 +154,43 @@ fn crop() -> Arc<dyn Tool> {
     })
 }
 
-pub fn rotate_any(img: &DynamicImage, degrees: f64, bg: Rgba<u8>) -> DynamicImage {
+pub fn rotate_any(
+    ctx: &ToolContext,
+    img: &DynamicImage,
+    degrees: f64,
+    bg: Rgba<u8>,
+) -> ToolResult<DynamicImage> {
     let d = degrees.rem_euclid(360.0);
     if d.abs() < 1e-9 {
-        return img.clone();
+        return Ok(img.clone());
     }
     if (d - 90.0).abs() < 1e-9 {
-        return img.rotate90();
+        return Ok(img.rotate90());
     }
     if (d - 180.0).abs() < 1e-9 {
-        return img.rotate180();
+        return Ok(img.rotate180());
     }
     if (d - 270.0).abs() < 1e-9 {
-        return img.rotate270();
+        return Ok(img.rotate270());
     }
+    let theta = (d as f32).to_radians();
+    check_rotated(ctx, img.width(), img.height(), theta)?;
     let rgba = img.to_rgba8();
-    DynamicImage::ImageRgba8(rotate_about_center_no_crop(
+    Ok(DynamicImage::ImageRgba8(rotate_about_center_no_crop(
         &rgba,
-        (d as f32).to_radians(),
+        theta,
         Interpolation::Bicubic,
         Border::Constant(bg),
-    ))
+    )))
+}
+
+/// Check the canvas `rotate_about_center_no_crop` will allocate (same formula)
+/// against the pixel limit: a 100000x1 strip at 45 degrees needs ~70711x70711.
+fn check_rotated(ctx: &ToolContext, w: u32, h: u32, theta: f32) -> ToolResult<()> {
+    let (s, c) = (theta.sin().abs(), theta.cos().abs());
+    let nw = (h as f32 * s + w as f32 * c).ceil() as u64;
+    let nh = (h as f32 * c + w as f32 * s).ceil() as u64;
+    check_pixels(ctx, nw, nh)
 }
 
 fn rotate_flip() -> Arc<dyn Tool> {
@@ -201,8 +217,7 @@ fn rotate_flip() -> Arc<dyn Tool> {
             if p.bool("flip_vertical") {
                 img = img.flipv();
             }
-            let img = rotate_any(&img, angle, bg);
-            check_pixels(ctx, img.width() as u64, img.height() as u64)?;
+            let img = rotate_any(ctx, &img, angle, bg)?;
             let fmt = out_format(p, f)?;
             let mut opts = same_format_opts(p);
             if bg[3] == 0 {
@@ -463,20 +478,28 @@ fn watermark() -> Arc<dyn Tool> {
             let bw = base.width() as f32;
             let mut layer = match &logo {
                 Some(l) => {
-                    let tw = (bw * p.num_or("scale", 20.0) as f32 / 100.0)
+                    let tw = (f64::from(bw) * p.num_or("scale", 20.0) / 100.0)
                         .round()
-                        .max(1.0) as u32;
-                    let th = ((l.height() as f32) * tw as f32 / l.width() as f32)
+                        .max(1.0);
+                    let th = (f64::from(l.height()) * tw / f64::from(l.width()))
                         .round()
-                        .max(1.0) as u32;
+                        .max(1.0);
+                    // f64 -> u64 casts saturate, so a huge size is rejected, not wrapped.
+                    check_pixels(ctx, tw as u64, th as u64)?;
+                    let (tw, th) = (tw as u32, th as u32);
                     image::imageops::resize(l, tw, th, image::imageops::FilterType::Lanczos3)
                 }
                 None => {
                     let px = (bw * p.num_or("font_size", 5.0) as f32 / 100.0).max(6.0);
-                    let txt = render_text(p.text("text"), px, color);
+                    let txt = render_text(ctx, p.text("text"), px, color)?;
                     if p.bool("shadow") {
                         let off = (px / 18.0).ceil().max(1.0) as i64;
-                        let sh = render_text(p.text("text"), px, Rgba([0, 0, 0, 140]));
+                        let sh = render_text(ctx, p.text("text"), px, Rgba([0, 0, 0, 140]))?;
+                        check_pixels(
+                            ctx,
+                            txt.width() as u64 + off as u64,
+                            txt.height() as u64 + off as u64,
+                        )?;
                         let mut l =
                             RgbaImage::new(txt.width() + off as u32, txt.height() + off as u32);
                         composite(&mut l, &sh, off, off, 1.0, Blend::Normal);
@@ -488,6 +511,12 @@ fn watermark() -> Arc<dyn Tool> {
                 }
             };
             if rotation.abs() > 0.01 {
+                check_rotated(
+                    ctx,
+                    layer.width(),
+                    layer.height(),
+                    (rotation as f32).to_radians(),
+                )?;
                 layer = rotate_about_center_no_crop(
                     &layer,
                     (rotation as f32).to_radians(),
@@ -521,6 +550,17 @@ fn watermark() -> Arc<dyn Tool> {
         })?;
         Ok(ToolOutput::files(arts))
     })
+}
+
+/// Check a combined canvas size against the pixel limit and u32 range.
+fn canvas_dims(ctx: &ToolContext, w: u64, h: u64) -> ToolResult<(u32, u32)> {
+    check_pixels(ctx, w, h)?;
+    match (u32::try_from(w), u32::try_from(h)) {
+        (Ok(w), Ok(h)) => Ok((w, h)),
+        _ => Err(ToolError::limit(format!(
+            "combined image of {w}x{h} pixels is too large"
+        ))),
+    }
 }
 
 fn load_all(ctx: &ToolContext, files: &[InputFile]) -> ToolResult<Vec<DynamicImage>> {
@@ -628,25 +668,41 @@ fn combine() -> Arc<dyn Tool> {
         };
         let canvas = match dir {
             "vertical" => {
+                // Work out every size (and the canvas) in u64 and check the
+                // limit before resizing anything.
+                let tw = imgs.iter().map(|i| i.width()).max().unwrap_or(1);
+                let sizes: Vec<(u64, u64)> = imgs
+                    .iter()
+                    .map(|i| {
+                        if p.bool("match_size") {
+                            let h = (i.height() as f64 * tw as f64 / i.width() as f64)
+                                .round()
+                                .max(1.0);
+                            (tw as u64, h.min(u64::MAX as f64) as u64)
+                        } else {
+                            (i.width() as u64, i.height() as u64)
+                        }
+                    })
+                    .collect();
+                let w = sizes.iter().map(|s| s.0).max().unwrap_or(1);
+                let h = sizes
+                    .iter()
+                    .fold(0u64, |a, s| a.saturating_add(s.1))
+                    .saturating_add(gap as u64 * (imgs.len() as u64 - 1));
+                let (w, h) = canvas_dims(ctx, w, h)?;
                 if p.bool("match_size") {
-                    let tw = imgs.iter().map(|i| i.width()).max().unwrap_or(1);
                     imgs = imgs
                         .iter()
-                        .map(|i| {
+                        .zip(&sizes)
+                        .map(|(i, s)| {
                             i.resize_exact(
-                                tw,
-                                ((i.height() as f64) * tw as f64 / i.width() as f64)
-                                    .round()
-                                    .max(1.0) as u32,
+                                s.0 as u32,
+                                s.1 as u32,
                                 image::imageops::FilterType::Lanczos3,
                             )
                         })
                         .collect();
                 }
-                let w = imgs.iter().map(|i| i.width()).max().unwrap_or(1);
-                let h: u32 =
-                    imgs.iter().map(|i| i.height()).sum::<u32>() + gap * (imgs.len() as u32 - 1);
-                check_pixels(ctx, w as u64, h as u64)?;
                 let mut c = RgbaImage::from_pixel(w, h, bg);
                 let mut y = 0i64;
                 for i in &imgs {
@@ -667,11 +723,12 @@ fn combine() -> Arc<dyn Tool> {
                 let rows = imgs.len().div_ceil(cols);
                 let cw = imgs.iter().map(|i| i.width()).max().unwrap_or(1);
                 let chh = imgs.iter().map(|i| i.height()).max().unwrap_or(1);
-                let (w, h) = (
-                    cw * cols as u32 + gap * (cols as u32 - 1),
-                    chh * rows as u32 + gap * (rows as u32 - 1),
-                );
-                check_pixels(ctx, w as u64, h as u64)?;
+                let span = |cell: u32, n: usize| {
+                    (cell as u64)
+                        .saturating_mul(n as u64)
+                        .saturating_add((gap as u64).saturating_mul(n as u64 - 1))
+                };
+                let (w, h) = canvas_dims(ctx, span(cw, cols), span(chh, rows))?;
                 let mut c = RgbaImage::from_pixel(w, h, bg);
                 for (k, i) in imgs.iter().enumerate() {
                     let i = if p.bool("match_size") {
@@ -695,25 +752,39 @@ fn combine() -> Arc<dyn Tool> {
                 c
             }
             _ => {
+                let th = imgs.iter().map(|i| i.height()).max().unwrap_or(1);
+                let sizes: Vec<(u64, u64)> = imgs
+                    .iter()
+                    .map(|i| {
+                        if p.bool("match_size") {
+                            let w = (i.width() as f64 * th as f64 / i.height() as f64)
+                                .round()
+                                .max(1.0);
+                            (w.min(u64::MAX as f64) as u64, th as u64)
+                        } else {
+                            (i.width() as u64, i.height() as u64)
+                        }
+                    })
+                    .collect();
+                let h = sizes.iter().map(|s| s.1).max().unwrap_or(1);
+                let w = sizes
+                    .iter()
+                    .fold(0u64, |a, s| a.saturating_add(s.0))
+                    .saturating_add(gap as u64 * (imgs.len() as u64 - 1));
+                let (w, h) = canvas_dims(ctx, w, h)?;
                 if p.bool("match_size") {
-                    let th = imgs.iter().map(|i| i.height()).max().unwrap_or(1);
                     imgs = imgs
                         .iter()
-                        .map(|i| {
+                        .zip(&sizes)
+                        .map(|(i, s)| {
                             i.resize_exact(
-                                ((i.width() as f64) * th as f64 / i.height() as f64)
-                                    .round()
-                                    .max(1.0) as u32,
-                                th,
+                                s.0 as u32,
+                                s.1 as u32,
                                 image::imageops::FilterType::Lanczos3,
                             )
                         })
                         .collect();
                 }
-                let h = imgs.iter().map(|i| i.height()).max().unwrap_or(1);
-                let w: u32 =
-                    imgs.iter().map(|i| i.width()).sum::<u32>() + gap * (imgs.len() as u32 - 1);
-                check_pixels(ctx, w as u64, h as u64)?;
                 let mut c = RgbaImage::from_pixel(w, h, bg);
                 let mut x = 0i64;
                 for i in &imgs {
@@ -766,10 +837,25 @@ fn split() -> Arc<dyn Tool> {
         let f = p.file("input")?;
         let img = load_image(ctx, f)?;
         let (w, h) = img.dimensions();
-        let (tw, th) = if p.str_or("mode", "grid") == "size" {
+        // Tile edges along each axis. Grid mode keeps the requested counts
+        // and spreads remainder pixels (100px / 30 -> tiles of 3 and 4 px);
+        // size mode uses fixed tiles with a smaller last one.
+        let (xs, ys): (Vec<u32>, Vec<u32>) = if p.str_or("mode", "grid") == "size" {
+            let tw = p.int_or("tile_width", 512).max(1) as u32;
+            let th = p.int_or("tile_height", 512).max(1) as u32;
+            let (cols, rows) = (w.div_ceil(tw), h.div_ceil(th));
+            if (cols as u64) * (rows as u64) > 2500 {
+                return Err(ToolError::invalid(
+                    "tile_width",
+                    format!(
+                        "would create {} tiles (max 2500)",
+                        cols as u64 * rows as u64
+                    ),
+                ));
+            }
             (
-                p.int_or("tile_width", 512).max(1) as u32,
-                p.int_or("tile_height", 512).max(1) as u32,
+                (0..=cols).map(|i| (i * tw).min(w)).collect(),
+                (0..=rows).map(|i| (i * th).min(h)).collect(),
             )
         } else {
             let r = p.int_or("rows", 2).max(1) as u32;
@@ -777,18 +863,14 @@ fn split() -> Arc<dyn Tool> {
             if r > h || c > w {
                 return Err(ToolError::invalid("rows", "more tiles than pixels"));
             }
-            (w.div_ceil(c), h.div_ceil(r))
+            let edges = |n: u32, len: u32| -> Vec<u32> {
+                (0..=n)
+                    .map(|i| (u64::from(i) * u64::from(len) / u64::from(n)) as u32)
+                    .collect()
+            };
+            (edges(c, w), edges(r, h))
         };
-        let (cols, rows) = (w.div_ceil(tw), h.div_ceil(th));
-        if (cols as u64) * (rows as u64) > 2500 {
-            return Err(ToolError::invalid(
-                "tile_width",
-                format!(
-                    "would create {} tiles (max 2500)",
-                    cols as u64 * rows as u64
-                ),
-            ));
-        }
+        let (cols, rows) = (xs.len() as u32 - 1, ys.len() as u32 - 1);
         let fmt = out_format(p, f)?;
         let stem = f.stem();
         let mut arts = vec![];
@@ -796,8 +878,8 @@ fn split() -> Arc<dyn Tool> {
         for r in 0..rows {
             for c in 0..cols {
                 ctx.check_cancelled()?;
-                let (x, y) = (c * tw, r * th);
-                let (cw, ch) = (tw.min(w - x), th.min(h - y));
+                let (x, y) = (xs[c as usize], ys[r as usize]);
+                let (cw, ch) = (xs[c as usize + 1] - x, ys[r as usize + 1] - y);
                 let t = img.crop_imm(x, y, cw, ch);
                 arts.push(save_output(
                     ctx,
@@ -1051,7 +1133,8 @@ fn contact_sheet() -> Arc<dyn Tool> {
         let label_h = if labels { (label_px * 1.6) as u32 } else { 0 };
         let title = p
             .opt_str("title")
-            .map(|t| render_text(t, label_px * 1.8, tc));
+            .map(|t| render_text(ctx, t, label_px * 1.8, tc))
+            .transpose()?;
         let title_h = title.as_ref().map(|t| t.height() + gap).unwrap_or(0);
         let rows = files.len().div_ceil(cols) as u32;
         let w = cols as u32 * ts + (cols as u32 + 1) * gap;
@@ -1086,7 +1169,7 @@ fn contact_sheet() -> Arc<dyn Tool> {
                     );
                 }
                 Err(_) => {
-                    let x = render_text("unreadable", label_px, Rgba([200, 0, 0, 255]));
+                    let x = render_text(ctx, "unreadable", label_px, Rgba([200, 0, 0, 255]))?;
                     composite(
                         &mut sheet,
                         &x,
@@ -1099,14 +1182,14 @@ fn contact_sheet() -> Arc<dyn Tool> {
             }
             if labels {
                 let mut name = f.name.clone();
-                let mut lbl = render_text(&name, label_px, tc);
+                let mut lbl = render_text(ctx, &name, label_px, tc)?;
                 while lbl.width() > ts && name.chars().count() > 4 {
                     let keep: String = name
                         .chars()
                         .take(name.chars().count().saturating_sub(4))
                         .collect();
                     name = format!("{keep}…");
-                    lbl = render_text(&name, label_px, tc);
+                    lbl = render_text(ctx, &name, label_px, tc)?;
                     name = name.trim_end_matches('…').to_string();
                 }
                 composite(

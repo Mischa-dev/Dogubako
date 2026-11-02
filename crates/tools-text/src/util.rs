@@ -6,6 +6,103 @@ use dogubako_core::prelude::*;
 pub const PREVIEW_ROWS: usize = 500;
 /// Maximum size of an uploaded file read fully into memory as text.
 pub const MAX_TEXT_FILE: u64 = 64 * 1024 * 1024;
+/// Largest text a tool may build from user-controlled repetition (a
+/// separator or prefix repeated per byte/line/row). Inputs are capped, but
+/// a long separator times many pieces can otherwise need gigabytes.
+pub const MAX_GENERATED_TEXT: u128 = 256 * 1024 * 1024;
+
+/// Reject an output whose estimated size (computed by the caller in u128,
+/// so it cannot overflow) is over [`MAX_GENERATED_TEXT`], before building it.
+pub fn check_generated_size(bytes: u128) -> ToolResult<()> {
+    if bytes > MAX_GENERATED_TEXT {
+        return Err(ToolError::limit(format!(
+            "the output would be about {}, over the {} limit; use a shorter separator, prefix or input",
+            human_size(u64::try_from(bytes).unwrap_or(u64::MAX)),
+            human_size(MAX_GENERATED_TEXT as u64)
+        )));
+    }
+    Ok(())
+}
+
+/// Estimated size of `v` pretty-printed with `indent` bytes per level
+/// (string escapes aside). Cheap: string lengths are read, not scanned.
+pub fn json_pretty_size(v: &Value, indent: usize) -> u128 {
+    fn go(v: &Value, depth: u128, ind: u128) -> u128 {
+        let line = |d: u128| 2 + d * ind; // ",\n" plus indentation
+        match v {
+            Value::Null | Value::Bool(_) => 5,
+            Value::Number(_) => 24,
+            Value::String(s) => s.len() as u128 + 2,
+            Value::Array(a) => {
+                2 + line(depth)
+                    + a.iter()
+                        .map(|x| line(depth + 1) + go(x, depth + 1, ind))
+                        .sum::<u128>()
+            }
+            Value::Object(m) => {
+                2 + line(depth)
+                    + m.iter()
+                        .map(|(k, x)| line(depth + 1) + k.len() as u128 + 4 + go(x, depth + 1, ind))
+                        .sum::<u128>()
+            }
+        }
+    }
+    go(v, 0, indent as u128)
+}
+
+/// `re.replacen(text, limit, rep)` (limit 0 = all; `expand` = whether `$1`
+/// etc. are substituted) that charges `budget` before appending each piece,
+/// so a long replacement times many matches, or `$0` repeated, fails with
+/// `limit_exceeded` instead of allocating.
+pub fn replace_budgeted(
+    re: &regex::Regex,
+    text: &str,
+    rep: &str,
+    expand: bool,
+    limit: usize,
+    budget: &mut OutputBudget,
+) -> ToolResult<String> {
+    let dollars = if expand { rep.matches('$').count() } else { 0 };
+    let mut out = String::new();
+    let mut last = 0;
+    for (n, c) in re.captures_iter(text).enumerate() {
+        if limit > 0 && n >= limit {
+            break;
+        }
+        let m = c.get(0).expect("group 0 always matches");
+        let widest = if expand {
+            c.iter().flatten().map(|g| g.len()).max().unwrap_or(0)
+        } else {
+            0
+        };
+        budget.add(
+            (m.start() - last)
+                .saturating_add(rep.len())
+                .saturating_add(dollars.saturating_mul(widest)),
+        )?;
+        out.push_str(&text[last..m.start()]);
+        if expand {
+            c.expand(rep, &mut out);
+        } else {
+            out.push_str(rep);
+        }
+        last = m.end();
+    }
+    budget.add(text.len() - last)?;
+    out.push_str(&text[last..]);
+    Ok(out)
+}
+
+/// Running total for output assembled piece by piece.
+#[derive(Default)]
+pub struct OutputBudget(u128);
+
+impl OutputBudget {
+    pub fn add(&mut self, bytes: usize) -> ToolResult<()> {
+        self.0 += bytes as u128;
+        check_generated_size(self.0)
+    }
+}
 
 /// Decode bytes into a string: strips BOMs, uses UTF-8 when valid and
 /// otherwise detects the legacy encoding with `chardetng`.

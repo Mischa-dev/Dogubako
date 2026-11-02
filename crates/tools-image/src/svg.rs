@@ -386,6 +386,7 @@ pub fn optimize_svg(input: &str, o: &OptimizeOptions) -> Result<String, String> 
                         used_prefixes.insert(p.to_string());
                     }
                     let v = match o.precision {
+                        Some(pr) if k == "d" => round_path_numbers(&v, pr),
                         Some(pr) if NUMERIC_ATTRS.contains(&k.as_str()) => round_numbers(&v, pr),
                         _ => v,
                     };
@@ -500,11 +501,45 @@ pub fn optimize_svg(input: &str, o: &OptimizeOptions) -> Result<String, String> 
 /// Round decimal numbers in an attribute value to `precision` decimals,
 /// leaving everything else (commands, units, separators) untouched.
 pub fn round_numbers(s: &str, precision: usize) -> String {
+    round_impl(s, precision, false)
+}
+
+/// Like [`round_numbers`], for path data (`d`): elliptical-arc flags are
+/// single-character tokens that may touch the next number ("0110.5" is
+/// flags 0, 1 and x 10.5), so they are copied through unparsed.
+pub fn round_path_numbers(s: &str, precision: usize) -> String {
+    round_impl(s, precision, true)
+}
+
+fn round_impl(s: &str, precision: usize, path: bool) -> String {
     let b = s.as_bytes();
     let mut out = String::with_capacity(s.len());
     let mut i = 0;
+    // Current path command and how many numbers it has consumed.
+    let mut cmd = 0u8;
+    let mut argn = 0usize;
     while i < b.len() {
         let c = b[i];
+        if path && c.is_ascii_alphabetic() {
+            cmd = c;
+            argn = 0;
+            out.push(c as char);
+            i += 1;
+            continue;
+        }
+        if path && (cmd == b'A' || cmd == b'a') && matches!(argn % 7, 3 | 4) {
+            if c == b'0' || c == b'1' {
+                out.push(c as char);
+                i += 1;
+                argn += 1;
+                continue;
+            }
+            if c.is_ascii_digit() || c == b'.' || c == b'-' || c == b'+' {
+                // Not a valid flag: leave the rest untouched rather than guess.
+                out.push_str(&s[i..]);
+                return out;
+            }
+        }
         let starts_num = c.is_ascii_digit()
             || (c == b'.' && b.get(i + 1).is_some_and(|d| d.is_ascii_digit()))
             || ((c == b'-' || c == b'+')
@@ -546,6 +581,7 @@ pub fn round_numbers(s: &str, precision: usize) -> String {
             }
         }
         let tok = &s[st..i];
+        argn += 1;
         if has_exp || !tok.contains('.') {
             out.push_str(tok);
             continue;
@@ -570,7 +606,13 @@ pub fn round_numbers(s: &str, precision: usize) -> String {
         } else if let Some(rest) = r.strip_prefix("-0.") {
             r = format!("-.{rest}");
         }
-        // Keep an explicit leading sign separator semantics: "+" is dropped harmlessly.
+        // A sign may have been the only separator ("1.2+3.4", "5-0.001"):
+        // if rounding dropped it, keep the numbers apart with a space.
+        if r.starts_with(|ch: char| ch.is_ascii_digit() || ch == '.')
+            && out.ends_with(|ch: char| ch.is_ascii_digit() || ch == '.')
+        {
+            out.push(' ');
+        }
         out.push_str(&r);
         // "1.0.5" → "1" + ".5" would merge into "1.5": insert a separator.
         if !r.contains('.') && i < b.len() && (b[i] == b'.' || b[i].is_ascii_digit()) {

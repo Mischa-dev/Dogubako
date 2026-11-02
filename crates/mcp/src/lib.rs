@@ -29,6 +29,16 @@ pub const LATEST_VERSION: &str = "2025-11-25";
 const PAGE_SIZE: usize = 200;
 const MAX_INLINE_RESOURCE: u64 = 16 * 1024 * 1024;
 
+/// Read at most `max` bytes of `path`, so an oversized file is detected
+/// without loading it (and stays bounded if it grows meanwhile).
+pub async fn read_capped(path: impl AsRef<std::path::Path>, max: u64) -> std::io::Result<Vec<u8>> {
+    use tokio::io::AsyncReadExt;
+    let f = tokio::fs::File::open(path.as_ref()).await?;
+    let mut buf = Vec::new();
+    f.take(max).read_to_end(&mut buf).await?;
+    Ok(buf)
+}
+
 /// How tools are exposed in `tools/list`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiscoveryMode {
@@ -70,7 +80,10 @@ pub trait McpBackend: Send + Sync {
     async fn cancel_job(&self, job_id: &str) -> Result<JobView, ToolError>;
     async fn upload(&self, name: &str, bytes: Vec<u8>) -> Result<FileView, ToolError>;
     async fn list_files(&self) -> Result<Vec<FileView>, ToolError>;
-    async fn read_file(&self, file_id: &str) -> Result<(FileView, Vec<u8>), ToolError>;
+    /// A stored file's metadata and at most `max` bytes of its contents
+    /// (see [`read_capped`]); callers compare the length with `max` to
+    /// detect a file that is too large without loading all of it.
+    async fn read_file(&self, file_id: &str, max: u64) -> Result<(FileView, Vec<u8>), ToolError>;
     /// Maximum accepted upload size through MCP (bytes).
     fn max_upload(&self) -> u64 {
         DEFAULT_MAX_UPLOAD
@@ -358,8 +371,11 @@ impl McpServer {
             .cloned();
         let progress: Option<ProgressFn> = match (progress_token, notify) {
             (Some(tok), Some(n)) => {
+                let last = std::sync::Mutex::new(None::<f64>);
                 Some(Arc::new(move |ev: dogubako_core::tool::ProgressEvent| {
-                    let mut p = json!({"progressToken": tok, "progress": ev.fraction.map(|f| (f * 100.0) as f64).unwrap_or(0.0), "total": 100.0});
+                    let progress =
+                        next_progress(&mut last.lock().unwrap(), ev.fraction.map(f64::from));
+                    let mut p = json!({"progressToken": tok, "progress": progress, "total": 100.0});
                     if let Some(m) = ev.message {
                         p["message"] = json!(m);
                     }
@@ -626,15 +642,15 @@ impl McpServer {
             .ok_or((-32602, format!("unknown resource uri: {uri}")))?;
         let (f, bytes) = self
             .backend
-            .read_file(id)
+            .read_file(id, MAX_INLINE_RESOURCE + 1)
             .await
             .map_err(|e| (-32002, e.to_string()))?;
-        if bytes.len() as u64 > MAX_INLINE_RESOURCE {
+        if f.size > MAX_INLINE_RESOURCE || bytes.len() as u64 > MAX_INLINE_RESOURCE {
             return Err((
                 -32603,
                 format!(
                     "resource too large for inline transfer ({} bytes); download it from {}",
-                    bytes.len(),
+                    f.size.max(bytes.len() as u64),
                     f.url.clone().unwrap_or_default()
                 ),
             ));
@@ -651,6 +667,22 @@ impl McpServer {
         };
         Ok(json!({"contents": [content]}))
     }
+}
+
+/// MCP requires each progress notification to report a higher value than the
+/// last. Message-only events (no fraction) and late, lower fractions nudge the
+/// previous value up by the smallest step so their messages still go out.
+fn next_progress(last: &mut Option<f64>, fraction: Option<f64>) -> f64 {
+    let wanted = fraction
+        .filter(|f| f.is_finite())
+        .map(|f| (f * 100.0).clamp(0.0, 100.0));
+    let v = match (*last, wanted) {
+        (None, w) => w.unwrap_or(0.0),
+        (Some(l), Some(w)) if w > l => w,
+        (Some(l), _) => l.next_up(),
+    };
+    *last = Some(v);
+    v
 }
 
 fn ok_result(text: String, structured: Value) -> Value {
@@ -743,5 +775,42 @@ pub fn job_result(job: &JobView) -> Value {
                 "isError": false
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::{next_progress, read_capped};
+
+    #[tokio::test]
+    async fn read_capped_stops_at_the_limit() {
+        let dir = std::env::temp_dir().join(format!("dogubako-mcp-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("f.bin");
+        std::fs::write(&path, vec![7u8; 1000]).unwrap();
+        assert_eq!(read_capped(&path, 101).await.unwrap().len(), 101);
+        assert_eq!(read_capped(&path, 5000).await.unwrap().len(), 1000);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn progress_strictly_increases() {
+        let mut last = None;
+        let seq = [
+            Some(0.5),
+            None,
+            Some(0.2),
+            Some(0.8),
+            None,
+            Some(f64::NAN),
+            Some(1.0),
+        ];
+        let mut prev = f64::NEG_INFINITY;
+        for f in seq {
+            let v = next_progress(&mut last, f);
+            assert!(v > prev, "{v} after {prev}");
+            prev = v;
+        }
+        assert_eq!(prev, 100.0);
     }
 }

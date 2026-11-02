@@ -364,6 +364,8 @@ fn compress() -> Arc<dyn Tool> {
             };
             let mut method;
             let size_mode = p.str("mode")? == "size";
+            // In size mode the audio bitrate is part of the budget.
+            let mut budget_audio_kbps = None;
             if size_mode {
                 let dur = require_dur(&pr, f)?;
                 let target = p.num("target_mb")?;
@@ -378,6 +380,7 @@ fn compress() -> Arc<dyn Tool> {
                     return Err(ToolError::invalid("target_mb", format!("{target} MB is too small for {:.0} s of video (needs at least ~{:.1} MB)", dur, (40.0 + a as f64) * dur * 1000.0 / 8.0 / 1024.0 / 1024.0 / 0.97)));
                 }
                 o.bitrate_kbps = Some(v as u64);
+                budget_audio_kbps = Some(a);
                 method = format!("{} kbit/s video", v as u64);
             } else {
                 o.crf = Some(match codec {
@@ -401,11 +404,7 @@ fn compress() -> Arc<dyn Tool> {
                 }
             }
             let vf = enc.vf(vf);
-            let audio_kbps = if size_mode {
-                o.bitrate_kbps.map(|_| akbps).unwrap_or(akbps)
-            } else {
-                akbps
-            };
+            let audio_kbps = budget_audio_kbps.unwrap_or(akbps);
             let aargs = if pr.audio().is_some() {
                 aud.args(audio_kbps as u32)
             } else {
