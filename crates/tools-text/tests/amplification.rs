@@ -132,6 +132,13 @@ async fn json_results_are_bounded() {
     }
     let text = serde_json::to_string(&doc).unwrap();
     limited(&h, "dev.jsonpath", json!({"query": "$..*", "text": text})).await;
+    // A long key over many array items: every location repeats the key.
+    let text = format!(
+        "{{\"{}\":[{}0]}}",
+        "k".repeat(100_000),
+        "0,".repeat(100_000)
+    );
+    limited(&h, "dev.jsonpath", json!({"query": "$.*[*]", "text": text})).await;
     // Small results are unchanged.
     let out = h
         .run(

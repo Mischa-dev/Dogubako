@@ -61,16 +61,19 @@ fn jsonpath() -> Arc<dyn Tool> {
         let located = path.query_located(&doc);
         // Recursive queries match every ancestor of a large value, so the
         // copies can dwarf the document: size the result before cloning.
+        // Each location repeats its ancestors' keys, so a long key over many
+        // array items multiplies too; one location is at most a few times
+        // the document, so charging each as it is built keeps the total
+        // within the budget.
         let mut budget = OutputBudget::default();
+        let mut paths: Vec<Value> = Vec::with_capacity(located.len());
         for n in located.iter() {
             budget.add(usize::try_from(json_pretty_size(n.node(), 2)).unwrap_or(usize::MAX))?;
+            let loc = n.location().to_string();
+            budget.add(loc.len())?;
+            paths.push(Value::String(loc));
         }
-        let mut values: Vec<Value> = Vec::with_capacity(located.len());
-        let mut paths: Vec<Value> = Vec::with_capacity(located.len());
-        for n in located {
-            paths.push(json!(n.location().to_string()));
-            values.push(n.node().clone());
-        }
+        let values: Vec<Value> = located.into_iter().map(|n| n.node().clone()).collect();
         Ok(
             ToolOutput::text_as(serde_json::to_string_pretty(&values)?, "application/json")
                 .with_data(json!({"count": values.len(), "paths": paths})),
