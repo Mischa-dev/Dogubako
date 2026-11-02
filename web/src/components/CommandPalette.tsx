@@ -6,6 +6,7 @@ import {
 import { useApp } from '../lib/app';
 import { navigate, href } from '../lib/router';
 import { search, fuzzyMatch } from '../lib/search';
+import { matchIntent } from '../lib/intent';
 import { cycleTheme, favorites as favStore, recents as recStore, resolvedTheme, useStore } from '../lib/store';
 import { categoryIcon } from '../lib/icons';
 import type { ToolInfo } from '../lib/types';
@@ -97,6 +98,13 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
       boost: (id) => (favSet.has(id) ? 6 : 0) + (recentIds.has(id) ? Math.max(0, 8 - recentIds.get(id)!) : 0),
     });
     const tools = hits.map((h) => toolItem(h.item, h.ranges, 'Tools'));
+    // Home invites "say what you need": understand plain words ("make this smaller",
+    // "no location") that name no tool, and offer what they usually mean.
+    const found = new Set(hits.map((h) => h.item.id));
+    const meant = matchIntent(docs.map((d) => d.item).filter((t) => t.permitted !== false), docs, query)
+      .filter((t) => !found.has(t.id))
+      .slice(0, Math.max(0, 8 - tools.length))
+      .map((t) => toolItem(t, [], 'Suggested'));
     const ql = query.toLowerCase();
     const cats: Item[] = categories
       .filter((c) => c.label.toLowerCase().includes(ql) || c.id.startsWith(ql))
@@ -110,7 +118,7 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
       .sort((x, y) => y.m!.score - x.m!.score)
       .slice(0, 4)
       .map(({ a, m }) => ({ ...a, ranges: toRanges(m!.positions) }));
-    return [...tools, ...cats, ...acts];
+    return [...tools, ...meant, ...cats, ...acts];
   }, [q, docs, recs, favs, toolMap, actions, categories, categoryLabel]);
 
   useEffect(() => { setActive(0); }, [q]);

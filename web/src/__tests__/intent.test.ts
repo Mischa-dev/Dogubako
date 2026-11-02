@@ -49,6 +49,10 @@ describe('matchIntent', () => {
     expect(matchIntent(cands, docs, 'smaller')[0].id).toBe('image.compress');
     expect(matchIntent(cands, docs, 'jpg').map((t) => t.id)).toContain('image.convert');
   });
+  it('puts what a word most likely means first, whatever the candidate order', () => {
+    const all = tools.filter((t) => t.id === 'image.convert' || t.id === 'image.compress').reverse();
+    expect(matchIntent(all, docs, 'make this smaller')[0].id).toBe('image.compress');
+  });
   it('still matches tool names', () => {
     expect(matchIntent(cands, docs, 'resize')[0].id).toBe('image.resize');
   });

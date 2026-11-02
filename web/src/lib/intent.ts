@@ -61,6 +61,13 @@ export function rankTools(cands: ToolInfo[], files: IntentFile[], ctx: { pinned:
   return [...cands].sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
 }
 
+/** Whether a tool id's name part contains this fragment as whole words ("compress" is in
+ *  image.compress, not in files.decompress). */
+function nameHas(id: string, frag: string): boolean {
+  const name = id.split('.')[1] ?? '';
+  return `_${name}_`.includes(`_${frag}_`) || name.startsWith(frag);
+}
+
 /** Filter candidates by what someone typed, understanding a few plain words ("smaller", "jpg", "no location"). */
 export function matchIntent(cands: ToolInfo[], docs: { doc: SearchDoc; item: ToolInfo }[], query: string): ToolInfo[] {
   const q = query.trim().toLowerCase();
@@ -71,11 +78,15 @@ export function matchIntent(cands: ToolInfo[], docs: { doc: SearchDoc; item: Too
   for (const hit of search(pool, q, { limit: 60 })) scores.set(hit.item.id, (scores.get(hit.item.id) ?? 0) + hit.score + 100);
   const words = q.split(/[^a-z0-9]+/).filter(Boolean);
   words.forEach((w) => {
-    for (const frag of WORDS[w] ?? []) {
+    // A word's fragments are listed most-likely first ("smaller" means compress before
+    // convert); among tools matching the same fragment, the candidates' order wins.
+    (WORDS[w] ?? []).forEach((frag, fi) => {
       cands.forEach((t, i) => {
-        if (t.id.split('.')[1]?.includes(frag) || t.id.endsWith(frag)) scores.set(t.id, (scores.get(t.id) ?? 0) + 200 - i);
+        if (nameHas(t.id, frag)) {
+          scores.set(t.id, (scores.get(t.id) ?? 0) + 200 - fi * 30 - Math.min(i, 299) * 0.1);
+        }
       });
-    }
+    });
   });
   return cands.filter((t) => scores.has(t.id)).sort((a, b) => (scores.get(b.id)! - scores.get(a.id)!));
 }
