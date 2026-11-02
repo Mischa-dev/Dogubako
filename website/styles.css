@@ -190,11 +190,9 @@ p { margin: 0; text-wrap: pretty; }
 .eyebrow { font: 500 12.5px/1.2 var(--font-mono); color: var(--text-3); letter-spacing: 0.02em; margin-bottom: 18px; }
 .eyebrow .kanji { font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; font-size: 15px; color: var(--text); letter-spacing: 0.12em; }
 .eyebrow .dot { margin: 0 4px; }
-.hero h1 { font-size: clamp(38px, 6.4vw, 76px); font-weight: 600; letter-spacing: -0.035em; line-height: 1.02; max-width: 15ch; }
-.hero h1 .soft { color: var(--text-3); font-weight: 500; }
+.hero h1 { font-size: clamp(38px, 6.4vw, 76px); font-weight: 600; letter-spacing: -0.035em; line-height: 1.02; max-width: 18ch; }
 .lede { margin-top: 24px; font-size: clamp(17px, 1.7vw, 20px); color: var(--text-2); max-width: 58ch; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
-.hero-meta { margin-top: 18px; font-size: 12.5px; color: var(--text-3); }
 
 /* ---------------------------------------------------------------- drop demo */
 .drop-demo { margin-top: 72px; position: relative; }
@@ -335,17 +333,11 @@ video.bo-frame { width: 100%; object-fit: cover; }
 .tour-tabs button[aria-selected='true'], .ways-tabs button[aria-selected='true'] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); }
 .tour-frame { margin: 22px 0 0; }
 .window { border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: var(--shadow-pop); }
-.window-bar { display: flex; gap: 7px; padding: 11px 14px; background: var(--surface-2); border-bottom: 1px solid var(--divider); }
-.window-bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--border-strong); }
 .window img { width: 100%; aspect-ratio: 1360 / 860; object-fit: cover; transition: opacity 200ms var(--ease); }
 .window img.is-swapping { opacity: .35; }
+.tour-note { margin-top: 40px; max-width: 68ch; color: var(--text-2); }
 .tour-frame figcaption { margin-top: 14px; color: var(--text-3); font-size: 14.5px; text-align: center; }
 
-.features { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px; margin-top: 64px; }
-.feature h3 { font-size: 17px; letter-spacing: -0.01em; margin-bottom: 8px; }
-.feature p { color: var(--text-2); font-size: 15px; }
-@media (max-width: 960px) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 560px) { .features { grid-template-columns: minmax(0, 1fr); } }
 
 .phones { display: flex; justify-content: center; gap: clamp(12px, 3vw, 36px); margin-top: 72px; }
 .phones img { width: min(260px, 30%); border-radius: clamp(14px, 2.6vw, 30px); box-shadow: var(--shadow-pop); border: clamp(3px, .6vw, 6px) solid #1c1b19; }
@@ -357,9 +349,6 @@ video.bo-frame { width: 100%; object-fit: cover; }
   position: relative; padding: 22px 22px 20px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow-card);
   transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-/* a drawer pull, because these are drawers */
-.drawer::before { content: ''; position: absolute; top: 0; left: 50%; width: 44px; height: 5px; transform: translateX(-50%); border-radius: 0 0 5px 5px; background: var(--border-strong); }
-.drawer:hover { transform: translateY(-3px); box-shadow: var(--shadow-pop); }
 .drawer header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 .drawer h3 { font-size: 18px; letter-spacing: -0.01em; }
 .count { font-size: 12.5px; color: var(--text-3); }
@@ -389,23 +378,7 @@ video.bo-frame { width: 100%; object-fit: cover; }
 .split h2 { font-size: clamp(28px, 3.6vw, 44px); }
 .split .section-lede { margin-bottom: 22px; }
 .keys { display: flex; flex-direction: column; gap: 14px; position: relative; }
-.keys::before {
-  content: ''; position: absolute; inset: -40px 0; z-index: -1; opacity: .5; border-radius: 40px;
-  background: radial-gradient(50% 50% at 30% 30%, #c9a58f, transparent 70%), radial-gradient(50% 50% at 80% 70%, #9fa7c9, transparent 70%);
-  filter: blur(10px);
-}
-.key { padding: 16px 18px; border-radius: 16px; }
-.key:nth-child(2) { margin-left: 32px; }
-.key-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.key-name { font-weight: 600; }
-.tag { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--text-2); }
-.key-scopes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.scope { font-size: 12px; padding: 4px 9px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); }
-.scope.yes::before { content: '✓ '; color: var(--success); }
-.scope.no { color: var(--text-3); text-decoration: line-through; }
-.scope.no::before { content: '✕ '; color: var(--danger); text-decoration: none; display: inline-block; margin-right: 3px; }
-.key-token { font-size: 12.5px; color: var(--text-3); }
-@media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); gap: 40px; } .key:nth-child(2) { margin-left: 0; } }
+@media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); gap: 32px; } }
 
 /* ---------------------------------------------------------------- trust */
 .trust { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--divider); border-radius: 18px; overflow: hidden; border: 1px solid var(--divider); }
@@ -419,11 +392,9 @@ video.bo-frame { width: 100%; object-fit: cover; }
 /* ---------------------------------------------------------------- download */
 .downloads { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .dl { display: flex; flex-direction: column; gap: 4px; padding: 22px; border-radius: 18px; text-decoration: none; transition: transform var(--dur) var(--ease); }
-.dl:hover { transform: translateY(-3px); }
 .dl-os { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
 .dl-sub { font-size: 12px; color: var(--text-3); }
 .dl-state { margin-top: 18px; font-size: 13.5px; color: var(--text-2); }
-.dl-state::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--brand); vertical-align: 1px; }
 .dl.is-yours { outline: 2px solid var(--text); outline-offset: -2px; }
 .dl.is-yours .dl-os::after { content: 'Your system'; margin-left: 10px; font: 500 11px/1 var(--font-mono); color: var(--text-3); vertical-align: 3px; }
 .from-source { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: 32px; align-items: center; margin-top: 32px; }

@@ -63,13 +63,12 @@
     <!-- ============================================================ hero -->
     <section class="hero" id="top">
       <p class="eyebrow"><span class="kanji" lang="ja">道具箱</span> <span class="dot" aria-hidden="true">·</span> dōgu-bako, “toolbox”</p>
-      <h1>Every little tool you reach for, <span class="soft">in one box on your own machine.</span></h1>
-      <p class="lede">249 tools for images, video, audio, speech, PDFs, files, text, code, data, networks, design and your system. Free and open source. Nothing leaves your computer unless you host it yourself.</p>
+      <h1>249 small tools for your files, in one app.</h1>
+      <p class="lede">Dogubako replaces the single-purpose websites you use to convert an image, shrink a PDF or format some JSON. It runs on your computer, or on a server you host, so your files stay with you. Free and open source.</p>
       <div class="hero-cta">
         <a class="btn btn-ink" href="#download" id="hero-download">Get Dogubako</a>
         <a class="btn btn-glass" href="https://github.com/Mischa-dev/Dogubako">View on GitHub</a>
       </div>
-      <p class="hero-meta mono">macOS · Windows · Linux · Docker · CLI · HTTP API · MCP</p>
 
       <!-- The drop demo: mirrors the app's home screen. Files never leave the browser. -->
       <div class="drop-demo" id="drop-demo">
@@ -164,9 +163,7 @@
     <!-- ============================================================ tour -->
     <section class="section" id="tour" aria-labelledby="tour-title">
       <header class="section-head">
-        <p class="eyebrow">A quick tour</p>
-        <h2 id="tour-title">Open it, drop something in, done.</h2>
-        <p class="section-lede">Dogubako replaces the dozens of single-purpose sites and small apps you reach for every week. It looks like paper, it feels physical, and it stays out of the way.</p>
+        <h2 id="tour-title">What it looks like</h2>
       </header>
 
       <div class="tour">
@@ -180,31 +177,13 @@
         </div>
         <figure class="tour-frame" id="tour-panel" role="tabpanel">
           <div class="window">
-            <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
             <img id="tour-img" src="screenshots/home-light.webp" width="1360" height="860" alt="Dogubako home screen" decoding="async">
           </div>
           <figcaption id="tour-caption">Home: a big input, the files you worked on lately on a shelf, and your recent runs.</figcaption>
         </figure>
       </div>
 
-      <div class="features">
-        <article class="feature">
-          <h3>Files look like what they are</h3>
-          <p>Photos sit on the bench as photos, PDFs as a stack of pages, video as a strip of film and audio as a waveform. You always know what you’re holding.</p>
-        </article>
-        <article class="feature">
-          <h3>It guesses what you want</h3>
-          <p>Drop a file and the likeliest tools come first. Type plain words like “smaller” or “jpg” and it understands.</p>
-        </article>
-        <article class="feature">
-          <h3>Make it yours</h3>
-          <p>Hide the sidebar, pin your favorite tools to <span class="nowrap"><span class="kbd mono">Alt 1–9</span>,</span> reorder the home screen and pick light, dark or frosted.</p>
-        </article>
-        <article class="feature">
-          <h3>Fast on every screen</h3>
-          <p>The same interface runs as a desktop app, in your browser and on your phone, with keyboard shortcuts for everything.</p>
-        </article>
-      </div>
+      <p class="tour-note">Files are drawn as what they are: photos as photos, PDFs as a stack of pages, video as film, audio as a waveform. You can hide the sidebar, pin tools to <span class="nowrap"><span class="kbd mono">Alt 1–9</span>,</span> and rearrange the home screen. The same interface runs as a desktop app, in the browser and on phones.</p>
 
       <div class="phones" aria-label="On your phone">
         <img src="screenshots/phone-home-light.webp" width="585" height="1266" alt="Dogubako home on a phone" loading="lazy" decoding="async">
@@ -216,8 +195,7 @@
     <!-- ============================================================ tools -->
     <section class="section" id="tools" aria-labelledby="tools-title">
       <header class="section-head">
-        <p class="eyebrow">What’s in the box</p>
-        <h2 id="tools-title">249 tools, sorted into twelve drawers.</h2>
+        <h2 id="tools-title">249 tools in 12 categories</h2>
         <p class="section-lede">Built on mature open-source engines like FFmpeg, libvips, ExifTool, qpdf, Tesseract and whisper.cpp, with fast native code for everything that doesn’t need them.</p>
       </header>
 
@@ -241,9 +219,8 @@
     <!-- ============================================================ everywhere -->
     <section class="section" id="everywhere" aria-labelledby="everywhere-title">
       <header class="section-head">
-        <p class="eyebrow">One toolbox, every way in</p>
-        <h2 id="everywhere-title">Click it, script it, host it, or hand it to an agent.</h2>
-        <p class="section-lede">Each tool is written once. The app, the command line, the HTTP API and the MCP server are all built from that one description and run by the same engine, so they always agree.</p>
+        <h2 id="everywhere-title">Use it from the app, the command line, an API or an AI agent</h2>
+        <p class="section-lede">Each tool is written once. The app, the command line, the HTTP API and the MCP server are generated from that one description and run by the same engine.</p>
       </header>
 
       <div class="ways">
@@ -280,7 +257,7 @@
 
         <div class="way" role="tabpanel" id="way-server" aria-labelledby="tab-server" hidden>
           <div class="way-copy">
-            <h3>Your own server, in one command</h3>
+            <h3>Host it yourself</h3>
             <p>Run Dogubako on a home server, a NAS or a VPS with all the heavy engines installed once. Reach it over your LAN or Tailscale from any browser, including your phone.</p>
             <a class="link-arrow" href="https://docs.dogubako.app/self-hosting/overview/">Self-hosting guide</a>
           </div>
@@ -327,22 +304,11 @@
     <section class="section" id="agents" aria-labelledby="agents-title">
       <div class="split">
         <div>
-          <p class="eyebrow">Agent-ready, not agent-first</p>
-          <h2 id="agents-title">Give every agent its own key, and only the tools it needs.</h2>
+          <h2 id="agents-title">Separate keys for separate agents</h2>
           <p class="section-lede">Run one central server with the heavy engines and hand each agent a scoped token. An image bot may resize and blur. A media bot may transcode and transcribe. Neither can see the other’s files or touch your system tools.</p>
           <a class="link-arrow" href="https://docs.dogubako.app/self-hosting/accounts-and-agents/">Accounts and agents</a>
         </div>
-        <div class="keys" aria-label="Example agent tokens">
-          <div class="key glass">
-            <div class="key-head"><span class="key-name">media-bot</span><span class="tag mono">agent</span></div>
-            <div class="key-scopes mono"><span class="scope yes">video.*</span><span class="scope yes">speech.*</span><span class="scope no">system.*</span></div>
-            <code class="mono key-token">dgb_••••••••••••7Kq2</code>
-          </div>
-          <div class="key glass">
-            <div class="key-head"><span class="key-name">image-bot</span><span class="tag mono">agent</span></div>
-            <div class="key-scopes mono"><span class="scope yes">image.resize</span><span class="scope yes">image.redact</span><span class="scope no">files.*</span></div>
-            <code class="mono key-token">dgb_••••••••••••p9Xe</code>
-          </div>
+        <div class="keys">
 <pre class="code code-sm"><code><span class="p">$</span> dogubako users create media-bot --role agent \
     --allow 'video.*' --allow 'speech.*'
 <span class="p">$</span> dogubako tokens create --user media-bot --name laptop</code></pre>
@@ -353,37 +319,35 @@
     <!-- ============================================================ trust -->
     <section class="section" id="trust" aria-labelledby="trust-title">
       <header class="section-head">
-        <p class="eyebrow">Private and safe by construction</p>
-        <h2 id="trust-title">Your files stay yours.</h2>
+        <h2 id="trust-title">Privacy and security</h2>
       </header>
       <div class="trust">
-        <article><h3>Local first</h3><p>The desktop app needs no account and sends nothing anywhere. Self-host it and your files only travel to a machine you own.</p></article>
-        <article><h3>No shell, ever</h3><p>External programs run directly, with timeouts, resource limits and optional bubblewrap sandboxing.</p></article>
+        <article><h3>Nothing leaves your machine</h3><p>The desktop app needs no account and sends nothing anywhere. Self-host it and your files only travel to a machine you own.</p></article>
+        <article><h3>No shell</h3><p>External programs run directly, with timeouts, resource limits and optional bubblewrap sandboxing.</p></article>
         <article><h3>Owner-checked files</h3><p>Files are addressed by id and checked against their owner on every request. Archives are guarded against bombs and path tricks.</p></article>
         <article><h3>Guarded network tools</h3><p>On a shared server, tools that fetch URLs refuse to reach into your private network by default, and every action is written to an audit log.</p></article>
         <article><h3>Free and open source</h3><p>Licensed under the GNU AGPL v3.0 or later. No telemetry, no paywalls, and the code is all there to read.</p></article>
-        <article><h3>Standing on giants</h3><p class="engines mono">FFmpeg · ImageMagick · libvips · ExifTool · qpdf · Poppler · Ghostscript · Tesseract · whisper.cpp · Piper · LibreOffice · Pandoc · 7-Zip</p></article>
+        <article><h3>Built on</h3><p class="engines mono">FFmpeg · ImageMagick · libvips · ExifTool · qpdf · Poppler · Ghostscript · Tesseract · whisper.cpp · Piper · LibreOffice · Pandoc · 7-Zip</p></article>
       </div>
     </section>
 
     <!-- ============================================================ download -->
     <section class="section" id="download" aria-labelledby="download-title">
-      <header class="section-head center">
-        <p class="eyebrow">Get Dogubako</p>
-        <h2 id="download-title">Pick it up.</h2>
-        <p class="section-lede">The first alpha is almost here. Until the installers are published, you can build it from source in a few minutes.</p>
+      <header class="section-head">
+        <h2 id="download-title">Download</h2>
+        <p class="section-lede">Installers come with the first alpha release. Until then, you can build it from source.</p>
       </header>
 
       <div class="downloads">
         <!-- PLACEHOLDER: point these at the release assets once the alpha is published. -->
         <a class="dl glass" data-os="mac" href="https://github.com/Mischa-dev/Dogubako/releases">
-          <span class="dl-os">macOS</span><span class="dl-sub mono">.dmg</span><span class="dl-state">Coming with the alpha</span>
+          <span class="dl-os">macOS</span><span class="dl-sub mono">.dmg</span><span class="dl-state">Not released yet</span>
         </a>
         <a class="dl glass" data-os="windows" href="https://github.com/Mischa-dev/Dogubako/releases">
-          <span class="dl-os">Windows</span><span class="dl-sub mono">.msi · .exe</span><span class="dl-state">Coming with the alpha</span>
+          <span class="dl-os">Windows</span><span class="dl-sub mono">.msi · .exe</span><span class="dl-state">Not released yet</span>
         </a>
         <a class="dl glass" data-os="linux" href="https://github.com/Mischa-dev/Dogubako/releases">
-          <span class="dl-os">Linux</span><span class="dl-sub mono">AppImage · .deb · .rpm</span><span class="dl-state">Coming with the alpha</span>
+          <span class="dl-os">Linux</span><span class="dl-sub mono">AppImage · .deb · .rpm</span><span class="dl-state">Not released yet</span>
         </a>
       </div>
 
@@ -413,7 +377,6 @@
         <div><h2 class="footer-h">License</h2><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a><a href="https://docs.dogubako.app/project/licensing/">Third-party licenses</a></div>
       </nav>
     </div>
-    <p class="footer-fine mono">dogubako.app · made with care, runs on your machine</p>
   </footer>
 
   <script src="main.js" defer></script>
