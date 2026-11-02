@@ -949,9 +949,10 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> ToolResult<String> {
             write(&mut out, k, val, 0)?;
         }
         Value::Array(_) => {
-            out.push_str(&format!("<{root_name}>\n"));
+            let root = valid_name(root_name);
+            out.push_str(&format!("<{root}>\n"));
             write(&mut out, "item", v, 1)?;
-            out.push_str(&format!("</{root_name}>\n"));
+            out.push_str(&format!("</{root}>\n"));
         }
         _ => write(&mut out, root_name, v, 0)?,
     }
@@ -1511,6 +1512,23 @@ mod tests {
             .await
             .unwrap_err();
         assert!(e.to_string().contains("a_"), "{e}");
+        // The root name is cleaned up for every input shape, arrays included.
+        for text in ["[1]", "1", "{}"] {
+            let xml = h
+                .run(
+                    "dev.convert",
+                    json!({"text": text, "from": "json", "to": "xml", "root": "my items"}),
+                )
+                .await
+                .unwrap()
+                .text
+                .unwrap();
+            assert!(
+                xml.contains("<my_items") && !xml.contains("my items"),
+                "{text}: {xml}"
+            );
+            super::xml_to_json(&xml).unwrap();
+        }
     }
 
     #[tokio::test]
