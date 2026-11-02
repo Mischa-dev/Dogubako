@@ -123,3 +123,37 @@ export const TOOL_LAYOUT_DEFAULT: ToolLayout = { controls: 'below', preview: 'si
 const isToolLayout = (v: any): v is ToolLayout =>
   !!v && ['below', 'left', 'right'].includes(v.controls) && ['side', 'result'].includes(v.preview) && ['file', 'pinned'].includes(v.row);
 export const toolLayout = new Store<ToolLayout>('dgb.toolLayout', TOOL_LAYOUT_DEFAULT, isToolLayout);
+
+/** Home page: which sections show, in what order, and a few layout choices. Saved on this device. */
+export type HomeModuleId = 'bench' | 'pinned' | 'runs' | 'tip' | 'categories';
+export interface HomeLayout {
+  sidebar: 'left' | 'right';
+  shelf: 'compact' | 'large';
+  glass: boolean;
+  modules: { id: HomeModuleId; on: boolean }[];
+}
+export const HOME_MODULES: HomeModuleId[] = ['bench', 'pinned', 'runs', 'tip', 'categories'];
+export const HOME_LAYOUT_DEFAULT: HomeLayout = {
+  sidebar: 'left',
+  shelf: 'compact',
+  glass: true,
+  modules: [{ id: 'bench', on: true }, { id: 'runs', on: true }, { id: 'tip', on: true }, { id: 'pinned', on: false }, { id: 'categories', on: false }],
+};
+const isHomeLayout = (v: any): v is HomeLayout =>
+  !!v && (v.sidebar === 'left' || v.sidebar === 'right') && (v.shelf === 'compact' || v.shelf === 'large')
+  && typeof v.glass === 'boolean' && Array.isArray(v.modules) && v.modules.every((m: any) => HOME_MODULES.includes(m?.id));
+export const homeLayout = new Store<HomeLayout>('dgb.home', HOME_LAYOUT_DEFAULT, isHomeLayout);
+
+/** Modules in saved order, with any new ones (added in a later version) appended switched off. */
+export function homeModules(l: HomeLayout): { id: HomeModuleId; on: boolean }[] {
+  const seen = new Set(l.modules.map((m) => m.id));
+  return [...l.modules, ...HOME_MODULES.filter((id) => !seen.has(id)).map((id) => ({ id, on: false }))];
+}
+
+function applyGlass() {
+  if (typeof document === 'undefined') return;
+  if (homeLayout.get().glass) delete document.documentElement.dataset.glass;
+  else document.documentElement.dataset.glass = 'off';
+}
+applyGlass();
+homeLayout.subscribe(applyGlass);

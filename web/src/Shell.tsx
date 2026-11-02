@@ -5,7 +5,7 @@ import { CommandPalette } from './components/CommandPalette';
 import { ToolsMenu } from './components/ToolsMenu';
 import { DropOverlay } from './components/DropOverlay';
 import { href, navigate, useRoute } from './lib/router';
-import { favorites as favStore, sidebarCollapsed, useStore } from './lib/store';
+import { favorites as favStore, homeLayout, sidebarCollapsed, useStore } from './lib/store';
 import { useApp } from './lib/app';
 import { LogoMark } from './components/Logo';
 import { Kbd, Spinner, cx, modKey } from './components/ui';
@@ -34,6 +34,7 @@ export function Shell() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const hidden = useStore(sidebarCollapsed);
   const favs = useStore(favStore);
+  const side = useStore(homeLayout).sidebar;
   const main = useRef<HTMLElement>(null);
 
   const openPalette = useCallback((q?: string) => { setDrawer(false); setToolsOpen(false); setQuery(typeof q === 'string' ? q : ''); setPalette(true); }, []);
@@ -108,7 +109,7 @@ export function Shell() {
   }
 
   return (
-    <div className={cx('app', drawer && 'drawer-open', hidden && 'sidebar-hidden')}>
+    <div className={cx('app', drawer && 'drawer-open', hidden && 'sidebar-hidden', side === 'right' && 'sidebar-right')}>
       <a href="#main" className="skip-link" onClick={(e) => { e.preventDefault(); main.current?.focus(); }}>Skip to content</a>
       <header className="topbar">
         <button className="icon-btn" onClick={() => setDrawer(true)} aria-label="Open navigation" aria-expanded={drawer}>
