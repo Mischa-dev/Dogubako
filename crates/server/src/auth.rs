@@ -169,11 +169,11 @@ pub fn authenticate(state: &AppState, parts: &Parts) -> Result<Option<Principal>
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
     {
-        let token = auth
-            .strip_prefix("Bearer ")
-            .or_else(|| auth.strip_prefix("bearer "))
-            .unwrap_or("")
-            .trim();
+        // The auth scheme name is case-insensitive (RFC 9110 §11.1).
+        let token = match auth.split_once(' ') {
+            Some((scheme, rest)) if scheme.eq_ignore_ascii_case("bearer") => rest.trim(),
+            _ => "",
+        };
         if !token.starts_with(TOKEN_PREFIX) {
             return Err(ApiError::unauthorized("invalid bearer token"));
         }

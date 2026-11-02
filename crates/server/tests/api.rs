@@ -305,6 +305,17 @@ async fn agent_permissions_enforced() {
         .map(|t| t["id"].as_str().unwrap())
         .collect();
     assert_eq!(ids, vec!["image.copy"]);
+    // The scheme name is case-insensitive.
+    let upper = format!("BEARER {img_token}");
+    let r = call(
+        &t.app,
+        Method::GET,
+        "/api/v1/tools",
+        &[("authorization", upper.as_str())],
+        None,
+    )
+    .await;
+    assert_eq!(r.body["tools"].as_array().unwrap().len(), 1, "{}", r.body);
     // Invocation of a non-permitted tool is refused even though the agent knows its id
     let r = call(
         &t.app,

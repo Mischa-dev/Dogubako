@@ -107,10 +107,10 @@ async fn setup(
     if !s.login_limiter.check(&format!("setup:{ip}")) {
         return Err(ApiError::too_many("too many attempts; try again later"));
     }
-    let expected = s
-        .setup_token
-        .lock()
-        .unwrap()
+    // Hold the lock until the owner exists, so two concurrent requests with
+    // the token cannot both create an owner account.
+    let mut token = s.setup_token.lock().unwrap();
+    let expected = token
         .clone()
         .ok_or_else(|| ApiError::conflict("setup already completed"))?;
     if !auth::constant_time_eq(r.setup_token.trim(), &expected) {
@@ -131,7 +131,8 @@ async fn setup(
         &Policy::for_role(Role::Owner),
         "Instance owner",
     )?;
-    *s.setup_token.lock().unwrap() = None;
+    *token = None;
+    drop(token);
     s.db.audit(
         &r.username,
         "setup",
