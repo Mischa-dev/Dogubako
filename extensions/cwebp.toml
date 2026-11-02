@@ -1,0 +1,48 @@
+# Example Dogubako extension: wrap Google's `cwebp` encoder as a tool.
+# Install: copy to your extensions folder, review it, then
+#   dogubako extensions trust image.cwebp
+[tool]
+id = "image.cwebp"
+name = "Encode WebP (cwebp)"
+category = "image"
+description = "Encode an image to WebP with Google's reference encoder cwebp"
+version = "1.0.0"
+keywords = ["webp", "libwebp", "encode"]
+timeout_secs = 300
+
+[command]
+program = "cwebp"
+args = [
+  "-q", "{quality}",
+  { when = "lossless", args = ["-lossless"] },
+  { when = "metadata", args = ["-metadata", "all"] },
+  "{input}", "-o", "{output}",
+]
+
+[output]
+file = "{input.stem}.webp"
+
+[[params]]
+name = "input"
+type = "file"
+accept = ["image/png", "image/jpeg", "image/tiff", "image/webp"]
+required = true
+primary = true
+
+[[params]]
+name = "quality"
+type = "integer"
+min = 0
+max = 100
+default = 80
+
+[[params]]
+name = "lossless"
+type = "boolean"
+default = false
+
+[[params]]
+name = "metadata"
+label = "Keep metadata"
+type = "boolean"
+default = false

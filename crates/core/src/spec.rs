@@ -237,6 +237,7 @@ pub enum ParamKind {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ParamSpec {
     pub name: String,
+    #[serde(default)]
     pub label: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,

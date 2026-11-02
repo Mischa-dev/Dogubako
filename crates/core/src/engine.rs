@@ -225,3 +225,108 @@ impl Engine {
         Ok((output, RunStats { duration_ms: started.elapsed().as_millis() as u64 }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::prelude::*;
+    use crate::testing::TestHarness;
+
+    fn tools() -> Vec<Arc<dyn Tool>> {
+        vec![
+            async_tool(ToolSpec::new("dev.slow", "Slow", Category::Dev).describe("sleeps").timeout(1), |ctx, _p| async move {
+                #[cfg(unix)]
+                ctx.command_path("sleep".into(), "sleep").arg("30").run().await?;
+                #[cfg(not(unix))]
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                let _ = ctx;
+                Ok(ToolOutput::text("never"))
+            }),
+            sync_tool(ToolSpec::new("dev.escape", "Escape", Category::Dev).describe("returns artifact outside out dir"), |ctx, _p| {
+                let p = ctx.work_dir().join("x.txt");
+                std::fs::write(&p, "x")?;
+                Ok(ToolOutput::files(vec![ctx.artifact(&p)?]))
+            }),
+            sync_tool(ToolSpec::new("network.fake", "Net", Category::Network).describe("needs network").permission(Permission::Network), |_c, _p| Ok(ToolOutput::text("ok"))),
+            sync_tool(ToolSpec::new("video.fake", "Needs dep", Category::Video).describe("needs a missing dep").requires(&["definitely-not-a-dep"]), |_c, _p| Ok(ToolOutput::text("ok"))),
+            sync_tool(
+                ToolSpec::new("dev.types", "Types", Category::Dev)
+                    .describe("coercion")
+                    .param(ParamSpec::integer("n").range(1.0, 10.0).required())
+                    .param(ParamSpec::boolean("flag"))
+                    .param(ParamSpec::choice_of("mode", &["a", "b"]).default_str("a"))
+                    .param(ParamSpec::color("c").default_str("#abc")),
+                |_c, p| Ok(ToolOutput::data(json!({"n": p.int("n")?, "flag": p.bool("flag"), "mode": p.str("mode")?, "c": p.str("c")?}))),
+            ),
+        ]
+    }
+
+    #[tokio::test]
+    async fn timeout_kills_tool() {
+        let h = TestHarness::new(tools());
+        let t = std::time::Instant::now();
+        let e = h.run("dev.slow", json!({})).await.unwrap_err();
+        assert_eq!(e.code(), "timeout");
+        assert!(t.elapsed().as_secs() < 5);
+    }
+
+    #[tokio::test]
+    async fn artifacts_must_stay_in_out_dir() {
+        let h = TestHarness::new(tools());
+        let e = h.run("dev.escape", json!({})).await.unwrap_err();
+        assert!(e.to_string().contains("outside"));
+    }
+
+    #[tokio::test]
+    async fn permissions_and_dependencies_enforced() {
+        let h = TestHarness::new(tools());
+        let resolver = crate::params::LocalFileResolver::unrestricted();
+        let r = h
+            .engine
+            .run(crate::engine::RunRequest {
+                tool_id: "network.fake",
+                params: Default::default(),
+                resolver: &resolver,
+                out_dir: h.path("o"),
+                permissions: crate::policy::PermissionSet::none(),
+                authorize: None,
+                progress: None,
+                cancel: Default::default(),
+                timeout: None,
+                fs: None,
+            })
+            .await;
+        assert_eq!(r.unwrap_err().code(), "permission_denied");
+        let deny = |_: &ToolSpec| false;
+        let r = h
+            .engine
+            .run(crate::engine::RunRequest {
+                tool_id: "dev.types",
+                params: Default::default(),
+                resolver: &resolver,
+                out_dir: h.path("o"),
+                permissions: crate::policy::PermissionSet::all(),
+                authorize: Some(&deny),
+                progress: None,
+                cancel: Default::default(),
+                timeout: None,
+                fs: None,
+            })
+            .await;
+        assert_eq!(r.unwrap_err().code(), "permission_denied");
+        assert_eq!(h.run("video.fake", json!({})).await.unwrap_err().code(), "missing_dependency");
+        assert_eq!(h.run("nope.nope", json!({})).await.unwrap_err().code(), "not_found");
+    }
+
+    #[tokio::test]
+    async fn validation_and_coercion() {
+        let h = TestHarness::new(tools());
+        let o = h.run("dev.types", json!({"n": "5", "flag": "yes", "mode": "B"})).await.unwrap();
+        assert_eq!(o.data, json!({"n": 5, "flag": true, "mode": "b", "c": "#aabbcc"}));
+        for bad in [json!({"n": 11}), json!({"n": "x"}), json!({}), json!({"n": 1, "mode": "z"}), json!({"n": 1, "c": "red"}), json!({"n": 1, "extra": 1})] {
+            assert_eq!(h.run("dev.types", bad.clone()).await.unwrap_err().code(), "invalid_input", "{bad}");
+        }
+        let json_schema = crate::schema::input_schema(h.engine.registry.get("dev.types").unwrap().spec(), "path");
+        assert_eq!(json_schema["required"], json!(["n"]));
+        assert_eq!(json_schema["properties"]["mode"]["enum"], json!(["a", "b"]));
+    }
+}

@@ -52,7 +52,8 @@ fn cli(engine: &Engine) -> Command {
             .subcommand_required(true)
             .subcommand(Command::new("list").about("List tools").arg(Arg::new("category").long("category").short('c').help("Filter by category")).arg(Arg::new("available").long("available").action(ArgAction::SetTrue).help("Only tools usable on this machine")))
             .subcommand(Command::new("search").about("Search tools by keyword").arg(Arg::new("query").num_args(1..).required(true)))
-            .subcommand(Command::new("info").about("Show a tool's parameters, dependencies and schema").arg(Arg::new("tool").required(true))),
+            .subcommand(Command::new("info").about("Show a tool's parameters, dependencies and schema").arg(Arg::new("tool").required(true)))
+            .subcommand(Command::new("matrix").about("Print a Markdown capability matrix of all tools (platforms, dependencies, permissions)")),
     );
     cmd = cmd.subcommand(
         Command::new("run")
@@ -88,7 +89,8 @@ fn cli(engine: &Engine) -> Command {
                     .arg(Arg::new("no-auth").long("no-auth").action(ArgAction::SetTrue).help("Disable authentication (loopback only)"))
                     .arg(Arg::new("public-url").long("public-url").env("DOGUBAKO_PUBLIC_URL").help("Externally visible base URL")),
             )
-            .subcommand(Command::new("config").about("Print the effective configuration as TOML").arg(Arg::new("config").long("config"))),
+            .subcommand(Command::new("config").about("Print the effective configuration as TOML").arg(Arg::new("config").long("config")))
+            .subcommand(Command::new("health").about("Check that a server is responding (for container health checks)").arg(Arg::new("addr").long("addr").env("DOGUBAKO_BIND").default_value("127.0.0.1:8420"))),
     );
     cmd = cmd.subcommand(
         Command::new("mcp")
@@ -152,6 +154,7 @@ async fn dispatch(engine: Engine, m: &ArgMatches, out: &render::Out) -> i32 {
         Some(("run", sub)) => toolcmd::run_generic(engine, sub, out).await,
         Some(("server", sub)) => match sub.subcommand() {
             Some(("start", s)) => server_start(s).await,
+            Some(("health", s)) => health(s.get_one::<String>("addr").unwrap()),
             Some(("config", s)) => {
                 match dogubako_server::ServerConfig::load(s.get_one::<String>("config").map(Into::into)) {
                     Ok(c) => {
@@ -207,6 +210,24 @@ fn toml_value(v: &serde_json::Value) -> String {
         serde_json::Value::String(s) => format!("{s:?}"),
         serde_json::Value::Array(a) => format!("[{}]", a.iter().map(toml_value).collect::<Vec<_>>().join(", ")),
         other => other.to_string(),
+    }
+}
+
+fn health(addr: &str) -> i32 {
+    use std::io::{Read, Write};
+    let addr = addr.replace("0.0.0.0", "127.0.0.1").replace("[::]", "[::1]");
+    let Ok(sa) = addr.parse::<std::net::SocketAddr>() else { return 2 };
+    let Ok(mut s) = std::net::TcpStream::connect_timeout(&sa, std::time::Duration::from_secs(3)) else { return 1 };
+    let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(3)));
+    if s.write_all(format!("GET /healthz HTTP/1.0\r\nHost: {addr}\r\n\r\n").as_bytes()).is_err() {
+        return 1;
+    }
+    let mut buf = String::new();
+    let _ = s.read_to_string(&mut buf);
+    if buf.starts_with("HTTP/1.1 200") || buf.starts_with("HTTP/1.0 200") {
+        0
+    } else {
+        1
     }
 }
 

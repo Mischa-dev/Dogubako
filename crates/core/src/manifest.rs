@@ -371,3 +371,75 @@ pub fn load_extensions(dir: &Path, trust_all: bool) -> (Vec<Arc<dyn Tool>>, Vec<
     }
     (tools, status)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const M: &str = r#"
+[tool]
+id = "text.ext_head"
+name = "Head (extension)"
+category = "text"
+description = "First lines of a file"
+[command]
+program = "head"
+args = ["-n", "{lines}", { when = "quiet", args = ["-q"] }, "--", "{input}"]
+[output]
+stdout = "text/plain"
+[[params]]
+name = "input"
+type = "file"
+required = true
+[[params]]
+name = "lines"
+type = "integer"
+min = 1
+max = 1000
+default = 2
+[[params]]
+name = "quiet"
+type = "boolean"
+"#;
+
+    #[test]
+    fn rejects_shells_and_unknown_placeholders() {
+        let bad = M.replace("program = \"head\"", "program = \"/bin/sh\"");
+        assert!(parse_manifest(&bad, "x").err().unwrap().contains("not allowed"));
+        let bad = M.replace("\"{lines}\"", "\"{nope}\"");
+        assert!(parse_manifest(&bad, "x").err().unwrap().contains("placeholder"));
+        let bad = M.replace("category = \"text\"", "category = \"bogus\"");
+        assert!(parse_manifest(&bad, "x").is_err());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn runs_with_argv_only() {
+        let tool = parse_manifest(M, "test.toml").unwrap();
+        let h = crate::testing::TestHarness::new(vec![std::sync::Arc::new(tool)]);
+        // A file name with shell metacharacters must be passed verbatim.
+        let p = h.write("a; rm -rf x $(id).txt", b"one\ntwo\nthree\n");
+        let out = h.run("text.ext_head", serde_json::json!({"input": p, "lines": 2})).await.unwrap();
+        assert_eq!(out.text.as_deref(), Some("one\ntwo\n"));
+        let err = h.run("text.ext_head", serde_json::json!({"input": p, "lines": 0})).await.unwrap_err();
+        assert_eq!(err.code(), "invalid_input");
+    }
+
+    #[test]
+    fn trust_store_requires_matching_hash() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("head.toml"), M).unwrap();
+        let (tools, st) = load_extensions(dir.path(), false);
+        assert!(tools.is_empty());
+        assert!(!st[0].loaded);
+        let mut ts = TrustStore::default();
+        ts.trusted.insert("text.ext_head".into(), sha256_hex(M.as_bytes()));
+        ts.save(&dir.path().join("trusted.toml")).unwrap();
+        let (tools, _) = load_extensions(dir.path(), false);
+        assert_eq!(tools.len(), 1);
+        // Modifying the manifest revokes trust.
+        std::fs::write(dir.path().join("head.toml"), M.replace("First lines", "Changed")).unwrap();
+        let (tools, _) = load_extensions(dir.path(), false);
+        assert!(tools.is_empty());
+    }
+}

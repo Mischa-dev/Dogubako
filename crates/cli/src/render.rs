@@ -276,3 +276,33 @@ pub fn deps(engine: &Engine, out: &Out) -> i32 {
     }
     0
 }
+
+/// Markdown capability matrix generated from the registry.
+pub fn matrix(engine: &Engine) {
+    use dogubako_core::spec::{Category, Platform};
+    let specs: Vec<&ToolSpec> = engine.registry.specs().collect();
+    println!("# Capability matrix\n");
+    println!("Generated from the tool registry by `dogubako tools matrix` (Dogubako {}). {} tools.\n", env!("CARGO_PKG_VERSION"), specs.len());
+    println!("Legend — Engine: **native** = built into Dogubako (no external programs), **external** = invokes the listed program(s), **model** = needs a downloadable local model, **network** = makes outbound requests. Platforms: L = Linux, M = macOS, W = Windows.\n");
+    println!("| Category | Tools | Native | External | Model | Network |\n|---|---:|---:|---:|---:|---:|");
+    for c in Category::ALL {
+        let in_cat: Vec<_> = specs.iter().filter(|s| s.category == c).collect();
+        if in_cat.is_empty() { continue; }
+        let count = |e: dogubako_core::spec::Execution| in_cat.iter().filter(|s| s.execution == e).count();
+        use dogubako_core::spec::Execution::*;
+        println!("| {} | {} | {} | {} | {} | {} |", c.label(), in_cat.len(), count(Native), count(External), count(Model), count(Network));
+    }
+    for c in Category::ALL {
+        let in_cat: Vec<_> = specs.iter().filter(|s| s.category == c).collect();
+        if in_cat.is_empty() { continue; }
+        println!("\n## {}\n\n| Tool | Id | Engine | Requires | Platforms | Permissions |\n|---|---|---|---|---|---|", c.label());
+        for s in in_cat {
+            let plats: String = [(Platform::Linux, "L"), (Platform::Macos, "M"), (Platform::Windows, "W")].iter().filter(|(p, _)| s.platforms.contains(p)).map(|(_, l)| *l).collect::<Vec<_>>().join(" ");
+            let mut req = s.requires.join(", ");
+            if let Some(m) = &s.requires_model { if !req.is_empty() { req.push_str(", "); } req.push_str(&format!("model: {m}")); }
+            let eng = format!("{:?}", s.execution).to_lowercase();
+            let perms = s.permissions.iter().map(|p| p.id()).collect::<Vec<_>>().join(", ");
+            println!("| {} | `{}` | {} | {} | {} | {} |", s.name.replace('|', "/"), s.id, eng, if req.is_empty() { "—".into() } else { req }, plats, if perms.is_empty() { "—".into() } else { perms });
+        }
+    }
+}

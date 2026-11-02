@@ -312,6 +312,10 @@ pub fn tools_cmd(engine: &Engine, m: &ArgMatches, out: &Out) -> i32 {
                 0
             }
         }
+        Some(("matrix", _)) => {
+            render::matrix(engine);
+            0
+        }
         Some(("info", s)) => {
             let id = s.get_one::<String>("tool").unwrap();
             match engine.registry.find(id) {
