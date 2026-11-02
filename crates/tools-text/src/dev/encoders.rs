@@ -554,7 +554,13 @@ fn binary_text() -> Arc<dyn Tool> {
         let bytes: Vec<u8> = tokens
             .iter()
             .map(|tok| {
-                let tok = tok.trim_start_matches("0x").trim_start_matches("0b");
+                // Only the selected radix's prefix: "0b" is a valid hex byte.
+                let prefixed = match radix {
+                    16 => tok.strip_prefix("0x").or_else(|| tok.strip_prefix("0X")),
+                    2 => tok.strip_prefix("0b").or_else(|| tok.strip_prefix("0B")),
+                    _ => None,
+                };
+                let tok = prefixed.unwrap_or(tok);
                 u8::from_str_radix(tok, radix).map_err(|_| {
                     ToolError::invalid(
                         "text",
@@ -780,6 +786,28 @@ mod tests {
             )
             .await,
             "Hi"
+        );
+        // "0b" is a hex byte (vertical tab), not a binary prefix, in hex mode.
+        for t in ["41 0b 42", "0x41 0x0b 0x42"] {
+            assert_eq!(
+                txt(
+                    &h,
+                    "dev.binary_text",
+                    json!({"text": t, "mode": "decode", "format": "hex"})
+                )
+                .await,
+                "A\u{b}B",
+                "{t}"
+            );
+        }
+        assert_eq!(
+            txt(
+                &h,
+                "dev.binary_text",
+                json!({"text": "0b01000001 0b01000010", "mode": "decode", "format": "bin"})
+            )
+            .await,
+            "AB"
         );
         assert_eq!(
             h.run(
