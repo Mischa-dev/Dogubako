@@ -211,7 +211,13 @@ pub fn parse_vtt(input: &str) -> Result<Vec<Segment>, String> {
         if k == 0 && b[0].starts_with("WEBVTT") && !b.iter().any(|l| l.contains("-->")) {
             continue;
         }
-        if b[0].starts_with("NOTE") || b[0].starts_with("STYLE") || b[0].starts_with("REGION") {
+        // A block keyword is the whole line or is followed by a space or
+        // tab; a cue identifier such as "NOTEBOOK" is not a comment.
+        let keyword = |k: &str| {
+            b[0].strip_prefix(k)
+                .is_some_and(|r| r.is_empty() || r.starts_with([' ', '\t']))
+        };
+        if keyword("NOTE") || keyword("STYLE") || keyword("REGION") {
             continue;
         }
         let Some(ti) = b.iter().position(|l| l.contains("-->")) else {
@@ -1210,6 +1216,14 @@ mod tests {
             .starts_with("WEBVTT\n\n1\n00:00:01.000 --> 00:00:02.000\n<v Alice>Hi &amp; welcome"));
         assert_eq!(parse_vtt(&out).unwrap(), s);
         assert!(parse_vtt("1\n00:00:01,000 --> 00:00:02,000\nx").is_err());
+        // Cue identifiers that merely start with a block keyword are cues;
+        // real NOTE/STYLE/REGION blocks are still skipped.
+        let v = "WEBVTT\n\nNOTEBOOK\n00:00:01.000 --> 00:00:02.000\nfirst\n\nNOTE a comment\n\nNOTE\nmulti-line\n\nSTYLES-1\n00:00:03.000 --> 00:00:04.000\nsecond\n";
+        let s = parse_vtt(v).unwrap();
+        assert_eq!(
+            s.iter().map(|x| x.text.as_str()).collect::<Vec<_>>(),
+            ["first", "second"]
+        );
     }
 
     #[test]
