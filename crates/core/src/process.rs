@@ -88,6 +88,13 @@ pub struct Exec {
 
 impl Exec {
     pub(crate) fn new(ctx: ToolContext, program: PathBuf, display: String) -> Self {
+        // The app's own engines need their data folders (and each other) found.
+        let env = ctx.deps().env_for(&program);
+        // ...and, under bubblewrap, their whole folder (lib/, share/) visible.
+        let ro_binds = match program.parent().and_then(Path::parent) {
+            Some(root) if !env.is_empty() => vec![root.to_path_buf()],
+            _ => vec![],
+        };
         Exec {
             ctx,
             program,
@@ -95,12 +102,12 @@ impl Exec {
             args: vec![],
             stdin: None,
             timeout: None,
-            env: vec![],
+            env,
             cwd: None,
             on_stdout: None,
             on_stderr: None,
             ok_codes: vec![0],
-            ro_binds: vec![],
+            ro_binds,
             allow_network: false,
         }
     }

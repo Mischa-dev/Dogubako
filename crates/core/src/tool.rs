@@ -328,12 +328,14 @@ impl ToolContext {
             binary.to_string()
         };
         let sib = p.parent().map(|d| d.join(&exe)).filter(|c| c.is_file());
-        let path = sib.or_else(|| which::which(binary).ok()).ok_or_else(|| {
-            ToolError::MissingDependency {
+        // An app-managed engine's siblings come from the same folder only.
+        let system = self.inner.deps.system_lookup_allowed(dep_id);
+        let path = sib
+            .or_else(|| system.then(|| which::which(binary).ok()).flatten())
+            .ok_or_else(|| ToolError::MissingDependency {
                 dependency: binary.to_string(),
                 hint: status.install_hint.clone(),
-            }
-        })?;
+            })?;
         Ok(Exec::new(self.clone(), path, binary.to_string()))
     }
 

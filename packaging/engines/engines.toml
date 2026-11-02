@@ -1,0 +1,238 @@
+# Dogubako engine manifest: the single source of truth for which external
+# programs the app ships, at which version, from where, and under which terms.
+#
+#   tier = "bundled"    shipped inside the app (Dogubako.app/Contents/Resources/engines)
+#   tier = "on-demand"  downloaded into the app's own folder the first time a tool
+#                       needs it (one click), from a pack we build and checksum
+#   tier = "system"     not managed: too large or not relocatable yet; the app
+#                       detects a user-installed copy as before
+#   tier = "dropped"    not shipped; nothing in the app invokes it today
+#
+# Versions here are what `lock.py` pins. Bumping an engine = edit nothing here,
+# re-run `lock.py` (or pass --formula-version), test, commit the new lock.
+# The homelab Docker image installs the same engines from a pinned Debian
+# snapshot (see [docker] below and docs/ENGINES.md).
+#
+# `deps` are the dependency ids from crates/core/src/deps.rs that this engine
+# provides. `binaries` are the executables copied into engines/bin.
+
+schema = 1
+
+[macos]
+# Homebrew dropped Intel macOS bottles; managed engines are Apple silicon only.
+# Intel Macs fall back to system engines (see docs/ENGINES.md).
+targets = ["darwin-arm64"]
+# Oldest macOS bottle tag accepted, newest last. The lock picks the first that
+# exists for each formula; the app's minimum macOS is the newest tag picked.
+bottle_tags = ["arm64_sequoia", "arm64_tahoe"]
+minimum_system_version = "15.0"
+
+[docker]
+# Debian snapshot the homelab image installs from. Same idea as the lock:
+# bump deliberately, run `engines check` in the image, commit.
+# trixie (Debian 13): bookworm left regular security support in June 2026.
+debian_suite = "trixie"
+snapshot = "20261101T000000Z"
+# debian:trixie-slim, pinned by digest (runtime stage and whisper build stage).
+base_digest = "sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4"
+
+# ---------------------------------------------------------------- bundled ---
+
+[engine.ffmpeg]
+tier = "bundled"
+deps = ["ffmpeg", "ffprobe"]
+formula = "ffmpeg"
+binaries = ["ffmpeg", "ffprobe"]
+license = "GPL-3.0-or-later"
+bundling = "ok"
+license_note = "Homebrew build enables GPL parts (x264, x265). GPL is compatible with Dogubako's AGPL; releases must offer the corresponding source (source_url)."
+source_url = "https://ffmpeg.org/releases/"
+debian = ["ffmpeg"]
+reason = "38 video/audio tools; the core of the media categories."
+
+[engine.qpdf]
+tier = "bundled"
+deps = ["qpdf"]
+formula = "qpdf"
+binaries = ["qpdf"]
+license = "Apache-2.0"
+bundling = "ok"
+source_url = "https://github.com/qpdf/qpdf/releases"
+debian = ["qpdf"]
+reason = "25 PDF tools, small."
+
+[engine.poppler]
+tier = "bundled"
+deps = ["poppler"]
+formula = "poppler"
+binaries = ["pdftoppm", "pdftotext", "pdfimages", "pdfinfo", "pdffonts"]
+license = "GPL-2.0-only OR GPL-3.0-only"
+bundling = "ok"
+license_note = "Used as GPL-3.0, compatible with AGPL. Source offer required."
+source_url = "https://poppler.freedesktop.org/"
+share = ["share/poppler"]
+debian = ["poppler-utils"]
+reason = "15 PDF and text-extraction tools."
+
+[engine.exiftool]
+tier = "bundled"
+deps = ["exiftool"]
+formula = "exiftool"
+binaries = []
+# The bottle's bin/exiftool is a wrapper with Homebrew paths baked in; we copy
+# libexec/ and write our own wrapper that runs it with the system perl.
+perl_scripts = { exiftool = { script = "libexec/bin/exiftool", lib = "libexec/lib/perl5", tree = "libexec" } }
+license = "Artistic-1.0-Perl OR GPL-1.0-or-later"
+bundling = "ok"
+license_note = "Perl script; runs on the /usr/bin/perl that macOS still ships. If Apple removes it we need a bundled perl."
+source_url = "https://exiftool.org/"
+debian = ["libimage-exiftool-perl"]
+reason = "11 metadata tools, tiny."
+
+[engine.sevenzip]
+tier = "bundled"
+deps = ["7zip"]
+formula = "sevenzip"
+binaries = ["7zz"]
+license = "LGPL-2.1-or-later AND BSD-3-Clause (+ unRAR restriction)"
+bundling = "ok-with-note"
+license_note = "Separate program, so bundling is mere aggregation. The unRAR code is freeware, not open source (it forbids recreating a RAR compressor); we only extract. Debian ships 7zip in main, without RAR, so homelab RAR support depends on the 7zip-rar package."
+source_url = "https://www.7-zip.org/download.html"
+debian = ["7zip"]
+reason = "5 archive tools, small, single static binary."
+
+# -------------------------------------------------------------- on-demand ---
+
+[engine.imagemagick]
+tier = "on-demand"
+deps = ["imagemagick"]
+formula = "imagemagick"
+binaries = ["magick"]
+license = "ImageMagick"
+bundling = "ok"
+source_url = "https://imagemagick.org/script/download.php"
+share = ["etc/ImageMagick-7", "lib/ImageMagick"]
+env = { MAGICK_CONFIGURE_PATH = "etc/ImageMagick-7:lib/ImageMagick/config-Q16HDRI", MAGICK_CODER_MODULE_PATH = "lib/ImageMagick/modules-Q16HDRI/coders", MAGICK_CODER_FILTER_PATH = "lib/ImageMagick/modules-Q16HDRI/filters" }
+debian = ["imagemagick"]
+reason = "Only for HEIC/PSD/exotic formats; native Rust covers the common image paths. Large dependency tree."
+
+[engine.ghostscript]
+tier = "on-demand"
+deps = ["ghostscript"]
+formula = "ghostscript"
+binaries = ["gs"]
+license = "AGPL-3.0-or-later"
+bundling = "ok"
+license_note = "Same license as Dogubako."
+source_url = "https://ghostscript.com/releases/"
+share = ["share/ghostscript/Resource", "share/ghostscript/lib", "share/ghostscript/fonts", "share/ghostscript/iccprofiles"]
+env = { GS_LIB = "share/ghostscript/Resource/Init:share/ghostscript/lib:share/ghostscript/Resource/Font:share/ghostscript/fonts" }
+debian = ["ghostscript"]
+reason = "3 tools (PDF compress, PostScript). Pulls in tesseract and leptonica."
+
+[engine.tesseract]
+tier = "on-demand"
+deps = ["tesseract"]
+formula = "tesseract"
+binaries = ["tesseract"]
+license = "Apache-2.0"
+bundling = "ok"
+license_note = "Language data (eng, osd) Apache-2.0."
+source_url = "https://github.com/tesseract-ocr/tesseract/releases"
+share = ["share/tessdata"]
+env = { TESSDATA_PREFIX = "share/tessdata" }
+debian = ["tesseract-ocr", "tesseract-ocr-eng"]
+reason = "8 OCR tools; language data is the bulk of the size."
+
+[engine.pandoc]
+tier = "on-demand"
+deps = ["pandoc"]
+formula = "pandoc"
+binaries = ["pandoc"]
+license = "GPL-2.0-or-later"
+bundling = "ok"
+source_url = "https://github.com/jgm/pandoc/releases"
+debian = ["pandoc"]
+reason = "6 document tools; one very large static Haskell binary."
+
+[engine.whisper]
+tier = "on-demand"
+deps = ["whisper"]
+# Built from source (small CMake build); no Homebrew formula is relied on.
+source = "build"
+git = "https://github.com/ggml-org/whisper.cpp"
+ref = "v1.7.6"
+binaries = ["whisper-cli"]
+license = "MIT"
+bundling = "ok"
+source_url = "https://github.com/ggml-org/whisper.cpp/releases"
+debian = []
+docker_build = "whisper"
+reason = "9 speech tools, and they already need a model download first."
+
+[engine.realesrgan]
+tier = "on-demand"
+deps = ["realesrgan"]
+source = "upstream"
+version = "0.2.5.0"
+# The Real-ESRGAN release ships the models; the bare ncnn-vulkan release doesn't.
+url = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-macos.zip"
+binaries = ["realesrgan-ncnn-vulkan"]
+license = "BSD-3-Clause"
+bundling = "ok"
+source_url = "https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan"
+# Kept next to the binary; the upscale tool passes `-m <bin>/models`.
+share = ["models"]
+share_into_bin = true
+debian = []
+reason = "1 upscaling tool; models are most of the size."
+
+# ----------------------------------------------------------------- system ---
+
+[engine.piper]
+tier = "system"
+deps = ["piper"]
+license = "MIT (engine) + GPL-3.0-or-later (espeak-ng, linked)"
+bundling = "ok"
+license_note = "espeak-ng makes the combined binary GPL-3.0, compatible with AGPL."
+blocker = "The last native release (rhasspy/piper 2023.11.14-2) ships a macOS archive without libespeak-ng, libpiper_phonemize and libonnxruntime, so it can't run. rhasspy/piper is archived; its successor OHF-Voice/piper1-gpl is Python. Needs our own build (or a replacement TTS) before it can be managed."
+source_url = "https://github.com/rhasspy/piper"
+debian = []
+reason = "6 TTS tools; target tier is on-demand once we have a working macOS build."
+
+[engine.libreoffice]
+tier = "system"
+deps = ["libreoffice"]
+license = "MPL-2.0"
+bundling = "ok"
+license_note = "License allows it, but it's a ~700 MB .app. Candidate for on-demand later by unpacking the official DMG into the engines folder."
+debian = ["libreoffice-core-nogui", "libreoffice-writer-nogui", "libreoffice-calc-nogui", "libreoffice-impress-nogui"]
+docker_optional = true
+reason = "Office conversion; too large to manage for the first test build."
+
+[engine.rembg]
+tier = "system"
+deps = ["rembg"]
+license = "MIT"
+bundling = "blocked-technically"
+license_note = "License is fine, but it's a Python app with onnxruntime; not relocatable as a single engine. Better replaced by an in-process ONNX model later."
+debian = []
+reason = "1 tool (background removal)."
+
+[engine.bwrap]
+tier = "system"
+deps = ["bwrap"]
+license = "LGPL-2.0-or-later"
+bundling = "ok"
+debian = ["bubblewrap"]
+reason = "Linux server sandbox only; installed in the Docker image."
+
+# ---------------------------------------------------------------- dropped ---
+
+[engine.vips]
+tier = "dropped"
+deps = ["vips"]
+license = "LGPL-2.1-or-later"
+bundling = "ok"
+debian = []
+reason = "Listed in deps.rs but no tool invokes it. Removed from the Docker image too."
