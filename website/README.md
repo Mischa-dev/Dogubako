@@ -14,6 +14,7 @@ like one thing.
 | `styles.css` | Styles, light and dark (follows the system, with a toggle) |
 | `main.js` | Theme toggle, the drop demo, the screenshot tour and tabs |
 | `screenshots/` | WebP copies of `docs/screenshots`, made by `scripts/screenshots.py` |
+| `scripts/` | Screenshot capture, sample files and the WebP conversion |
 | `CNAME` | The domain, for GitHub Pages |
 
 ## Preview
@@ -25,13 +26,21 @@ python3 -m http.server --directory website 8000
 
 ## Refresh the screenshots
 
-The README and the site share one set of screenshots. Update `docs/screenshots`
-first, then:
+The README and the site share one set of screenshots in `docs/screenshots`.
+`scripts/capture-app.mjs` re-captures all of them from a running server: it
+seeds a few runs through the HTTP API, then walks the UI in Chromium.
 
 ```sh
-pip install pillow
-python3 website/scripts/screenshots.py
+cargo build -p dogubako-cli && (cd web && npm ci && npm run build)
+python3 website/scripts/samples.py /tmp/dgb-samples          # sample photos and a CSV
+target/debug/dogubako server start --no-auth --data-dir /tmp/dgb-data --bind 127.0.0.1:8420 &
+node website/scripts/capture-app.mjs http://127.0.0.1:8420 /tmp/dgb-samples
+python3 website/scripts/screenshots.py                        # WebP copies for the site
 ```
+
+Use a fresh `--data-dir` each time so the bench and history look the same.
+The scripts need Pillow (`pip install pillow`) and Playwright with Chromium
+(`NODE_PATH=$(npm root -g)` if Playwright is installed globally).
 
 ## Placeholders
 
