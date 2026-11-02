@@ -6,6 +6,34 @@ use dogubako_core::prelude::*;
 pub const PREVIEW_ROWS: usize = 500;
 /// Maximum size of an uploaded file read fully into memory as text.
 pub const MAX_TEXT_FILE: u64 = 64 * 1024 * 1024;
+/// Largest text a tool may build from user-controlled repetition (a
+/// separator or prefix repeated per byte/line/row). Inputs are capped, but
+/// a long separator times many pieces can otherwise need gigabytes.
+pub const MAX_GENERATED_TEXT: u128 = 256 * 1024 * 1024;
+
+/// Reject an output whose estimated size (computed by the caller in u128,
+/// so it cannot overflow) is over [`MAX_GENERATED_TEXT`], before building it.
+pub fn check_generated_size(bytes: u128) -> ToolResult<()> {
+    if bytes > MAX_GENERATED_TEXT {
+        return Err(ToolError::limit(format!(
+            "the output would be about {}, over the {} limit; use a shorter separator, prefix or input",
+            human_size(u64::try_from(bytes).unwrap_or(u64::MAX)),
+            human_size(MAX_GENERATED_TEXT as u64)
+        )));
+    }
+    Ok(())
+}
+
+/// Running total for output assembled piece by piece.
+#[derive(Default)]
+pub struct OutputBudget(u128);
+
+impl OutputBudget {
+    pub fn add(&mut self, bytes: usize) -> ToolResult<()> {
+        self.0 += bytes as u128;
+        check_generated_size(self.0)
+    }
+}
 
 /// Decode bytes into a string: strips BOMs, uses UTF-8 when valid and
 /// otherwise detects the legacy encoding with `chardetng`.

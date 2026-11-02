@@ -594,6 +594,9 @@ fn slugify() -> Arc<dyn Tool> {
     sync_tool(spec, |_ctx, p| {
         let sep = p.text("separator");
         let max = p.int_or("max_length", 0) as usize;
+        // At most one separator per two input bytes ("a a a").
+        let len = p.text("text").len() as u128;
+        crate::util::check_generated_size(len + (len / 2 + 1) * sep.len() as u128)?;
         let out: Vec<String> = p
             .text("text")
             .lines()
@@ -1043,6 +1046,7 @@ fn column_extract() -> Arc<dyn Tool> {
             d => d,
         };
         let mut out = vec![];
+        let mut budget = crate::util::OutputBudget::default();
         for line in p.text("text").lines() {
             let fields: Vec<&str> = if delim.is_empty() {
                 line.split_whitespace().collect()
@@ -1056,6 +1060,8 @@ fn column_extract() -> Arc<dyn Tool> {
                 let (s, e) = (idx(*a).max(0), idx(*b).min(n - 1));
                 let mut i = s;
                 while i <= e {
+                    // Ranges may repeat fields ("1,1,1,..."), so count as we go.
+                    budget.add(fields[i as usize].len() + od.len())?;
                     sel.push(fields[i as usize]);
                     i += 1;
                 }
@@ -1116,6 +1122,10 @@ fn number_lines() -> Arc<dyn Tool> {
             0
         };
         let sep = p.text("separator");
+        crate::util::check_generated_size(
+            p.text("text").len() as u128
+                + lines.len() as u128 * (sep.len() as u128 + width.max(20) as u128),
+        )?;
         let mut n = start;
         let out: Vec<String> = lines
             .iter()
@@ -1159,6 +1169,9 @@ fn prefix_suffix() -> Arc<dyn Tool> {
     sync_tool(spec, |_ctx, p| {
         let (lines, tr) = split_lines(p.text("text"));
         let (pre, suf, skip) = (p.text("prefix"), p.text("suffix"), p.bool("skip_empty"));
+        crate::util::check_generated_size(
+            p.text("text").len() as u128 + lines.len() as u128 * (pre.len() + suf.len()) as u128,
+        )?;
         let out: Vec<String> = lines
             .iter()
             .map(|l| {

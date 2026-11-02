@@ -318,6 +318,9 @@ fn random() -> Arc<dyn Tool> {
                 let words: Vec<&str> = EFF_WORDS.lines().filter(|l| !l.is_empty()).collect();
                 let n = p.int_or("words", 6).max(1) as usize;
                 let sep = p.text("separator");
+                crate::util::check_generated_size(
+                    count as u128 * (n as u128 * (32 + sep.len() as u128) + 1),
+                )?;
                 let cap = p.bool("capitalize");
                 let num = p.bool("add_number");
                 let items = (0..count)

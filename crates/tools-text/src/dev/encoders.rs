@@ -527,6 +527,9 @@ fn binary_text() -> Arc<dyn Tool> {
         let fmt = p.str("format")?;
         let t = p.text("text");
         if p.str("mode")? == "encode" {
+            let sep = p.text("separator");
+            let n = t.len() as u128;
+            crate::util::check_generated_size(n * 8 + n.saturating_sub(1) * sep.len() as u128)?;
             let parts: Vec<String> = t
                 .bytes()
                 .map(|b| match fmt {
@@ -536,7 +539,7 @@ fn binary_text() -> Arc<dyn Tool> {
                     _ => format!("{b:08b}"),
                 })
                 .collect();
-            return Ok(ToolOutput::text(parts.join(p.text("separator"))));
+            return Ok(ToolOutput::text(parts.join(sep)));
         }
         let radix = match fmt {
             "oct" => 8,

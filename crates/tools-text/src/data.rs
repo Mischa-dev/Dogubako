@@ -284,7 +284,7 @@ pub fn rows_to_objects(t: &Table, infer: bool) -> Value {
 }
 
 /// Flatten JSON records into columns using dotted keys.
-pub fn flatten_records(items: &[Value], sep: &str) -> (Vec<String>, Vec<Vec<String>>) {
+pub fn flatten_records(items: &[Value], sep: &str) -> ToolResult<(Vec<String>, Vec<Vec<String>>)> {
     flatten_records_with(items, sep, "index")
 }
 
@@ -292,7 +292,7 @@ pub fn flatten_records_with(
     items: &[Value],
     sep: &str,
     arrays: &str,
-) -> (Vec<String>, Vec<Vec<String>>) {
+) -> ToolResult<(Vec<String>, Vec<Vec<String>>)> {
     // Columns are identified by their structural path (the key segments),
     // not by the joined name: {"a":{"b":1}} and {"a.b":2} are different
     // fields even though both display as "a.b".
@@ -329,6 +329,8 @@ pub fn flatten_records_with(
     let mut used: HashSet<String> = HashSet::new();
     let mut idx: HashMap<Path, usize> = HashMap::new();
     let mut flat_rows = vec![];
+    // Column names repeat the separator once per nesting level.
+    let mut budget = crate::util::OutputBudget::default();
     for it in items {
         let mut pairs = vec![];
         walk(&mut vec![], it, arrays, &mut pairs);
@@ -341,6 +343,7 @@ pub fn flatten_records_with(
             let base = if path.is_empty() {
                 "value".to_string()
             } else {
+                budget.add(path.iter().map(|s| s.len()).sum::<usize>() + path.len() * sep.len())?;
                 path.join(sep)
             };
             let mut name = base.clone();
@@ -365,7 +368,7 @@ pub fn flatten_records_with(
             r
         })
         .collect();
-    (cols, rows)
+    Ok((cols, rows))
 }
 
 fn delim_param(name: &str, auto: bool) -> ParamSpec {
@@ -556,7 +559,7 @@ pub fn json_table(text: &str, header: bool) -> ToolResult<Table> {
             .collect();
         return Ok(table_from_cells(rows, header));
     }
-    let (headers, rows) = flatten_records(&items, ".");
+    let (headers, rows) = flatten_records(&items, ".")?;
     Ok(Table { headers, rows })
 }
 
@@ -1017,7 +1020,7 @@ fn json_to_csv() -> Arc<dyn Tool> {
             &items,
             p.str_or("separator", "."),
             p.str_or("arrays", "index"),
-        );
+        )?;
         let t = Table { headers, rows };
         let name = input_name(p, "file", "data.json");
         emit_table(ctx, p, &t, &name, "converted", out_delim(p), json!({}))
@@ -1323,6 +1326,12 @@ fn columns() -> Arc<dyn Tool> {
                             .collect::<Vec<_>>()
                             .join("_")
                     });
+                let mut budget = crate::util::OutputBudget::default();
+                for r in &t.rows {
+                    for i in &idx {
+                        budget.add(r[*i].len() + sep.len())?;
+                    }
+                }
                 let merged: Vec<String> = t
                     .rows
                     .iter()

@@ -1246,7 +1246,7 @@ pub(crate) fn render_any(v: &Value, to: &str, root: &str) -> ToolResult<(String,
                     ))
                 }
             };
-            let (cols, data) = crate::data::flatten_records(&rows, ".");
+            let (cols, data) = crate::data::flatten_records(&rows, ".")?;
             (
                 crate::data::write_csv(
                     &cols,
