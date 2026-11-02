@@ -125,6 +125,7 @@ export default defineConfig({
             'project/performance',
             'project/troubleshooting',
             'project/faq',
+            { label: 'dogubako.app', link: 'https://dogubako.app', attrs: { rel: 'noopener' } },
           ],
         },
       ],
