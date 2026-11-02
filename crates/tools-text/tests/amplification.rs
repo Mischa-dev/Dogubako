@@ -233,6 +233,15 @@ async fn replacements_and_column_splits_are_bounded() {
     )
     .await;
 
+    // Generated part names repeat a long column name.
+    let long = format!("{}\n{}\n", "h".repeat(100_000), "|".repeat(99_999));
+    limited(
+        &h,
+        "data.columns",
+        json!({"text": long, "header": "yes", "operation": "split", "columns": "1", "separator": "|"}),
+    )
+    .await;
+
     // Ordinary replacements are unchanged, including $ expansion.
     let out = h
         .run(

@@ -1327,6 +1327,9 @@ fn columns() -> Arc<dyn Tool> {
                     .collect();
                 let n = parts.iter().map(|v| v.len()).max().unwrap_or(1);
                 let names: Vec<String> = split_list(p.text("new_names"));
+                // Unnamed parts are called `<column>_<k>`, repeating the name.
+                let unnamed = n.saturating_sub(names.len()) as u128;
+                crate::util::check_generated_size(unnamed * (t.headers[i].len() as u128 + 21))?;
                 let new_headers: Vec<String> = (0..n)
                     .map(|k| {
                         names
