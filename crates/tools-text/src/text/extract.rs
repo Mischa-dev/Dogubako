@@ -553,7 +553,15 @@ pub(crate) fn rtf_to_text(rtf: &str) -> String {
     let mut uc = 1usize;
     let mut pending_skip = 0usize;
     let mut i = 0;
-    let flush = |bytes: &mut Vec<u8>, out: &mut String, cp: &'static encoding_rs::Encoding| {
+    // High half of a UTF-16 surrogate pair from `\uN`, waiting for its low half.
+    let mut hi: Option<u32> = None;
+    let flush = |bytes: &mut Vec<u8>,
+                 out: &mut String,
+                 cp: &'static encoding_rs::Encoding,
+                 hi: &mut Option<u32>| {
+        if hi.take().is_some() {
+            out.push('\u{fffd}'); // unpaired high surrogate
+        }
         if !bytes.is_empty() {
             out.push_str(&cp.decode_without_bom_handling(bytes).0);
             bytes.clear();
@@ -567,7 +575,7 @@ pub(crate) fn rtf_to_text(rtf: &str) -> String {
                 i += 1;
             }
             '}' => {
-                flush(&mut bytes, &mut out, codepage);
+                flush(&mut bytes, &mut out, codepage, &mut hi);
                 if let Some((s, u)) = stack.pop() {
                     skip = s;
                     uc = u;
@@ -603,11 +611,11 @@ pub(crate) fn rtf_to_text(rtf: &str) -> String {
                         '-' => {}
                         '_' => out.push('-'),
                         '\n' | '\r' => {
-                            flush(&mut bytes, &mut out, codepage);
+                            flush(&mut bytes, &mut out, codepage, &mut hi);
                             out.push('\n')
                         }
                         other => {
-                            flush(&mut bytes, &mut out, codepage);
+                            flush(&mut bytes, &mut out, codepage, &mut hi);
                             out.push(other)
                         }
                     }
@@ -636,7 +644,13 @@ pub(crate) fn rtf_to_text(rtf: &str) -> String {
                 if skip {
                     continue;
                 }
-                flush(&mut bytes, &mut out, codepage);
+                if word == "u" {
+                    // Keep a pending high surrogate for the low half.
+                    let mut none = None;
+                    flush(&mut bytes, &mut out, codepage, &mut none);
+                } else {
+                    flush(&mut bytes, &mut out, codepage, &mut hi);
+                }
                 match word.as_str() {
                     "par" | "line" | "sect" | "page" | "row" => out.push('\n'),
                     "tab" | "cell" => out.push('\t'),
@@ -663,7 +677,24 @@ pub(crate) fn rtf_to_text(rtf: &str) -> String {
                             if v < 0 {
                                 v += 65536;
                             }
-                            out.push(char::from_u32(v as u32).unwrap_or('\u{fffd}'));
+                            let v = v as u32;
+                            match (hi.take(), v) {
+                                (None, 0xD800..=0xDBFF) => hi = Some(v),
+                                (Some(h), 0xDC00..=0xDFFF) => out.push(
+                                    char::from_u32(0x10000 + ((h - 0xD800) << 10) + (v - 0xDC00))
+                                        .unwrap_or('\u{fffd}'),
+                                ),
+                                (prev, _) => {
+                                    if prev.is_some() {
+                                        out.push('\u{fffd}');
+                                    }
+                                    if (0xD800..=0xDBFF).contains(&v) {
+                                        hi = Some(v);
+                                    } else {
+                                        out.push(char::from_u32(v).unwrap_or('\u{fffd}'));
+                                    }
+                                }
+                            }
                             pending_skip = uc;
                         }
                     }
@@ -678,13 +709,13 @@ pub(crate) fn rtf_to_text(rtf: &str) -> String {
                     continue;
                 }
                 if !skip {
-                    flush(&mut bytes, &mut out, codepage);
+                    flush(&mut bytes, &mut out, codepage, &mut hi);
                     out.push(c);
                 }
             }
         }
     }
-    flush(&mut bytes, &mut out, codepage);
+    flush(&mut bytes, &mut out, codepage, &mut hi);
     tidy(&out)
 }
 
@@ -810,6 +841,16 @@ mod tests {
                 .text
                 .unwrap(),
             "Café bold\nLine €2\n"
+        );
+        // Supplementary characters arrive as UTF-16 surrogate pairs.
+        assert_eq!(
+            super::rtf_to_text(r"{\rtf1\ansi\uc1 \u-10179?\u-8704? ok}"),
+            "\u{1F600} ok\n"
+        );
+        // A lone surrogate becomes U+FFFD instead of disappearing.
+        assert_eq!(
+            super::rtf_to_text(r"{\rtf1\ansi\uc1 \u-10179?x}"),
+            "\u{fffd}x\n"
         );
         let f = h.write("f.html", b"<p>Hi <b>there</b></p>");
         assert!(h

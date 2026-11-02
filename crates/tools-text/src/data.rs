@@ -1660,7 +1660,8 @@ fn duplicates() -> Arc<dyn Tool> {
             .collect();
         let removed = t.rows.len() - deduped.rows.len();
         let n_groups = groups.values().filter(|v| v.len() > 1).count();
-        let csv = write_csv(&deduped.headers, &deduped.rows, out_delim(p), false)?;
+        let delim = out_delim(p);
+        let csv = write_csv(&deduped.headers, &deduped.rows, delim, false)?;
         let data = json!({
             "rows": t.rows.len(),
             "duplicate_rows_removed": removed,
@@ -1670,7 +1671,15 @@ fn duplicates() -> Arc<dyn Tool> {
         });
         if p.opt_file("file").is_some() {
             return Ok(ToolOutput::files(vec![
-                ctx.write_output(&suffixed(&name, "deduped", None), csv.as_bytes())?
+                // The output is CSV/TSV whatever the input was (xlsx, json...).
+                ctx.write_output(
+                    &suffixed(
+                        &name,
+                        "deduped",
+                        Some(if delim == b'\t' { "tsv" } else { "csv" }),
+                    ),
+                    csv.as_bytes(),
+                )?,
             ])
             .with_data(data));
         }
@@ -2462,6 +2471,13 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.data["duplicate_rows_removed"], 2);
+        // File output is named for its actual format (CSV), not the input's.
+        let x = h.write("records.json", br#"[{"a":1},{"a":1},{"a":2}]"#);
+        let out = h
+            .run("data.duplicates", json!({"file": x.to_str().unwrap()}))
+            .await
+            .unwrap();
+        assert_eq!(out.artifacts[0].name, "records-deduped.csv");
         let out = h.run("data.stats", json!({"text": CSV})).await.unwrap();
         let rows = out.data["table"]["rows"].as_array().unwrap();
         assert_eq!(rows[1][1], "integer");
