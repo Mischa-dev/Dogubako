@@ -514,7 +514,11 @@ async fn key_inspect_keys() {
         assert_eq!(a.data["rsa_exponent"], 65537);
         assert_eq!(a.data["spki_sha256"], b.data["spki_sha256"]);
         assert_eq!(a.data["spki_sha256"], c.data["spki_sha256"]);
-        assert_eq!(c.data["public_key_pem"].as_str().unwrap().trim(), pp.trim());
+        // openssl writes CRLF on Windows; the tool always emits LF.
+        assert_eq!(
+            c.data["public_key_pem"].as_str().unwrap().trim(),
+            pp.replace("\r\n", "\n").trim()
+        );
         assert_no_secret(&a, &p8, &pp);
         assert_no_secret(&b, &p1, &pp);
     } else {
