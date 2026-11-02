@@ -503,18 +503,27 @@ fn caps_cache() -> &'static Mutex<HashMap<PathBuf, Arc<Caps>>> {
 }
 
 /// Parse `ffmpeg -encoders` / `-filters` style listings into names.
-pub fn parse_listing(text: &str, flag_len: usize) -> HashSet<String> {
+///
+/// The flag column's width differs between FFmpeg releases (e.g. filters
+/// gained extra flag letters in newer versions), so `_flag_len` is only a
+/// hint: any leading token made of flag characters is accepted, and legend
+/// lines (`T.. = Timeline support`) are skipped.
+pub fn parse_listing(text: &str, _flag_len: usize) -> HashSet<String> {
     let mut out = HashSet::new();
     for line in text.lines() {
+        if line.contains(" = ") {
+            continue;
+        }
         let mut it = line.split_whitespace();
         let (Some(flags), Some(name)) = (it.next(), it.next()) else {
             continue;
         };
-        if flags.len() == flag_len
+        if (1..=8).contains(&flags.len())
             && flags
                 .chars()
                 .all(|c| c.is_ascii_uppercase() || c == '.' || c == '|')
             && name != "="
+            && !name.starts_with('-')
         {
             out.insert(name.to_string());
         }
@@ -522,7 +531,6 @@ pub fn parse_listing(text: &str, flag_len: usize) -> HashSet<String> {
     out
 }
 
-/// Fail with a clear `unsupported` error when this FFmpeg build lacks a filter.
 pub async fn need_filter(ctx: &ToolContext, filter: &str, purpose: &str) -> ToolResult<()> {
     if caps(ctx).await?.filter(filter) {
         Ok(())
@@ -1634,6 +1642,11 @@ mod tests {
         let fil = "Filters:\n  T.. = Timeline support\n TSC afftdn            A->A       Denoise\n ... anull  A->A x\n";
         let f = parse_listing(fil, 3);
         assert!(f.contains("afftdn") && f.contains("anull"));
+        // Newer FFmpeg releases print a wider flag column.
+        let fil4 = "Filters:\n  T... = Timeline support\n  ...A = Audio\n TS.A afftdn  A->A  Denoise\n T.CV drawtext V->V Draw text\n";
+        let f4 = parse_listing(fil4, 3);
+        assert!(f4.contains("afftdn") && f4.contains("drawtext"), "{f4:?}");
+        assert!(!f4.contains("="));
     }
 
     #[test]
