@@ -156,3 +156,31 @@ async fn json_results_are_bounded() {
     )
     .await;
 }
+
+#[tokio::test]
+async fn wrap_indent_and_regex_groups_are_bounded() {
+    let h = harness();
+    limited(
+        &h,
+        "text.wrap",
+        json!({"text": "a ".repeat(100_000), "width": 1, "indent": " ".repeat(100_000)}),
+    )
+    .await;
+    let out = h
+        .run(
+            "text.wrap",
+            json!({"text": "aa bb cc", "width": 5, "indent": "> "}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.text.as_deref(), Some("aa bb\n> cc"));
+
+    // 100 nested groups each capture the whole 4 MiB match.
+    let pattern = format!("{}a+{}", "(".repeat(100), ")".repeat(100));
+    limited(
+        &h,
+        "dev.regex",
+        json!({"pattern": pattern, "text": "a".repeat(4 << 20)}),
+    )
+    .await;
+}

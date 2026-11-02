@@ -1,5 +1,6 @@
 //! `dev.regex`: regular expression tester.
 
+use crate::util::OutputBudget;
 use dogubako_core::prelude::*;
 
 pub fn tools() -> Vec<Arc<dyn Tool>> {
@@ -193,6 +194,21 @@ fn regex_tester() -> Arc<dyn Tool> {
                 None => None,
             }
         };
+        // Nested groups each copy the same text ("((((a+))))"), so size the
+        // result (match text, every group, named copies) before building it.
+        let mut budget = OutputBudget::default();
+        for m in &matches {
+            budget.add(m.end - m.start + 64)?;
+            for (i, g) in m.groups.iter().enumerate() {
+                let len = g.map(|(s, e)| e - s).unwrap_or(0) + 48;
+                let copies = if matches!(names.get(i + 1), Some(Some(_))) {
+                    2
+                } else {
+                    1
+                };
+                budget.add(len * copies)?;
+            }
+        }
         let idx = Utf16Index::new(text);
         let group_names: Vec<Value> = names.iter().skip(1).map(|n| json!(n)).collect();
         let list: Vec<Value> = matches

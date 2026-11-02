@@ -960,6 +960,12 @@ fn wrap() -> Arc<dyn Tool> {
         }
         let width = p.int_or("width", 80).max(1) as usize;
         let indent = p.text("indent");
+        // Every wrapped line repeats the indent. A line ends at a word or
+        // (when breaking words) after at least width - indent characters.
+        let words = t.split_whitespace().count() as u128;
+        let room = width.saturating_sub(indent.chars().count()).max(1) as u128;
+        let lines = words + t.len() as u128 / room + 1;
+        check_generated_size(t.len() as u128 * 2 + lines * indent.len() as u128)?;
         let opts = textwrap::Options::new(width)
             .break_words(p.bool("break_words"))
             .subsequent_indent(indent);
