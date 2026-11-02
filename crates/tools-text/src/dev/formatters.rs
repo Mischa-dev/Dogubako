@@ -898,12 +898,19 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> ToolResult<String> {
             Value::Object(m) => {
                 let n = valid_name(name);
                 out.push_str(&format!("{pad}<{n}"));
+                let mut seen = std::collections::HashMap::new();
                 for (k, val) in m.iter().filter(|(k, _)| k.starts_with('@')) {
-                    out.push_str(&format!(
-                        " {}=\"{}\"",
-                        valid_name(&k[1..]),
-                        esc_attr(&cell_string(val))?
-                    ));
+                    let an = valid_name(&k[1..]);
+                    if let Some(prev) = seen.insert(an.clone(), k) {
+                        return Err(ToolError::invalid(
+                            "text",
+                            format!(
+                                "attributes {prev:?} and {k:?} on <{n}> would both be \
+                                 written as {an:?}; rename one of them"
+                            ),
+                        ));
+                    }
+                    out.push_str(&format!(" {an}=\"{}\"", esc_attr(&cell_string(val))?));
                 }
                 let children: Vec<_> = m
                     .iter()
@@ -1494,6 +1501,16 @@ mod tests {
                 .unwrap_err();
             assert!(e.to_string().contains("XML 1.0"), "{bad}: {e}");
         }
+        // Attribute keys that sanitize to the same name are rejected rather
+        // than written as duplicate attributes.
+        let e = h
+            .run(
+                "dev.convert",
+                json!({"text": r#"{"r":{"@a!":"first","@a?":"second"}}"#, "from": "json", "to": "xml"}),
+            )
+            .await
+            .unwrap_err();
+        assert!(e.to_string().contains("a_"), "{e}");
     }
 
     #[tokio::test]
