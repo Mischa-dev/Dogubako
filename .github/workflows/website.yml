@@ -51,6 +51,12 @@ jobs:
       - name: Assemble _site
         run: |
           set -eu
+          if [ ! -d website ]; then
+            # Branches below the website PR (#3) have no site yet.
+            echo "::notice::No website/ folder on this branch; nothing to build."
+            echo "NO_SITE=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
           # The trailer is copied only when its review manifest allows it
           # (website/scripts/trailer.sh); otherwise the page shows its placeholder.
           if [ -f website/scripts/trailer.sh ]; then
@@ -73,6 +79,7 @@ jobs:
           rm -rf _site/concepts _site/review _site/scripts _site/README.md _site/NOTES.md
           cp deploy/website/_headers _site/_headers
       - name: Point links at live docs and the release
+        if: env.NO_SITE != '1'
         run: |
           args=""
           [ -n "$DOCS_LIVE" ] && args="$args --docs"
@@ -81,6 +88,7 @@ jobs:
           echo "### Still pointing at branches or saying prerelease" >> "$GITHUB_STEP_SUMMARY"
           python3 -I packaging/release/website_links.py _site --check | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Check local references resolve
+        if: env.NO_SITE != '1'
         run: |
           python3 -I - <<'PY'
           import re, sys
@@ -96,6 +104,7 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
       - uses: actions/upload-artifact@v4
+        if: env.NO_SITE != '1'
         with:
           name: website-${{ env.CONCEPT }}
           path: _site
