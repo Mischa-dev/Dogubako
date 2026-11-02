@@ -194,16 +194,27 @@ fn hmac_tool() -> Arc<dyn Tool> {
             json!({"algorithm": format!("HMAC-{}", alg.to_uppercase()), "bytes": mac.len()});
         if let Some(exp) = p.opt_str("expected") {
             let e = exp.trim();
-            let e = e
-                .split_once('=')
-                .filter(|(pre, _)| pre.chars().all(|c| c.is_ascii_alphanumeric()))
-                .map(|(_, v)| v)
-                .unwrap_or(e);
-            let candidate = hex::decode(e)
-                .ok()
-                .filter(|b| b.len() == mac.len())
-                .or_else(|| super::encoders::b64_decode_lenient(e).ok());
-            let ok = candidate.map(|c| ct_eq(&c, &mac)).unwrap_or(false);
+            let decode = |v: &str| {
+                hex::decode(v)
+                    .ok()
+                    .filter(|b| b.len() == mac.len())
+                    .or_else(|| super::encoders::b64_decode_lenient(v).ok())
+                    .map(|c| ct_eq(&c, &mac))
+                    .unwrap_or(false)
+            };
+            // The value as given first (padded Base64 ends in '='), then
+            // without a label prefix such as "sha256=" (GitHub/Stripe style).
+            let ok = decode(e)
+                || e.split_once('=')
+                    .filter(|(pre, v)| {
+                        !pre.is_empty()
+                            && !v.is_empty()
+                            && pre
+                                .chars()
+                                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                    })
+                    .map(|(_, v)| decode(v))
+                    .unwrap_or(false);
             data["valid"] = json!(ok);
         }
         Ok(ToolOutput::text(s).with_data(data))
@@ -720,6 +731,16 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.data["valid"], false);
+        // Padded Base64 whose characters before '=' are all alphanumeric
+        // must not be mistaken for a "label=" prefix.
+        let out = h
+            .run(
+                "dev.hmac",
+                json!({"text": "1", "key": "key", "expected": "bakfuRUXvh9c3POvkdfUDHF91jijBhV2BvsuWE966SY="}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.data["valid"], true);
     }
 
     #[tokio::test]

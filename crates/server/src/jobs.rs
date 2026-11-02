@@ -76,12 +76,23 @@ impl JobManager {
         &self.engine
     }
 
-    fn user_sem(&self, p: &Principal) -> Arc<Semaphore> {
-        let n = p.concurrency(self.per_user_default);
+    fn sem(&self, key: String, n: usize) -> Arc<Semaphore> {
         let mut m = self.user_sems.lock().unwrap();
-        m.entry(format!("{}:{n}", p.user_id))
+        m.entry(key)
             .or_insert_with(|| Arc::new(Semaphore::new(n)))
             .clone()
+    }
+
+    /// The user's limit is one semaphore shared by all their sessions and
+    /// tokens; a token scope with a narrower limit adds a second one.
+    fn user_sems(&self, p: &Principal) -> (Arc<Semaphore>, Option<Arc<Semaphore>>) {
+        let n = p.concurrency(self.per_user_default);
+        let user = self.sem(format!("user:{}:{n}", p.user_id), n);
+        let token = match (p.token_concurrency(self.per_user_default), &p.token_id) {
+            (Some(t), Some(id)) if t < n => Some(self.sem(format!("token:{id}:{t}"), t)),
+            _ => None,
+        };
+        (user, token)
     }
 
     pub fn running_count(&self) -> usize {
@@ -176,12 +187,16 @@ impl JobManager {
         via: String,
         quota: u64,
     ) {
-        let user_sem = self.user_sem(&p);
+        let (user_sem, token_sem) = self.user_sems(&p);
         let permits = tokio::select! {
             r = async {
+                let t = match token_sem {
+                    Some(s) => Some(s.acquire_owned().await),
+                    None => None,
+                };
                 let u = user_sem.acquire_owned().await;
                 let g = self.global.clone().acquire_owned().await;
-                (u, g)
+                (t, u, g)
             } => Some(r),
             _ = cancel.cancelled() => None,
         };

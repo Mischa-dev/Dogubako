@@ -174,28 +174,42 @@ impl Principal {
         }))
     }
 
+    /// Concurrent-job limit of the user (shared by all their sessions and
+    /// tokens).
     pub fn concurrency(&self, default: usize) -> usize {
+        self.policy.max_concurrent_jobs.unwrap_or(default).max(1)
+    }
+
+    /// An additional, narrower concurrent-job limit set on the token scope
+    /// (never wider than the user's own limit).
+    pub fn token_concurrency(&self, default: usize) -> Option<usize> {
         self.token_scope
             .as_ref()
             .and_then(|t| t.max_concurrent_jobs)
-            .or(self.policy.max_concurrent_jobs)
-            .unwrap_or(default)
-            .max(1)
+            .map(|n| n.clamp(1, self.concurrency(default)))
     }
 
+    /// Storage quota: the user's quota, narrowed by the token scope.
     pub fn quota_bytes(&self, default_mb: u64) -> u64 {
-        self.policy
-            .quota_mb
-            .unwrap_or(default_mb)
-            .saturating_mul(1024 * 1024)
+        let mb = self.policy.quota_mb.unwrap_or(default_mb);
+        let mb = match self.token_scope.as_ref().and_then(|t| t.quota_mb) {
+            Some(t) => mb.min(t),
+            None => mb,
+        };
+        mb.saturating_mul(1024 * 1024)
     }
 
+    /// Upload limit: the instance limit, narrowed by the user's policy and
+    /// the token scope.
     pub fn max_upload_bytes(&self, default_mb: u64) -> u64 {
-        let mb = self
+        let mut mb = self
             .policy
             .max_upload_mb
             .unwrap_or(default_mb)
             .min(default_mb);
+        if let Some(t) = self.token_scope.as_ref().and_then(|t| t.max_upload_mb) {
+            mb = mb.min(t);
+        }
         mb.saturating_mul(1024 * 1024)
     }
 
@@ -285,5 +299,50 @@ mod tests {
         assert!(perms.has(Permission::Network));
         assert!(!perms.has(Permission::SystemInfo));
         assert!(!perms.has(Permission::HostFsRead));
+    }
+
+    #[test]
+    fn token_limits_only_narrow() {
+        let mut p = Principal {
+            user_id: "u".into(),
+            username: "u".into(),
+            role: Role::User,
+            policy: Policy {
+                quota_mb: Some(100),
+                max_upload_mb: Some(50),
+                max_concurrent_jobs: Some(2),
+                ..Policy::for_role(Role::User)
+            },
+            token_scope: None,
+            token_id: None,
+            via: "session",
+            csrf: None,
+        };
+        const MB: u64 = 1024 * 1024;
+        assert_eq!(p.quota_bytes(500), 100 * MB);
+        assert_eq!(p.max_upload_bytes(200), 50 * MB);
+        assert_eq!(p.token_concurrency(4), None);
+        p.token_scope = Some(Policy {
+            allow: vec!["*".into()],
+            quota_mb: Some(10),
+            max_upload_mb: Some(5),
+            max_concurrent_jobs: Some(1),
+            ..Default::default()
+        });
+        assert_eq!(p.quota_bytes(500), 10 * MB);
+        assert_eq!(p.max_upload_bytes(200), 5 * MB);
+        assert_eq!(p.concurrency(4), 2, "the user's limit is shared");
+        assert_eq!(p.token_concurrency(4), Some(1));
+        // A token cannot widen the user's limits.
+        p.token_scope = Some(Policy {
+            allow: vec!["*".into()],
+            quota_mb: Some(1000),
+            max_upload_mb: Some(1000),
+            max_concurrent_jobs: Some(9),
+            ..Default::default()
+        });
+        assert_eq!(p.quota_bytes(500), 100 * MB);
+        assert_eq!(p.max_upload_bytes(200), 50 * MB);
+        assert_eq!(p.token_concurrency(4), Some(2));
     }
 }
