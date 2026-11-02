@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { benchItems, kindOf, suggestion } from '../lib/bench';
+import { benchItems, benchKindClass, kindOf, suggestion } from '../lib/bench';
 import type { JobView } from '../lib/types';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { FileThing } from '../components/BenchObject';
 import { tool } from './fixtures';
 
 const job = (id: string, at: number, artifacts: { name: string; mime: string; size?: number }[], status: JobView['status'] = 'succeeded'): JobView => ({
@@ -48,5 +51,17 @@ describe('suggestion', () => {
   it('never suggests a tool that cannot run', () => {
     const items = benchItems([job('j', 1, [{ name: 'talk.mp3', mime: 'audio/mpeg' }])]);
     expect(suggestion(items, tools)).toBeNull();
+  });
+});
+
+describe('benchKindClass', () => {
+  it('never reuses a class the file drawings are styled with', () => {
+    const kinds = ['image', 'pdf', 'video', 'audio', 'sheet', 'text', 'archive', 'file'] as const;
+    const markup = kinds.map((kind) => renderToStaticMarkup(createElement(FileThing, { kind, name: `a.${kind}` }))).join('');
+    const drawings = new Set(Array.from(markup.matchAll(/class="([^"]*)"/g), (m) => m[1].split(' ')).flat());
+    expect(drawings.has('bo-sheet')).toBe(true);
+    // A spreadsheet's wrapper used to get `.bo-sheet`, the absolutely positioned PDF page,
+    // and flew to the top-left corner of the app.
+    for (const k of kinds) expect(drawings.has(benchKindClass(k))).toBe(false);
   });
 });

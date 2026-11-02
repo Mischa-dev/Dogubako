@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import type { BenchKind } from '../lib/bench';
 import { useApp } from '../lib/app';
-import type { BenchItem } from '../lib/bench';
+import { benchKindClass, type BenchItem } from '../lib/bench';
 import { formatBytes, formatRelative } from '../lib/format';
 import { href, navigate } from '../lib/router';
 import { setDropped } from '../lib/store';
@@ -63,7 +63,7 @@ export const BenchObject = memo(function BenchObject({ item }: { item: BenchItem
 
   return (
     <a
-      className={`bench-object bo-${item.kind}`}
+      className={`bench-object ${benchKindClass(item.kind)}`}
       href={ref ? href.open : href.tool(item.toolId)}
       title={item.name}
       onClick={(e) => {
