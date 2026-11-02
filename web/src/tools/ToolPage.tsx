@@ -11,7 +11,15 @@ import { Callout, CopyButton, Segmented, Spinner, cx } from '../components/ui';
 import { NotFound } from '../pages/NotFound';
 import { GenericTool } from './GenericTool';
 
-const SPECIAL: Record<string, React.LazyExoticComponent<React.ComponentType<{ tool: ToolInfo; jobId?: string | null }>>> = {
+/** Props every special editor gets. The visual editors (crop, redact) lay
+ *  themselves out like the generic tool page, so they take the panel head and
+ *  footer too; the others keep their own layout under a standalone head. */
+export interface SpecialProps { tool: ToolInfo; jobId?: string | null; head?: React.ReactNode; meta?: React.ReactNode }
+
+/** Specials that sit in the shared tool-page layout (stage, settings panel, result). */
+const STAGED = new Set(['face-redact', 'crop']);
+
+const SPECIAL: Record<string, React.LazyExoticComponent<React.ComponentType<SpecialProps>>> = {
   'face-redact': lazy(() => import('./special/FaceRedact')),
   crop: lazy(() => import('./special/Crop')),
   regex: lazy(() => import('./special/Regex')),
@@ -43,28 +51,31 @@ function ToolPageInner({ tool, jobId }: { tool: ToolInfo; jobId: string | null }
   const Special = special && mode === 'editor' ? SPECIAL[special] : null;
   const root = useRef<HTMLDivElement>(null);
 
+  const staged = !!special && STAGED.has(special);
+  const uiSwitch = staged && (
+    <div className="ui-switch">
+      <Segmented<'editor' | 'form'>
+        size="sm"
+        label="Interface"
+        value={mode}
+        onChange={setMode}
+        options={[{ value: 'editor', label: 'Visual', icon: LayoutPanelLeft }, { value: 'form', label: 'All options', icon: ListChecks }]}
+      />
+    </div>
+  );
+  const head = <ToolHead tool={tool}>{uiSwitch}</ToolHead>;
+
   return (
-    <div className={cx('page tool-page', tool.ui === 'live' && 'is-live', Special && 'is-special')} ref={root}>
+    <div className={cx('page tool-page', tool.ui === 'live' && 'is-live', Special && !staged && 'is-special')} ref={root}>
       <ToolTopRow tool={tool} />
       <Availability tool={tool} />
-      {Special && <ToolHead tool={tool} standalone />}
-      {special && (special === 'face-redact' || special === 'crop') && (
-        <div className="ui-switch">
-          <Segmented<'editor' | 'form'>
-            size="sm"
-            label="Interface"
-            value={mode}
-            onChange={setMode}
-            options={[{ value: 'editor', label: 'Visual', icon: LayoutPanelLeft }, { value: 'form', label: 'All options', icon: ListChecks }]}
-          />
-        </div>
-      )}
+      {Special && !staged && <ToolHead tool={tool} standalone />}
       {Special ? (
         <Suspense fallback={<div className="page-loading"><Spinner /></div>}>
-          <Special tool={tool} jobId={jobId} />
+          {staged ? <Special tool={tool} jobId={jobId} head={head} meta={<ToolMeta tool={tool} />} /> : <Special tool={tool} jobId={jobId} />}
         </Suspense>
       ) : (
-        <GenericTool tool={tool} jobId={jobId} head={<ToolHead tool={tool} />} meta={<ToolMeta tool={tool} />} />
+        <GenericTool tool={tool} jobId={jobId} head={head} meta={<ToolMeta tool={tool} />} />
       )}
     </div>
   );
@@ -77,7 +88,7 @@ const EXEC_REQUIRES_LABEL: Record<string, string> = {
 };
 
 /** Title, pin and one-line purpose, at the top of the settings panel. */
-function ToolHead({ tool, standalone }: { tool: ToolInfo; standalone?: boolean }) {
+function ToolHead({ tool, standalone, children }: { tool: ToolInfo; standalone?: boolean; children?: React.ReactNode }) {
   const favs = useStore(favStore);
   const fav = favs.includes(tool.id);
   return (
@@ -96,6 +107,7 @@ function ToolHead({ tool, standalone }: { tool: ToolInfo; standalone?: boolean }
         </button>
       </div>
       <p className="tool-desc">{tool.description}</p>
+      {children}
     </header>
   );
 }

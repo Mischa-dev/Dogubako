@@ -91,6 +91,12 @@
 .stage-delta { font-weight: 500; }
 .stage-delta.is-down { color: var(--success); }
 
+/* visual editors (crop, redact): the editable image is the stage */
+.editor-stage .editor-panel { gap: 10px; }
+.editor-stage .box-editor { border: 0; border-radius: 6px; padding: 14px; }
+.editor-stage .box-media { max-height: clamp(240px, 56vh, 620px); box-shadow: var(--shadow-object); }
+.editor-stage .editor-foot, .editor-stage .crop-fields { font-size: 13px; }
+
 /* controls below the stage: settings flow into columns */
 @media (min-width: 1000px) {
   /* Run sits beside the title, right under the preview, however long the settings get. */
