@@ -60,7 +60,7 @@ impl Table {
         }
         names.iter().map(|c| self.col(c)).collect()
     }
-    fn normalize(&mut self) {
+    fn normalize(&mut self) -> ToolResult<()> {
         let w = self
             .rows
             .iter()
@@ -68,6 +68,16 @@ impl Table {
             .max()
             .unwrap_or(0)
             .max(self.headers.len());
+        // Ragged rows are padded to the widest one: a wide header over many
+        // short records could otherwise need billions of empty cells.
+        let have: u128 = self.rows.iter().map(|r| r.len() as u128).sum();
+        let added = (w as u128 * self.rows.len() as u128).saturating_sub(have);
+        if added > MAX_PADDED_CELLS {
+            return Err(ToolError::limit(format!(
+                "the table is too ragged: making all {} rows {w} columns wide would add {added} empty cells (max {MAX_PADDED_CELLS})",
+                self.rows.len()
+            )));
+        }
         // Generated names must not collide with existing headers
         // (e.g. a header row `column2` with two-field records).
         let mut used: HashSet<String> = self.headers.iter().cloned().collect();
@@ -85,6 +95,7 @@ impl Table {
         for r in &mut self.rows {
             r.resize(w, String::new());
         }
+        Ok(())
     }
     pub fn preview(&self, offset: usize, limit: usize) -> Value {
         let rows: Vec<Vec<Value>> = self
@@ -97,6 +108,9 @@ impl Table {
         table_owned(&self.headers, rows)
     }
 }
+
+/// Most empty cells `Table::normalize` may add when padding ragged rows.
+const MAX_PADDED_CELLS: u128 = 20_000_000;
 
 pub fn split_list(s: &str) -> Vec<String> {
     s.split(',')
@@ -175,7 +189,7 @@ pub fn parse_csv(text: &str, delim: u8, has_header: bool) -> ToolResult<Table> {
             rows,
         }
     };
-    t.normalize();
+    t.normalize()?;
     Ok(t)
 }
 
@@ -438,7 +452,7 @@ pub fn load_table(p: &Params) -> ToolResult<(Table, String)> {
                         .map(|r| r.iter().map(crate::sheet::cell_text).collect())
                         .collect(),
                     header_mode != "no",
-                ),
+                )?,
                 f.name.clone(),
             ));
         }
@@ -488,7 +502,7 @@ fn parse_text_table(text: &str, p: &Params, header_mode: &str, tsv: bool) -> Too
     parse_csv(text, delim, header)
 }
 
-fn table_from_cells(mut rows: Vec<Vec<String>>, header: bool) -> Table {
+fn table_from_cells(mut rows: Vec<Vec<String>>, header: bool) -> ToolResult<Table> {
     let mut t = if header && !rows.is_empty() {
         let h = rows.remove(0);
         Table {
@@ -501,8 +515,8 @@ fn table_from_cells(mut rows: Vec<Vec<String>>, header: bool) -> Table {
             rows,
         }
     };
-    t.normalize();
-    t
+    t.normalize()?;
+    Ok(t)
 }
 
 /// Whether a JSON number survives conversion to an f64 spreadsheet cell.
@@ -557,7 +571,7 @@ pub fn json_table(text: &str, header: bool) -> ToolResult<Table> {
             .iter()
             .map(|r| r.as_array().unwrap().iter().map(cell_string).collect())
             .collect();
-        return Ok(table_from_cells(rows, header));
+        return table_from_cells(rows, header);
     }
     let (headers, rows) = flatten_records(&items, ".")?;
     Ok(Table { headers, rows })
@@ -1149,7 +1163,7 @@ fn spreadsheet() -> Arc<dyn Tool> {
                         .map(|r| r.iter().map(crate::sheet::cell_text).collect())
                         .collect(),
                     header,
-                );
+                )?;
                 let offset = p.int_or("offset", 0).max(0) as usize;
                 let limit = (p.int_or("limit", 100).max(1) as usize).min(PREVIEW_ROWS);
                 let mut out = ToolOutput::data(

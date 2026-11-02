@@ -92,3 +92,31 @@ async fn repeated_separators_are_bounded() {
         .unwrap();
     assert_eq!(out.text.as_deref(), Some("- a\n- b"));
 }
+
+#[tokio::test]
+async fn ragged_tables_are_bounded() {
+    let h = harness();
+    // A 100000-field header over 100000 one-field records would pad to 10^10 cells.
+    let header = vec!["h"; 100_000].join(",");
+    let csv = format!("{header}\n{}", "x\n".repeat(100_000));
+    limited(
+        &h,
+        "data.csv_view",
+        json!({"text": csv, "delimiter": "comma", "header": "yes"}),
+    )
+    .await;
+    // Ordinary ragged rows are still padded.
+    let out = h
+        .run(
+            "data.csv_view",
+            json!({"text": "a,b,c\n1\n2,3", "delimiter": "comma", "header": "yes"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        out.data["table"]["rows"],
+        json!([["1", "", ""], ["2", "3", ""]]),
+        "{}",
+        out.data
+    );
+}
