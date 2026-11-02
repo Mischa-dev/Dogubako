@@ -557,10 +557,22 @@ pub(crate) fn slug(s: &str, sep: &str, lower: bool, max: usize) -> String {
         }
     }
     if max > 0 && out.len() > max {
-        out.truncate(max);
+        // Cut at a character boundary (the separator may be non-ASCII).
+        let mut cut = max;
+        while !out.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        out.truncate(cut);
         if !sep.is_empty() {
             while out.ends_with(sep) {
                 out.truncate(out.len() - sep.len());
+            }
+            // Drop a separator cut in half, e.g. "a-" from "--".
+            if let Some(k) = (1..sep.len())
+                .rev()
+                .find(|&k| sep.is_char_boundary(k) && out.ends_with(&sep[..k]))
+            {
+                out.truncate(out.len() - k);
             }
         }
     }
@@ -1524,6 +1536,12 @@ mod tests {
 
     #[tokio::test]
     async fn cleanup_slug_reverse() {
+        // Truncation never splits a (non-ASCII) separator and never panics.
+        assert_eq!(super::slug("a b", "é", true, 2), "a");
+        assert_eq!(super::slug("a b", "é", true, 3), "a");
+        assert_eq!(super::slug("a b", "é", true, 4), "aéb");
+        assert_eq!(super::slug("ab cd", "--", true, 3), "ab");
+        assert_eq!(super::slug("ab cd", "--", true, 6), "ab--cd");
         let h = TestHarness::new(crate::tools());
         let out = h
             .run("text.cleanup", json!({"text": "“Hi”\u{200B} it’s\u{00A0}café", "operations": ["quotes", "invisible", "nbsp", "diacritics"]}))
