@@ -907,32 +907,34 @@ fn diff() -> Arc<dyn Tool> {
             "char" => cfg.diff_chars(a, b),
             _ => cfg.diff_words(a, b),
         };
-        let mut chunks: Vec<Value> = vec![];
+        // Chunks are owned strings appended in place and converted to JSON
+        // once (re-cloning a chunk per token is quadratic).
+        let mut chunks: Vec<(&'static str, String)> = vec![];
         let (mut ins, mut del) = (0usize, 0usize);
-        let mut push = |tag: &str, s: &str| {
-            if let Some(last) = chunks.last_mut() {
-                if last["tag"] == tag {
-                    let t = last["text"].as_str().unwrap_or("").to_string() + s;
-                    last["text"] = json!(t);
-                    return;
-                }
+        for (n, c) in d.iter_all_changes().enumerate() {
+            if n % 65_536 == 0 {
+                ctx.check_cancelled()?;
             }
-            chunks.push(json!({"tag": tag, "text": s}));
-        };
-        for c in d.iter_all_changes() {
-            let s = c.value();
-            match c.tag() {
-                ChangeTag::Equal => push("equal", s),
+            let tag = match c.tag() {
+                ChangeTag::Equal => "equal",
                 ChangeTag::Insert => {
                     ins += 1;
-                    push("insert", s)
+                    "insert"
                 }
                 ChangeTag::Delete => {
                     del += 1;
-                    push("delete", s)
+                    "delete"
                 }
+            };
+            match chunks.last_mut() {
+                Some((t, text)) if *t == tag => text.push_str(c.value()),
+                _ => chunks.push((tag, c.value().to_string())),
             }
         }
+        let chunks: Vec<Value> = chunks
+            .into_iter()
+            .map(|(tag, text)| json!({"tag": tag, "text": text}))
+            .collect();
         let line_diff = cfg.diff_lines(a, b);
         let unified = line_diff
             .unified_diff()
