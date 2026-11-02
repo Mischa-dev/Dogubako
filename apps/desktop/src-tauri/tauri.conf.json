@@ -36,6 +36,6 @@
     "longDescription": "Dogubako consolidates hundreds of everyday utilities — images, video, audio, speech, PDF, files, text, developer, data, network, design and system tools — into one private, local-first app.",
     "license": "AGPL-3.0-or-later",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png", "icons/icon.icns", "icons/icon.ico"],
-    "linux": { "deb": { "depends": [], "suggests": ["ffmpeg", "qpdf", "poppler-utils", "tesseract-ocr", "libimage-exiftool-perl", "ghostscript", "p7zip-full"] } }
+    "linux": { "deb": { "depends": [], "recommends": ["ffmpeg", "qpdf", "poppler-utils", "tesseract-ocr", "libimage-exiftool-perl", "ghostscript", "p7zip-full"] } }
   }
 }
