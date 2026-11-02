@@ -577,39 +577,32 @@ fn protect() -> Arc<dyn Tool> {
             ctx.check_cancelled()?;
             progress_files(&ctx, i, files.len(), &f.name);
             let out = ctx.output_path(&pdf_name(f, "protected"));
-            // Arguments go through a private args file so passwords never
-            // appear in the process list.
-            let argfile = ctx.temp_path(&format!("encrypt-{i}.args"));
-            let lines = [
-                "--warning-exit-0".to_string(),
-                f.path.to_string_lossy().to_string(),
-                "--encrypt".into(),
-                format!("--user-password={user}"),
-                format!("--owner-password={owner}"),
-                "--bits=256".into(),
-                format!(
-                    "--print={}",
-                    if allow.iter().any(|a| a == "print") {
-                        "full"
-                    } else {
-                        "none"
+            // Options go through a private qpdf job-JSON file so passwords
+            // never appear in the process list (`--job-json-file` is part of
+            // qpdf's stable interface, unlike @argfile expansion which some
+            // builds lack).
+            let argfile = ctx.temp_path(&format!("encrypt-{i}.json"));
+            let job = serde_json::json!({
+                "inputFile": f.path.to_string_lossy(),
+                "outputFile": out.to_string_lossy(),
+                "warningExit0": "",
+                "encrypt": {
+                    "userPassword": user,
+                    "ownerPassword": owner,
+                    "256bit": {
+                        "print": if allow.iter().any(|a| a == "print") { "full" } else { "none" },
+                        "modifyOther": yn("modify"),
+                        "extract": yn("copy"),
+                        "annotate": yn("annotate"),
+                        "form": yn("forms"),
+                        "assemble": yn("assemble"),
                     }
-                ),
-                format!("--modify-other={}", yn("modify")),
-                format!("--extract={}", yn("copy")),
-                format!("--annotate={}", yn("annotate")),
-                format!("--form={}", yn("forms")),
-                format!("--assemble={}", yn("assemble")),
-            ];
-            write_private(&argfile, lines.join("\n").as_bytes())?;
+                }
+            });
+            write_private(&argfile, job.to_string().as_bytes())?;
             let res = ctx
                 .command("qpdf")?
-                .arg(format!("@{}", argfile.display()))
-                // The encryption-group terminator and the output path are
-                // passed as plain arguments: some qpdf builds do not honour
-                // `--` inside an @argfile. Passwords stay in the private file.
-                .arg("--")
-                .arg(&out)
+                .arg(format!("--job-json-file={}", argfile.display()))
                 .run()
                 .await
                 .map_err(map_qpdf_err("input"));
