@@ -15,8 +15,9 @@ as a desktop app, a self-hosted web service, a CLI, an HTTP API and an MCP serve
 
 Dogubako replaces the dozens of single-purpose utility websites and small apps
 you reach for every week. Open it, find the tool (⌘K), drop in a file, done.
-Files are processed on your machine, or on a server you host. Network tools
-reach the targets you give them, and optional model downloads need a connection.
+With the desktop app, files are processed on your machine. With a hosted
+Dogubako, they go to that server and are processed there. Network tools reach
+the targets you give them, and optional model downloads need a connection.
 
 * **Free and open source** (AGPL-3.0-or-later). No accounts for desktop use, no telemetry, no paywalls.
 * **Built on mature open-source engines** — FFmpeg, ImageMagick, libvips, ExifTool, qpdf, Poppler, Ghostscript, Tesseract, whisper.cpp, Piper, LibreOffice, Pandoc, 7-Zip — plus fast native Rust implementations for everything that doesn't need them.

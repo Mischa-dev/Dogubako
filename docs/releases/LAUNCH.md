@@ -17,9 +17,12 @@ Nothing here has been merged, tagged, published or deployed.
       trailer whose manifest isn't `in-development`, so pick one:
       re-render with "Alpha · coming soon" for the pre-launch site, or allow a
       `released` status on launch day.
-- [ ] **Pick the website concept.** `current`, `live-product`,
-      `ink-and-paper`, `open-the-box` (and `bench-3d` once it's done). The
-      choice is just the `concept` input of the Website workflow.
+- [x] **Pick the website concept.** Picked on 2026-11-02: Live product,
+      reworked, with extra pages for self-hosting and agents. The website
+      thread is rebuilding it on PR #3. Deploy it with the Website workflow's
+      default `concept` (`current`). The other concepts stay under
+      `website/concepts/` for later, and the workflow never publishes them.
+- [ ] **Review the rebuilt website** on PR #3 before it merges.
 - [ ] **Signing: decide signed or unsigned.**
       - Signed (recommended before sharing widely): enrol in the Apple
         Developer Program (USD 99/year, can take a day or two), create a
@@ -84,7 +87,7 @@ merging it.
 | 5 | #7 engines → main | Latest "Alpha test builds" run green |
 | 6 | #9 launch prep → main | Regenerate notices (part 3) |
 | 7 | #5 trailer → main | Music approved, end card decided |
-| 8 | #8 → #3, then #3 → main | Concept picked |
+| 8 | #8 → #3, then #3 → main | Rebuilt site reviewed |
 
 Steps 1 to 6 are what the release needs. The website and trailer (7, 8) can
 land later, because the release doesn't depend on them. `release.yml` (#7)
