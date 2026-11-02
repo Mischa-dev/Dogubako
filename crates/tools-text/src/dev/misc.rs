@@ -273,7 +273,7 @@ fn http_request() -> Arc<dyn Tool> {
             .unwrap_or_default();
         let ctype = get(&hs, "content-type").unwrap_or_default();
         let q = crate::escape::shell_quote;
-        let mut curl = format!("curl -X {} {}", method, q(&url));
+        let mut curl = format!("curl -X {} {}", q(&method), q(&url));
         for (k, v) in &hs {
             if k.eq_ignore_ascii_case("host") || k.eq_ignore_ascii_case("content-length") {
                 continue;
@@ -544,6 +544,15 @@ mod tests {
                 && curl.contains("--data-raw '{\"name\":\"it'\\''s\"}'"),
             "{curl}"
         );
+        let out = h
+            .run(
+                "dev.http_request",
+                json!({"text": "X`id` /x HTTP/1.1\nHost: example.com\n\n"}),
+            )
+            .await
+            .unwrap();
+        let curl = out.data["curl"].as_str().unwrap();
+        assert!(curl.starts_with("curl -X 'X`id`' "), "{curl}");
         let out = h
             .run(
                 "dev.http_request",
