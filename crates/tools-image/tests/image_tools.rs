@@ -113,6 +113,16 @@ async fn resize_modes() {
         .await
         .unwrap();
     assert_eq!(dims(&out), (80, 80));
+    // Extreme aspect change: must not build a huge intermediate before cropping.
+    let strip = save(&h, "strip.png", &pattern(10000, 1, false));
+    let out = h
+        .run(
+            "image.resize",
+            json!({"input": s(&strip), "width": 1, "height": 10000, "fit": "cover"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(dims(&out), (1, 10000));
     let out = h
         .run(
             "image.resize",
