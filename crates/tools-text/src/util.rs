@@ -167,17 +167,92 @@ pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 /// Parse a number leniently (allows thousands separators `_`/`,` when unambiguous and surrounding spaces).
 /// Compare two cells numerically: exactly as integers when both are
 /// integral (f64 cannot tell 2^53 from 2^53+1), otherwise as f64.
+/// Compare two numeric cells exactly, whatever their notation (integers,
+/// decimals, exponents; `_`/`,` separators): no rounding through f64, so
+/// "9007199254740992.0" < "9007199254740993" and the order is total.
+/// Falls back to f64 only for values this parser does not understand.
 pub fn compare_numbers(a: &str, b: &str) -> Option<std::cmp::Ordering> {
-    fn int(s: &str) -> Option<i128> {
-        let t = s.trim();
-        t.parse::<i128>().ok().or_else(|| {
-            let cleaned: String = t.chars().filter(|c| *c != '_' && *c != ',').collect();
-            (cleaned.len() != t.len()).then(|| cleaned.parse::<i128>().ok())?
-        })
-    }
-    match (int(a), int(b)) {
-        (Some(x), Some(y)) => Some(x.cmp(&y)),
+    match (exact_decimal(a), exact_decimal(b)) {
+        (Some(x), Some(y)) => Some(cmp_decimal(&x, &y)),
         _ => parse_number(a)?.partial_cmp(&parse_number(b)?),
+    }
+}
+
+/// A decimal as (negative, significant digits without leading/trailing
+/// zeros, exponent): value = digits × 10^exp. Zero has no digits.
+type Decimal = (bool, Vec<u8>, i64);
+
+fn exact_decimal(s: &str) -> Option<Decimal> {
+    let t: String = s
+        .trim()
+        .chars()
+        .filter(|c| *c != '_' && *c != ',')
+        .collect();
+    let (neg, body) = match t.strip_prefix('-') {
+        Some(r) => (true, r),
+        None => (false, t.strip_prefix('+').unwrap_or(&t)),
+    };
+    let (mant, exp) = match body.find(['e', 'E']) {
+        Some(i) => (&body[..i], body[i + 1..].parse::<i64>().ok()?),
+        None => (body, 0),
+    };
+    let (int, frac) = mant.split_once('.').unwrap_or((mant, ""));
+    if (int.is_empty() && frac.is_empty())
+        || !int.bytes().all(|c| c.is_ascii_digit())
+        || !frac.bytes().all(|c| c.is_ascii_digit())
+        || exp.unsigned_abs() > 1_000_000
+    {
+        return None;
+    }
+    let mut digits: Vec<u8> = int.bytes().chain(frac.bytes()).map(|c| c - b'0').collect();
+    let mut exp = exp - frac.len() as i64;
+    while digits.last() == Some(&0) {
+        digits.pop();
+        exp += 1;
+    }
+    let lead = digits.iter().take_while(|d| **d == 0).count();
+    digits.drain(..lead);
+    if digits.is_empty() {
+        return Some((false, vec![], 0));
+    }
+    Some((neg, digits, exp))
+}
+
+fn cmp_decimal(x: &Decimal, y: &Decimal) -> std::cmp::Ordering {
+    use std::cmp::Ordering::*;
+    let sign = |d: &Decimal| {
+        if d.1.is_empty() {
+            0
+        } else if d.0 {
+            -1
+        } else {
+            1
+        }
+    };
+    let (sx, sy) = (sign(x), sign(y));
+    if sx != sy || sx == 0 {
+        return sx.cmp(&sy);
+    }
+    // Same sign, both non-zero: compare magnitudes by position of the
+    // leading digit, then digit by digit.
+    let mag = (x.1.len() as i64 + x.2)
+        .cmp(&(y.1.len() as i64 + y.2))
+        .then_with(|| {
+            for i in 0..x.1.len().max(y.1.len()) {
+                let (a, b) = (
+                    x.1.get(i).copied().unwrap_or(0),
+                    y.1.get(i).copied().unwrap_or(0),
+                );
+                if a != b {
+                    return a.cmp(&b);
+                }
+            }
+            Equal
+        });
+    if sx < 0 {
+        mag.reverse()
+    } else {
+        mag
     }
 }
 
@@ -248,6 +323,39 @@ pub fn infer_value(s: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exact_number_comparison() {
+        use std::cmp::Ordering::*;
+        let c = |a, b| compare_numbers(a, b).unwrap();
+        assert_eq!(c("9007199254740992.0", "9007199254740993"), Less);
+        assert_eq!(c("9007199254740992.0", "9007199254740992"), Equal);
+        assert_eq!(c("1e3", "1000"), Equal);
+        assert_eq!(c("1,000.50", "1000.5"), Equal);
+        assert_eq!(c("-0", "0.000"), Equal);
+        assert_eq!(c("-2.5", "-10"), Greater);
+        assert_eq!(c("0.1", "0.09"), Greater);
+        assert_eq!(c("-1e-3", "0"), Less);
+        // Consistent (total) ordering across notations.
+        let mut v = vec![
+            "9007199254740993",
+            "9007199254740992.0",
+            "9007199254740992",
+            "-1",
+            "1e2",
+        ];
+        v.sort_by(|a, b| c(a, b));
+        assert_eq!(
+            v,
+            [
+                "-1",
+                "1e2",
+                "9007199254740992.0",
+                "9007199254740992",
+                "9007199254740993"
+            ]
+        );
+    }
 
     #[test]
     fn natural() {
