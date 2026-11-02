@@ -42,7 +42,7 @@
     <nav class="nav-links" aria-label="Sections">
       <a href="#tour">Tour</a>
       <a href="#tools">Tools</a>
-      <a href="#everywhere">Everywhere</a>
+      <a href="#everywhere">Ways in</a>
       <a href="#agents">Agents</a>
       <a href="#trust">Privacy</a>
       <a href="https://docs.dogubako.app">Docs</a>
@@ -85,7 +85,7 @@
 
         <div class="demo-body">
           <div class="bench" aria-label="On your bench">
-            <div class="bench-head"><span>On your bench</span><span class="mono soft-3 hint-drop">try dropping a file here</span><span class="mono soft-3 hint-tap">tap one, or choose a file</span></div>
+            <div class="bench-head"><span>On your bench</span><span class="mono soft-3 hint-drop">drop your own file anywhere</span><span class="mono soft-3 hint-tap">tap one, or choose a file</span></div>
             <div class="bench-shelf" id="bench-shelf">
               <figure class="bench-object" data-kind="image" data-name="dune.jpg">
                 <span class="bo-thing"><svg class="bo-photo" viewBox="0 0 224 150" role="img" aria-label="A photo of a desert sunset">
@@ -127,7 +127,7 @@
             </div>
           </div>
 
-          <div class="intent glass" id="intent" aria-live="polite">
+          <div class="intent glass" id="intent">
             <h2 class="intent-title">What should happen to it?</h2>
             <p class="intent-file mono" id="intent-file">dune.jpg</p>
             <ol class="intent-list" id="intent-list">
@@ -136,7 +136,8 @@
               <li><span class="n">3</span><span><b>Redact Regions</b><span class="d">Blur, pixelate or black out parts of the image</span></span></li>
               <li><span class="n">4</span><span><b>Remove Image Metadata</b><span class="d">Strip EXIF, GPS location and comments</span></span></li>
             </ol>
-            <p class="intent-note">This page only looks at the file’s name and type. Nothing is uploaded, and the real app works the same way: everything runs on your machine.</p>
+            <div class="intent-out" id="intent-out" aria-live="polite"></div>
+            <p class="intent-note">Some of these really run, right in this tab: compress or convert a photo, format JSON, hash any file. Nothing is uploaded. The app runs all 249 the same way, on your machine.</p>
           </div>
         </div>
       </div>
@@ -199,122 +200,179 @@
         <p class="section-lede">Built on mature open-source engines like FFmpeg, libvips, ExifTool, qpdf, Tesseract and whisper.cpp, with fast native code for everything that doesn’t need them.</p>
       </header>
 
-      <div class="drawers">
-        <article class="drawer"><header><h3>Images</h3><span class="count mono">30</span></header><p>Convert HEIC, AVIF and WebP, batch resize and compress, crop, watermark, strip metadata, blur faces, OCR, remove backgrounds and upscale.</p></article>
-        <article class="drawer"><header><h3>Video</h3><span class="count mono">27</span></header><p>Convert and compress to a target size, trim, merge, crop, GIF to video and back, stabilize, pull frames, add or burn subtitles.</p></article>
-        <article class="drawer"><header><h3>Audio</h3><span class="count mono">21</span></header><p>Convert, normalize loudness, trim and split, remove silence, denoise, EQ, fades, waveforms, spectrograms, tags and cover art.</p></article>
-        <article class="drawer"><header><h3>Speech &amp; voice</h3><span class="count mono">9</span></header><p>Offline transcription to TXT, SRT, VTT or Markdown, language detection, speaker turns and text to speech, all on your machine.</p></article>
-        <article class="drawer"><header><h3>PDF &amp; documents</h3><span class="count mono">27</span></header><p>Merge, split, reorder, compress, make searchable with OCR, extract text and images, watermark, number pages, encrypt and fill forms.</p></article>
-        <article class="drawer"><header><h3>Files</h3><span class="count mono">23</span></header><p>Checksums, archives with zip-bomb protection, duplicate and large-file finders, folder compare and batch rename with a preview.</p></article>
-        <article class="drawer"><header><h3>Text</h3><span class="count mono">27</span></header><p>Case, counts, sort and dedupe, diff, regex replace, encodings, Markdown and HTML, and text out of Office, EPUB and PDF files.</p></article>
-        <article class="drawer"><header><h3>Developer</h3><span class="count mono">34</span></header><p>JSON, YAML, TOML and XML, Base64 and hex, UUIDs, hashes, timestamps, regex, JSONPath and jq, JWTs, SQL, cron, QR and barcodes.</p></article>
-        <article class="drawer"><header><h3>Data</h3><span class="count mono">12</span></header><p>View, filter, sort, clean and summarize CSV, open spreadsheets, convert JSON and CSV, validate schemas and export to SQL.</p></article>
-        <article class="drawer"><header><h3>Network &amp; web</h3><span class="count mono">18</span></header><p>DNS, WHOIS, HTTP header and security checks, TLS certificates, URL tools, subnet planning and connectivity tests.</p></article>
-        <article class="drawer"><header><h3>Design</h3><span class="count mono">9</span></header><p>Palettes and palette extraction, WCAG contrast, gradients, canvas resize, compositing and styled QR codes.</p></article>
-        <article class="drawer"><header><h3>System</h3><span class="count mono">12</span></header><p>An overview dashboard for CPU, memory, disks, battery health, hardware, processes and temperatures.</p></article>
+      <div class="cabinet-find" hidden>
+        <label class="find-box">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <span class="sr-only">Find a tool</span>
+          <input type="search" id="tool-find" placeholder="Find a tool: subtitles, merge, qr…" autocomplete="off" spellcheck="false">
+        </label>
+        <p class="find-status mono" id="find-status" aria-live="polite"></p>
       </div>
-      <p class="center"><a class="link-arrow" href="https://docs.dogubako.app/reference/capabilities/">See the full list of tools</a></p>
+
+      <div class="cabinet" id="cabinet">
+        <details class="drawer" name="cabinet" data-cat="image" open>
+          <summary class="drawer-face"><span class="plate">Images</span><span class="drawer-count mono"><span class="sr-only">, </span>30<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>Convert HEIC, AVIF and WebP, batch resize and compress, crop, watermark, strip metadata, blur faces, OCR, remove backgrounds and upscale.</p>
+            <ul><li>Convert Images</li><li>Resize Images</li><li>Create Thumbnails</li><li>Compress Images</li><li>Image Info</li><li>Convert Color Space</li><li>Extract Animation Frames</li><li>Generate Icons</li><li>Favicon Generator</li><li>Crop Image</li><li>Rotate &amp; Flip</li><li>Adjust &amp; Filter</li><li>Watermark Images</li><li>Combine Images</li><li>Split Image into Tiles</li><li>Compare Images</li><li>Contact Sheet</li><li>Sprite Sheet</li><li>Redact Regions</li><li>Reduce Noise</li><li>View Image Metadata</li><li>Remove Image Metadata</li><li>SVG to PNG/JPEG/WebP</li><li>Optimize SVG</li><li>Detect Faces</li><li>Blur Faces</li><li>Extract Text (OCR)</li><li>Remove Background</li><li>AI Upscale</li><li>Dominant Colors</li></ul>
+          </div>
+        </details>
+        <details class="drawer" name="cabinet" data-cat="video">
+          <summary class="drawer-face"><span class="plate">Video</span><span class="drawer-count mono"><span class="sr-only">, </span>27<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>Convert and compress to a target size, trim, merge, crop, GIF to video and back, stabilize, pull frames, add or burn subtitles.</p>
+            <ul><li>Convert Video</li><li>Compress Video</li><li>Resize Video</li><li>Change Frame Rate</li><li>Trim Video</li><li>Cut / Split Video</li><li>Crop Video</li><li>Rotate / Flip Video</li><li>Merge Videos</li><li>Extract Audio from Video</li><li>Remove Audio</li><li>Replace Audio</li><li>Extract Frames</li><li>Video Thumbnail</li><li>Video to GIF</li><li>GIF to Video</li><li>Change Video Speed</li><li>Stabilize Video</li><li>Video Info</li><li>Video Preview Clip</li><li>Hardware Encoders</li><li>Watermark Video</li><li>Video Contact Sheet</li><li>Add Subtitles</li><li>Remove Subtitles</li><li>Burn In Subtitles</li><li>Extract Subtitles</li></ul>
+          </div>
+        </details>
+        <details class="drawer" name="cabinet" data-cat="audio">
+          <summary class="drawer-face"><span class="plate">Audio</span><span class="drawer-count mono"><span class="sr-only">, </span>21<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>Convert, normalize loudness, trim and split, remove silence, denoise, EQ, fades, waveforms, spectrograms, tags and cover art.</p>
+            <ul><li>Convert Audio</li><li>Compress Audio</li><li>Trim Audio</li><li>Split Audio</li><li>Merge Audio</li><li>Normalize Audio</li><li>Change Volume</li><li>Change Sample Rate</li><li>Audio Channels</li><li>Remove Silence</li><li>Detect Silence</li><li>Audio Waveform</li><li>Audio Spectrogram</li><li>Audio Info</li><li>Audio Tags</li><li>Reduce Noise</li><li>Change Audio Speed / Pitch</li><li>Equalizer</li><li>Fade In / Out</li><li>Reverse Audio</li><li>Extract Audio from Video</li></ul>
+          </div>
+        </details>
+        <details class="drawer" name="cabinet" data-cat="speech">
+          <summary class="drawer-face"><span class="plate">Speech &amp; Voice</span><span class="drawer-count mono"><span class="sr-only">, </span>9<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>Offline transcription to TXT, SRT, VTT or Markdown, language detection, speaker turns and text to speech, all on your machine.</p>
+            <ul><li>Convert Transcript / Subtitles</li><li>Shift Subtitle Timing</li><li>Transcribe Audio / Video</li><li>Detect Spoken Language</li><li>Generate Subtitles</li><li>Text to Speech</li><li>Voice Activity Detection</li><li>Extract Speech Segments</li><li>Split at Pauses</li></ul>
+          </div>
+        </details>
+        <details class="drawer" name="cabinet" data-cat="pdf">
+          <summary class="drawer-face"><span class="plate">PDF &amp; Documents</span><span class="drawer-count mono"><span class="sr-only">, </span>27<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>Merge, split, reorder, compress, make searchable with OCR, extract text and images, watermark, number pages, encrypt and fill forms.</p>
+            <ul><li>Merge PDFs</li><li>Split PDF</li><li>Extract Pages</li><li>Reorder Pages</li><li>Rotate Pages</li><li>Delete Pages</li><li>Repair PDF</li><li>Optimize for Web</li><li>Flatten Forms &amp; Annotations</li><li>Protect PDF</li><li>Remove PDF Password</li><li>Compress PDF</li><li>Extract Text</li><li>Extract Images</li><li>PDF to Images</li><li>PDF Info</li><li>Compare PDF Text</li><li>Images to PDF</li><li>OCR PDF</li><li>Watermark PDF</li><li>Add Page Numbers</li><li>Edit PDF Metadata</li><li>List Form Fields</li><li>Fill PDF Form</li><li>Convert Office Documents</li><li>Convert Markup Documents</li><li>Markdown to PDF</li></ul>
+          </div>
+        </details>
+        <details class="drawer" name="cabinet" data-cat="files">
+          <summary class="drawer-face"><span class="plate">Files</span><span class="drawer-count mono"><span class="sr-only">, </span>23<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>Checksums, archives with zip-bomb protection, duplicate and large-file finders, folder compare and batch rename with a preview.</p>
+            <ul><li>File Hash</li><li>Verify Checksums</li><li>Checksum Manifest</li><li>Detect File Type</li><li>Executable Info</li><li>Hex Viewer</li><li>MIME Type Lookup</li><li>Compare Files</li><li>Compare Folders</li><li>List Archive Contents</li><li>Extract Archive</li><li>Create Archive</li><li>Compress File</li><li>Decompress File</li><li>Folder Size</li><li>Find Large Files</li><li>Find Duplicate Files</li><li>Find Duplicates Among Files</li><li>Find Empty Files &amp; Folders</li><li>Remove Empty Files &amp; Folders</li><li>Search Files</li><li>File Manifest</li><li>Batch Rename</li></ul>
+          </div>
+        </details>
+        <details class="drawer" name="cabinet" data-cat="text">
+          <summary class="drawer-face"><span class="plate">Text</span><span class="drawer-count mono"><span class="sr-only">, </span>27<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>Case, counts, sort and dedupe, diff, regex replace, encodings, Markdown and HTML, and text out of Office, EPUB and PDF files.</p>
+            <ul><li>Change Case</li><li>Word &amp; Character Count</li><li>Sort Lines</li><li>Remove Duplicate Lines</li><li>Trim &amp; Remove Whitespace</li><li>Line Endings</li><li>Find &amp; Replace</li><li>Regex Replace</li><li>Compare Text (Diff)</li><li>Escape / Unescape</li><li>Convert Text Encoding</li><li>Markdown Preview</li><li>Markdown to HTML</li><li>HTML to Plain Text</li><li>HTML to Markdown</li><li>Clean Up Text</li><li>Slugify</li><li>Reverse Text</li><li>Lorem Ipsum Generator</li><li>Wrap Text</li><li>Extract Columns</li><li>Number Lines</li><li>Add Prefix / Suffix</li><li>Filter Lines</li><li>Unicode Inspector</li><li>Word Frequency</li><li>Extract Text from Document</li></ul>
+          </div>
+        </details>
+        <details class="drawer" name="cabinet" data-cat="dev">
+          <summary class="drawer-face"><span class="plate">Developer</span><span class="drawer-count mono"><span class="sr-only">, </span>34<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>JSON, YAML, TOML and XML, Base64 and hex, UUIDs, hashes, timestamps, regex, JSONPath and jq, JWTs, SQL, cron, QR and barcodes.</p>
+            <ul><li>QR Code Generator</li><li>QR Code Reader</li><li>Barcode Generator</li><li>Barcode Reader</li><li>JSON Formatter &amp; Validator</li><li>YAML Formatter &amp; Validator</li><li>TOML Formatter &amp; Validator</li><li>XML Formatter &amp; Validator</li><li>SQL Formatter</li><li>Convert Data Format</li><li>Base64 Encode / Decode</li><li>URL Encode / Decode</li><li>HTML Entities Encode / Decode</li><li>Hex Encode / Decode</li><li>Number Base Converter</li><li>Text ↔ Binary</li><li>Hash Generator</li><li>HMAC Generator &amp; Verifier</li><li>Password &amp; Random Generator</li><li>UUID Generator &amp; Decoder</li><li>JWT Decoder &amp; Verifier</li><li>Unix Timestamp Converter</li><li>Date Calculator &amp; Formatter</li><li>Time Zone Converter</li><li>Cron Expression Explainer</li><li>Regex Tester</li><li>JSONPath Query</li><li>jq Filter</li><li>JSON Schema Validator</li><li>JSON Diff</li><li>Color Converter</li><li>HTTP Message Parser</li><li>User-Agent Parser</li><li>String Inspector</li></ul>
+          </div>
+        </details>
+        <details class="drawer" name="cabinet" data-cat="data">
+          <summary class="drawer-face"><span class="plate">Data</span><span class="drawer-count mono"><span class="sr-only">, </span>12<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>View, filter, sort, clean and summarize CSV, open spreadsheets, convert JSON and CSV, validate schemas and export to SQL.</p>
+            <ul><li>CSV Viewer</li><li>Filter &amp; Sort CSV</li><li>CSV to JSON</li><li>JSON to CSV</li><li>Spreadsheet Viewer &amp; Export</li><li>Change CSV Delimiter</li><li>Transform Columns</li><li>Validate CSV / JSON Data</li><li>Find Duplicate Rows</li><li>Column Statistics</li><li>Clean CSV Data</li><li>Convert Table Data</li></ul>
+          </div>
+        </details>
+        <details class="drawer" name="cabinet" data-cat="network">
+          <summary class="drawer-face"><span class="plate">Network &amp; Web</span><span class="drawer-count mono"><span class="sr-only">, </span>18<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>DNS, WHOIS, HTTP header and security checks, TLS certificates, URL tools, subnet planning and connectivity tests.</p>
+            <ul><li>URL Parser</li><li>URL Normalizer</li><li>Query Parameter Editor</li><li>IP Address Info</li><li>CIDR Calculator</li><li>Subnet Planner (VLSM)</li><li>Certificate Decoder</li><li>Key Inspector</li><li>DNS Lookup</li><li>Reverse DNS</li><li>TLS / SSL Inspector</li><li>HTTP Headers &amp; Security Check</li><li>Favicon Fetcher</li><li>Connectivity Check</li><li>Port Checker</li><li>RDAP Lookup</li><li>WHOIS Lookup</li><li>Domain Inspector</li></ul>
+          </div>
+        </details>
+        <details class="drawer" name="cabinet" data-cat="design">
+          <summary class="drawer-face"><span class="plate">Design</span><span class="drawer-count mono"><span class="sr-only">, </span>9<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>Palettes and palette extraction, WCAG contrast, gradients, canvas resize, compositing and styled QR codes.</p>
+            <ul><li>Color Palette Generator</li><li>Extract Palette from Image</li><li>Contrast Checker</li><li>Gradient Generator</li><li>Aspect Ratio Calculator</li><li>Resize Canvas / Pad</li><li>Overlay Images</li><li>Bulk Image Dimensions</li><li>Styled QR Code</li></ul>
+          </div>
+        </details>
+        <details class="drawer" name="cabinet" data-cat="system">
+          <summary class="drawer-face"><span class="plate">System</span><span class="drawer-count mono"><span class="sr-only">, </span>12<span class="sr-only"> tools</span></span><span class="pull" aria-hidden="true"></span></summary>
+          <div class="drawer-tray">
+            <p>An overview dashboard for CPU, memory, disks, battery health, hardware, processes and temperatures.</p>
+            <ul><li>System Overview</li><li>CPU Info</li><li>Memory Usage</li><li>Disks &amp; Storage</li><li>Hardware Info</li><li>Operating System</li><li>Network Interfaces</li><li>Top Processes</li><li>Uptime</li><li>Temperature Sensors</li><li>Environment Diagnostics</li><li>Battery Health</li></ul>
+          </div>
+        </details>
+
+      </div>
+      <p class="cabinet-foot"><a class="link-arrow" href="https://docs.dogubako.app/reference/capabilities/">What each tool does, and what it needs</a></p>
     </section>
 
     <!-- ============================================================ everywhere -->
     <section class="section" id="everywhere" aria-labelledby="everywhere-title">
       <header class="section-head">
-        <h2 id="everywhere-title">Use it from the app, the command line, an API or an AI agent</h2>
-        <p class="section-lede">Each tool is written once. The app, the command line, the HTTP API and the MCP server are generated from that one description and run by the same engine.</p>
+        <h2 id="everywhere-title">One tool, four ways in</h2>
+        <p class="section-lede">Each tool is described once. The app’s form, the command, the HTTP call and the MCP call are all generated from that description and run by the same engine, so they always agree. Pick a tool and compare.</p>
       </header>
 
-      <div class="ways">
-        <div class="ways-tabs" role="tablist" aria-label="Ways to use Dogubako">
-          <button role="tab" aria-selected="true" aria-controls="way-desktop" id="tab-desktop">Desktop</button>
-          <button role="tab" aria-selected="false" aria-controls="way-cli" id="tab-cli" tabindex="-1">CLI</button>
-          <button role="tab" aria-selected="false" aria-controls="way-server" id="tab-server" tabindex="-1">Self-hosted</button>
-          <button role="tab" aria-selected="false" aria-controls="way-api" id="tab-api" tabindex="-1">HTTP API</button>
-          <button role="tab" aria-selected="false" aria-controls="way-mcp" id="tab-mcp" tabindex="-1">MCP</button>
-        </div>
+      <div class="ways-pick" id="ways-pick" role="group" aria-label="Tool">
+        <button type="button" data-tool="image.compress" aria-pressed="true">Compress Images</button>
+        <button type="button" data-tool="video.compress" aria-pressed="false">Compress Video</button>
+        <button type="button" data-tool="speech.transcribe" aria-pressed="false">Transcribe</button>
+        <button type="button" data-tool="pdf.merge" aria-pressed="false">Merge PDFs</button>
+        <button type="button" data-tool="dev.json" aria-pressed="false">Format JSON</button>
+        <button type="button" data-tool="files.hash" aria-pressed="false">File Hash</button>
+      </div>
+      <p class="way-spec mono"><span class="soft-3">tool id</span> <span id="way-id">image.compress</span></p>
 
-        <div class="way" role="tabpanel" id="way-desktop" aria-labelledby="tab-desktop">
-          <div class="way-copy">
-            <h3>A native app for macOS, Windows and Linux</h3>
-            <p>No account, no telemetry, no paywall. Drop files onto the window and it suggests the right tool. Dogubako tells you which engines are missing and gives you the exact command to install them.</p>
-            <a class="link-arrow" href="#download">Get the app</a>
-          </div>
-          <div class="way-visual"><img src="screenshots/settings-dependencies-dark.webp" width="1360" height="860" alt="Settings showing which optional engines are installed, with install commands" loading="lazy" decoding="async"></div>
-        </div>
-
-        <div class="way" role="tabpanel" id="way-cli" aria-labelledby="tab-cli" hidden>
-          <div class="way-copy">
-            <h3>Every tool is a command</h3>
-            <p>Pipe text in, point it at files, and script whole batches. Exit codes and output are stable, so it fits in shell scripts and CI.</p>
-            <a class="link-arrow" href="https://docs.dogubako.app/cli/overview/">CLI guide</a>
-          </div>
-<pre class="code"><code><span class="c"># find a tool</span>
-<span class="p">$</span> dogubako tools search pdf
-<span class="p">$</span> dogubako image convert photo.heic --format webp
-<span class="p">$</span> dogubako video compress talk.mov
-<span class="p">$</span> dogubako pdf merge a.pdf b.pdf -o merged.pdf
-<span class="p">$</span> echo '{"b":1}' | dogubako dev json</code></pre>
-        </div>
-
-        <div class="way" role="tabpanel" id="way-server" aria-labelledby="tab-server" hidden>
-          <div class="way-copy">
-            <h3>Host it yourself</h3>
-            <p>Run Dogubako on a home server, a NAS or a VPS with all the heavy engines installed once. Reach it over your LAN or Tailscale from any browser, including your phone.</p>
-            <a class="link-arrow" href="https://docs.dogubako.app/self-hosting/overview/">Self-hosting guide</a>
-          </div>
-<pre class="code"><code><span class="p">$</span> docker compose up -d --build
-<span class="c"># the first-run setup token</span>
-<span class="p">$</span> docker compose logs dogubako | grep "Setup token"
-<span class="p">$</span> open http://localhost:8420</code></pre>
-        </div>
-
-        <div class="way" role="tabpanel" id="way-api" aria-labelledby="tab-api" hidden>
-          <div class="way-copy">
-            <h3>A documented HTTP API</h3>
-            <p>Upload a file, run any tool, and download the result. The OpenAPI document is generated from the same tool descriptions, so it is never out of date.</p>
-            <a class="link-arrow" href="https://docs.dogubako.app/reference/http-api/">API reference</a>
-          </div>
-<pre class="code"><code><span class="c"># every endpoint, always current</span>
-<span class="p">GET</span>  /api/v1/openapi.json
-<span class="c"># upload a file, run a tool, fetch the result</span>
-<span class="p">POST</span> /api/v1/files
+      <div class="ways-grid">
+        <article class="way-card" id="way-app">
+          <header><h3>Desktop and web app</h3><a href="#tour">See it</a></header>
+          <div class="way-body"><div class="mock"><div class="m-title">Compress Images</div><div class="m-row"><span class="m-label">Images</span><span class="m-val"><span class="m-chip">dune.jpg</span></span></div><div class="m-row"><span class="m-label">Quality</span><span class="m-val"><span class="m-range" style="--v:0.75"><span></span></span><span class="m-num mono">75</span></span></div><div class="m-row"><span class="m-label">Output format</span><span class="m-val"><span class="m-select">WebP</span></span></div><div class="m-run"><span class="m-btn">Run</span></div></div></div>
+        </article>
+        <article class="way-card" id="way-cli">
+          <header><h3>Command line</h3><a href="https://docs.dogubako.app/cli/overview/">CLI guide</a></header>
+          <div class="way-body"><pre class="code code-sm"><code><span class="p">$</span> dogubako image compress dune.jpg --quality 75 --format webp</code></pre></div>
+        </article>
+        <article class="way-card" id="way-api">
+          <header><h3>HTTP API</h3><a href="https://docs.dogubako.app/reference/http-api/">API reference</a></header>
+          <div class="way-body"><pre class="code code-sm"><code><span class="p">PUT</span>  /api/v1/files/raw?name=dune.jpg  <span class="c"># → f_1</span>
 <span class="p">POST</span> /api/v1/tools/image.compress/run
-<span class="p">GET</span>  /api/v1/jobs/{id}?wait_seconds=30
-<span class="p">GET</span>  /api/v1/files/{id}/content
-<span class="c"># every request: Authorization: Bearer dgb_…</span></code></pre>
-        </div>
-
-        <div class="way" role="tabpanel" id="way-mcp" aria-labelledby="tab-mcp" hidden>
-          <div class="way-copy">
-            <h3>Tools for your AI agents</h3>
-            <p>Plug Dogubako into any MCP client. Locally over stdio, or from a shared server over HTTP. Compact discovery keeps 249 tools from flooding the agent’s context.</p>
-            <a class="link-arrow" href="https://docs.dogubako.app/agents/overview/">MCP guide</a>
-          </div>
-<pre class="code"><code><span class="c"># a local agent</span>
-<span class="p">$</span> claude mcp add dogubako -- \
-    dogubako mcp serve --discovery compact
-<span class="c"># a shared server, one token per agent</span>
-<span class="p">$</span> claude mcp add --transport http dogubako \
-    https://tools.example.ts.net/mcp \
-    --header "Authorization: Bearer dgb_…"</code></pre>
-        </div>
+{
+  <span class="k">"params"</span>: {
+    <span class="k">"input"</span>: [<span class="s">"f_1"</span>],
+    <span class="k">"quality"</span>: 75,
+    <span class="k">"format"</span>: <span class="s">"webp"</span>
+  },
+  <span class="k">"wait_seconds"</span>: 60
+}</code></pre></div>
+        </article>
+        <article class="way-card" id="way-mcp">
+          <header><h3>MCP, for AI agents</h3><a href="https://docs.dogubako.app/agents/overview/">MCP guide</a></header>
+          <div class="way-body"><pre class="code code-sm"><code><span class="c"># tools/call</span> <span class="p">dogubako_run_tool</span>
+{
+  <span class="k">"tool"</span>: <span class="s">"image.compress"</span>,
+  <span class="k">"arguments"</span>: {
+    <span class="k">"input"</span>: [<span class="s">"f_1"</span>],
+    <span class="k">"quality"</span>: 75,
+    <span class="k">"format"</span>: <span class="s">"webp"</span>
+  }
+}</code></pre></div>
+        </article>
       </div>
     </section>
+
 
     <!-- ============================================================ agents -->
     <section class="section" id="agents" aria-labelledby="agents-title">
       <div class="split">
         <div>
-          <h2 id="agents-title">Separate keys for separate agents</h2>
-          <p class="section-lede">Run one central server with the heavy engines and hand each agent a scoped token. An image bot may resize and blur. A media bot may transcode and transcribe. Neither can see the other’s files or touch your system tools.</p>
-          <a class="link-arrow" href="https://docs.dogubako.app/self-hosting/accounts-and-agents/">Accounts and agents</a>
+          <h2 id="agents-title">Host it once, give each agent its own key</h2>
+          <p class="section-lede">Run Dogubako on a home server, a NAS or a VPS with the heavy engines installed once, and open it from any browser on your network, including your phone. Then hand each agent a scoped token. An image bot may resize and blur. A media bot may transcode and transcribe. Neither can see the other’s files or touch your system tools.</p>
+          <p class="split-links"><a class="link-arrow" href="https://docs.dogubako.app/self-hosting/overview/">Self-hosting guide</a> <a class="link-arrow" href="https://docs.dogubako.app/self-hosting/accounts-and-agents/">Accounts and agents</a></p>
         </div>
-        <div class="keys">
-<pre class="code code-sm"><code><span class="p">$</span> dogubako users create media-bot --role agent \
+<pre class="code code-sm"><code><span class="c"># on the server</span>
+<span class="p">$</span> docker compose up -d --build
+<span class="p">$</span> docker compose logs dogubako | grep "Setup token"
+
+<span class="c"># one account per agent, limited to its tools</span>
+<span class="p">$</span> dogubako users create media-bot --role agent \
     --allow 'video.*' --allow 'speech.*'
 <span class="p">$</span> dogubako tokens create --user media-bot --name laptop</code></pre>
-        </div>
       </div>
     </section>
+
 
     <!-- ============================================================ trust -->
     <section class="section" id="trust" aria-labelledby="trust-title">

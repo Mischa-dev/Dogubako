@@ -12,10 +12,25 @@ like one thing.
 |---|---|
 | `index.html` | The page |
 | `styles.css` | Styles, light and dark (follows the system, with a toggle) |
-| `main.js` | Theme toggle, the drop demo, the screenshot tour and tabs |
+| `main.js` | Theme toggle, the working bench, the tool cabinet, the four-ways switcher and the screenshot tour |
 | `screenshots/`, `og.png` | WebP copies of `docs/screenshots` and the 1200×630 link preview, made by `scripts/screenshots.py` |
 | `scripts/` | Screenshot capture, sample files and the WebP conversion |
 | `CNAME` | The domain, for GitHub Pages |
+
+## What's interactive
+
+* **The bench** (hero). Drop or choose a file and it's drawn on the bench with
+  the app's suggestions. Tools in `RUN` in `main.js` really run in the tab
+  (compress, convert or clean a photo, format JSON, count or sort text, view a
+  CSV, hash, detect the type, hex view) and put their result on the bench.
+  Nothing is uploaded. The rest show the CLI command instead.
+* **The cabinet** (`#tools`). One `<details>` drawer per category, listing every
+  tool by name, with a search box. The lists come from the tool registry; if
+  tools are added or renamed, update them in `index.html`.
+* **One tool, four ways in** (`#everywhere`). `WAYS` in `main.js` describes six
+  tools once, and the app form, CLI, HTTP and MCP views are generated from it.
+  The HTML holds a pre-rendered copy of the first tool for visitors without JS;
+  if you change `WAYS['image.compress']`, copy the rendered markup back in.
 
 ## Preview
 
