@@ -233,6 +233,16 @@ async fn crop_rotate_flip() {
         .unwrap();
     let (w, hh) = open(&out.artifacts[0].path).dimensions();
     assert!(w > 100 && hh > 100);
+    // A long strip at 45 degrees needs a ~70711x70711 canvas: rejected before allocating.
+    let strip = save(&h, "strip.png", &pattern(100_000, 1, false));
+    let err = h
+        .run(
+            "image.rotate_flip",
+            json!({"input": s(&strip), "angle": 45}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "limit_exceeded");
     let out = h
         .run(
             "image.rotate_flip",
@@ -375,6 +385,27 @@ async fn watermark_text_image_and_tiles() {
         .filter(|(x, y)| (x[0] as i32 - y[0] as i32).abs() > 30)
         .count();
     assert!(changed > 200, "text must be drawn ({changed})");
+    // A narrow logo scaled to a wide image: 10000 x 100000000 pixels.
+    let wide = save(&h, "wide10k.png", &pattern(10_000, 1, false));
+    let tall = save(&h, "tall10k.png", &pattern(1, 10_000, false));
+    let err = h
+        .run(
+            "image.watermark",
+            json!({"input": [s(&wide)], "kind": "image", "watermark": s(&tall), "scale": 100}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "limit_exceeded");
+    // Text that fits, but whose rotated layer would not.
+    let mid = save(&h, "mid.png", &pattern(1000, 10, false));
+    let err = h
+        .run(
+            "image.watermark",
+            json!({"input": [s(&mid)], "text": "W".repeat(4000), "font_size": 5, "rotation": 45}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "limit_exceeded");
     let out = h.run("image.watermark", json!({"input": [s(&a)], "kind": "image", "watermark": s(&logo), "opacity": 1.0, "position": "top-left", "margin": 0, "scale": 10})).await.unwrap();
     let w = open(&out.artifacts[0].path).to_rgb8();
     let p = w.get_pixel(5, 5);

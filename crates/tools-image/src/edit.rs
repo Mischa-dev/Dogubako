@@ -154,27 +154,43 @@ fn crop() -> Arc<dyn Tool> {
     })
 }
 
-pub fn rotate_any(img: &DynamicImage, degrees: f64, bg: Rgba<u8>) -> DynamicImage {
+pub fn rotate_any(
+    ctx: &ToolContext,
+    img: &DynamicImage,
+    degrees: f64,
+    bg: Rgba<u8>,
+) -> ToolResult<DynamicImage> {
     let d = degrees.rem_euclid(360.0);
     if d.abs() < 1e-9 {
-        return img.clone();
+        return Ok(img.clone());
     }
     if (d - 90.0).abs() < 1e-9 {
-        return img.rotate90();
+        return Ok(img.rotate90());
     }
     if (d - 180.0).abs() < 1e-9 {
-        return img.rotate180();
+        return Ok(img.rotate180());
     }
     if (d - 270.0).abs() < 1e-9 {
-        return img.rotate270();
+        return Ok(img.rotate270());
     }
+    let theta = (d as f32).to_radians();
+    check_rotated(ctx, img.width(), img.height(), theta)?;
     let rgba = img.to_rgba8();
-    DynamicImage::ImageRgba8(rotate_about_center_no_crop(
+    Ok(DynamicImage::ImageRgba8(rotate_about_center_no_crop(
         &rgba,
-        (d as f32).to_radians(),
+        theta,
         Interpolation::Bicubic,
         Border::Constant(bg),
-    ))
+    )))
+}
+
+/// Check the canvas `rotate_about_center_no_crop` will allocate (same formula)
+/// against the pixel limit: a 100000x1 strip at 45 degrees needs ~70711x70711.
+fn check_rotated(ctx: &ToolContext, w: u32, h: u32, theta: f32) -> ToolResult<()> {
+    let (s, c) = (theta.sin().abs(), theta.cos().abs());
+    let nw = (h as f32 * s + w as f32 * c).ceil() as u64;
+    let nh = (h as f32 * c + w as f32 * s).ceil() as u64;
+    check_pixels(ctx, nw, nh)
 }
 
 fn rotate_flip() -> Arc<dyn Tool> {
@@ -201,8 +217,7 @@ fn rotate_flip() -> Arc<dyn Tool> {
             if p.bool("flip_vertical") {
                 img = img.flipv();
             }
-            let img = rotate_any(&img, angle, bg);
-            check_pixels(ctx, img.width() as u64, img.height() as u64)?;
+            let img = rotate_any(ctx, &img, angle, bg)?;
             let fmt = out_format(p, f)?;
             let mut opts = same_format_opts(p);
             if bg[3] == 0 {
@@ -463,12 +478,15 @@ fn watermark() -> Arc<dyn Tool> {
             let bw = base.width() as f32;
             let mut layer = match &logo {
                 Some(l) => {
-                    let tw = (bw * p.num_or("scale", 20.0) as f32 / 100.0)
+                    let tw = (f64::from(bw) * p.num_or("scale", 20.0) / 100.0)
                         .round()
-                        .max(1.0) as u32;
-                    let th = ((l.height() as f32) * tw as f32 / l.width() as f32)
+                        .max(1.0);
+                    let th = (f64::from(l.height()) * tw / f64::from(l.width()))
                         .round()
-                        .max(1.0) as u32;
+                        .max(1.0);
+                    // f64 -> u64 casts saturate, so a huge size is rejected, not wrapped.
+                    check_pixels(ctx, tw as u64, th as u64)?;
+                    let (tw, th) = (tw as u32, th as u32);
                     image::imageops::resize(l, tw, th, image::imageops::FilterType::Lanczos3)
                 }
                 None => {
@@ -493,6 +511,12 @@ fn watermark() -> Arc<dyn Tool> {
                 }
             };
             if rotation.abs() > 0.01 {
+                check_rotated(
+                    ctx,
+                    layer.width(),
+                    layer.height(),
+                    (rotation as f32).to_radians(),
+                )?;
                 layer = rotate_about_center_no_crop(
                     &layer,
                     (rotation as f32).to_radians(),
