@@ -27,8 +27,9 @@ pub const FULL_URL: &AsciiSet = &COMPONENT
     .remove(b'+')
     .remove(b',')
     .remove(b';')
-    .remove(b'=')
-    .remove(b'%');
+    .remove(b'=');
+// '%' stays encoded (as in encodeURI): "100% organic" -> "100%25%20organic",
+// so the output always decodes back to the input.
 
 pub fn url_encode(s: &str, full: bool, space_plus: bool) -> String {
     let enc = utf8_percent_encode(s, if full { FULL_URL } else { COMPONENT }).to_string();
@@ -463,6 +464,13 @@ mod tests {
             "a,\"b\""
         );
         assert_eq!(xml_unescape(&xml_escape("<a & 'b'>")).unwrap(), "<a & 'b'>");
+        // Full-URL mode keeps URL syntax but encodes literal '%'.
+        let full = url_encode("https://example.com/100% organic?q=a&b=c", true, false);
+        assert_eq!(full, "https://example.com/100%25%20organic?q=a&b=c");
+        assert_eq!(
+            url_decode(&full, false).unwrap(),
+            "https://example.com/100% organic?q=a&b=c"
+        );
         assert_eq!(
             url_decode(&url_encode("a b/ü", false, false), false).unwrap(),
             "a b/ü"
