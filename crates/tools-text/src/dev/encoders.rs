@@ -539,7 +539,13 @@ fn binary_text() -> Arc<dyn Tool> {
         };
         let tokens: Vec<String> =
             if fmt == "bin" && !t.trim().contains(char::is_whitespace) && !t.contains(',') {
-                let digits: Vec<char> = t.trim().chars().collect();
+                let t = t.trim();
+                // A single run of bits may carry one 0b prefix ("b" is never a bit).
+                let t = t
+                    .strip_prefix("0b")
+                    .or_else(|| t.strip_prefix("0B"))
+                    .unwrap_or(t);
+                let digits: Vec<char> = t.chars().collect();
                 if !digits.len().is_multiple_of(8) {
                     return Err(ToolError::invalid(
                         "text",
@@ -824,6 +830,16 @@ mod tests {
             .await,
             "AB"
         );
+        // A prefixed run without separators is accepted too.
+        for (t, want) in [("0b01000001", "A"), ("0B0100000101000010", "AB")] {
+            let out = txt(
+                &h,
+                "dev.binary_text",
+                json!({"text": t, "mode": "decode", "format": "bin"}),
+            )
+            .await;
+            assert_eq!(out, want, "{t}");
+        }
         assert_eq!(
             h.run(
                 "dev.binary_text",
