@@ -286,19 +286,28 @@ fn docx<R: Read + Seek>(z: &mut zip::ZipArchive<R>, mut budget: u64) -> ToolResu
 }
 
 fn pptx<R: Read + Seek>(z: &mut zip::ZipArchive<R>, mut budget: u64) -> ToolResult<String> {
-    let mut slides: Vec<(u32, String)> = z
-        .file_names()
-        .filter_map(|n| n.ok())
-        .filter_map(|n| {
-            let num = n
-                .strip_prefix("ppt/slides/slide")?
-                .strip_suffix(".xml")?
-                .parse::<u32>()
-                .ok()?;
-            Some((num, n.to_string()))
-        })
+    // Presentation order comes from ppt/presentation.xml (sldIdLst) resolved
+    // through its relationships; slideN.xml names are part ids, not positions.
+    let mut slides: Vec<(u32, String)> = pptx_slide_order(z, &mut budget)?
+        .into_iter()
+        .enumerate()
+        .map(|(i, p)| (i as u32 + 1, p))
         .collect();
-    slides.sort();
+    if slides.is_empty() {
+        slides = z
+            .file_names()
+            .filter_map(|n| n.ok())
+            .filter_map(|n| {
+                let num = n
+                    .strip_prefix("ppt/slides/slide")?
+                    .strip_suffix(".xml")?
+                    .parse::<u32>()
+                    .ok()?;
+                Some((num, n.to_string()))
+            })
+            .collect();
+        slides.sort();
+    }
     let rules = XmlRules {
         para: &["p"],
         brk: &["br"],
@@ -315,6 +324,62 @@ fn pptx<R: Read + Seek>(z: &mut zip::ZipArchive<R>, mut budget: u64) -> ToolResu
         }
     }
     Ok(out)
+}
+
+/// Slide part paths in presentation order; empty if the parts are missing.
+fn pptx_slide_order<R: Read + Seek>(
+    z: &mut zip::ZipArchive<R>,
+    budget: &mut u64,
+) -> ToolResult<Vec<String>> {
+    let (Some(pres), Some(rels)) = (
+        read_part(z, "ppt/presentation.xml", budget)?,
+        read_part(z, "ppt/_rels/presentation.xml.rels", budget)?,
+    ) else {
+        return Ok(vec![]);
+    };
+    let attrs_of =
+        |e: &quick_xml::events::BytesStart| -> std::collections::HashMap<String, String> {
+            e.attributes()
+                .flatten()
+                .map(|a| (local(a.key.as_ref()), a.value.to_string()))
+                .collect()
+        };
+    let mut targets = std::collections::HashMap::new();
+    let mut reader = quick_xml::Reader::from_str(&rels);
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e))
+                if local(e.name().as_ref()) == "Relationship" =>
+            {
+                let a = attrs_of(&e);
+                if let (Some(id), Some(t)) = (a.get("Id"), a.get("Target")) {
+                    targets.insert(id.clone(), t.clone());
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+    let mut order = vec![];
+    let mut reader = quick_xml::Reader::from_str(&pres);
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) if local(e.name().as_ref()) == "sldId" => {
+                // `r:id` (namespaced); local() strips the prefix.
+                if let Some(t) = attrs_of(&e).get("id").and_then(|id| targets.get(id)) {
+                    let path = if let Some(abs) = t.strip_prefix('/') {
+                        abs.to_string()
+                    } else {
+                        normalize_zip_path(&format!("ppt/{t}"))
+                    };
+                    order.push(path);
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+    Ok(order)
 }
 
 fn odf<R: Read + Seek>(z: &mut zip::ZipArchive<R>, mut budget: u64) -> ToolResult<String> {
@@ -687,6 +752,34 @@ mod tests {
             .text
             .unwrap();
         assert!(t.find("One").unwrap() < t.find("Two").unwrap());
+        // Reordered deck: presentation.xml decides the order and numbering.
+        let reordered = make_zip(&[
+            (
+                "ppt/presentation.xml",
+                r#"<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId id="256" r:id="rId9"/><p:sldId id="257" r:id="rId8"/></p:sldIdLst></p:presentation>"#,
+            ),
+            (
+                "ppt/_rels/presentation.xml.rels",
+                r#"<Relationships><Relationship Id="rId8" Target="slides/slide1.xml"/><Relationship Id="rId9" Target="slides/slide2.xml"/></Relationships>"#,
+            ),
+            (
+                "ppt/slides/slide1.xml",
+                r#"<p:sld xmlns:a="a" xmlns:p="p"><a:p><a:r><a:t>One</a:t></a:r></a:p></p:sld>"#,
+            ),
+            (
+                "ppt/slides/slide2.xml",
+                r#"<p:sld xmlns:a="a" xmlns:p="p"><a:p><a:r><a:t>Two</a:t></a:r></a:p></p:sld>"#,
+            ),
+        ]);
+        let f = h.write("d.pptx", &reordered);
+        let t = h
+            .run("text.extract", json!({"file": f.to_str().unwrap()}))
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        assert!(t.find("Two").unwrap() < t.find("One").unwrap(), "{t}");
+        assert!(t.starts_with("--- Slide 1 ---\nTwo"), "{t}");
         let epub = make_zip(&[
             (
                 "META-INF/container.xml",
