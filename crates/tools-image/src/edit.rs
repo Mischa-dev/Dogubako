@@ -837,10 +837,25 @@ fn split() -> Arc<dyn Tool> {
         let f = p.file("input")?;
         let img = load_image(ctx, f)?;
         let (w, h) = img.dimensions();
-        let (tw, th) = if p.str_or("mode", "grid") == "size" {
+        // Tile edges along each axis. Grid mode keeps the requested counts
+        // and spreads remainder pixels (100px / 30 -> tiles of 3 and 4 px);
+        // size mode uses fixed tiles with a smaller last one.
+        let (xs, ys): (Vec<u32>, Vec<u32>) = if p.str_or("mode", "grid") == "size" {
+            let tw = p.int_or("tile_width", 512).max(1) as u32;
+            let th = p.int_or("tile_height", 512).max(1) as u32;
+            let (cols, rows) = (w.div_ceil(tw), h.div_ceil(th));
+            if (cols as u64) * (rows as u64) > 2500 {
+                return Err(ToolError::invalid(
+                    "tile_width",
+                    format!(
+                        "would create {} tiles (max 2500)",
+                        cols as u64 * rows as u64
+                    ),
+                ));
+            }
             (
-                p.int_or("tile_width", 512).max(1) as u32,
-                p.int_or("tile_height", 512).max(1) as u32,
+                (0..=cols).map(|i| (i * tw).min(w)).collect(),
+                (0..=rows).map(|i| (i * th).min(h)).collect(),
             )
         } else {
             let r = p.int_or("rows", 2).max(1) as u32;
@@ -848,18 +863,14 @@ fn split() -> Arc<dyn Tool> {
             if r > h || c > w {
                 return Err(ToolError::invalid("rows", "more tiles than pixels"));
             }
-            (w.div_ceil(c), h.div_ceil(r))
+            let edges = |n: u32, len: u32| -> Vec<u32> {
+                (0..=n)
+                    .map(|i| (u64::from(i) * u64::from(len) / u64::from(n)) as u32)
+                    .collect()
+            };
+            (edges(c, w), edges(r, h))
         };
-        let (cols, rows) = (w.div_ceil(tw), h.div_ceil(th));
-        if (cols as u64) * (rows as u64) > 2500 {
-            return Err(ToolError::invalid(
-                "tile_width",
-                format!(
-                    "would create {} tiles (max 2500)",
-                    cols as u64 * rows as u64
-                ),
-            ));
-        }
+        let (cols, rows) = (xs.len() as u32 - 1, ys.len() as u32 - 1);
         let fmt = out_format(p, f)?;
         let stem = f.stem();
         let mut arts = vec![];
@@ -867,8 +878,8 @@ fn split() -> Arc<dyn Tool> {
         for r in 0..rows {
             for c in 0..cols {
                 ctx.check_cancelled()?;
-                let (x, y) = (c * tw, r * th);
-                let (cw, ch) = (tw.min(w - x), th.min(h - y));
+                let (x, y) = (xs[c as usize], ys[r as usize]);
+                let (cw, ch) = (xs[c as usize + 1] - x, ys[r as usize + 1] - y);
                 let t = img.crop_imm(x, y, cw, ch);
                 arts.push(save_output(
                     ctx,

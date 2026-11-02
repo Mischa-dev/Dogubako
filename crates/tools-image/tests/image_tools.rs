@@ -499,6 +499,26 @@ async fn combine_split_sheets() {
         .await
         .unwrap();
     assert_eq!(out.artifacts.len(), 6); // 3 x 2, edge tiles smaller
+                                        // Uneven grids keep the requested counts and cover every pixel once.
+    let sq = save(&h, "sq100.png", &pattern(100, 100, false));
+    let out = h
+        .run(
+            "image.split",
+            json!({"input": s(&sq), "rows": 30, "columns": 30}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.artifacts.len(), 900);
+    let regions = out.data["regions"].as_array().unwrap();
+    let area: u64 = regions
+        .iter()
+        .map(|r| r["width"].as_u64().unwrap() * r["height"].as_u64().unwrap())
+        .sum();
+    assert_eq!(area, 100 * 100);
+    assert!(regions.iter().all(|r| {
+        let (w, h) = (r["width"].as_u64().unwrap(), r["height"].as_u64().unwrap());
+        (3..=4).contains(&w) && (3..=4).contains(&h)
+    }));
 
     let out = h
         .run(
