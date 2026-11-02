@@ -14,7 +14,8 @@ trap 'rm -rf "$work"' EXIT
 
 check_links() {
   # Only @rpath (inside the folder), /usr/lib and /System are allowed.
-  bad="$(otool -L "$1" | tail -n +2 | awk '{print $1}' | grep -vE '^(@rpath/|/usr/lib/|/System/)' || true)"
+  # Universal binaries print one "<file> (architecture x):" header per slice.
+  bad="$(otool -L "$1" | grep -v ':$' | awk '{print $1}' | grep -vE '^(@rpath/|/usr/lib/|/System/)' || true)"
   [ -z "$bad" ] || fail "$1 links outside its folder: $bad"
 }
 
