@@ -3,7 +3,11 @@
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 
 /// RFC 3986 unreserved characters are left alone.
-pub const COMPONENT: &AsciiSet = &NON_ALPHANUMERIC.remove(b'-').remove(b'_').remove(b'.').remove(b'~');
+pub const COMPONENT: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'_')
+    .remove(b'.')
+    .remove(b'~');
 /// Like `encodeURI`: keeps reserved URL delimiters.
 pub const FULL_URL: &AsciiSet = &COMPONENT
     .remove(b':')
@@ -36,7 +40,11 @@ pub fn url_encode(s: &str, full: bool, space_plus: bool) -> String {
 }
 
 pub fn url_decode(s: &str, plus_space: bool) -> Result<String, String> {
-    let s = if plus_space { s.replace('+', " ") } else { s.to_string() };
+    let s = if plus_space {
+        s.replace('+', " ")
+    } else {
+        s.to_string()
+    };
     // Validate escapes so malformed input is reported instead of passed through silently.
     let b = s.as_bytes();
     let mut i = 0;
@@ -53,7 +61,10 @@ pub fn url_decode(s: &str, plus_space: bool) -> Result<String, String> {
             i += 1;
         }
     }
-    percent_encoding::percent_decode_str(&s).decode_utf8().map(|c| c.into_owned()).map_err(|e| format!("decoded bytes are not valid UTF-8: {e}"))
+    percent_encoding::percent_decode_str(&s)
+        .decode_utf8()
+        .map(|c| c.into_owned())
+        .map_err(|e| format!("decoded bytes are not valid UTF-8: {e}"))
 }
 
 pub fn html_escape(s: &str, non_ascii: bool) -> String {
@@ -85,7 +96,9 @@ pub fn xml_escape(s: &str) -> String {
             '>' => out.push_str("&gt;"),
             '"' => out.push_str("&quot;"),
             '\'' => out.push_str("&apos;"),
-            c if (c as u32) < 0x20 && !matches!(c, '\n' | '\r' | '\t') => out.push_str(&format!("&#x{:X};", c as u32)),
+            c if (c as u32) < 0x20 && !matches!(c, '\n' | '\r' | '\t') => {
+                out.push_str(&format!("&#x{:X};", c as u32))
+            }
             c => out.push(c),
         }
     }
@@ -98,7 +111,12 @@ pub fn xml_unescape(s: &str) -> Result<String, String> {
     while let Some(i) = rest.find('&') {
         out.push_str(&rest[..i]);
         let after = &rest[i + 1..];
-        let end = after.find(';').filter(|e| *e <= 12).ok_or_else(|| format!("unterminated entity near '{}'", &rest[i..rest.len().min(i + 12)]))?;
+        let end = after.find(';').filter(|e| *e <= 12).ok_or_else(|| {
+            format!(
+                "unterminated entity near '{}'",
+                &rest[i..rest.len().min(i + 12)]
+            )
+        })?;
         let name = &after[..end];
         let ch = match name {
             "amp" => '&',
@@ -106,10 +124,15 @@ pub fn xml_unescape(s: &str) -> Result<String, String> {
             "gt" => '>',
             "quot" => '"',
             "apos" => '\'',
-            n if n.starts_with("#x") || n.starts_with("#X") => {
-                u32::from_str_radix(&n[2..], 16).ok().and_then(char::from_u32).ok_or_else(|| format!("invalid character reference &{n};"))?
-            }
-            n if n.starts_with('#') => n[1..].parse::<u32>().ok().and_then(char::from_u32).ok_or_else(|| format!("invalid character reference &{n};"))?,
+            n if n.starts_with("#x") || n.starts_with("#X") => u32::from_str_radix(&n[2..], 16)
+                .ok()
+                .and_then(char::from_u32)
+                .ok_or_else(|| format!("invalid character reference &{n};"))?,
+            n if n.starts_with('#') => n[1..]
+                .parse::<u32>()
+                .ok()
+                .and_then(char::from_u32)
+                .ok_or_else(|| format!("invalid character reference &{n};"))?,
             n => return Err(format!("unknown XML entity &{n};")),
         };
         out.push(ch);
@@ -143,7 +166,9 @@ pub fn backslash_escape(s: &str, lang: Lang) -> String {
             '\u{c}' => out.push_str("\\f"),
             '\u{b}' if lang != Lang::Json && lang != Lang::Java => out.push_str("\\v"),
             '\u{7}' if matches!(lang, Lang::C | Lang::Python) => out.push_str("\\a"),
-            '\u{2028}' | '\u{2029}' if lang == Lang::Js => out.push_str(&format!("\\u{:04x}", c as u32)),
+            '\u{2028}' | '\u{2029}' if lang == Lang::Js => {
+                out.push_str(&format!("\\u{:04x}", c as u32))
+            }
             c if (c as u32) < 0x20 || c == '\u{7f}' => match lang {
                 Lang::Json | Lang::Java => out.push_str(&format!("\\u{:04x}", c as u32)),
                 Lang::Js | Lang::Python => out.push_str(&format!("\\x{:02x}", c as u32)),
@@ -182,7 +207,8 @@ pub fn backslash_unescape(s: &str, hex_is_byte: bool) -> Result<String, String> 
             return Err(format!("truncated escape at position {}", start));
         }
         let h: String = chars[start..start + n].iter().collect();
-        u32::from_str_radix(&h, 16).map_err(|_| format!("invalid hex digits '{h}' at position {start}"))
+        u32::from_str_radix(&h, 16)
+            .map_err(|_| format!("invalid hex digits '{h}' at position {start}"))
     };
     while i < chars.len() {
         let c = chars[i];
@@ -191,7 +217,9 @@ pub fn backslash_unescape(s: &str, hex_is_byte: bool) -> Result<String, String> 
             i += 1;
             continue;
         }
-        let Some(&e) = chars.get(i + 1) else { return Err("trailing backslash".into()) };
+        let Some(&e) = chars.get(i + 1) else {
+            return Err("trailing backslash".into());
+        };
         i += 2;
         match e {
             'n' => bytes.push(b'\n'),
@@ -222,10 +250,16 @@ pub fn backslash_unescape(s: &str, hex_is_byte: bool) -> Result<String, String> 
                 }
             }
             'u' if chars.get(i) == Some(&'{') => {
-                let end = chars[i..].iter().position(|c| *c == '}').ok_or("unterminated \\u{...}")?;
+                let end = chars[i..]
+                    .iter()
+                    .position(|c| *c == '}')
+                    .ok_or("unterminated \\u{...}")?;
                 let v = hex(&chars, i + 1, end - 1)?;
                 i += end + 1;
-                push_char(&mut bytes, char::from_u32(v).ok_or_else(|| format!("invalid code point U+{v:X}"))?);
+                push_char(
+                    &mut bytes,
+                    char::from_u32(v).ok_or_else(|| format!("invalid code point U+{v:X}"))?,
+                );
             }
             'u' => {
                 let v = hex(&chars, i, 4)?;
@@ -249,7 +283,10 @@ pub fn backslash_unescape(s: &str, hex_is_byte: bool) -> Result<String, String> 
             'U' => {
                 let v = hex(&chars, i, 8)?;
                 i += 8;
-                push_char(&mut bytes, char::from_u32(v).ok_or_else(|| format!("invalid code point U+{v:X}"))?);
+                push_char(
+                    &mut bytes,
+                    char::from_u32(v).ok_or_else(|| format!("invalid code point U+{v:X}"))?,
+                );
             }
             '0'..='7' => {
                 let mut v = e.to_digit(8).unwrap();
@@ -265,7 +302,12 @@ pub fn backslash_unescape(s: &str, hex_is_byte: bool) -> Result<String, String> 
                     push_char(&mut bytes, char::from_u32(v).unwrap_or('\u{fffd}'));
                 }
             }
-            other => return Err(format!("unknown escape sequence \\{other} at position {}", i - 2)),
+            other => {
+                return Err(format!(
+                    "unknown escape sequence \\{other} at position {}",
+                    i - 2
+                ))
+            }
         }
     }
     String::from_utf8(bytes).map_err(|_| "unescaped bytes are not valid UTF-8".to_string())
@@ -282,7 +324,9 @@ pub fn csv_escape(s: &str, delim: char) -> String {
 pub fn csv_unescape(s: &str) -> Result<String, String> {
     let t = s.trim();
     if let Some(inner) = t.strip_prefix('"') {
-        let inner = inner.strip_suffix('"').ok_or("quoted field is missing its closing quote")?;
+        let inner = inner
+            .strip_suffix('"')
+            .ok_or("quoted field is missing its closing quote")?;
         let mut out = String::new();
         let mut it = inner.chars().peekable();
         while let Some(c) = it.next() {
@@ -304,7 +348,10 @@ pub fn csv_unescape(s: &str) -> Result<String, String> {
 }
 
 pub fn shell_quote(s: &str) -> String {
-    if !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_./=:,+@%".contains(c)) {
+    if !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_./=:,+@%".contains(c))
+    {
         return s.to_string();
     }
     format!("'{}'", s.replace('\'', "'\\''"))
@@ -407,10 +454,19 @@ mod tests {
             let e = backslash_escape(s, lang);
             assert_eq!(backslash_unescape(&e, lang == Lang::C).unwrap(), s, "{e}");
         }
-        assert_eq!(shell_unquote(&shell_quote("it's a test")).unwrap(), "it's a test");
-        assert_eq!(csv_unescape(&csv_escape("a,\"b\"", ',')).unwrap(), "a,\"b\"");
+        assert_eq!(
+            shell_unquote(&shell_quote("it's a test")).unwrap(),
+            "it's a test"
+        );
+        assert_eq!(
+            csv_unescape(&csv_escape("a,\"b\"", ',')).unwrap(),
+            "a,\"b\""
+        );
         assert_eq!(xml_unescape(&xml_escape("<a & 'b'>")).unwrap(), "<a & 'b'>");
-        assert_eq!(url_decode(&url_encode("a b/ü", false, false), false).unwrap(), "a b/ü");
+        assert_eq!(
+            url_decode(&url_encode("a b/ü", false, false), false).unwrap(),
+            "a b/ü"
+        );
         assert!(url_decode("%zz", false).is_err());
         assert!(url_decode("abc%2", false).is_err());
     }

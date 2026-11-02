@@ -39,10 +39,13 @@ pub fn build_registry(extensions_dir: Option<&Path>) -> (Registry, Vec<Extension
         for t in tools {
             let id = t.spec().id.clone();
             if let Err(e) = reg.register(t) {
-                statuses.iter_mut().filter(|s| s.id.as_deref() == Some(id.as_str())).for_each(|s| {
-                    s.loaded = false;
-                    s.error = Some(e.to_string());
-                });
+                statuses
+                    .iter_mut()
+                    .filter(|s| s.id.as_deref() == Some(id.as_str()))
+                    .for_each(|s| {
+                        s.loaded = false;
+                        s.error = Some(e.to_string());
+                    });
             }
         }
     }
@@ -56,8 +59,16 @@ mod tests {
     fn registry_builds_without_conflicts() {
         let (reg, _) = build_registry(None);
         for spec in reg.specs() {
-            assert!(!spec.description.is_empty(), "{} has no description", spec.id);
-            assert!(spec.id.starts_with(spec.category.id()) || spec.id.contains('.'), "{}", spec.id);
+            assert!(
+                !spec.description.is_empty(),
+                "{} has no description",
+                spec.id
+            );
+            assert!(
+                spec.id.starts_with(spec.category.id()) || spec.id.contains('.'),
+                "{}",
+                spec.id
+            );
         }
     }
 }

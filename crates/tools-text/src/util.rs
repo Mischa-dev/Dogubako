@@ -32,7 +32,12 @@ pub fn detect_encoding(bytes: &[u8]) -> &'static encoding_rs::Encoding {
 pub fn read_file(f: &InputFile) -> ToolResult<Vec<u8>> {
     let size = f.size();
     if size > MAX_TEXT_FILE {
-        return Err(ToolError::limit(format!("'{}' is too large ({}; max {})", f.name, human_size(size), human_size(MAX_TEXT_FILE))));
+        return Err(ToolError::limit(format!(
+            "'{}' is too large ({}; max {})",
+            f.name,
+            human_size(size),
+            human_size(MAX_TEXT_FILE)
+        )));
     }
     std::fs::read(&f.path).ctx(&format!("reading {}", f.name))
 }
@@ -46,12 +51,17 @@ pub fn text_or_file(p: &Params, text: &str, file: &str) -> ToolResult<String> {
     if p.has(text) {
         return Ok(p.text(text).to_string());
     }
-    Err(ToolError::invalid(text, format!("provide text or upload a file ('{file}')")))
+    Err(ToolError::invalid(
+        text,
+        format!("provide text or upload a file ('{file}')"),
+    ))
 }
 
 /// Name of the uploaded file, if any, else a default.
 pub fn input_name(p: &Params, file: &str, default: &str) -> String {
-    p.opt_file(file).map(|f| f.name.clone()).unwrap_or_else(|| default.to_string())
+    p.opt_file(file)
+        .map(|f| f.name.clone())
+        .unwrap_or_else(|| default.to_string())
 }
 
 /// Split into lines, remembering whether the text ended with a newline.
@@ -61,13 +71,20 @@ pub fn split_lines(text: &str) -> (Vec<&str>, bool) {
     }
     let trailing = text.ends_with('\n');
     let body = text.strip_suffix('\n').unwrap_or(text);
-    let lines = body.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l)).collect();
+    let lines = body
+        .split('\n')
+        .map(|l| l.strip_suffix('\r').unwrap_or(l))
+        .collect();
     (lines, trailing)
 }
 
 /// Join lines with `\n`, re-adding a trailing newline if requested.
 pub fn join_lines<S: AsRef<str>>(lines: &[S], trailing: bool) -> String {
-    let mut s = lines.iter().map(|l| l.as_ref()).collect::<Vec<_>>().join("\n");
+    let mut s = lines
+        .iter()
+        .map(|l| l.as_ref())
+        .collect::<Vec<_>>()
+        .join("\n");
     if trailing && !lines.is_empty() {
         s.push('\n');
     }
@@ -83,17 +100,17 @@ pub fn table_owned(columns: &[String], rows: Vec<Vec<Value>>) -> Value {
     json!({"columns": columns, "rows": rows})
 }
 
-/// Pretty JSON string.
-pub fn pretty(v: &Value) -> String {
-    serde_json::to_string_pretty(v).unwrap_or_default()
-}
-
 /// Line and column (1-based) of a byte offset.
 pub fn line_col(text: &str, offset: usize) -> (usize, usize) {
     let offset = offset.min(text.len());
     let before = &text[..floor_char(text, offset)];
     let line = before.matches('\n').count() + 1;
-    let col = before.rsplit('\n').next().map(|l| l.chars().count()).unwrap_or(0) + 1;
+    let col = before
+        .rsplit('\n')
+        .next()
+        .map(|l| l.chars().count())
+        .unwrap_or(0)
+        + 1;
     (line, col)
 }
 
@@ -126,7 +143,11 @@ pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
                 }
                 let ta = na.trim_start_matches('0');
                 let tb = nb.trim_start_matches('0');
-                let o = ta.len().cmp(&tb.len()).then_with(|| ta.cmp(tb)).then_with(|| na.len().cmp(&nb.len()));
+                let o = ta
+                    .len()
+                    .cmp(&tb.len())
+                    .then_with(|| ta.cmp(tb))
+                    .then_with(|| na.len().cmp(&nb.len()));
                 if o != Ordering::Equal {
                     return o;
                 }
@@ -190,7 +211,8 @@ pub fn infer_value(s: &str) -> Value {
         }
         if t.chars().any(|c| c.is_ascii_digit()) && !t.contains(['x', 'X']) {
             if let Ok(f) = t.parse::<f64>() {
-                if f.is_finite() && !t.eq_ignore_ascii_case("inf") && !t.eq_ignore_ascii_case("nan") {
+                if f.is_finite() && !t.eq_ignore_ascii_case("inf") && !t.eq_ignore_ascii_case("nan")
+                {
                     return json!(f);
                 }
             }

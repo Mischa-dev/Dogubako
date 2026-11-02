@@ -27,9 +27,15 @@ impl AppDirs {
         let base = if cfg!(target_os = "macos") {
             home().join("Library/Application Support/Dogubako")
         } else if cfg!(windows) {
-            std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(home).join("Dogubako")
+            std::env::var_os("APPDATA")
+                .map(PathBuf::from)
+                .unwrap_or_else(home)
+                .join("Dogubako")
         } else {
-            std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).unwrap_or_else(|| home().join(".local/share")).join("dogubako")
+            std::env::var_os("XDG_DATA_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home().join(".local/share"))
+                .join("dogubako")
         };
         Self::under(base)
     }

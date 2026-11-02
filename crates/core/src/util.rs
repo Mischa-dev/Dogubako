@@ -87,7 +87,10 @@ pub fn random_id(bytes: usize) -> String {
 
 /// Replace the extension of a file name.
 pub fn with_extension(name: &str, ext: &str) -> String {
-    let stem = Path::new(name).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "output".into());
+    let stem = Path::new(name)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "output".into());
     if ext.is_empty() {
         stem
     } else {
@@ -98,7 +101,10 @@ pub fn with_extension(name: &str, ext: &str) -> String {
 /// `photo.jpg` + `small` → `photo-small.jpg` (optionally changing extension).
 pub fn suffixed(name: &str, suffix: &str, ext: Option<&str>) -> String {
     let p = Path::new(name);
-    let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "output".into());
+    let stem = p
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "output".into());
     let ext = ext
         .map(|e| e.trim_start_matches('.').to_string())
         .or_else(|| p.extension().map(|e| e.to_string_lossy().to_string()))

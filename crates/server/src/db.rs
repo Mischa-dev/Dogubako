@@ -8,7 +8,10 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
 pub fn now() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 pub struct Db {
@@ -205,7 +208,9 @@ impl Db {
         for m in MIGRATIONS {
             conn.execute_batch(m)?;
         }
-        Ok(Db { conn: Mutex::new(conn) })
+        Ok(Db {
+            conn: Mutex::new(conn),
+        })
     }
 
     fn c(&self) -> MutexGuard<'_, Connection> {
@@ -214,10 +219,24 @@ impl Db {
 
     // ---- users
     pub fn user_count(&self) -> i64 {
-        self.c().query_row("SELECT COUNT(*) FROM users WHERE role != 'agent'", [], |r| r.get(0)).unwrap_or(0)
+        self.c()
+            .query_row(
+                "SELECT COUNT(*) FROM users WHERE role != 'agent'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0)
     }
 
-    pub fn create_user(&self, id: &str, username: &str, password_hash: Option<&str>, role: Role, policy: &Policy, description: &str) -> rusqlite::Result<()> {
+    pub fn create_user(
+        &self,
+        id: &str,
+        username: &str,
+        password_hash: Option<&str>,
+        role: Role,
+        policy: &Policy,
+        description: &str,
+    ) -> rusqlite::Result<()> {
         self.c().execute(
             "INSERT INTO users (id, username, password_hash, role, policy, description, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![id, username, password_hash, role.as_str(), serde_json::to_string(policy).unwrap(), description, now()],
@@ -226,17 +245,33 @@ impl Db {
     }
 
     pub fn user_by_name(&self, username: &str) -> Option<UserRow> {
-        self.c().query_row("SELECT * FROM users WHERE username = ?1", [username], user_from_row).optional().ok().flatten()
+        self.c()
+            .query_row(
+                "SELECT * FROM users WHERE username = ?1",
+                [username],
+                user_from_row,
+            )
+            .optional()
+            .ok()
+            .flatten()
     }
 
     pub fn user(&self, id: &str) -> Option<UserRow> {
-        self.c().query_row("SELECT * FROM users WHERE id = ?1", [id], user_from_row).optional().ok().flatten()
+        self.c()
+            .query_row("SELECT * FROM users WHERE id = ?1", [id], user_from_row)
+            .optional()
+            .ok()
+            .flatten()
     }
 
     pub fn users(&self) -> Vec<UserRow> {
         let c = self.c();
-        let mut st = c.prepare("SELECT * FROM users ORDER BY role, username").unwrap();
-        st.query_map([], user_from_row).map(|it| it.flatten().collect()).unwrap_or_default()
+        let mut st = c
+            .prepare("SELECT * FROM users ORDER BY role, username")
+            .unwrap();
+        st.query_map([], user_from_row)
+            .map(|it| it.flatten().collect())
+            .unwrap_or_default()
     }
 
     pub fn update_user(&self, u: &UserRow) -> rusqlite::Result<()> {
@@ -249,7 +284,10 @@ impl Db {
 
     pub fn set_password(&self, id: &str, hash: &str) -> rusqlite::Result<()> {
         let c = self.c();
-        c.execute("UPDATE users SET password_hash = ?2 WHERE id = ?1", params![id, hash])?;
+        c.execute(
+            "UPDATE users SET password_hash = ?2 WHERE id = ?1",
+            params![id, hash],
+        )?;
         c.execute("DELETE FROM sessions WHERE user_id = ?1", [id])?;
         Ok(())
     }
@@ -260,11 +298,22 @@ impl Db {
     }
 
     pub fn touch_user(&self, id: &str) {
-        let _ = self.c().execute("UPDATE users SET last_seen_at = ?2 WHERE id = ?1", params![id, now()]);
+        let _ = self.c().execute(
+            "UPDATE users SET last_seen_at = ?2 WHERE id = ?1",
+            params![id, now()],
+        );
     }
 
     // ---- sessions
-    pub fn create_session(&self, id_hash: &str, user_id: &str, csrf: &str, ttl_secs: i64, ip: &str, ua: &str) -> rusqlite::Result<()> {
+    pub fn create_session(
+        &self,
+        id_hash: &str,
+        user_id: &str,
+        csrf: &str,
+        ttl_secs: i64,
+        ip: &str,
+        ua: &str,
+    ) -> rusqlite::Result<()> {
         let n = now();
         self.c().execute(
             "INSERT INTO sessions (id_hash, user_id, csrf, created_at, expires_at, ip, user_agent) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -277,22 +326,41 @@ impl Db {
     pub fn session_user(&self, id_hash: &str) -> Option<(UserRow, String)> {
         let c = self.c();
         let row: Option<(String, String)> = c
-            .query_row("SELECT user_id, csrf FROM sessions WHERE id_hash = ?1 AND expires_at > ?2", params![id_hash, now()], |r| Ok((r.get(0)?, r.get(1)?)))
+            .query_row(
+                "SELECT user_id, csrf FROM sessions WHERE id_hash = ?1 AND expires_at > ?2",
+                params![id_hash, now()],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
             .optional()
             .ok()
             .flatten();
         let (uid, csrf) = row?;
-        let user = c.query_row("SELECT * FROM users WHERE id = ?1", [uid], user_from_row).optional().ok().flatten()?;
+        let user = c
+            .query_row("SELECT * FROM users WHERE id = ?1", [uid], user_from_row)
+            .optional()
+            .ok()
+            .flatten()?;
         Some((user, csrf))
     }
 
     pub fn delete_session(&self, id_hash: &str) {
-        let _ = self.c().execute("DELETE FROM sessions WHERE id_hash = ?1", [id_hash]);
+        let _ = self
+            .c()
+            .execute("DELETE FROM sessions WHERE id_hash = ?1", [id_hash]);
     }
 
     // ---- tokens
     #[allow(clippy::too_many_arguments)]
-    pub fn create_token(&self, id: &str, user_id: &str, name: &str, hash: &str, prefix: &str, scope: Option<&Policy>, expires_at: Option<i64>) -> rusqlite::Result<()> {
+    pub fn create_token(
+        &self,
+        id: &str,
+        user_id: &str,
+        name: &str,
+        hash: &str,
+        prefix: &str,
+        scope: Option<&Policy>,
+        expires_at: Option<i64>,
+    ) -> rusqlite::Result<()> {
         self.c().execute(
             "INSERT INTO tokens (id, user_id, name, token_hash, prefix, scope, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![id, user_id, name, hash, prefix, scope.map(|s| serde_json::to_string(s).unwrap()), now(), expires_at],
@@ -313,8 +381,15 @@ impl Db {
             .ok()
             .flatten();
         let (tid, uid, scope) = row?;
-        let user = c.query_row("SELECT * FROM users WHERE id = ?1", [uid], user_from_row).optional().ok().flatten()?;
-        let _ = c.execute("UPDATE tokens SET last_used_at = ?2 WHERE id = ?1", params![tid, now()]);
+        let user = c
+            .query_row("SELECT * FROM users WHERE id = ?1", [uid], user_from_row)
+            .optional()
+            .ok()
+            .flatten()?;
+        let _ = c.execute(
+            "UPDATE tokens SET last_used_at = ?2 WHERE id = ?1",
+            params![tid, now()],
+        );
         Some((user, tid, scope.and_then(|s| serde_json::from_str(&s).ok())))
     }
 
@@ -342,11 +417,18 @@ impl Db {
     }
 
     pub fn token_owner(&self, id: &str) -> Option<String> {
-        self.c().query_row("SELECT user_id FROM tokens WHERE id = ?1", [id], |r| r.get(0)).optional().ok().flatten()
+        self.c()
+            .query_row("SELECT user_id FROM tokens WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .optional()
+            .ok()
+            .flatten()
     }
 
     pub fn revoke_token(&self, id: &str) -> rusqlite::Result<usize> {
-        self.c().execute("UPDATE tokens SET revoked = 1 WHERE id = ?1", [id])
+        self.c()
+            .execute("UPDATE tokens SET revoked = 1 WHERE id = ?1", [id])
     }
 
     // ---- files
@@ -359,19 +441,31 @@ impl Db {
     }
 
     pub fn file(&self, id: &str) -> Option<StoredFile> {
-        self.c().query_row("SELECT * FROM files WHERE id = ?1", [id], file_from_row).optional().ok().flatten()
+        self.c()
+            .query_row("SELECT * FROM files WHERE id = ?1", [id], file_from_row)
+            .optional()
+            .ok()
+            .flatten()
     }
 
     pub fn files(&self, owner: &str, limit: i64) -> Vec<StoredFile> {
         let c = self.c();
-        let mut st = c.prepare("SELECT * FROM files WHERE owner_id = ?1 ORDER BY created_at DESC LIMIT ?2").unwrap();
-        st.query_map(params![owner, limit], file_from_row).map(|it| it.flatten().collect()).unwrap_or_default()
+        let mut st = c
+            .prepare("SELECT * FROM files WHERE owner_id = ?1 ORDER BY created_at DESC LIMIT ?2")
+            .unwrap();
+        st.query_map(params![owner, limit], file_from_row)
+            .map(|it| it.flatten().collect())
+            .unwrap_or_default()
     }
 
     pub fn files_for_job(&self, job_id: &str) -> Vec<StoredFile> {
         let c = self.c();
-        let mut st = c.prepare("SELECT * FROM files WHERE job_id = ?1 ORDER BY rowid").unwrap();
-        st.query_map([job_id], file_from_row).map(|it| it.flatten().collect()).unwrap_or_default()
+        let mut st = c
+            .prepare("SELECT * FROM files WHERE job_id = ?1 ORDER BY rowid")
+            .unwrap();
+        st.query_map([job_id], file_from_row)
+            .map(|it| it.flatten().collect())
+            .unwrap_or_default()
     }
 
     pub fn delete_file(&self, id: &str) -> rusqlite::Result<()> {
@@ -380,13 +474,23 @@ impl Db {
     }
 
     pub fn storage_used(&self, owner: &str) -> u64 {
-        self.c().query_row("SELECT COALESCE(SUM(size), 0) FROM files WHERE owner_id = ?1", [owner], |r| r.get::<_, i64>(0)).unwrap_or(0) as u64
+        self.c()
+            .query_row(
+                "SELECT COALESCE(SUM(size), 0) FROM files WHERE owner_id = ?1",
+                [owner],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap_or(0) as u64
     }
 
     pub fn expired_files(&self) -> Vec<StoredFile> {
         let c = self.c();
-        let mut st = c.prepare("SELECT * FROM files WHERE expires_at IS NOT NULL AND expires_at < ?1").unwrap();
-        st.query_map([now()], file_from_row).map(|it| it.flatten().collect()).unwrap_or_default()
+        let mut st = c
+            .prepare("SELECT * FROM files WHERE expires_at IS NOT NULL AND expires_at < ?1")
+            .unwrap();
+        st.query_map([now()], file_from_row)
+            .map(|it| it.flatten().collect())
+            .unwrap_or_default()
     }
 
     pub fn files_of_owner(&self, owner: &str) -> Vec<StoredFile> {
@@ -418,13 +522,19 @@ impl Db {
     }
 
     pub fn job(&self, id: &str) -> Option<JobView> {
-        self.c().query_row("SELECT * FROM jobs WHERE id = ?1", [id], job_from_row).optional().ok().flatten()
+        self.c()
+            .query_row("SELECT * FROM jobs WHERE id = ?1", [id], job_from_row)
+            .optional()
+            .ok()
+            .flatten()
     }
 
     pub fn jobs(&self, owner: Option<&str>, limit: i64) -> Vec<JobView> {
         let c = self.c();
         let mut st = c.prepare("SELECT * FROM jobs WHERE (?1 IS NULL OR owner_id = ?1) ORDER BY created_at DESC LIMIT ?2").unwrap();
-        st.query_map(params![owner, limit], job_from_row).map(|it| it.flatten().collect()).unwrap_or_default()
+        st.query_map(params![owner, limit], job_from_row)
+            .map(|it| it.flatten().collect())
+            .unwrap_or_default()
     }
 
     pub fn delete_job(&self, id: &str) -> rusqlite::Result<()> {
@@ -434,22 +544,40 @@ impl Db {
 
     /// Mark jobs left running by a previous process as failed.
     pub fn fail_orphaned_jobs(&self) -> usize {
-        let err = serde_json::to_string(&dogubako_core::error::ToolError::failed("server restarted while the job was running")).unwrap();
+        let err = serde_json::to_string(&dogubako_core::error::ToolError::failed(
+            "server restarted while the job was running",
+        ))
+        .unwrap();
         self.c()
             .execute("UPDATE jobs SET status = 'failed', error = ?1, finished_at = ?2 WHERE status IN ('queued', 'running')", params![err, now()])
             .unwrap_or(0)
     }
 
     pub fn purge_jobs_before(&self, ts: i64) -> usize {
-        self.c().execute("DELETE FROM jobs WHERE created_at < ?1 AND status NOT IN ('queued','running')", [ts]).unwrap_or(0)
+        self.c()
+            .execute(
+                "DELETE FROM jobs WHERE created_at < ?1 AND status NOT IN ('queued','running')",
+                [ts],
+            )
+            .unwrap_or(0)
     }
 
     pub fn purge_sessions(&self) -> usize {
-        self.c().execute("DELETE FROM sessions WHERE expires_at < ?1", [now()]).unwrap_or(0)
+        self.c()
+            .execute("DELETE FROM sessions WHERE expires_at < ?1", [now()])
+            .unwrap_or(0)
     }
 
     // ---- audit
-    pub fn audit(&self, actor: &str, action: &str, target: &str, outcome: &str, ip: &str, detail: &str) {
+    pub fn audit(
+        &self,
+        actor: &str,
+        action: &str,
+        target: &str,
+        outcome: &str,
+        ip: &str,
+        detail: &str,
+    ) {
         let _ = self.c().execute(
             "INSERT INTO audit (ts, actor, action, target, outcome, ip, detail) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![now(), actor, action, target, outcome, ip, detail],
@@ -458,7 +586,9 @@ impl Db {
 
     pub fn audit_log(&self, limit: i64, before: Option<i64>) -> Vec<AuditRow> {
         let c = self.c();
-        let mut st = c.prepare("SELECT * FROM audit WHERE (?2 IS NULL OR id < ?2) ORDER BY id DESC LIMIT ?1").unwrap();
+        let mut st = c
+            .prepare("SELECT * FROM audit WHERE (?2 IS NULL OR id < ?2) ORDER BY id DESC LIMIT ?1")
+            .unwrap();
         st.query_map(params![limit, before], |r| {
             Ok(AuditRow {
                 id: r.get("id")?,
@@ -476,12 +606,20 @@ impl Db {
     }
 
     pub fn purge_audit_before(&self, ts: i64) -> usize {
-        self.c().execute("DELETE FROM audit WHERE ts < ?1", [ts]).unwrap_or(0)
+        self.c()
+            .execute("DELETE FROM audit WHERE ts < ?1", [ts])
+            .unwrap_or(0)
     }
 
     // ---- settings
     pub fn setting(&self, key: &str) -> Option<String> {
-        self.c().query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).optional().ok().flatten()
+        self.c()
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                r.get(0)
+            })
+            .optional()
+            .ok()
+            .flatten()
     }
 
     pub fn set_setting(&self, key: &str, value: &str) {

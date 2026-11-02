@@ -66,11 +66,21 @@ pub fn param_schema(p: &ParamSpec, file_mode: &str) -> Value {
                 json!({"type": "string", "enum": vals})
             }
         }
-        ParamKind::Color => json!({"type": "string", "pattern": "^#?([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"}),
+        ParamKind::Color => {
+            json!({"type": "string", "pattern": "^#?([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"})
+        }
         ParamKind::File { multiple, accept } => {
-            let what = if file_mode == "path" { "Local file path" } else { "File id returned by the upload endpoint or a previous job (e.g. 'f_...')" };
+            let what = if file_mode == "path" {
+                "Local file path"
+            } else {
+                "File id returned by the upload endpoint or a previous job (e.g. 'f_...')"
+            };
             let item = json!({"type": "string", "description": what});
-            let mut s = if *multiple { json!({"type": "array", "items": item, "minItems": 1}) } else { item };
+            let mut s = if *multiple {
+                json!({"type": "array", "items": item, "minItems": 1})
+            } else {
+                item
+            };
             if !accept.is_empty() {
                 s["x-accept"] = json!(accept);
             }

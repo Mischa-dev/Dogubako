@@ -88,7 +88,7 @@ fn dir_size() -> Arc<dyn Tool> {
             Ok(())
         })?;
         let mut v: Vec<_> = children.into_iter().collect();
-        v.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+        v.sort_by_key(|x| std::cmp::Reverse(x.1 .0));
         let rows: Vec<Value> = v
             .iter()
             .take(5000)
@@ -172,7 +172,7 @@ fn large_files() -> Arc<dyn Tool> {
             Ok(())
         })?;
         let mut v: Vec<_> = heap.into_iter().map(|Reverse(x)| x).collect();
-        v.sort_by(|a, b| b.0.cmp(&a.0));
+        v.sort_by_key(|x| std::cmp::Reverse(x.0));
         let total: u64 = v.iter().map(|x| x.0).sum();
         let rows: Vec<Value> = v
             .into_iter()
@@ -228,7 +228,7 @@ fn find_duplicates(ctx: &ToolContext, cands: Vec<Cand>) -> ToolResult<ToolOutput
         let mut by_partial: HashMap<[u8; 32], Vec<Cand>> = HashMap::new();
         for c in g {
             hashed += 1;
-            if hashed % 32 == 0 {
+            if hashed.is_multiple_of(32) {
                 ctx.check_cancelled()?;
                 ctx.progress(hashed as f32 / to_hash as f32, c.label.clone());
             }
@@ -536,7 +536,7 @@ fn remove_empty() -> Arc<dyn Tool> {
         }
         if kind != "files" {
             let mut dirs = scan.dirs.clone();
-            dirs.sort_by(|a, b| b.2.cmp(&a.2)); // deepest first
+            dirs.sort_by_key(|x| std::cmp::Reverse(x.2)); // deepest first
             for (r, path, _) in dirs {
                 act(r, &path, true);
             }

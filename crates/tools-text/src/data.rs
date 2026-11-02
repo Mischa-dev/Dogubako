@@ -5,7 +5,20 @@ use dogubako_core::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 pub fn tools() -> Vec<Arc<dyn Tool>> {
-    vec![csv_view(), csv_filter_sort(), csv_to_json(), json_to_csv(), spreadsheet(), delimiter(), columns(), validate(), duplicates(), stats(), clean(), convert()]
+    vec![
+        csv_view(),
+        csv_filter_sort(),
+        csv_to_json(),
+        json_to_csv(),
+        spreadsheet(),
+        delimiter(),
+        columns(),
+        validate(),
+        duplicates(),
+        stats(),
+        clean(),
+        convert(),
+    ]
 }
 
 /// A parsed table of strings.
@@ -30,13 +43,25 @@ impl Table {
                 return Ok(i - 1);
             }
         }
-        Err(ToolError::invalid("column", format!("no column named '{n}' (columns: {})", self.headers.join(", "))))
+        Err(ToolError::invalid(
+            "column",
+            format!(
+                "no column named '{n}' (columns: {})",
+                self.headers.join(", ")
+            ),
+        ))
     }
     pub fn cols(&self, list: &str) -> ToolResult<Vec<usize>> {
         split_list(list).iter().map(|c| self.col(c)).collect()
     }
     fn normalize(&mut self) {
-        let w = self.rows.iter().map(|r| r.len()).max().unwrap_or(0).max(self.headers.len());
+        let w = self
+            .rows
+            .iter()
+            .map(|r| r.len())
+            .max()
+            .unwrap_or(0)
+            .max(self.headers.len());
         for i in self.headers.len()..w {
             self.headers.push(format!("column{}", i + 1));
         }
@@ -45,25 +70,42 @@ impl Table {
         }
     }
     pub fn preview(&self, offset: usize, limit: usize) -> Value {
-        let rows: Vec<Vec<Value>> = self.rows.iter().skip(offset).take(limit).map(|r| r.iter().map(|c| json!(c)).collect()).collect();
+        let rows: Vec<Vec<Value>> = self
+            .rows
+            .iter()
+            .skip(offset)
+            .take(limit)
+            .map(|r| r.iter().map(|c| json!(c)).collect())
+            .collect();
         table_owned(&self.headers, rows)
     }
 }
 
 pub fn split_list(s: &str) -> Vec<String> {
-    s.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()
+    s.split(',')
+        .map(|x| x.trim().to_string())
+        .filter(|x| !x.is_empty())
+        .collect()
 }
 
 /// Guess the delimiter from the first lines.
 pub fn sniff_delimiter(text: &str) -> u8 {
-    let sample: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).take(20).collect();
+    let sample: Vec<&str> = text
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .take(20)
+        .collect();
     let mut best = (b',', 0.0f64);
-    for d in [b',', b'\t', b';', b'|'] {
-        let counts: Vec<usize> = sample.iter().map(|l| count_outside_quotes(l, d as char)).collect();
+    for d in *b",\t;|" {
+        let counts: Vec<usize> = sample
+            .iter()
+            .map(|l| count_outside_quotes(l, d as char))
+            .collect();
         if counts.is_empty() || counts[0] == 0 {
             continue;
         }
-        let consistent = counts.iter().filter(|c| **c == counts[0]).count() as f64 / counts.len() as f64;
+        let consistent =
+            counts.iter().filter(|c| **c == counts[0]).count() as f64 / counts.len() as f64;
         let score = consistent * 10.0 + counts[0] as f64 * 0.01;
         if score > best.1 {
             best = (d, score);
@@ -74,28 +116,47 @@ pub fn sniff_delimiter(text: &str) -> u8 {
 
 fn count_outside_quotes(line: &str, d: char) -> usize {
     let mut q = false;
-    line.chars().filter(|c| {
-        if *c == '"' {
-            q = !q;
-        }
-        !q && *c == d
-    })
-    .count()
+    line.chars()
+        .filter(|c| {
+            if *c == '"' {
+                q = !q;
+            }
+            !q && *c == d
+        })
+        .count()
 }
 
 pub fn parse_csv(text: &str, delim: u8, has_header: bool) -> ToolResult<Table> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    let mut rdr = csv::ReaderBuilder::new().delimiter(delim).has_headers(false).flexible(true).from_reader(text.as_bytes());
+    if text.matches('"').count() % 2 == 1 {
+        return Err(ToolError::invalid(
+            "text",
+            "malformed CSV: a quoted field is never closed (unbalanced \")",
+        ));
+    }
+    let mut rdr = csv::ReaderBuilder::new()
+        .delimiter(delim)
+        .has_headers(false)
+        .flexible(true)
+        .from_reader(text.as_bytes());
     let mut rows: Vec<Vec<String>> = vec![];
     for (i, rec) in rdr.records().enumerate() {
-        let rec = rec.map_err(|e| ToolError::invalid("text", format!("CSV error near record {}: {e}", i + 1)))?;
+        let rec = rec.map_err(|e| {
+            ToolError::invalid("text", format!("CSV error near record {}: {e}", i + 1))
+        })?;
         rows.push(rec.iter().map(|s| s.to_string()).collect());
     }
     let mut t = if has_header && !rows.is_empty() {
         let headers = rows.remove(0);
-        Table { headers: dedupe_headers(headers), rows }
+        Table {
+            headers: dedupe_headers(headers),
+            rows,
+        }
     } else {
-        Table { headers: vec![], rows }
+        Table {
+            headers: vec![],
+            rows,
+        }
     };
     t.normalize();
     Ok(t)
@@ -106,7 +167,11 @@ fn dedupe_headers(h: Vec<String>) -> Vec<String> {
     h.into_iter()
         .enumerate()
         .map(|(i, s)| {
-            let base = if s.trim().is_empty() { format!("column{}", i + 1) } else { s.trim().to_string() };
+            let base = if s.trim().is_empty() {
+                format!("column{}", i + 1)
+            } else {
+                s.trim().to_string()
+            };
             let n = seen.entry(base.clone()).or_insert(0);
             *n += 1;
             if *n > 1 {
@@ -121,8 +186,12 @@ fn dedupe_headers(h: Vec<String>) -> Vec<String> {
 /// Heuristic: the first row is a header if it has no numeric cells while later rows do,
 /// or if all its cells are distinct non-empty strings.
 fn looks_like_header(text: &str, delim: u8) -> bool {
-    let Ok(t) = parse_csv(text, delim, false) else { return true };
-    let Some(first) = t.rows.first() else { return true };
+    let Ok(t) = parse_csv(text, delim, false) else {
+        return true;
+    };
+    let Some(first) = t.rows.first() else {
+        return true;
+    };
     let numeric = |s: &str| parse_number(s).is_some();
     if first.iter().any(|c| numeric(c)) {
         return false;
@@ -134,12 +203,34 @@ fn looks_like_header(text: &str, delim: u8) -> bool {
     distinct.len() == first.len()
 }
 
-pub fn write_csv(headers: &[String], rows: &[Vec<String>], delim: u8, always_quote: bool) -> ToolResult<String> {
-    write_csv_style(headers, rows, delim, if always_quote { csv::QuoteStyle::Always } else { csv::QuoteStyle::Necessary })
+pub fn write_csv(
+    headers: &[String],
+    rows: &[Vec<String>],
+    delim: u8,
+    always_quote: bool,
+) -> ToolResult<String> {
+    write_csv_style(
+        headers,
+        rows,
+        delim,
+        if always_quote {
+            csv::QuoteStyle::Always
+        } else {
+            csv::QuoteStyle::Necessary
+        },
+    )
 }
 
-pub fn write_csv_style(headers: &[String], rows: &[Vec<String>], delim: u8, style: csv::QuoteStyle) -> ToolResult<String> {
-    let mut w = csv::WriterBuilder::new().delimiter(delim).quote_style(style).from_writer(vec![]);
+pub fn write_csv_style(
+    headers: &[String],
+    rows: &[Vec<String>],
+    delim: u8,
+    style: csv::QuoteStyle,
+) -> ToolResult<String> {
+    let mut w = csv::WriterBuilder::new()
+        .delimiter(delim)
+        .quote_style(style)
+        .from_writer(vec![]);
     if !headers.is_empty() {
         w.write_record(headers).ctx("writing CSV")?;
     }
@@ -169,28 +260,53 @@ pub fn flatten_records(items: &[Value], sep: &str) -> (Vec<String>, Vec<Vec<Stri
     flatten_records_with(items, sep, "index")
 }
 
-pub fn flatten_records_with(items: &[Value], sep: &str, arrays: &str) -> (Vec<String>, Vec<Vec<String>>) {
+pub fn flatten_records_with(
+    items: &[Value],
+    sep: &str,
+    arrays: &str,
+) -> (Vec<String>, Vec<Vec<String>>) {
     fn walk(prefix: &str, v: &Value, sep: &str, arrays: &str, out: &mut Vec<(String, String)>) {
         match v {
             Value::Object(m) if !m.is_empty() => {
                 for (k, x) in m {
-                    let key = if prefix.is_empty() { k.clone() } else { format!("{prefix}{sep}{k}") };
+                    let key = if prefix.is_empty() {
+                        k.clone()
+                    } else {
+                        format!("{prefix}{sep}{k}")
+                    };
                     walk(&key, x, sep, arrays, out);
                 }
             }
             Value::Array(a) if !a.is_empty() => match arrays {
-                "join" if a.iter().all(|x| !x.is_object() && !x.is_array()) => out.push((prefix.to_string(), a.iter().map(cell_string).collect::<Vec<_>>().join("; "))),
-                "json" => out.push((prefix.to_string(), serde_json::to_string(v).unwrap_or_default())),
+                "join" if a.iter().all(|x| !x.is_object() && !x.is_array()) => out.push((
+                    prefix.to_string(),
+                    a.iter().map(cell_string).collect::<Vec<_>>().join("; "),
+                )),
+                "json" => out.push((
+                    prefix.to_string(),
+                    serde_json::to_string(v).unwrap_or_default(),
+                )),
                 _ => {
                     for (i, x) in a.iter().enumerate() {
-                        let key = if prefix.is_empty() { i.to_string() } else { format!("{prefix}{sep}{i}") };
+                        let key = if prefix.is_empty() {
+                            i.to_string()
+                        } else {
+                            format!("{prefix}{sep}{i}")
+                        };
                         walk(&key, x, sep, arrays, out);
                     }
                 }
             },
             Value::Object(_) => out.push((prefix.to_string(), "{}".into())),
             Value::Array(_) => out.push((prefix.to_string(), "[]".into())),
-            other => out.push((if prefix.is_empty() { "value".into() } else { prefix.to_string() }, cell_string(other))),
+            other => out.push((
+                if prefix.is_empty() {
+                    "value".into()
+                } else {
+                    prefix.to_string()
+                },
+                cell_string(other),
+            )),
         }
     }
     let mut cols: Vec<String> = vec![];
@@ -225,7 +341,12 @@ fn delim_param(name: &str, auto: bool) -> ParamSpec {
     if auto {
         opts.push(("auto", "Auto-detect"));
     }
-    opts.extend([("comma", "Comma ,"), ("tab", "Tab"), ("semicolon", "Semicolon ;"), ("pipe", "Pipe |")]);
+    opts.extend([
+        ("comma", "Comma ,"),
+        ("tab", "Tab"),
+        ("semicolon", "Semicolon ;"),
+        ("pipe", "Pipe |"),
+    ]);
     ParamSpec::choice(name, &opts).default_str(if auto { "auto" } else { "comma" })
 }
 
@@ -241,10 +362,24 @@ fn delim_byte(s: &str) -> Option<u8> {
 
 fn input_params() -> Vec<ParamSpec> {
     vec![
-        ParamSpec::file("file").label("File").primary().accept(&[".csv", ".tsv", ".txt", ".json", ".ndjson", ".jsonl", ".xlsx", ".xls", ".xlsb", ".ods", "text/*"]),
-        ParamSpec::textarea("text").label("Or paste CSV").syntax("csv"),
+        ParamSpec::file("file").label("File").primary().accept(&[
+            ".csv", ".tsv", ".txt", ".json", ".ndjson", ".jsonl", ".xlsx", ".xls", ".xlsb", ".ods",
+            "text/*",
+        ]),
+        ParamSpec::textarea("text")
+            .label("Or paste CSV")
+            .syntax("csv"),
         delim_param("delimiter", true).advanced(),
-        ParamSpec::choice("header", &[("auto", "Auto-detect"), ("yes", "First row is a header"), ("no", "No header")]).default_str("auto").advanced(),
+        ParamSpec::choice(
+            "header",
+            &[
+                ("auto", "Auto-detect"),
+                ("yes", "First row is a header"),
+                ("no", "No header"),
+            ],
+        )
+        .default_str("auto")
+        .advanced(),
     ]
 }
 
@@ -257,19 +392,36 @@ pub fn load_table(p: &Params) -> ToolResult<(Table, String)> {
             use calamine::Reader;
             let mut book = crate::sheet::open(f)?;
             let names = book.sheet_names();
-            let first = names.first().ok_or_else(|| ToolError::invalid("file", "workbook has no sheets"))?.clone();
+            let first = names
+                .first()
+                .ok_or_else(|| ToolError::invalid("file", "workbook has no sheets"))?
+                .clone();
             let rows = crate::sheet::sheet_rows(&mut book, &first)?;
-            return Ok((table_from_cells(rows.iter().map(|r| r.iter().map(crate::sheet::cell_text).collect()).collect(), header_mode != "no"), f.name.clone()));
+            return Ok((
+                table_from_cells(
+                    rows.iter()
+                        .map(|r| r.iter().map(crate::sheet::cell_text).collect())
+                        .collect(),
+                    header_mode != "no",
+                ),
+                f.name.clone(),
+            ));
         }
         let text = decode_bytes(&read_file(f)?).0;
         if matches!(ext.as_str(), "json" | "ndjson" | "jsonl") {
             return Ok((json_table(&text)?, f.name.clone()));
         }
-        return Ok((parse_text_table(&text, p, header_mode, ext == "tsv")?, f.name.clone()));
+        return Ok((
+            parse_text_table(&text, p, header_mode, ext == "tsv")?,
+            f.name.clone(),
+        ));
     }
     let text = p.text("text");
     if text.trim().is_empty() {
-        return Err(ToolError::invalid("text", "paste CSV text or upload a file"));
+        return Err(ToolError::invalid(
+            "text",
+            "paste CSV text or upload a file",
+        ));
     }
     let t = text.trim_start();
     if (t.starts_with('[') || t.starts_with('{')) && p.str_or("delimiter", "auto") == "auto" {
@@ -277,7 +429,10 @@ pub fn load_table(p: &Params) -> ToolResult<(Table, String)> {
             return Ok((tab, "data.csv".into()));
         }
     }
-    Ok((parse_text_table(text, p, header_mode, false)?, "data.csv".into()))
+    Ok((
+        parse_text_table(text, p, header_mode, false)?,
+        "data.csv".into(),
+    ))
 }
 
 fn parse_text_table(text: &str, p: &Params, header_mode: &str, tsv: bool) -> ToolResult<Table> {
@@ -297,9 +452,15 @@ fn parse_text_table(text: &str, p: &Params, header_mode: &str, tsv: bool) -> Too
 fn table_from_cells(mut rows: Vec<Vec<String>>, header: bool) -> Table {
     let mut t = if header && !rows.is_empty() {
         let h = rows.remove(0);
-        Table { headers: dedupe_headers(h), rows }
+        Table {
+            headers: dedupe_headers(h),
+            rows,
+        }
     } else {
-        Table { headers: vec![], rows }
+        Table {
+            headers: vec![],
+            rows,
+        }
     };
     t.normalize();
     t
@@ -312,7 +473,13 @@ pub fn json_table(text: &str) -> ToolResult<Table> {
             // NDJSON?
             let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
             if lines.len() > 1 {
-                Value::Array(lines.iter().map(|l| serde_json::from_str(l)).collect::<Result<_, _>>().map_err(|_| ToolError::invalid("text", format!("invalid JSON: {e}")))?)
+                Value::Array(
+                    lines
+                        .iter()
+                        .map(|l| serde_json::from_str(l))
+                        .collect::<Result<_, _>>()
+                        .map_err(|_| ToolError::invalid("text", format!("invalid JSON: {e}")))?,
+                )
             } else {
                 return Err(ToolError::invalid("text", format!("invalid JSON: {e}")));
             }
@@ -327,7 +494,10 @@ pub fn json_table(text: &str) -> ToolResult<Table> {
         other => vec![other],
     };
     if items.iter().all(|x| x.is_array()) && !items.is_empty() {
-        let rows: Vec<Vec<String>> = items.iter().map(|r| r.as_array().unwrap().iter().map(cell_string).collect()).collect();
+        let rows: Vec<Vec<String>> = items
+            .iter()
+            .map(|r| r.as_array().unwrap().iter().map(cell_string).collect())
+            .collect();
         return Ok(table_from_cells(rows, true));
     }
     let (headers, rows) = flatten_records(&items, ".");
@@ -339,7 +509,15 @@ fn out_delim(p: &Params) -> u8 {
 }
 
 /// Emit a table as CSV: an artifact when the input was a file, else text; plus a preview.
-fn emit_table(ctx: &ToolContext, p: &Params, t: &Table, name: &str, suffix: &str, delim: u8, extra: Value) -> ToolResult<ToolOutput> {
+fn emit_table(
+    ctx: &ToolContext,
+    p: &Params,
+    t: &Table,
+    name: &str,
+    suffix: &str,
+    delim: u8,
+    extra: Value,
+) -> ToolResult<ToolOutput> {
     let csv = write_csv(&t.headers, &t.rows, delim, false)?;
     let mut data = json!({"rows": t.rows.len(), "columns": t.headers.len(), "table": t.preview(0, PREVIEW_ROWS)});
     if let (Value::Object(d), Value::Object(e)) = (&mut data, extra) {
@@ -347,12 +525,26 @@ fn emit_table(ctx: &ToolContext, p: &Params, t: &Table, name: &str, suffix: &str
     }
     let ext = if delim == b'\t' { "tsv" } else { "csv" };
     let mut out = if p.opt_file("file").is_some() {
-        ToolOutput::files(vec![ctx.write_output(&suffixed(name, suffix, Some(ext)), csv.as_bytes())?]).with_data(data)
+        ToolOutput::files(vec![
+            ctx.write_output(&suffixed(name, suffix, Some(ext)), csv.as_bytes())?
+        ])
+        .with_data(data)
     } else {
-        ToolOutput::text_as(csv, if ext == "tsv" { "text/tab-separated-values" } else { "text/csv" }).with_data(data)
+        ToolOutput::text_as(
+            csv,
+            if ext == "tsv" {
+                "text/tab-separated-values"
+            } else {
+                "text/csv"
+            },
+        )
+        .with_data(data)
     };
     if t.rows.len() > PREVIEW_ROWS {
-        out = out.warn(format!("Preview shows the first {PREVIEW_ROWS} of {} rows; the output contains all rows", t.rows.len()));
+        out = out.warn(format!(
+            "Preview shows the first {PREVIEW_ROWS} of {} rows; the output contains all rows",
+            t.rows.len()
+        ));
     }
     Ok(out)
 }
@@ -371,10 +563,18 @@ fn infer_type(values: &[&String]) -> &'static str {
     if non_empty.iter().all(|v| parse_number(v).is_some()) {
         return "number";
     }
-    if non_empty.iter().all(|v| matches!(v.trim().to_lowercase().as_str(), "true" | "false" | "yes" | "no")) {
+    if non_empty.iter().all(|v| {
+        matches!(
+            v.trim().to_lowercase().as_str(),
+            "true" | "false" | "yes" | "no"
+        )
+    }) {
         return "boolean";
     }
-    if non_empty.iter().all(|v| crate::dev::time::parse_loose(v.trim(), false).is_some()) {
+    if non_empty
+        .iter()
+        .all(|v| crate::dev::time::parse_loose(v.trim(), false).is_some())
+    {
         return "date";
     }
     "text"
@@ -411,7 +611,10 @@ fn csv_view() -> Arc<dyn Tool> {
             "table": t.preview(offset, limit),
         }));
         if offset + shown < t.rows.len() {
-            out = out.warn(format!("Showing {shown} of {} rows; adjust offset/limit to page", t.rows.len()));
+            out = out.warn(format!(
+                "Showing {shown} of {} rows; adjust offset/limit to page",
+                t.rows.len()
+            ));
         }
         Ok(out)
     })
@@ -449,8 +652,18 @@ const FILTER_OPS: &[(&str, &str)] = &[
     ("not_empty", "is not empty"),
 ];
 
-fn row_matches(cell: &str, op: &str, value: &str, re: Option<&regex::Regex>, ci: bool) -> ToolResult<bool> {
-    let (c, v) = if ci { (cell.to_lowercase(), value.to_lowercase()) } else { (cell.to_string(), value.to_string()) };
+fn row_matches(
+    cell: &str,
+    op: &str,
+    value: &str,
+    re: Option<&regex::Regex>,
+    ci: bool,
+) -> ToolResult<bool> {
+    let (c, v) = if ci {
+        (cell.to_lowercase(), value.to_lowercase())
+    } else {
+        (cell.to_string(), value.to_string())
+    };
     let num = || -> Option<std::cmp::Ordering> {
         match (parse_number(cell), parse_number(value)) {
             (Some(a), Some(b)) => a.partial_cmp(&b),
@@ -475,7 +688,12 @@ fn row_matches(cell: &str, op: &str, value: &str, re: Option<&regex::Regex>, ci:
         "lte" => ord().is_le(),
         "empty" => cell.trim().is_empty(),
         "not_empty" => !cell.trim().is_empty(),
-        other => return Err(ToolError::invalid("filters", format!("unknown operator '{other}'"))),
+        other => {
+            return Err(ToolError::invalid(
+                "filters",
+                format!("unknown operator '{other}'"),
+            ))
+        }
     })
 }
 
@@ -502,10 +720,15 @@ fn csv_filter_sort() -> Arc<dyn Tool> {
         let (mut t, name) = load_table(p)?;
         let mut filters: Vec<Filter> = vec![];
         if let Some(c) = p.opt_str("filter_column") {
-            filters.push(Filter { column: c.into(), op: p.str_or("filter_op", "contains").into(), value: json!(p.text("filter_value")) });
+            filters.push(Filter {
+                column: c.into(),
+                op: p.str_or("filter_op", "contains").into(),
+                value: json!(p.text("filter_value")),
+            });
         }
         if let Some(f) = p.json("filters") {
-            let more: Vec<Filter> = serde_json::from_value(f.clone()).map_err(|e| ToolError::invalid("filters", e.to_string()))?;
+            let more: Vec<Filter> = serde_json::from_value(f.clone())
+                .map_err(|e| ToolError::invalid("filters", e.to_string()))?;
             filters.extend(more);
         }
         let ci = p.bool("case_insensitive");
@@ -514,7 +737,12 @@ fn csv_filter_sort() -> Arc<dyn Tool> {
             .map(|f| {
                 let v = cell_string(&f.value);
                 let re = if f.op == "regex" {
-                    Some(regex::RegexBuilder::new(&v).case_insensitive(ci).build().map_err(|e| ToolError::invalid("filters", e.to_string()))?)
+                    Some(
+                        regex::RegexBuilder::new(&v)
+                            .case_insensitive(ci)
+                            .build()
+                            .map_err(|e| ToolError::invalid("filters", e.to_string()))?,
+                    )
                 } else {
                     None
                 };
@@ -524,11 +752,13 @@ fn csv_filter_sort() -> Arc<dyn Tool> {
         let before = t.rows.len();
         let mut err = None;
         t.rows.retain(|r| {
-            compiled.iter().all(|(i, op, v, re)| match row_matches(&r[*i], op, v, re.as_ref(), ci) {
-                Ok(b) => b,
-                Err(e) => {
-                    err = Some(e);
-                    false
+            compiled.iter().all(|(i, op, v, re)| {
+                match row_matches(&r[*i], op, v, re.as_ref(), ci) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        err = Some(e);
+                        false
+                    }
                 }
             })
         });
@@ -553,7 +783,9 @@ fn csv_filter_sort() -> Arc<dyn Tool> {
                 for (i, desc) in &keys {
                     let (x, y) = (&a[*i], &b[*i]);
                     let o = match (parse_number(x), parse_number(y)) {
-                        (Some(m), Some(n)) => m.partial_cmp(&n).unwrap_or(std::cmp::Ordering::Equal),
+                        (Some(m), Some(n)) => {
+                            m.partial_cmp(&n).unwrap_or(std::cmp::Ordering::Equal)
+                        }
                         (Some(_), None) if y.trim().is_empty() => std::cmp::Ordering::Less,
                         (None, Some(_)) if x.trim().is_empty() => std::cmp::Ordering::Greater,
                         _ => natural_cmp(&x.to_lowercase(), &y.to_lowercase()),
@@ -568,10 +800,25 @@ fn csv_filter_sort() -> Arc<dyn Tool> {
         }
         if let Some(c) = p.opt_str("columns") {
             let idx = t.cols(c)?;
-            t = Table { headers: idx.iter().map(|i| t.headers[*i].clone()).collect(), rows: t.rows.iter().map(|r| idx.iter().map(|i| r[*i].clone()).collect()).collect() };
+            t = Table {
+                headers: idx.iter().map(|i| t.headers[*i].clone()).collect(),
+                rows: t
+                    .rows
+                    .iter()
+                    .map(|r| idx.iter().map(|i| r[*i].clone()).collect())
+                    .collect(),
+            };
         }
         let removed = before - t.rows.len();
-        emit_table(ctx, p, &t, &name, "filtered", out_delim(p), json!({"matched": t.rows.len(), "removed": removed}))
+        emit_table(
+            ctx,
+            p,
+            &t,
+            &name,
+            "filtered",
+            out_delim(p),
+            json!({"matched": t.rows.len(), "removed": removed}),
+        )
     })
 }
 
@@ -596,22 +843,55 @@ fn csv_to_json() -> Arc<dyn Tool> {
         let (out, mime, ext) = match shape {
             "arrays" => {
                 let mut v: Vec<Value> = vec![json!(t.headers)];
-                v.extend(t.rows.iter().map(|r| Value::Array(r.iter().map(cell).collect())));
+                v.extend(
+                    t.rows
+                        .iter()
+                        .map(|r| Value::Array(r.iter().map(cell).collect())),
+                );
                 let v = Value::Array(v);
-                (if p.bool("pretty") { serde_json::to_string_pretty(&v)? } else { serde_json::to_string(&v)? }, "application/json", "json")
+                (
+                    if p.bool("pretty") {
+                        serde_json::to_string_pretty(&v)?
+                    } else {
+                        serde_json::to_string(&v)?
+                    },
+                    "application/json",
+                    "json",
+                )
             }
             "ndjson" => {
                 let objs = rows_to_objects(&t, infer);
-                (objs.as_array().unwrap().iter().map(|o| serde_json::to_string(o).unwrap_or_default()).collect::<Vec<_>>().join("\n") + "\n", "application/x-ndjson", "ndjson")
+                (
+                    objs.as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|o| serde_json::to_string(o).unwrap_or_default())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                        + "\n",
+                    "application/x-ndjson",
+                    "ndjson",
+                )
             }
             _ => {
                 let v = rows_to_objects(&t, infer);
-                (if p.bool("pretty") { serde_json::to_string_pretty(&v)? } else { serde_json::to_string(&v)? }, "application/json", "json")
+                (
+                    if p.bool("pretty") {
+                        serde_json::to_string_pretty(&v)?
+                    } else {
+                        serde_json::to_string(&v)?
+                    },
+                    "application/json",
+                    "json",
+                )
             }
         };
         let data = json!({"records": t.rows.len(), "columns": t.headers});
         if p.opt_file("file").is_some() {
-            return Ok(ToolOutput::files(vec![ctx.write_output(&with_extension(&name, ext), out.as_bytes())?]).with_data(data));
+            return Ok(ToolOutput::files(vec![
+                ctx.write_output(&with_extension(&name, ext), out.as_bytes())?
+            ])
+            .with_data(data));
         }
         Ok(ToolOutput::text_as(out, mime).with_data(data))
     })
@@ -647,14 +927,24 @@ fn json_to_csv() -> Arc<dyn Tool> {
                     lines
                         .iter()
                         .enumerate()
-                        .map(|(i, l)| serde_json::from_str(l).map_err(|e| ToolError::invalid("text", format!("line {}: {e}", i + 1))))
+                        .map(|(i, l)| {
+                            serde_json::from_str(l).map_err(|e| {
+                                ToolError::invalid("text", format!("line {}: {e}", i + 1))
+                            })
+                        })
                         .collect::<ToolResult<_>>()?
                 } else {
-                    return Err(crate::dev::formatters::parse_json(&text, "text").err().unwrap_or_else(|| ToolError::invalid("text", e.to_string())));
+                    return Err(crate::dev::formatters::parse_json(&text, "text")
+                        .err()
+                        .unwrap_or_else(|| ToolError::invalid("text", e.to_string())));
                 }
             }
         };
-        let (headers, rows) = flatten_records_with(&items, p.str_or("separator", "."), p.str_or("arrays", "index"));
+        let (headers, rows) = flatten_records_with(
+            &items,
+            p.str_or("separator", "."),
+            p.str_or("arrays", "index"),
+        );
         let t = Table { headers, rows };
         let name = input_name(p, "file", "data.json");
         emit_table(ctx, p, &t, &name, "converted", out_delim(p), json!({}))
@@ -685,7 +975,16 @@ fn spreadsheet() -> Arc<dyn Tool> {
             return Err(ToolError::invalid("file", "workbook has no sheets"));
         }
         let sheet = match p.opt_str("sheet") {
-            Some(s) => names.iter().find(|n| n.as_str() == s || n.eq_ignore_ascii_case(s)).cloned().ok_or_else(|| ToolError::invalid("sheet", format!("no sheet named '{s}' (sheets: {})", names.join(", "))))?,
+            Some(s) => names
+                .iter()
+                .find(|n| n.as_str() == s || n.eq_ignore_ascii_case(s))
+                .cloned()
+                .ok_or_else(|| {
+                    ToolError::invalid(
+                        "sheet",
+                        format!("no sheet named '{s}' (sheets: {})", names.join(", ")),
+                    )
+                })?,
             None => names[0].clone(),
         };
         let header = p.bool("header");
@@ -696,9 +995,19 @@ fn spreadsheet() -> Arc<dyn Tool> {
                 ctx.check_cancelled()?;
                 ctx.progress(i as f32 / names.len() as f32, format!("sheet {n}"));
                 let rows = crate::sheet::sheet_rows(&mut book, n)?;
-                let cells: Vec<Vec<String>> = rows.iter().map(|r| r.iter().map(crate::sheet::cell_text).collect()).collect();
+                let cells: Vec<Vec<String>> = rows
+                    .iter()
+                    .map(|r| r.iter().map(crate::sheet::cell_text).collect())
+                    .collect();
                 let csv = write_csv(&[], &cells, b',', false)?;
-                arts.push(ctx.write_output(&format!("{}-{}.csv", f.stem(), crate::text::more::slug(n, "-", false, 60)), csv.as_bytes())?);
+                arts.push(ctx.write_output(
+                    &format!(
+                        "{}-{}.csv",
+                        f.stem(),
+                        crate::text::more::slug(n, "-", false, 60)
+                    ),
+                    csv.as_bytes(),
+                )?);
             }
             return Ok(ToolOutput::files(arts).with_data(json!({"sheets": names})));
         }
@@ -706,14 +1015,21 @@ fn spreadsheet() -> Arc<dyn Tool> {
         match action {
             "json" => {
                 let mut rows = rows;
-                let headers: Vec<String> = if header && !rows.is_empty() { dedupe_headers(rows.remove(0).iter().map(crate::sheet::cell_text).collect()) } else { vec![] };
+                let headers: Vec<String> = if header && !rows.is_empty() {
+                    dedupe_headers(rows.remove(0).iter().map(crate::sheet::cell_text).collect())
+                } else {
+                    vec![]
+                };
                 let v: Vec<Value> = rows
                     .iter()
                     .map(|r| {
                         if header {
                             let mut m = serde_json::Map::new();
                             for (i, c) in r.iter().enumerate() {
-                                let k = headers.get(i).cloned().unwrap_or_else(|| format!("column{}", i + 1));
+                                let k = headers
+                                    .get(i)
+                                    .cloned()
+                                    .unwrap_or_else(|| format!("column{}", i + 1));
                                 m.insert(k, crate::sheet::cell_json(c));
                             }
                             Value::Object(m)
@@ -723,20 +1039,46 @@ fn spreadsheet() -> Arc<dyn Tool> {
                     })
                     .collect();
                 let s = serde_json::to_string_pretty(&v)?;
-                let a = ctx.write_output(&format!("{}-{}.json", f.stem(), crate::text::more::slug(&sheet, "-", false, 60)), s.as_bytes())?;
-                Ok(ToolOutput::files(vec![a]).with_data(json!({"sheet": sheet, "records": v.len()})))
+                let a = ctx.write_output(
+                    &format!(
+                        "{}-{}.json",
+                        f.stem(),
+                        crate::text::more::slug(&sheet, "-", false, 60)
+                    ),
+                    s.as_bytes(),
+                )?;
+                Ok(ToolOutput::files(vec![a])
+                    .with_data(json!({"sheet": sheet, "records": v.len()})))
             }
             "csv" => {
-                let cells: Vec<Vec<String>> = rows.iter().map(|r| r.iter().map(crate::sheet::cell_text).collect()).collect();
+                let cells: Vec<Vec<String>> = rows
+                    .iter()
+                    .map(|r| r.iter().map(crate::sheet::cell_text).collect())
+                    .collect();
                 let csv = write_csv(&[], &cells, b',', false)?;
-                let a = ctx.write_output(&format!("{}-{}.csv", f.stem(), crate::text::more::slug(&sheet, "-", false, 60)), csv.as_bytes())?;
-                Ok(ToolOutput::files(vec![a]).with_data(json!({"sheet": sheet, "rows": cells.len()})))
+                let a = ctx.write_output(
+                    &format!(
+                        "{}-{}.csv",
+                        f.stem(),
+                        crate::text::more::slug(&sheet, "-", false, 60)
+                    ),
+                    csv.as_bytes(),
+                )?;
+                Ok(ToolOutput::files(vec![a])
+                    .with_data(json!({"sheet": sheet, "rows": cells.len()})))
             }
             _ => {
-                let t = table_from_cells(rows.iter().map(|r| r.iter().map(crate::sheet::cell_text).collect()).collect(), header);
+                let t = table_from_cells(
+                    rows.iter()
+                        .map(|r| r.iter().map(crate::sheet::cell_text).collect())
+                        .collect(),
+                    header,
+                );
                 let offset = p.int_or("offset", 0).max(0) as usize;
                 let limit = (p.int_or("limit", 100).max(1) as usize).min(PREVIEW_ROWS);
-                let mut out = ToolOutput::data(json!({"sheets": names, "sheet": sheet, "rows": t.rows.len(), "columns": t.headers.len(), "table": t.preview(offset, limit)}));
+                let mut out = ToolOutput::data(
+                    json!({"sheets": names, "sheet": sheet, "rows": t.rows.len(), "columns": t.headers.len(), "table": t.preview(offset, limit)}),
+                );
                 if t.rows.len() > offset + limit {
                     out = out.warn(format!("Showing up to {limit} of {} rows", t.rows.len()));
                 }
@@ -775,7 +1117,10 @@ fn delimiter() -> Arc<dyn Tool> {
         let ext = if d == b'\t' { "tsv" } else { "csv" };
         let data = json!({"rows": t.rows.len(), "columns": t.headers.len()});
         if p.opt_file("file").is_some() {
-            return Ok(ToolOutput::files(vec![ctx.write_output(&suffixed(&name, "converted", Some(ext)), csv.as_bytes())?]).with_data(data));
+            return Ok(ToolOutput::files(vec![
+                ctx.write_output(&suffixed(&name, "converted", Some(ext)), csv.as_bytes())?
+            ])
+            .with_data(data));
         }
         Ok(ToolOutput::text_as(csv, "text/csv").with_data(data))
     })
@@ -822,14 +1167,20 @@ fn columns() -> Arc<dyn Tool> {
         let (mut t, name) = load_table(p)?;
         let op = p.str("operation")?;
         let need_cols = || -> ToolResult<Vec<usize>> {
-            let c = p.opt_str("columns").ok_or_else(|| ToolError::invalid("columns", "select at least one column"))?;
+            let c = p
+                .opt_str("columns")
+                .ok_or_else(|| ToolError::invalid("columns", "select at least one column"))?;
             t.cols(c)
         };
         match op {
             "rename" => {
-                let m = p.opt_str("mapping").ok_or_else(|| ToolError::invalid("mapping", "give renames like old=new"))?;
+                let m = p
+                    .opt_str("mapping")
+                    .ok_or_else(|| ToolError::invalid("mapping", "give renames like old=new"))?;
                 for pair in split_list(m) {
-                    let (a, b) = pair.split_once('=').ok_or_else(|| ToolError::invalid("mapping", format!("'{pair}' should look like old=new")))?;
+                    let (a, b) = pair.split_once('=').ok_or_else(|| {
+                        ToolError::invalid("mapping", format!("'{pair}' should look like old=new"))
+                    })?;
                     let i = t.col(a)?;
                     t.headers[i] = b.trim().to_string();
                 }
@@ -848,10 +1199,21 @@ fn columns() -> Arc<dyn Tool> {
                 let i = idx[0];
                 let sep = p.text("separator");
                 let sep = if sep.is_empty() { " " } else { sep };
-                let parts: Vec<Vec<String>> = t.rows.iter().map(|r| r[i].split(sep).map(|s| s.trim().to_string()).collect()).collect();
+                let parts: Vec<Vec<String>> = t
+                    .rows
+                    .iter()
+                    .map(|r| r[i].split(sep).map(|s| s.trim().to_string()).collect())
+                    .collect();
                 let n = parts.iter().map(|v| v.len()).max().unwrap_or(1);
                 let names: Vec<String> = split_list(p.text("new_names"));
-                let new_headers: Vec<String> = (0..n).map(|k| names.get(k).cloned().unwrap_or_else(|| format!("{}_{}", t.headers[i], k + 1))).collect();
+                let new_headers: Vec<String> = (0..n)
+                    .map(|k| {
+                        names
+                            .get(k)
+                            .cloned()
+                            .unwrap_or_else(|| format!("{}_{}", t.headers[i], k + 1))
+                    })
+                    .collect();
                 let keep = p.bool("keep_original");
                 let mut headers = t.headers.clone();
                 let at = if keep { i + 1 } else { i };
@@ -874,8 +1236,26 @@ fn columns() -> Arc<dyn Tool> {
             "merge" => {
                 let idx = need_cols()?;
                 let sep = p.text("separator");
-                let new_name = p.opt_str("new_names").map(|s| s.trim().to_string()).unwrap_or_else(|| idx.iter().map(|i| t.headers[*i].clone()).collect::<Vec<_>>().join("_"));
-                let merged: Vec<String> = t.rows.iter().map(|r| idx.iter().map(|i| r[*i].as_str()).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(sep)).collect();
+                let new_name = p
+                    .opt_str("new_names")
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_else(|| {
+                        idx.iter()
+                            .map(|i| t.headers[*i].clone())
+                            .collect::<Vec<_>>()
+                            .join("_")
+                    });
+                let merged: Vec<String> = t
+                    .rows
+                    .iter()
+                    .map(|r| {
+                        idx.iter()
+                            .map(|i| r[*i].as_str())
+                            .filter(|s| !s.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(sep)
+                    })
+                    .collect();
                 let at = idx[0];
                 let keep = p.bool("keep_original");
                 if keep {
@@ -910,9 +1290,18 @@ fn columns() -> Arc<dyn Tool> {
             "upper" | "lower" | "title" | "trim" | "replace" => {
                 let idx = need_cols()?;
                 let re = if op == "replace" {
-                    let find = p.opt_str("find").ok_or_else(|| ToolError::invalid("find", "enter text to find"))?;
-                    let pat = if p.bool("regex") { find.to_string() } else { regex::escape(find) };
-                    Some(regex::Regex::new(&pat).map_err(|e| ToolError::invalid("find", e.to_string()))?)
+                    let find = p
+                        .opt_str("find")
+                        .ok_or_else(|| ToolError::invalid("find", "enter text to find"))?;
+                    let pat = if p.bool("regex") {
+                        find.to_string()
+                    } else {
+                        regex::escape(find)
+                    };
+                    Some(
+                        regex::Regex::new(&pat)
+                            .map_err(|e| ToolError::invalid("find", e.to_string()))?,
+                    )
                 } else {
                     None
                 };
@@ -937,14 +1326,26 @@ fn columns() -> Arc<dyn Tool> {
                     r.insert(0, (k + 1).to_string());
                 }
             }
-            other => return Err(ToolError::invalid("operation", format!("unknown operation {other}"))),
+            other => {
+                return Err(ToolError::invalid(
+                    "operation",
+                    format!("unknown operation {other}"),
+                ))
+            }
         }
         emit_table(ctx, p, &t, &name, "columns", out_delim(p), json!({}))
     })
 }
 
 fn project(t: &Table, idx: &[usize]) -> Table {
-    Table { headers: idx.iter().map(|i| t.headers[*i].clone()).collect(), rows: t.rows.iter().map(|r| idx.iter().map(|i| r[*i].clone()).collect()).collect() }
+    Table {
+        headers: idx.iter().map(|i| t.headers[*i].clone()).collect(),
+        rows: t
+            .rows
+            .iter()
+            .map(|r| idx.iter().map(|i| r[*i].clone()).collect())
+            .collect(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -976,13 +1377,18 @@ fn check_type(kind: &str, v: &str) -> bool {
     match kind {
         "integer" | "int" => t.parse::<i64>().is_ok(),
         "number" | "float" | "decimal" => parse_number(t).is_some(),
-        "boolean" | "bool" => matches!(t.to_lowercase().as_str(), "true" | "false" | "yes" | "no" | "1" | "0"),
+        "boolean" | "bool" => matches!(
+            t.to_lowercase().as_str(),
+            "true" | "false" | "yes" | "no" | "1" | "0"
+        ),
         "date" | "datetime" => crate::dev::time::parse_loose(t, false).is_some(),
         "email" => {
             let re = regex::Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").unwrap();
             re.is_match(t)
         }
-        "url" => url::Url::parse(t).map(|u| matches!(u.scheme(), "http" | "https" | "ftp")).unwrap_or(false),
+        "url" => url::Url::parse(t)
+            .map(|u| matches!(u.scheme(), "http" | "https" | "ftp"))
+            .unwrap_or(false),
         "uuid" => uuid::Uuid::parse_str(t).is_ok(),
         _ => true,
     }
@@ -1011,29 +1417,50 @@ fn validate() -> Arc<dyn Tool> {
         let mut errors: Vec<Vec<Value>> = vec![];
         for c in split_list(p.text("required_columns")) {
             if t.col(&c).is_err() {
-                errors.push(vec![json!(null), json!(c), json!(""), json!("required column is missing")]);
+                errors.push(vec![
+                    json!(null),
+                    json!(c),
+                    json!(""),
+                    json!("required column is missing"),
+                ]);
             }
         }
         let rules: serde_json::Map<String, Value> = match p.json("rules") {
             Some(Value::Object(m)) => m.clone(),
-            Some(Value::String(s)) if !s.trim().is_empty() => serde_json::from_str(s).map_err(|e| ToolError::invalid("rules", e.to_string()))?,
+            Some(Value::String(s)) if !s.trim().is_empty() => {
+                serde_json::from_str(s).map_err(|e| ToolError::invalid("rules", e.to_string()))?
+            }
             Some(Value::Null) | None => Default::default(),
             Some(Value::String(_)) => Default::default(),
-            Some(_) => return Err(ToolError::invalid("rules", "rules must be an object keyed by column name")),
+            Some(_) => {
+                return Err(ToolError::invalid(
+                    "rules",
+                    "rules must be an object keyed by column name",
+                ))
+            }
         };
         let mut total_errors = errors.len();
         for (col, r) in &rules {
-            let rule: Rule = serde_json::from_value(r.clone()).map_err(|e| ToolError::invalid("rules", format!("{col}: {e}")))?;
+            let rule: Rule = serde_json::from_value(r.clone())
+                .map_err(|e| ToolError::invalid("rules", format!("{col}: {e}")))?;
             let i = match t.col(col) {
                 Ok(i) => i,
                 Err(_) => {
-                    errors.push(vec![json!(null), json!(col), json!(""), json!("column from rules not found")]);
+                    errors.push(vec![
+                        json!(null),
+                        json!(col),
+                        json!(""),
+                        json!("column from rules not found"),
+                    ]);
                     total_errors += 1;
                     continue;
                 }
             };
             let re = match &rule.regex {
-                Some(r) => Some(regex::Regex::new(&format!("^(?:{r})$")).map_err(|e| ToolError::invalid("rules", format!("{col}: {e}")))?),
+                Some(r) => Some(
+                    regex::Regex::new(&format!("^(?:{r})$"))
+                        .map_err(|e| ToolError::invalid("rules", format!("{col}: {e}")))?,
+                ),
                 None => None,
             };
             let mut seen: HashMap<&str, usize> = HashMap::new();
@@ -1131,7 +1558,11 @@ fn duplicates() -> Arc<dyn Tool> {
         let key = |r: &Vec<String>| -> Vec<String> {
             idx.iter()
                 .map(|i| {
-                    let mut s = if tr { r[*i].trim().to_string() } else { r[*i].clone() };
+                    let mut s = if tr {
+                        r[*i].trim().to_string()
+                    } else {
+                        r[*i].clone()
+                    };
                     if ic {
                         s = s.to_lowercase();
                     }
@@ -1150,13 +1581,35 @@ fn duplicates() -> Arc<dyn Tool> {
             e.push(n);
         }
         let last = p.str("keep")? == "last";
-        let keep: HashSet<usize> = groups.values().map(|v| if last { *v.last().unwrap() } else { v[0] }).collect();
-        let deduped = Table { headers: t.headers.clone(), rows: t.rows.iter().enumerate().filter(|(n, _)| keep.contains(n)).map(|(_, r)| r.clone()).collect() };
+        let keep: HashSet<usize> = groups
+            .values()
+            .map(|v| if last { *v.last().unwrap() } else { v[0] })
+            .collect();
+        let deduped = Table {
+            headers: t.headers.clone(),
+            rows: t
+                .rows
+                .iter()
+                .enumerate()
+                .filter(|(n, _)| keep.contains(n))
+                .map(|(_, r)| r.clone())
+                .collect(),
+        };
         let dup_groups: Vec<Vec<Value>> = order
             .iter()
             .filter_map(|k| {
                 let rows = &groups[k];
-                (rows.len() > 1).then(|| vec![json!(k.join(" | ")), json!(rows.len()), json!(rows.iter().map(|r| (r + 2).to_string()).collect::<Vec<_>>().join(", "))])
+                (rows.len() > 1).then(|| {
+                    vec![
+                        json!(k.join(" | ")),
+                        json!(rows.len()),
+                        json!(rows
+                            .iter()
+                            .map(|r| (r + 2).to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")),
+                    ]
+                })
             })
             .take(PREVIEW_ROWS)
             .collect();
@@ -1171,7 +1624,10 @@ fn duplicates() -> Arc<dyn Tool> {
             "table": table(&["key", "count", "rows (line numbers)"], dup_groups),
         });
         if p.opt_file("file").is_some() {
-            return Ok(ToolOutput::files(vec![ctx.write_output(&suffixed(&name, "deduped", None), csv.as_bytes())?]).with_data(data));
+            return Ok(ToolOutput::files(vec![
+                ctx.write_output(&suffixed(&name, "deduped", None), csv.as_bytes())?
+            ])
+            .with_data(data));
         }
         Ok(ToolOutput::text_as(csv, "text/csv").with_data(data))
     })
@@ -1204,15 +1660,30 @@ fn stats() -> Arc<dyn Tool> {
             let distinct: HashSet<&str> = non_empty.iter().map(|v| v.as_str()).collect();
             let kind = infer_type(&vals);
             let nums: Vec<f64> = non_empty.iter().filter_map(|v| parse_number(v)).collect();
-            let (mut min, mut max, mut mean, mut median, mut sd, mut sum) = (json!(null), json!(null), json!(null), json!(null), json!(null), json!(null));
+            let (mut min, mut max, mut mean, mut median, mut sd, mut sum) = (
+                json!(null),
+                json!(null),
+                json!(null),
+                json!(null),
+                json!(null),
+                json!(null),
+            );
             if (kind == "integer" || kind == "number") && !nums.is_empty() {
                 let mut s = nums.clone();
                 s.sort_by(|a, b| a.partial_cmp(b).unwrap());
                 let n = s.len() as f64;
                 let total: f64 = s.iter().sum();
                 let m = total / n;
-                let var = if s.len() > 1 { s.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (n - 1.0) } else { 0.0 };
-                let med = if s.len() % 2 == 1 { s[s.len() / 2] } else { (s[s.len() / 2 - 1] + s[s.len() / 2]) / 2.0 };
+                let var = if s.len() > 1 {
+                    s.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (n - 1.0)
+                } else {
+                    0.0
+                };
+                let med = if s.len() % 2 == 1 {
+                    s[s.len() / 2]
+                } else {
+                    (s[s.len() / 2 - 1] + s[s.len() / 2]) / 2.0
+                };
                 min = fmt(s[0]);
                 max = fmt(*s.last().unwrap());
                 mean = fmt(m);
@@ -1231,8 +1702,25 @@ fn stats() -> Arc<dyn Tool> {
             }
             let mut fv: Vec<_> = freq.into_iter().collect();
             fv.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
-            let top: Vec<String> = fv.iter().take(top_n).map(|(v, c)| format!("{v} ({c})")).collect();
-            rows.push(vec![json!(h), json!(kind), json!(non_empty.len()), json!(vals.len() - non_empty.len()), json!(distinct.len()), min, max, mean, median, sd, sum, json!(top.join(", "))]);
+            let top: Vec<String> = fv
+                .iter()
+                .take(top_n)
+                .map(|(v, c)| format!("{v} ({c})"))
+                .collect();
+            rows.push(vec![
+                json!(h),
+                json!(kind),
+                json!(non_empty.len()),
+                json!(vals.len() - non_empty.len()),
+                json!(distinct.len()),
+                min,
+                max,
+                mean,
+                median,
+                sd,
+                sum,
+                json!(top.join(", ")),
+            ]);
         }
         Ok(ToolOutput::data(json!({
             "rows": t.rows.len(),
@@ -1273,7 +1761,19 @@ fn clean() -> Arc<dyn Tool> {
         let ops: HashSet<String> = p.list("operations").into_iter().collect();
         let day_first = p.bool("day_first");
         let mut changed = 0usize;
-        let nulls = ["null", "n/a", "na", "none", "nil", "-", "--", "?", "#n/a", "nan", "undefined"];
+        let nulls = [
+            "null",
+            "n/a",
+            "na",
+            "none",
+            "nil",
+            "-",
+            "--",
+            "?",
+            "#n/a",
+            "nan",
+            "undefined",
+        ];
         for r in &mut t.rows {
             for c in r.iter_mut() {
                 let orig = c.clone();
@@ -1288,7 +1788,11 @@ fn clean() -> Arc<dyn Tool> {
                 }
                 if ops.contains("dates") && !c.is_empty() && parse_number(c).is_none() {
                     if let Some(dt) = crate::dev::time::parse_loose(c.trim(), day_first) {
-                        *c = if dt.time() == chrono::NaiveTime::MIN { dt.date().to_string() } else { dt.format("%Y-%m-%dT%H:%M:%S").to_string() };
+                        *c = if dt.time() == chrono::NaiveTime::MIN {
+                            dt.date().to_string()
+                        } else {
+                            dt.format("%Y-%m-%dT%H:%M:%S").to_string()
+                        };
                     }
                 }
                 if *c != orig {
@@ -1302,11 +1806,18 @@ fn clean() -> Arc<dyn Tool> {
         }
         let cols_before = t.headers.len();
         if ops.contains("empty_columns") {
-            let keep: Vec<usize> = (0..t.headers.len()).filter(|i| t.rows.iter().any(|r| !r[*i].trim().is_empty())).collect();
+            let keep: Vec<usize> = (0..t.headers.len())
+                .filter(|i| t.rows.iter().any(|r| !r[*i].trim().is_empty()))
+                .collect();
             t = project(&t, &keep);
         }
         if ops.contains("headers") {
-            t.headers = dedupe_headers(t.headers.iter().map(|h| crate::text::convert_case(h, "snake").unwrap_or_else(|_| h.clone())).collect());
+            t.headers = dedupe_headers(
+                t.headers
+                    .iter()
+                    .map(|h| crate::text::convert_case(h, "snake").unwrap_or_else(|_| h.clone()))
+                    .collect(),
+            );
         }
         let extra = json!({"cells_changed": changed, "rows_removed": rows_before - t.rows.len(), "columns_removed": cols_before - t.headers.len()});
         emit_table(ctx, p, &t, &name, "clean", out_delim(p), extra)
@@ -1335,19 +1846,54 @@ fn sql_value(s: &str, infer: bool) -> String {
 pub fn render_table(t: &Table, to: &str, opts: &Params) -> ToolResult<(Vec<u8>, &'static str)> {
     let infer = opts.bool("infer_types");
     Ok(match to {
-        "csv" => (write_csv(&t.headers, &t.rows, b',', false)?.into_bytes(), "csv"),
-        "tsv" => (write_csv(&t.headers, &t.rows, b'\t', false)?.into_bytes(), "tsv"),
-        "json" => (serde_json::to_string_pretty(&rows_to_objects(t, infer))?.into_bytes(), "json"),
+        "csv" => (
+            write_csv(&t.headers, &t.rows, b',', false)?.into_bytes(),
+            "csv",
+        ),
+        "tsv" => (
+            write_csv(&t.headers, &t.rows, b'\t', false)?.into_bytes(),
+            "tsv",
+        ),
+        "json" => (
+            serde_json::to_string_pretty(&rows_to_objects(t, infer))?.into_bytes(),
+            "json",
+        ),
         "ndjson" => (
-            (rows_to_objects(t, infer).as_array().unwrap().iter().map(|o| serde_json::to_string(o).unwrap_or_default()).collect::<Vec<_>>().join("\n") + "\n").into_bytes(),
+            (rows_to_objects(t, infer)
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|o| serde_json::to_string(o).unwrap_or_default())
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n")
+                .into_bytes(),
             "ndjson",
         ),
-        "yaml" => (crate::dev::formatters::to_yaml(&rows_to_objects(t, infer))?.into_bytes(), "yaml"),
+        "yaml" => (
+            crate::dev::formatters::to_yaml(&rows_to_objects(t, infer))?.into_bytes(),
+            "yaml",
+        ),
         "markdown" => {
             let esc = |s: &str| s.replace('|', "\\|").replace('\n', "<br>");
-            let mut out = format!("| {} |\n|{}|\n", t.headers.iter().map(|h| esc(h)).collect::<Vec<_>>().join(" | "), t.headers.iter().map(|_| " --- ").collect::<Vec<_>>().join("|"));
+            let mut out = format!(
+                "| {} |\n|{}|\n",
+                t.headers
+                    .iter()
+                    .map(|h| esc(h))
+                    .collect::<Vec<_>>()
+                    .join(" | "),
+                t.headers
+                    .iter()
+                    .map(|_| " --- ")
+                    .collect::<Vec<_>>()
+                    .join("|")
+            );
             for r in &t.rows {
-                out.push_str(&format!("| {} |\n", r.iter().map(|c| esc(c)).collect::<Vec<_>>().join(" | ")));
+                out.push_str(&format!(
+                    "| {} |\n",
+                    r.iter().map(|c| esc(c)).collect::<Vec<_>>().join(" | ")
+                ));
             }
             (out.into_bytes(), "md")
         }
@@ -1370,10 +1916,22 @@ pub fn render_table(t: &Table, to: &str, opts: &Params) -> ToolResult<(Vec<u8>, 
         }
         "sql" => {
             let table_name = opts.str_or("table_name", "data");
-            let cols = t.headers.iter().map(|h| sql_ident(h)).collect::<Vec<_>>().join(", ");
+            let cols = t
+                .headers
+                .iter()
+                .map(|h| sql_ident(h))
+                .collect::<Vec<_>>()
+                .join(", ");
             let mut out = String::new();
             for r in &t.rows {
-                out.push_str(&format!("INSERT INTO {} ({cols}) VALUES ({});\n", sql_ident(table_name), r.iter().map(|c| sql_value(c, infer)).collect::<Vec<_>>().join(", ")));
+                out.push_str(&format!(
+                    "INSERT INTO {} ({cols}) VALUES ({});\n",
+                    sql_ident(table_name),
+                    r.iter()
+                        .map(|c| sql_value(c, infer))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
             }
             (out.into_bytes(), "sql")
         }
@@ -1382,7 +1940,8 @@ pub fn render_table(t: &Table, to: &str, opts: &Params) -> ToolResult<(Vec<u8>, 
             let ws = wb.add_worksheet();
             let bold = rust_xlsxwriter::Format::new().set_bold();
             for (c, h) in t.headers.iter().enumerate() {
-                ws.write_string_with_format(0, c as u16, h, &bold).ctx("writing XLSX")?;
+                ws.write_string_with_format(0, c as u16, h, &bold)
+                    .ctx("writing XLSX")?;
             }
             if t.rows.len() >= 1_048_575 {
                 return Err(ToolError::limit("XLSX supports at most 1,048,576 rows"));
@@ -1391,7 +1950,9 @@ pub fn render_table(t: &Table, to: &str, opts: &Params) -> ToolResult<(Vec<u8>, 
                 for (c, v) in r.iter().enumerate() {
                     let row = (ri + 1) as u32;
                     match if infer { infer_value(v) } else { json!(v) } {
-                        Value::Number(n) if n.as_f64().is_some() => ws.write_number(row, c as u16, n.as_f64().unwrap()).map(|_| ()),
+                        Value::Number(n) if n.as_f64().is_some() => ws
+                            .write_number(row, c as u16, n.as_f64().unwrap())
+                            .map(|_| ()),
                         Value::Bool(b) => ws.write_boolean(row, c as u16, b).map(|_| ()),
                         Value::Null => Ok(()),
                         _ => ws.write_string(row, c as u16, v).map(|_| ()),
@@ -1462,17 +2023,35 @@ mod tests {
     #[tokio::test]
     async fn view_and_detect() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("data.csv_view", json!({"text": "a;b\n1;x\n2;y"})).await.unwrap();
+        let out = h
+            .run("data.csv_view", json!({"text": "a;b\n1;x\n2;y"}))
+            .await
+            .unwrap();
         assert_eq!(out.data["table"]["columns"], json!(["a", "b"]));
         assert_eq!(out.data["total_rows"], 2);
         assert_eq!(out.data["column_types"][0]["type"], "integer");
-        let out = h.run("data.csv_view", json!({"text": "1,2\n3,4"})).await.unwrap();
+        let out = h
+            .run("data.csv_view", json!({"text": "1,2\n3,4"}))
+            .await
+            .unwrap();
         assert_eq!(out.data["table"]["columns"], json!(["column1", "column2"]));
         let f = h.write("t.tsv", b"x\ty\n1\t2\n");
-        let out = h.run("data.csv_view", json!({"file": f.to_str().unwrap()})).await.unwrap();
+        let out = h
+            .run("data.csv_view", json!({"file": f.to_str().unwrap()}))
+            .await
+            .unwrap();
         assert_eq!(out.data["table"]["rows"][0], json!(["1", "2"]));
-        assert_eq!(h.run("data.csv_view", json!({"text": "a,\"b\n1,2"})).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(h.run("data.csv_view", json!({})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("data.csv_view", json!({"text": "a,\"b\n1,2"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            h.run("data.csv_view", json!({})).await.unwrap_err().code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
@@ -1480,64 +2059,227 @@ mod tests {
         let h = TestHarness::new(crate::tools());
         let out = h.run("data.csv_filter_sort", json!({"text": CSV, "filter_column": "city", "filter_op": "equals", "filter_value": "paris", "sort": "age desc", "columns": "name"})).await.unwrap();
         assert_eq!(out.text.unwrap(), "name\nCid\nAnn\n");
-        let out = h.run("data.csv_filter_sort", json!({"text": CSV, "filters": [{"column": "age", "op": "lt", "value": 30}]})).await.unwrap();
+        let out = h
+            .run(
+                "data.csv_filter_sort",
+                json!({"text": CSV, "filters": [{"column": "age", "op": "lt", "value": 30}]}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["matched"], 2);
-        assert_eq!(h.run("data.csv_filter_sort", json!({"text": CSV, "filter_column": "nope"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run(
+                "data.csv_filter_sort",
+                json!({"text": CSV, "filter_column": "nope"})
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
     async fn json_csv_roundtrip() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("data.csv_to_json", json!({"text": "a,b\n1,true\n007,", "pretty": false})).await.unwrap();
-        assert_eq!(out.text.unwrap(), "[{\"a\":1,\"b\":true},{\"a\":\"007\",\"b\":null}]");
-        let out = h.run("data.csv_to_json", json!({"text": "a,b\n1,2", "shape": "ndjson"})).await.unwrap();
+        let out = h
+            .run(
+                "data.csv_to_json",
+                json!({"text": "a,b\n1,true\n007,", "pretty": false}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            out.text.unwrap(),
+            "[{\"a\":1,\"b\":true},{\"a\":\"007\",\"b\":null}]"
+        );
+        let out = h
+            .run(
+                "data.csv_to_json",
+                json!({"text": "a,b\n1,2", "shape": "ndjson"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "{\"a\":1,\"b\":2}\n");
         let out = h.run("data.json_to_csv", json!({"text": "[{\"id\":1,\"u\":{\"n\":\"x\"},\"tags\":[\"a\",\"b\"]},{\"id\":2,\"extra\":\"y,z\"}]", "arrays": "join"})).await.unwrap();
-        assert_eq!(out.text.unwrap(), "id,u.n,tags,extra\n1,x,a; b,\n2,,,\"y,z\"\n");
-        assert_eq!(h.run("data.json_to_csv", json!({"text": "[{bad"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            out.text.unwrap(),
+            "id,u.n,tags,extra\n1,x,a; b,\n2,,,\"y,z\"\n"
+        );
+        assert_eq!(
+            h.run("data.json_to_csv", json!({"text": "[{bad"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
     async fn spreadsheet_and_convert() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("data.convert", json!({"text": CSV, "to": "xlsx"})).await.unwrap();
+        let out = h
+            .run("data.convert", json!({"text": CSV, "to": "xlsx"}))
+            .await
+            .unwrap();
         let xlsx = &out.artifacts[0].path;
         assert!(out.artifacts[0].name.ends_with(".xlsx"));
-        let out = h.run("data.spreadsheet", json!({"file": xlsx.to_str().unwrap()})).await.unwrap();
+        let out = h
+            .run("data.spreadsheet", json!({"file": xlsx.to_str().unwrap()}))
+            .await
+            .unwrap();
         assert_eq!(out.data["table"]["columns"], json!(["name", "age", "city"]));
         assert_eq!(out.data["table"]["rows"][0], json!(["Ann", "30", "Paris"]));
-        let out = h.run("data.spreadsheet", json!({"file": xlsx.to_str().unwrap(), "action": "json"})).await.unwrap();
-        let j: serde_json::Value = serde_json::from_slice(&std::fs::read(&out.artifacts[0].path).unwrap()).unwrap();
+        let out = h
+            .run(
+                "data.spreadsheet",
+                json!({"file": xlsx.to_str().unwrap(), "action": "json"}),
+            )
+            .await
+            .unwrap();
+        let j: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&out.artifacts[0].path).unwrap()).unwrap();
         assert_eq!(j[0]["age"], 30);
-        assert_eq!(h.run("data.spreadsheet", json!({"file": xlsx.to_str().unwrap(), "sheet": "Nope"})).await.unwrap_err().code(), "invalid_input");
-        let out = h.run("data.convert", json!({"text": "a,b\n1,x'y", "to": "sql", "table_name": "t"})).await.unwrap();
-        assert_eq!(out.text.unwrap(), "INSERT INTO \"t\" (\"a\", \"b\") VALUES (1, 'x''y');\n");
-        let out = h.run("data.convert", json!({"text": "a,b\n1,x|y", "to": "markdown"})).await.unwrap();
-        assert_eq!(out.text.unwrap(), "| a | b |\n| --- | --- |\n| 1 | x\\|y |\n");
-        let out = h.run("data.convert", json!({"text": "a\n<b>", "to": "html"})).await.unwrap();
+        assert_eq!(
+            h.run(
+                "data.spreadsheet",
+                json!({"file": xlsx.to_str().unwrap(), "sheet": "Nope"})
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            "invalid_input"
+        );
+        let out = h
+            .run(
+                "data.convert",
+                json!({"text": "a,b\n1,x'y", "to": "sql", "table_name": "t"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            out.text.unwrap(),
+            "INSERT INTO \"t\" (\"a\", \"b\") VALUES (1, 'x''y');\n"
+        );
+        let out = h
+            .run(
+                "data.convert",
+                json!({"text": "a,b\n1,x|y", "to": "markdown"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            out.text.unwrap(),
+            "| a | b |\n| --- | --- |\n| 1 | x\\|y |\n"
+        );
+        let out = h
+            .run("data.convert", json!({"text": "a\n<b>", "to": "html"}))
+            .await
+            .unwrap();
         assert!(out.text.unwrap().contains("<td>&lt;b&gt;</td>"));
         let f = h.write("bad.xlsx", b"not a spreadsheet");
-        assert_eq!(h.run("data.spreadsheet", json!({"file": f.to_str().unwrap()})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("data.spreadsheet", json!({"file": f.to_str().unwrap()}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
     async fn delimiter_columns() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("data.delimiter", json!({"text": "a,b\n1,\"x;y\"", "output_delimiter": "semicolon"})).await.unwrap();
+        let out = h
+            .run(
+                "data.delimiter",
+                json!({"text": "a,b\n1,\"x;y\"", "output_delimiter": "semicolon"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "a;b\n1;\"x;y\"\n");
         let c = |op: &str, extra: serde_json::Value| {
             let mut v = json!({"text": "full,age\nAnn Lee,30\n", "operation": op});
-            v.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            v.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
             v
         };
-        assert_eq!(h.run("data.columns", c("rename", json!({"mapping": "age=years"}))).await.unwrap().text.unwrap(), "full,years\nAnn Lee,30\n");
-        assert_eq!(h.run("data.columns", c("drop", json!({"columns": "age"}))).await.unwrap().text.unwrap(), "full\nAnn Lee\n");
-        assert_eq!(h.run("data.columns", c("select", json!({"columns": "age,full"}))).await.unwrap().text.unwrap(), "age,full\n30,Ann Lee\n");
-        assert_eq!(h.run("data.columns", c("split", json!({"columns": "full", "new_names": "first,last"}))).await.unwrap().text.unwrap(), "first,last,age\nAnn,Lee,30\n");
-        assert_eq!(h.run("data.columns", c("merge", json!({"columns": "full,age", "separator": "-", "new_names": "x"}))).await.unwrap().text.unwrap(), "x\nAnn Lee-30\n");
-        assert_eq!(h.run("data.columns", c("upper", json!({"columns": "1"}))).await.unwrap().text.unwrap(), "full,age\nANN LEE,30\n");
-        assert_eq!(h.run("data.columns", c("index", json!({}))).await.unwrap().text.unwrap(), "index,full,age\n1,Ann Lee,30\n");
-        assert_eq!(h.run("data.columns", c("drop", json!({"columns": "zzz"}))).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("data.columns", c("rename", json!({"mapping": "age=years"})))
+                .await
+                .unwrap()
+                .text
+                .unwrap(),
+            "full,years\nAnn Lee,30\n"
+        );
+        assert_eq!(
+            h.run("data.columns", c("drop", json!({"columns": "age"})))
+                .await
+                .unwrap()
+                .text
+                .unwrap(),
+            "full\nAnn Lee\n"
+        );
+        assert_eq!(
+            h.run("data.columns", c("select", json!({"columns": "age,full"})))
+                .await
+                .unwrap()
+                .text
+                .unwrap(),
+            "age,full\n30,Ann Lee\n"
+        );
+        assert_eq!(
+            h.run(
+                "data.columns",
+                c(
+                    "split",
+                    json!({"columns": "full", "new_names": "first,last"})
+                )
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap(),
+            "first,last,age\nAnn,Lee,30\n"
+        );
+        assert_eq!(
+            h.run(
+                "data.columns",
+                c(
+                    "merge",
+                    json!({"columns": "full,age", "separator": "-", "new_names": "x"})
+                )
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap(),
+            "x\nAnn Lee-30\n"
+        );
+        assert_eq!(
+            h.run("data.columns", c("upper", json!({"columns": "1"})))
+                .await
+                .unwrap()
+                .text
+                .unwrap(),
+            "full,age\nANN LEE,30\n"
+        );
+        assert_eq!(
+            h.run("data.columns", c("index", json!({})))
+                .await
+                .unwrap()
+                .text
+                .unwrap(),
+            "index,full,age\n1,Ann Lee,30\n"
+        );
+        assert_eq!(
+            h.run("data.columns", c("drop", json!({"columns": "zzz"})))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
@@ -1551,9 +2293,15 @@ mod tests {
         assert_eq!(out.data["errors"], 6);
         let out = h.run("data.validate", json!({"text": "[1, \"x\"]", "schema": {"type": "array", "items": {"type": "integer"}}})).await.unwrap();
         assert_eq!(out.data["valid"], false);
-        let out = h.run("data.duplicates", json!({"text": CSV})).await.unwrap();
+        let out = h
+            .run("data.duplicates", json!({"text": CSV}))
+            .await
+            .unwrap();
         assert_eq!(out.data["duplicate_rows_removed"], 1);
-        let out = h.run("data.duplicates", json!({"text": CSV, "columns": "city"})).await.unwrap();
+        let out = h
+            .run("data.duplicates", json!({"text": CSV, "columns": "city"}))
+            .await
+            .unwrap();
         assert_eq!(out.data["duplicate_rows_removed"], 2);
         let out = h.run("data.stats", json!({"text": CSV})).await.unwrap();
         let rows = out.data["table"]["rows"].as_array().unwrap();

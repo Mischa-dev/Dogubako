@@ -35,7 +35,10 @@ macro_rules! whisper {
             group: "whisper",
             name: $name,
             description: $desc,
-            url: concat!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/", $file),
+            url: concat!(
+                "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/",
+                $file
+            ),
             extra: &[],
             file_name: $file,
             size_bytes: $size,
@@ -163,7 +166,12 @@ impl ModelRegistry {
     }
 
     pub fn is_installed(&self, id: &str) -> bool {
-        model_spec(id).map(|s| self.file_path(s).is_file() && s.extra.iter().all(|(_, f)| self.dir.join(f).is_file())).unwrap_or(false)
+        model_spec(id)
+            .map(|s| {
+                self.file_path(s).is_file()
+                    && s.extra.iter().all(|(_, f)| self.dir.join(f).is_file())
+            })
+            .unwrap_or(false)
     }
 
     pub fn path(&self, id: &str) -> Option<PathBuf> {
@@ -176,7 +184,10 @@ impl ModelRegistry {
 
     /// Installed models in a group, in catalog order.
     pub fn installed_in_group(&self, group: &str) -> Vec<&'static ModelSpec> {
-        KNOWN_MODELS.iter().filter(|m| m.group == group && self.is_installed(m.id)).collect()
+        KNOWN_MODELS
+            .iter()
+            .filter(|m| m.group == group && self.is_installed(m.id))
+            .collect()
     }
 
     pub fn group_available(&self, group: &str) -> bool {
@@ -192,14 +203,16 @@ impl ModelRegistry {
                     spec: m.clone(),
                     installed,
                     path: installed.then(|| self.file_path(m)),
-                    verified: installed && self.dir.join(format!("{}.verified", m.file_name)).is_file(),
+                    verified: installed
+                        && self.dir.join(format!("{}.verified", m.file_name)).is_file(),
                 }
             })
             .collect()
     }
 
     pub fn remove(&self, id: &str) -> ToolResult<()> {
-        let spec = model_spec(id).ok_or_else(|| ToolError::input(format!("unknown model '{id}'")))?;
+        let spec =
+            model_spec(id).ok_or_else(|| ToolError::input(format!("unknown model '{id}'")))?;
         for f in std::iter::once(spec.file_name).chain(spec.extra.iter().map(|(_, f)| *f)) {
             let _ = std::fs::remove_file(self.dir.join(f));
         }
@@ -218,7 +231,8 @@ impl ModelRegistry {
         use sha1::Digest as _;
         use tokio::io::AsyncWriteExt;
 
-        let spec = model_spec(id).ok_or_else(|| ToolError::input(format!("unknown model '{id}'")))?;
+        let spec =
+            model_spec(id).ok_or_else(|| ToolError::input(format!("unknown model '{id}'")))?;
         std::fs::create_dir_all(&self.dir)?;
         let client = reqwest::Client::builder()
             .user_agent(concat!("dogubako/", env!("CARGO_PKG_VERSION")))
@@ -227,11 +241,20 @@ impl ModelRegistry {
         let mut files: Vec<(&str, &str, bool)> = vec![(spec.url, spec.file_name, true)];
         files.extend(spec.extra.iter().map(|(u, f)| (*u, *f, false)));
         for (url, file_name, primary) in files {
-            let resp = client.get(url).send().await.map_err(|e| ToolError::failed(format!("download failed: {e}")))?;
+            let resp = client
+                .get(url)
+                .send()
+                .await
+                .map_err(|e| ToolError::failed(format!("download failed: {e}")))?;
             if !resp.status().is_success() {
-                return Err(ToolError::failed(format!("download failed: HTTP {} for {url}", resp.status())));
+                return Err(ToolError::failed(format!(
+                    "download failed: HTTP {} for {url}",
+                    resp.status()
+                )));
             }
-            let total = resp.content_length().unwrap_or(if primary { spec.size_bytes } else { 0 });
+            let total = resp
+                .content_length()
+                .unwrap_or(if primary { spec.size_bytes } else { 0 });
             let part = self.dir.join(format!("{file_name}.part"));
             let mut out = tokio::fs::File::create(&part).await?;
             let mut s1 = sha1::Sha1::new();
@@ -244,7 +267,8 @@ impl ModelRegistry {
                     let _ = std::fs::remove_file(&part);
                     return Err(ToolError::Cancelled);
                 }
-                let chunk = chunk.map_err(|e| ToolError::failed(format!("download interrupted: {e}")))?;
+                let chunk =
+                    chunk.map_err(|e| ToolError::failed(format!("download interrupted: {e}")))?;
                 s1.update(&chunk);
                 sha2::Digest::update(&mut s256, &chunk);
                 out.write_all(&chunk).await?;
@@ -262,22 +286,32 @@ impl ModelRegistry {
                 if let Some(want) = spec.sha1 {
                     if want != got1 {
                         let _ = std::fs::remove_file(&part);
-                        return Err(ToolError::failed(format!("checksum mismatch for {id}: expected sha1 {want}, got {got1}")));
+                        return Err(ToolError::failed(format!(
+                            "checksum mismatch for {id}: expected sha1 {want}, got {got1}"
+                        )));
                     }
                     verified = true;
                 }
                 if let Some(want) = spec.sha256 {
                     if want != got256 {
                         let _ = std::fs::remove_file(&part);
-                        return Err(ToolError::failed(format!("checksum mismatch for {id}: expected sha256 {want}, got {got256}")));
+                        return Err(ToolError::failed(format!(
+                            "checksum mismatch for {id}: expected sha256 {want}, got {got256}"
+                        )));
                     }
                     verified = true;
                 }
                 if verified {
-                    std::fs::write(self.dir.join(format!("{file_name}.verified")), format!("sha256 {got256}\n"))?;
+                    std::fs::write(
+                        self.dir.join(format!("{file_name}.verified")),
+                        format!("sha256 {got256}\n"),
+                    )?;
                 } else {
                     tracing::warn!(model = id, sha256 = %got256, "no upstream checksum published; recorded local hash");
-                    std::fs::write(self.dir.join(format!("{file_name}.sha256")), format!("{got256}\n"))?;
+                    std::fs::write(
+                        self.dir.join(format!("{file_name}.sha256")),
+                        format!("{got256}\n"),
+                    )?;
                 }
             }
             std::fs::rename(&part, self.dir.join(file_name))?;

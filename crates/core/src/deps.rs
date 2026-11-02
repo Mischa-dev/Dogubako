@@ -38,7 +38,14 @@ pub struct DepSpec {
 
 macro_rules! hints {
     ($apt:expr, $dnf:expr, $pacman:expr, $brew:expr, $winget:expr, $url:expr) => {
-        InstallHints { apt: $apt, dnf: $dnf, pacman: $pacman, brew: $brew, winget: $winget, url: $url }
+        InstallHints {
+            apt: $apt,
+            dnf: $dnf,
+            pacman: $pacman,
+            brew: $brew,
+            winget: $winget,
+            url: $url,
+        }
     };
 }
 
@@ -53,7 +60,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["-version"],
         version_regex: r"ffmpeg version (\S+)",
         license: "LGPL-2.1+ / GPL-2.0+ depending on build",
-        install: hints!(Some("ffmpeg"), Some("ffmpeg-free"), Some("ffmpeg"), Some("ffmpeg"), Some("Gyan.FFmpeg"), "https://ffmpeg.org/download.html"),
+        install: hints!(
+            Some("ffmpeg"),
+            Some("ffmpeg-free"),
+            Some("ffmpeg"),
+            Some("ffmpeg"),
+            Some("Gyan.FFmpeg"),
+            "https://ffmpeg.org/download.html"
+        ),
     },
     DepSpec {
         id: "ffprobe",
@@ -64,7 +78,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["-version"],
         version_regex: r"ffprobe version (\S+)",
         license: "LGPL-2.1+ / GPL-2.0+ depending on build",
-        install: hints!(Some("ffmpeg"), Some("ffmpeg-free"), Some("ffmpeg"), Some("ffmpeg"), Some("Gyan.FFmpeg"), "https://ffmpeg.org/download.html"),
+        install: hints!(
+            Some("ffmpeg"),
+            Some("ffmpeg-free"),
+            Some("ffmpeg"),
+            Some("ffmpeg"),
+            Some("Gyan.FFmpeg"),
+            "https://ffmpeg.org/download.html"
+        ),
     },
     DepSpec {
         id: "imagemagick",
@@ -75,7 +96,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["-version"],
         version_regex: r"ImageMagick (\S+)",
         license: "ImageMagick License (Apache-2.0 style)",
-        install: hints!(Some("imagemagick"), Some("ImageMagick"), Some("imagemagick"), Some("imagemagick"), Some("ImageMagick.ImageMagick"), "https://imagemagick.org/script/download.php"),
+        install: hints!(
+            Some("imagemagick"),
+            Some("ImageMagick"),
+            Some("imagemagick"),
+            Some("imagemagick"),
+            Some("ImageMagick.ImageMagick"),
+            "https://imagemagick.org/script/download.php"
+        ),
     },
     DepSpec {
         id: "vips",
@@ -86,7 +114,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["--version"],
         version_regex: r"vips-(\S+)",
         license: "LGPL-2.1+",
-        install: hints!(Some("libvips-tools"), Some("vips-tools"), Some("libvips"), Some("vips"), None, "https://www.libvips.org/install.html"),
+        install: hints!(
+            Some("libvips-tools"),
+            Some("vips-tools"),
+            Some("libvips"),
+            Some("vips"),
+            None,
+            "https://www.libvips.org/install.html"
+        ),
     },
     DepSpec {
         id: "exiftool",
@@ -97,7 +132,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["-ver"],
         version_regex: r"^(\d+\.\d+)",
         license: "Artistic-1.0 / GPL-1.0+ (Perl terms)",
-        install: hints!(Some("libimage-exiftool-perl"), Some("perl-Image-ExifTool"), Some("perl-image-exiftool"), Some("exiftool"), Some("OliverBetz.ExifTool"), "https://exiftool.org/"),
+        install: hints!(
+            Some("libimage-exiftool-perl"),
+            Some("perl-Image-ExifTool"),
+            Some("perl-image-exiftool"),
+            Some("exiftool"),
+            Some("OliverBetz.ExifTool"),
+            "https://exiftool.org/"
+        ),
     },
     DepSpec {
         id: "qpdf",
@@ -108,7 +150,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["--version"],
         version_regex: r"qpdf version (\S+)",
         license: "Apache-2.0",
-        install: hints!(Some("qpdf"), Some("qpdf"), Some("qpdf"), Some("qpdf"), Some("QPDF.QPDF"), "https://github.com/qpdf/qpdf/releases"),
+        install: hints!(
+            Some("qpdf"),
+            Some("qpdf"),
+            Some("qpdf"),
+            Some("qpdf"),
+            Some("QPDF.QPDF"),
+            "https://github.com/qpdf/qpdf/releases"
+        ),
     },
     DepSpec {
         id: "poppler",
@@ -119,7 +168,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["-v"],
         version_regex: r"pdftoppm version (\S+)",
         license: "GPL-2.0+",
-        install: hints!(Some("poppler-utils"), Some("poppler-utils"), Some("poppler"), Some("poppler"), Some("oschwartz10612.Poppler"), "https://poppler.freedesktop.org/"),
+        install: hints!(
+            Some("poppler-utils"),
+            Some("poppler-utils"),
+            Some("poppler"),
+            Some("poppler"),
+            Some("oschwartz10612.Poppler"),
+            "https://poppler.freedesktop.org/"
+        ),
     },
     DepSpec {
         id: "ghostscript",
@@ -130,7 +186,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["--version"],
         version_regex: r"^(\S+)",
         license: "AGPL-3.0",
-        install: hints!(Some("ghostscript"), Some("ghostscript"), Some("ghostscript"), Some("ghostscript"), Some("ArtifexSoftware.GhostScript"), "https://ghostscript.com/releases/"),
+        install: hints!(
+            Some("ghostscript"),
+            Some("ghostscript"),
+            Some("ghostscript"),
+            Some("ghostscript"),
+            Some("ArtifexSoftware.GhostScript"),
+            "https://ghostscript.com/releases/"
+        ),
     },
     DepSpec {
         id: "tesseract",
@@ -141,7 +204,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["--version"],
         version_regex: r"tesseract v?(\S+)",
         license: "Apache-2.0",
-        install: hints!(Some("tesseract-ocr"), Some("tesseract"), Some("tesseract"), Some("tesseract"), Some("UB-Mannheim.TesseractOCR"), "https://tesseract-ocr.github.io/tessdoc/Installation.html"),
+        install: hints!(
+            Some("tesseract-ocr"),
+            Some("tesseract"),
+            Some("tesseract"),
+            Some("tesseract"),
+            Some("UB-Mannheim.TesseractOCR"),
+            "https://tesseract-ocr.github.io/tessdoc/Installation.html"
+        ),
     },
     DepSpec {
         id: "whisper",
@@ -152,7 +222,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["--help"],
         version_regex: r"(usage)",
         license: "MIT",
-        install: hints!(None, None, Some("whisper.cpp"), Some("whisper-cpp"), None, "https://github.com/ggml-org/whisper.cpp#quick-start"),
+        install: hints!(
+            None,
+            None,
+            Some("whisper.cpp"),
+            Some("whisper-cpp"),
+            None,
+            "https://github.com/ggml-org/whisper.cpp#quick-start"
+        ),
     },
     DepSpec {
         id: "piper",
@@ -163,7 +240,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["--version"],
         version_regex: r"(\d+\.\d+\.\d+)",
         license: "MIT (engine); voices have individual licenses",
-        install: hints!(None, None, None, None, None, "https://github.com/rhasspy/piper/releases"),
+        install: hints!(
+            None,
+            None,
+            None,
+            None,
+            None,
+            "https://github.com/rhasspy/piper/releases"
+        ),
     },
     DepSpec {
         id: "rembg",
@@ -174,7 +258,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["--version"],
         version_regex: r"(\d+\.\d+\.\d+)",
         license: "MIT (models: Apache-2.0 / various)",
-        install: hints!(None, None, None, None, None, "https://github.com/danielgatis/rembg#installation"),
+        install: hints!(
+            None,
+            None,
+            None,
+            None,
+            None,
+            "https://github.com/danielgatis/rembg#installation"
+        ),
     },
     DepSpec {
         id: "realesrgan",
@@ -185,7 +276,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["-h"],
         version_regex: r"(Usage)",
         license: "BSD-3-Clause",
-        install: hints!(None, None, None, None, None, "https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases"),
+        install: hints!(
+            None,
+            None,
+            None,
+            None,
+            None,
+            "https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases"
+        ),
     },
     DepSpec {
         id: "libreoffice",
@@ -196,7 +294,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["--version"],
         version_regex: r"LibreOffice (\S+)",
         license: "MPL-2.0",
-        install: hints!(Some("libreoffice-core"), Some("libreoffice-core"), Some("libreoffice-fresh"), Some("--cask libreoffice"), Some("TheDocumentFoundation.LibreOffice"), "https://www.libreoffice.org/download/"),
+        install: hints!(
+            Some("libreoffice-core"),
+            Some("libreoffice-core"),
+            Some("libreoffice-fresh"),
+            Some("--cask libreoffice"),
+            Some("TheDocumentFoundation.LibreOffice"),
+            "https://www.libreoffice.org/download/"
+        ),
     },
     DepSpec {
         id: "pandoc",
@@ -207,7 +312,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["--version"],
         version_regex: r"pandoc (\S+)",
         license: "GPL-2.0+",
-        install: hints!(Some("pandoc"), Some("pandoc"), Some("pandoc"), Some("pandoc"), Some("JohnMacFarlane.Pandoc"), "https://pandoc.org/installing.html"),
+        install: hints!(
+            Some("pandoc"),
+            Some("pandoc"),
+            Some("pandoc"),
+            Some("pandoc"),
+            Some("JohnMacFarlane.Pandoc"),
+            "https://pandoc.org/installing.html"
+        ),
     },
     DepSpec {
         id: "7zip",
@@ -218,7 +330,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["i"],
         version_regex: r"7-Zip[^\d]*(\d+\.\d+)",
         license: "LGPL-2.1+ (unRAR restriction applies to RAR code)",
-        install: hints!(Some("7zip"), Some("p7zip-plugins"), Some("7zip"), Some("sevenzip"), Some("7zip.7zip"), "https://www.7-zip.org/download.html"),
+        install: hints!(
+            Some("7zip"),
+            Some("p7zip-plugins"),
+            Some("7zip"),
+            Some("sevenzip"),
+            Some("7zip.7zip"),
+            "https://www.7-zip.org/download.html"
+        ),
     },
     DepSpec {
         id: "bwrap",
@@ -229,7 +348,14 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         version_args: &["--version"],
         version_regex: r"bubblewrap (\S+)",
         license: "LGPL-2.0+",
-        install: hints!(Some("bubblewrap"), Some("bubblewrap"), Some("bubblewrap"), None, None, "https://github.com/containers/bubblewrap"),
+        install: hints!(
+            Some("bubblewrap"),
+            Some("bubblewrap"),
+            Some("bubblewrap"),
+            None,
+            None,
+            "https://github.com/containers/bubblewrap"
+        ),
     },
 ];
 
@@ -258,7 +384,10 @@ pub struct DepRegistry {
 
 impl DepRegistry {
     pub fn new(extra_dirs: Vec<PathBuf>) -> Self {
-        DepRegistry { extra_dirs, cache: RwLock::new(HashMap::new()) }
+        DepRegistry {
+            extra_dirs,
+            cache: RwLock::new(HashMap::new()),
+        }
     }
 
     /// Clear cached detection (after the user installs something).
@@ -271,7 +400,10 @@ impl DepRegistry {
             return s.clone();
         }
         let s = self.detect(id);
-        self.cache.write().unwrap().insert(id.to_string(), s.clone());
+        self.cache
+            .write()
+            .unwrap()
+            .insert(id.to_string(), s.clone());
         s
     }
 
@@ -288,7 +420,10 @@ impl DepRegistry {
     }
 
     fn find_binary(&self, spec: &DepSpec) -> Option<PathBuf> {
-        let env_key = format!("DOGUBAKO_{}_PATH", spec.id.to_ascii_uppercase().replace('-', "_"));
+        let env_key = format!(
+            "DOGUBAKO_{}_PATH",
+            spec.id.to_ascii_uppercase().replace('-', "_")
+        );
         if let Ok(p) = std::env::var(&env_key) {
             let p = PathBuf::from(p);
             if p.is_file() {
@@ -365,7 +500,9 @@ fn probe_version(path: &Path, spec: &DepSpec) -> Option<String> {
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
-            Ok(None) if std::time::Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20))
+            }
             _ => {
                 let _ = child.kill();
                 return None;
@@ -373,9 +510,19 @@ fn probe_version(path: &Path, spec: &DepSpec) -> Option<String> {
         }
     }
     let out = child.wait_with_output().ok()?;
-    let text = format!("{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
-    let re = regex::RegexBuilder::new(spec.version_regex).multi_line(true).case_insensitive(true).build().ok()?;
-    re.captures(&text).and_then(|c| c.get(1)).map(|m| m.as_str().trim_end_matches(',').to_string())
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let re = regex::RegexBuilder::new(spec.version_regex)
+        .multi_line(true)
+        .case_insensitive(true)
+        .build()
+        .ok()?;
+    re.captures(&text)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str().trim_end_matches(',').to_string())
 }
 
 pub fn install_hint(spec: &DepSpec) -> String {
@@ -385,7 +532,9 @@ pub fn install_hint(spec: &DepSpec) -> String {
     } else if cfg!(windows) {
         h.winget.map(|w| format!("winget install {w}"))
     } else {
-        h.apt.map(|a| format!("sudo apt install {a}")).or(h.dnf.map(|d| format!("sudo dnf install {d}")))
+        h.apt
+            .map(|a| format!("sudo apt install {a}"))
+            .or(h.dnf.map(|d| format!("sudo dnf install {d}")))
     };
     match os_hint {
         Some(cmd) => format!("Install {} ({cmd}) or see {}", spec.name, h.url),

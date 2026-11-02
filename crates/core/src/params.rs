@@ -18,12 +18,18 @@ pub struct InputFile {
 impl InputFile {
     pub fn from_path(path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "input".into());
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "input".into());
         InputFile { path, name }
     }
     /// File stem of the original name, e.g. `photo` for `photo.jpg`.
     pub fn stem(&self) -> String {
-        Path::new(&self.name).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "output".into())
+        Path::new(&self.name)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "output".into())
     }
     /// Lower-case extension of the original name, without dot.
     pub fn extension(&self) -> String {
@@ -49,7 +55,9 @@ pub struct LocalFileResolver {
 
 impl LocalFileResolver {
     pub fn unrestricted() -> Self {
-        LocalFileResolver { policy: FsPolicy::unrestricted() }
+        LocalFileResolver {
+            policy: FsPolicy::unrestricted(),
+        }
     }
 }
 
@@ -57,7 +65,10 @@ impl FileResolver for LocalFileResolver {
     fn resolve(&self, param: &str, value: &str) -> ToolResult<InputFile> {
         let path = self.policy.check(param, Path::new(value))?;
         if !path.is_file() {
-            return Err(ToolError::invalid(param, format!("'{value}' is not a readable file")));
+            return Err(ToolError::invalid(
+                param,
+                format!("'{value}' is not a readable file"),
+            ));
         }
         let mut f = InputFile::from_path(&path);
         // Keep the name the user typed, not the canonical target of a symlink.
@@ -78,7 +89,10 @@ pub struct Params {
 impl Params {
     /// Construct directly (mostly for tests).
     pub fn from_values(values: Map<String, Value>) -> Self {
-        Params { values, files: HashMap::new() }
+        Params {
+            values,
+            files: HashMap::new(),
+        }
     }
 
     pub fn raw(&self) -> &Map<String, Value> {
@@ -94,12 +108,15 @@ impl Params {
     }
 
     pub fn str(&self, name: &str) -> ToolResult<&str> {
-        self.opt_str(name).ok_or_else(|| ToolError::invalid(name, "is required"))
+        self.opt_str(name)
+            .ok_or_else(|| ToolError::invalid(name, "is required"))
     }
 
     /// Returns the string, treating empty strings as absent.
     pub fn opt_str(&self, name: &str) -> Option<&str> {
-        self.get(name).and_then(|v| v.as_str()).filter(|s| !s.is_empty())
+        self.get(name)
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
     }
 
     /// String value, possibly empty (for text inputs where empty is meaningful).
@@ -112,7 +129,8 @@ impl Params {
     }
 
     pub fn int(&self, name: &str) -> ToolResult<i64> {
-        self.opt_int(name).ok_or_else(|| ToolError::invalid(name, "is required"))
+        self.opt_int(name)
+            .ok_or_else(|| ToolError::invalid(name, "is required"))
     }
 
     pub fn opt_int(&self, name: &str) -> Option<i64> {
@@ -124,7 +142,8 @@ impl Params {
     }
 
     pub fn num(&self, name: &str) -> ToolResult<f64> {
-        self.opt_num(name).ok_or_else(|| ToolError::invalid(name, "is required"))
+        self.opt_num(name)
+            .ok_or_else(|| ToolError::invalid(name, "is required"))
     }
 
     pub fn opt_num(&self, name: &str) -> Option<f64> {
@@ -142,7 +161,10 @@ impl Params {
     /// Values of a multi-choice enum.
     pub fn list(&self, name: &str) -> Vec<String> {
         match self.get(name) {
-            Some(Value::Array(a)) => a.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect(),
+            Some(Value::Array(a)) => a
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect(),
             Some(Value::String(s)) if !s.is_empty() => vec![s.clone()],
             _ => vec![],
         }
@@ -170,7 +192,9 @@ impl Params {
 
     /// Host filesystem path parameter (already policy-checked).
     pub fn path(&self, name: &str) -> ToolResult<PathBuf> {
-        self.opt_str(name).map(PathBuf::from).ok_or_else(|| ToolError::invalid(name, "a path is required"))
+        self.opt_str(name)
+            .map(PathBuf::from)
+            .ok_or_else(|| ToolError::invalid(name, "a path is required"))
     }
 
     pub fn opt_path(&self, name: &str) -> Option<PathBuf> {
@@ -235,12 +259,17 @@ pub fn validate(
     for key in raw.keys() {
         if spec.param_spec(key).is_none() {
             let known: Vec<&str> = spec.params.iter().map(|p| p.name.as_str()).collect();
-            return Err(ToolError::invalid(key, format!("unknown parameter (expected one of: {})", known.join(", "))));
+            return Err(ToolError::invalid(
+                key,
+                format!("unknown parameter (expected one of: {})", known.join(", ")),
+            ));
         }
     }
     let mut out = Params::default();
     for p in &spec.params {
-        let v = raw.get(&p.name).filter(|v| !v.is_null() && !(v.is_string() && v.as_str() == Some("") && !is_text(p)));
+        let v = raw
+            .get(&p.name)
+            .filter(|v| !v.is_null() && !(v.is_string() && v.as_str() == Some("") && !is_text(p)));
         let v = match v {
             Some(v) => v.clone(),
             None => match &p.default {
@@ -259,9 +288,18 @@ pub fn validate(
                     Value::String(s) => vec![s.clone()],
                     Value::Array(a) => a
                         .iter()
-                        .map(|x| x.as_str().map(|s| s.to_string()).ok_or_else(|| ToolError::invalid(&p.name, "expected file references")))
+                        .map(|x| {
+                            x.as_str().map(|s| s.to_string()).ok_or_else(|| {
+                                ToolError::invalid(&p.name, "expected file references")
+                            })
+                        })
                         .collect::<ToolResult<_>>()?,
-                    _ => return Err(ToolError::invalid(&p.name, "expected a file reference or list of file references")),
+                    _ => {
+                        return Err(ToolError::invalid(
+                            &p.name,
+                            "expected a file reference or list of file references",
+                        ))
+                    }
                 };
                 if ids.is_empty() {
                     if p.required {
@@ -279,7 +317,10 @@ pub fn validate(
                     files.push(f);
                 }
                 out.files.insert(p.name.clone(), files);
-                out.values.insert(p.name.clone(), Value::Array(ids.into_iter().map(Value::String).collect()));
+                out.values.insert(
+                    p.name.clone(),
+                    Value::Array(ids.into_iter().map(Value::String).collect()),
+                );
             }
             _ => {
                 let cv = coerce(p, v, fs_policy)?;
@@ -295,7 +336,9 @@ fn is_text(p: &ParamSpec) -> bool {
 }
 
 fn check_accept(p: &ParamSpec, f: &InputFile) -> ToolResult<()> {
-    let ParamKind::File { accept, .. } = &p.kind else { return Ok(()) };
+    let ParamKind::File { accept, .. } = &p.kind else {
+        return Ok(());
+    };
     if accept.is_empty() {
         return Ok(());
     }
@@ -319,7 +362,14 @@ fn check_accept(p: &ParamSpec, f: &InputFile) -> ToolResult<()> {
     if ok {
         Ok(())
     } else {
-        Err(ToolError::invalid(&p.name, format!("'{}' is not an accepted file type (accepts: {})", f.name, accept.join(", "))))
+        Err(ToolError::invalid(
+            &p.name,
+            format!(
+                "'{}' is not an accepted file type (accepts: {})",
+                f.name,
+                accept.join(", ")
+            ),
+        ))
     }
 }
 
@@ -331,21 +381,34 @@ fn coerce(p: &ParamSpec, v: Value, fs_policy: &FsPolicy) -> ToolResult<Value> {
                 Value::String(s) => s,
                 Value::Number(n) => n.to_string(),
                 Value::Bool(b) => b.to_string(),
-                other => return Err(ToolError::invalid(name, format!("expected text, got {}", type_name(&other)))),
+                other => {
+                    return Err(ToolError::invalid(
+                        name,
+                        format!("expected text, got {}", type_name(&other)),
+                    ))
+                }
             };
             let limit = max_len.unwrap_or(DEFAULT_MAX_TEXT);
             if s.len() > limit {
-                return Err(ToolError::invalid(name, format!("text is too long ({} bytes, max {limit})", s.len())));
+                return Err(ToolError::invalid(
+                    name,
+                    format!("text is too long ({} bytes, max {limit})", s.len()),
+                ));
             }
             Ok(Value::String(s))
         }
         ParamKind::Secret => match v {
             Value::String(s) if s.len() <= 4096 => Ok(Value::String(s)),
-            _ => Err(ToolError::invalid(name, "expected a string of at most 4096 bytes")),
+            _ => Err(ToolError::invalid(
+                name,
+                "expected a string of at most 4096 bytes",
+            )),
         },
         ParamKind::Integer { min, max } => {
             let i = match &v {
-                Value::Number(n) => n.as_i64().or_else(|| n.as_f64().filter(|f| f.fract() == 0.0).map(|f| f as i64)),
+                Value::Number(n) => n
+                    .as_i64()
+                    .or_else(|| n.as_f64().filter(|f| f.fract() == 0.0).map(|f| f as i64)),
                 Value::String(s) => s.trim().parse::<i64>().ok(),
                 _ => None,
             }
@@ -382,7 +445,9 @@ fn coerce(p: &ParamSpec, v: Value, fs_policy: &FsPolicy) -> ToolResult<Value> {
             }
             Ok(Value::from(f))
         }
-        ParamKind::Boolean => coerce_bool(&v).map(Value::Bool).ok_or_else(|| ToolError::invalid(name, "expected true or false")),
+        ParamKind::Boolean => coerce_bool(&v)
+            .map(Value::Bool)
+            .ok_or_else(|| ToolError::invalid(name, "expected true or false")),
         ParamKind::Enum { options, multi } => {
             let check = |s: &str| -> ToolResult<String> {
                 options
@@ -391,16 +456,29 @@ fn coerce(p: &ParamSpec, v: Value, fs_policy: &FsPolicy) -> ToolResult<Value> {
                     .map(|o| o.value.clone())
                     .ok_or_else(|| {
                         let allowed: Vec<&str> = options.iter().map(|o| o.value.as_str()).collect();
-                        ToolError::invalid(name, format!("'{s}' is not one of: {}", allowed.join(", ")))
+                        ToolError::invalid(
+                            name,
+                            format!("'{s}' is not one of: {}", allowed.join(", ")),
+                        )
                     })
             };
             if *multi {
                 let items: Vec<String> = match v {
-                    Value::Array(a) => a.iter().map(|x| x.as_str().unwrap_or_default().to_string()).collect(),
-                    Value::String(s) => s.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect(),
+                    Value::Array(a) => a
+                        .iter()
+                        .map(|x| x.as_str().unwrap_or_default().to_string())
+                        .collect(),
+                    Value::String(s) => s
+                        .split(',')
+                        .map(|x| x.trim().to_string())
+                        .filter(|x| !x.is_empty())
+                        .collect(),
                     _ => return Err(ToolError::invalid(name, "expected a list of options")),
                 };
-                let vals = items.iter().map(|s| check(s).map(Value::String)).collect::<ToolResult<Vec<_>>>()?;
+                let vals = items
+                    .iter()
+                    .map(|s| check(s).map(Value::String))
+                    .collect::<ToolResult<Vec<_>>>()?;
                 Ok(Value::Array(vals))
             } else {
                 let s = match &v {
@@ -413,21 +491,33 @@ fn coerce(p: &ParamSpec, v: Value, fs_policy: &FsPolicy) -> ToolResult<Value> {
             }
         }
         ParamKind::Color => {
-            let s = v.as_str().ok_or_else(|| ToolError::invalid(name, "expected a color string"))?;
-            normalize_hex_color(s)
-                .map(Value::String)
-                .ok_or_else(|| ToolError::invalid(name, format!("'{s}' is not a hex color like #3366ff")))
+            let s = v
+                .as_str()
+                .ok_or_else(|| ToolError::invalid(name, "expected a color string"))?;
+            normalize_hex_color(s).map(Value::String).ok_or_else(|| {
+                ToolError::invalid(name, format!("'{s}' is not a hex color like #3366ff"))
+            })
         }
         ParamKind::Json { .. } => match v {
-            Value::String(s) => serde_json::from_str(&s).map_err(|e| ToolError::invalid(name, format!("invalid JSON: {e}"))),
+            Value::String(s) => serde_json::from_str(&s)
+                .map_err(|e| ToolError::invalid(name, format!("invalid JSON: {e}"))),
             other => Ok(other),
         },
         ParamKind::Path { kind } => {
-            let s = v.as_str().ok_or_else(|| ToolError::invalid(name, "expected a path"))?;
+            let s = v
+                .as_str()
+                .ok_or_else(|| ToolError::invalid(name, "expected a path"))?;
             let canon = fs_policy.check(name, Path::new(s))?;
             match kind {
-                PathKind::Dir if !canon.is_dir() => return Err(ToolError::invalid(name, format!("'{s}' is not a directory"))),
-                PathKind::File if !canon.is_file() => return Err(ToolError::invalid(name, format!("'{s}' is not a file"))),
+                PathKind::Dir if !canon.is_dir() => {
+                    return Err(ToolError::invalid(
+                        name,
+                        format!("'{s}' is not a directory"),
+                    ))
+                }
+                PathKind::File if !canon.is_file() => {
+                    return Err(ToolError::invalid(name, format!("'{s}' is not a file")))
+                }
                 _ => {}
             }
             Ok(Value::String(canon.to_string_lossy().to_string()))

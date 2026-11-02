@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum ToolError {
     #[error("invalid input{}: {message}", param.as_ref().map(|p| format!(" for '{p}'")).unwrap_or_default())]
-    InvalidInput { param: Option<String>, message: String },
+    InvalidInput {
+        param: Option<String>,
+        message: String,
+    },
     #[error("tool not found: {id}")]
     NotFound { id: String },
     #[error("missing dependency '{dependency}': {hint}")]
@@ -24,29 +27,47 @@ pub enum ToolError {
     #[error("limit exceeded: {message}")]
     LimitExceeded { message: String },
     #[error("{program} failed (exit {exit_code:?}): {stderr}")]
-    External { program: String, exit_code: Option<i32>, stderr: String },
+    External {
+        program: String,
+        exit_code: Option<i32>,
+        stderr: String,
+    },
     #[error("{message}")]
     Failed { message: String },
 }
 
 impl ToolError {
     pub fn invalid(param: &str, message: impl Into<String>) -> Self {
-        ToolError::InvalidInput { param: Some(param.to_string()), message: message.into() }
+        ToolError::InvalidInput {
+            param: Some(param.to_string()),
+            message: message.into(),
+        }
     }
     pub fn input(message: impl Into<String>) -> Self {
-        ToolError::InvalidInput { param: None, message: message.into() }
+        ToolError::InvalidInput {
+            param: None,
+            message: message.into(),
+        }
     }
     pub fn failed(message: impl Into<String>) -> Self {
-        ToolError::Failed { message: message.into() }
+        ToolError::Failed {
+            message: message.into(),
+        }
     }
     pub fn unsupported(message: impl Into<String>) -> Self {
-        ToolError::Unsupported { message: message.into() }
+        ToolError::Unsupported {
+            message: message.into(),
+        }
     }
     pub fn denied(message: impl Into<String>) -> Self {
-        ToolError::PermissionDenied { message: message.into() }
+        ToolError::PermissionDenied {
+            message: message.into(),
+        }
     }
     pub fn limit(message: impl Into<String>) -> Self {
-        ToolError::LimitExceeded { message: message.into() }
+        ToolError::LimitExceeded {
+            message: message.into(),
+        }
     }
 
     pub fn code(&self) -> &'static str {
@@ -69,7 +90,9 @@ impl ToolError {
     pub fn exit_code(&self) -> i32 {
         match self {
             ToolError::InvalidInput { .. } | ToolError::NotFound { .. } => 2,
-            ToolError::MissingDependency { .. } | ToolError::MissingModel { .. } | ToolError::Unsupported { .. } => 3,
+            ToolError::MissingDependency { .. }
+            | ToolError::MissingModel { .. }
+            | ToolError::Unsupported { .. } => 3,
             ToolError::PermissionDenied { .. } => 4,
             ToolError::Timeout { .. } | ToolError::LimitExceeded { .. } => 5,
             ToolError::Cancelled => 130,
@@ -83,7 +106,9 @@ impl ToolError {
             ToolError::InvalidInput { .. } => 400,
             ToolError::NotFound { .. } => 404,
             ToolError::PermissionDenied { .. } => 403,
-            ToolError::MissingDependency { .. } | ToolError::MissingModel { .. } | ToolError::Unsupported { .. } => 501,
+            ToolError::MissingDependency { .. }
+            | ToolError::MissingModel { .. }
+            | ToolError::Unsupported { .. } => 501,
             ToolError::LimitExceeded { .. } => 413,
             ToolError::Timeout { .. } => 504,
             ToolError::Cancelled => 499,
@@ -94,13 +119,17 @@ impl ToolError {
 
 impl From<std::io::Error> for ToolError {
     fn from(e: std::io::Error) -> Self {
-        ToolError::Failed { message: format!("I/O error: {e}") }
+        ToolError::Failed {
+            message: format!("I/O error: {e}"),
+        }
     }
 }
 
 impl From<serde_json::Error> for ToolError {
     fn from(e: serde_json::Error) -> Self {
-        ToolError::Failed { message: format!("JSON error: {e}") }
+        ToolError::Failed {
+            message: format!("JSON error: {e}"),
+        }
     }
 }
 
@@ -115,7 +144,9 @@ pub trait Context<T> {
 
 impl<T, E: std::fmt::Display> Context<T> for Result<T, E> {
     fn ctx(self, what: &str) -> ToolResult<T> {
-        self.map_err(|e| ToolError::Failed { message: format!("{what}: {e}") })
+        self.map_err(|e| ToolError::Failed {
+            message: format!("{what}: {e}"),
+        })
     }
     fn bad_input(self, param: &str) -> ToolResult<T> {
         self.map_err(|e| ToolError::invalid(param, e.to_string()))

@@ -81,21 +81,36 @@ impl Policy {
     /// Defaults by role (least privilege for agents: nothing).
     pub fn for_role(role: Role) -> Policy {
         match role {
-            Role::Owner | Role::Admin => Policy { allow: vec!["*".into()], permissions: Permission::ALL.to_vec(), ..Default::default() },
-            Role::User => Policy { allow: vec!["*".into()], permissions: vec![Permission::Network], ..Default::default() },
+            Role::Owner | Role::Admin => Policy {
+                allow: vec!["*".into()],
+                permissions: Permission::ALL.to_vec(),
+                ..Default::default()
+            },
+            Role::User => Policy {
+                allow: vec!["*".into()],
+                permissions: vec![Permission::Network],
+                ..Default::default()
+            },
             Role::Agent => Policy::default(),
         }
     }
 
     pub fn allows_tool(&self, spec: &ToolSpec) -> bool {
-        self.allow.iter().any(|p| pattern_matches(p, spec)) && !self.deny.iter().any(|p| pattern_matches(p, spec))
+        self.allow.iter().any(|p| pattern_matches(p, spec))
+            && !self.deny.iter().any(|p| pattern_matches(p, spec))
     }
 
     pub fn validate(&self) -> Result<(), String> {
         for p in self.allow.iter().chain(self.deny.iter()) {
             let ok = p == "*"
-                || p.strip_prefix("category:").map(|c| dogubako_core::spec::Category::parse(c).is_some()).unwrap_or(false)
-                || p.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-' | '*'));
+                || p.strip_prefix("category:")
+                    .map(|c| dogubako_core::spec::Category::parse(c).is_some())
+                    .unwrap_or(false)
+                || p.chars().all(|c| {
+                    c.is_ascii_lowercase()
+                        || c.is_ascii_digit()
+                        || matches!(c, '.' | '_' | '-' | '*')
+                });
             if !ok {
                 return Err(format!("invalid tool pattern '{p}'"));
             }
@@ -129,19 +144,34 @@ pub struct Principal {
 
 impl Principal {
     pub fn is_admin(&self) -> bool {
-        self.role.is_admin() && self.token_scope.as_ref().map(|t| t.allow.iter().any(|a| a == "*")).unwrap_or(true)
+        self.role.is_admin()
+            && self
+                .token_scope
+                .as_ref()
+                .map(|t| t.allow.iter().any(|a| a == "*"))
+                .unwrap_or(true)
     }
 
     pub fn can_use(&self, spec: &ToolSpec) -> bool {
-        self.policy.allows_tool(spec) && self.token_scope.as_ref().map(|t| t.allows_tool(spec)).unwrap_or(true)
+        self.policy.allows_tool(spec)
+            && self
+                .token_scope
+                .as_ref()
+                .map(|t| t.allows_tool(spec))
+                .unwrap_or(true)
     }
 
     /// Granted capabilities, intersected with the token scope and with what
     /// the instance enables (host fs only when roots are configured).
     pub fn permissions(&self, host_fs_enabled: bool) -> PermissionSet {
         PermissionSet::from_iter(self.policy.permissions.iter().copied().filter(|p| {
-            let instance_ok = host_fs_enabled || !matches!(p, Permission::HostFsRead | Permission::HostFsWrite);
-            let token_ok = self.token_scope.as_ref().map(|t| t.permissions.contains(p)).unwrap_or(true);
+            let instance_ok =
+                host_fs_enabled || !matches!(p, Permission::HostFsRead | Permission::HostFsWrite);
+            let token_ok = self
+                .token_scope
+                .as_ref()
+                .map(|t| t.permissions.contains(p))
+                .unwrap_or(true);
             instance_ok && token_ok
         }))
     }
@@ -156,16 +186,26 @@ impl Principal {
     }
 
     pub fn quota_bytes(&self, default_mb: u64) -> u64 {
-        self.policy.quota_mb.unwrap_or(default_mb).saturating_mul(1024 * 1024)
+        self.policy
+            .quota_mb
+            .unwrap_or(default_mb)
+            .saturating_mul(1024 * 1024)
     }
 
     pub fn max_upload_bytes(&self, default_mb: u64) -> u64 {
-        let mb = self.policy.max_upload_mb.unwrap_or(default_mb).min(default_mb);
+        let mb = self
+            .policy
+            .max_upload_mb
+            .unwrap_or(default_mb)
+            .min(default_mb);
         mb.saturating_mul(1024 * 1024)
     }
 
     pub fn mcp_discovery(&self) -> Option<&str> {
-        self.token_scope.as_ref().and_then(|t| t.mcp_discovery.as_deref()).or(self.policy.mcp_discovery.as_deref())
+        self.token_scope
+            .as_ref()
+            .and_then(|t| t.mcp_discovery.as_deref())
+            .or(self.policy.mcp_discovery.as_deref())
     }
 }
 
@@ -197,7 +237,11 @@ mod tests {
             user_id: "a".into(),
             username: "imgbot".into(),
             role: Role::Agent,
-            policy: Policy { allow: vec!["image.*".into()], deny: vec!["image.ocr".into()], ..Default::default() },
+            policy: Policy {
+                allow: vec!["image.*".into()],
+                deny: vec!["image.ocr".into()],
+                ..Default::default()
+            },
             token_scope: None,
             token_id: None,
             via: "token",
@@ -207,11 +251,23 @@ mod tests {
         assert!(!agent.can_use(&sys));
         assert!(!agent.can_use(&spec("image.ocr", Category::Image)));
         assert!(agent.permissions(true).0.is_empty());
-        assert!(!Principal { policy: Policy::for_role(Role::Agent), ..agent.clone() }.can_use(&img));
+        assert!(!Principal {
+            policy: Policy::for_role(Role::Agent),
+            ..agent.clone()
+        }
+        .can_use(&img));
 
         // token narrower than the user
-        let mut admin = Principal { role: Role::Admin, policy: Policy::for_role(Role::Admin), ..agent };
-        admin.token_scope = Some(Policy { allow: vec!["image.resize".into()], permissions: vec![Permission::Network], ..Default::default() });
+        let mut admin = Principal {
+            role: Role::Admin,
+            policy: Policy::for_role(Role::Admin),
+            ..agent
+        };
+        admin.token_scope = Some(Policy {
+            allow: vec!["image.resize".into()],
+            permissions: vec![Permission::Network],
+            ..Default::default()
+        });
         assert!(admin.can_use(&img));
         assert!(!admin.can_use(&sys));
         assert!(!admin.is_admin(), "scoped tokens do not carry admin rights");

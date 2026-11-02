@@ -26,7 +26,10 @@ impl TestHarness {
         if let Some(m) = std::env::var_os("DOGUBAKO_TEST_MODELS") {
             cfg.models_dir = PathBuf::from(m);
         }
-        TestHarness { engine: Engine::new(reg, cfg, vec![]), dir }
+        TestHarness {
+            engine: Engine::new(reg, cfg, vec![]),
+            dir,
+        }
     }
 
     /// Path for a fixture file inside the harness directory.
@@ -42,7 +45,13 @@ impl TestHarness {
 
     /// True if all deps of a tool are present (tests skip otherwise).
     pub fn available(&self, id: &str) -> bool {
-        let spec = self.engine.registry.get(id).expect("tool registered").spec().clone();
+        let spec = self
+            .engine
+            .registry
+            .get(id)
+            .expect("tool registered")
+            .spec()
+            .clone();
         let a = self.engine.availability(&spec);
         if !a.available {
             eprintln!("skipping {id}: {:?}", a.reason);
@@ -51,7 +60,10 @@ impl TestHarness {
     }
 
     pub async fn run(&self, id: &str, params: Value) -> ToolResult<ToolOutput> {
-        let out_dir = self.dir.path().join(format!("out-{}", crate::util::random_id(4)));
+        let out_dir = self
+            .dir
+            .path()
+            .join(format!("out-{}", crate::util::random_id(4)));
         let map: Map<String, Value> = params.as_object().cloned().unwrap_or_default();
         let resolver = LocalFileResolver::unrestricted();
         self.engine

@@ -14,7 +14,10 @@ use tower::ServiceExt;
 fn test_tools() -> Vec<Arc<dyn Tool>> {
     vec![
         sync_tool(
-            ToolSpec::new("text.upper", "Upper", Category::Text).describe("Uppercase text").param(ParamSpec::textarea("text").required()).text_output("text/plain"),
+            ToolSpec::new("text.upper", "Upper", Category::Text)
+                .describe("Uppercase text")
+                .param(ParamSpec::textarea("text").required())
+                .text_output("text/plain"),
             |_c, p| Ok(ToolOutput::text(p.text("text").to_uppercase())),
         ),
         sync_tool(
@@ -30,11 +33,16 @@ fn test_tools() -> Vec<Arc<dyn Tool>> {
             },
         ),
         sync_tool(
-            ToolSpec::new("system.secret_info", "Secret info", Category::System).describe("Needs system_info").permission(Permission::SystemInfo),
+            ToolSpec::new("system.secret_info", "Secret info", Category::System)
+                .describe("Needs system_info")
+                .permission(Permission::SystemInfo),
             |_c, _p| Ok(ToolOutput::data(json!({"host": "x"}))),
         ),
         async_tool(
-            ToolSpec::new("dev.sleep", "Sleep", Category::Dev).describe("Sleeps").param(ParamSpec::number("seconds").default_num(5.0)).progress(),
+            ToolSpec::new("dev.sleep", "Sleep", Category::Dev)
+                .describe("Sleeps")
+                .param(ParamSpec::number("seconds").default_num(5.0))
+                .progress(),
             |c, p| async move {
                 let secs = p.num_or("seconds", 5.0);
                 let steps = (secs * 10.0) as u32;
@@ -58,11 +66,20 @@ struct T {
 
 fn setup(auth: AuthMode) -> T {
     let dir = tempfile::tempdir().unwrap();
-    let cfg = ServerConfig { data_dir: dir.path().to_path_buf(), auth, setup_token: Some("setup-secret".into()), ..Default::default() };
+    let cfg = ServerConfig {
+        data_dir: dir.path().to_path_buf(),
+        auth,
+        setup_token: Some("setup-secret".into()),
+        ..Default::default()
+    };
     let mut reg = Registry::new();
     reg.register_all(test_tools());
     let state = AppState::build_with(cfg, reg, vec![]).unwrap();
-    T { app: app(state.clone()), state, _dir: dir }
+    T {
+        app: app(state.clone()),
+        state,
+        _dir: dir,
+    }
 }
 
 struct Resp {
@@ -72,28 +89,57 @@ struct Resp {
     raw: Vec<u8>,
 }
 
-async fn call(app: &axum::Router, method: Method, uri: &str, headers: &[(&str, &str)], body: Option<Value>) -> Resp {
+async fn call(
+    app: &axum::Router,
+    method: Method,
+    uri: &str,
+    headers: &[(&str, &str)],
+    body: Option<Value>,
+) -> Resp {
     let mut b = Request::builder().method(method).uri(uri);
     for (k, v) in headers {
         b = b.header(*k, *v);
     }
     let req = match body {
-        Some(v) => b.header(header::CONTENT_TYPE, "application/json").body(Body::from(v.to_string())).unwrap(),
+        Some(v) => b
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(v.to_string()))
+            .unwrap(),
         None => b.body(Body::empty()).unwrap(),
     };
     let resp = app.clone().oneshot(req).await.unwrap();
     let status = resp.status();
     let headers = resp.headers().clone();
-    let raw = resp.into_body().collect().await.unwrap().to_bytes().to_vec();
+    let raw = resp
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes()
+        .to_vec();
     let body = serde_json::from_slice(&raw).unwrap_or(Value::Null);
-    Resp { status, headers, body, raw }
+    Resp {
+        status,
+        headers,
+        body,
+        raw,
+    }
 }
 
 /// Set up the owner and return (cookie header, csrf).
 async fn owner_session(t: &T) -> (String, String) {
     let r = call(&t.app, Method::POST, "/api/v1/setup", &[], Some(json!({"setup_token": "setup-secret", "username": "owner", "password": "a-strong-password"}))).await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
-    let cookie = r.headers.get(header::SET_COOKIE).unwrap().to_str().unwrap().split(';').next().unwrap().to_string();
+    let cookie = r
+        .headers
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
     (cookie, r.body["csrf_token"].as_str().unwrap().to_string())
 }
 
@@ -103,7 +149,14 @@ async fn setup_login_and_csrf() {
     let s = call(&t.app, Method::GET, "/api/v1/status", &[], None).await;
     assert_eq!(s.body["setup_required"], true);
     // Wrong setup token
-    let r = call(&t.app, Method::POST, "/api/v1/setup", &[], Some(json!({"setup_token": "nope", "username": "x", "password": "a-strong-password"}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/setup",
+        &[],
+        Some(json!({"setup_token": "nope", "username": "x", "password": "a-strong-password"})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
     let (cookie, csrf) = owner_session(&t).await;
     // Setup can't be repeated
@@ -113,22 +166,64 @@ async fn setup_login_and_csrf() {
     let r = call(&t.app, Method::GET, "/api/v1/tools", &[], None).await;
     assert_eq!(r.status, StatusCode::UNAUTHORIZED);
     // Session works for GET
-    let r = call(&t.app, Method::GET, "/api/v1/tools", &[("cookie", &cookie)], None).await;
+    let r = call(
+        &t.app,
+        Method::GET,
+        "/api/v1/tools",
+        &[("cookie", &cookie)],
+        None,
+    )
+    .await;
     assert_eq!(r.status, StatusCode::OK);
     assert_eq!(r.body["count"], 4);
     // POST without CSRF header is rejected
-    let r = call(&t.app, Method::POST, "/api/v1/tools/text.upper/run", &[("cookie", &cookie)], Some(json!({"params": {"text": "hi"}}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/text.upper/run",
+        &[("cookie", &cookie)],
+        Some(json!({"params": {"text": "hi"}})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
-    let r = call(&t.app, Method::POST, "/api/v1/tools/text.upper/run", &[("cookie", &cookie), ("x-csrf-token", &csrf)], Some(json!({"params": {"text": "hi"}}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/text.upper/run",
+        &[("cookie", &cookie), ("x-csrf-token", &csrf)],
+        Some(json!({"params": {"text": "hi"}})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
     assert_eq!(r.body["result"]["text"], "HI");
     // Bad login
-    let r = call(&t.app, Method::POST, "/api/v1/auth/login", &[], Some(json!({"username": "owner", "password": "wrong-password"}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/auth/login",
+        &[],
+        Some(json!({"username": "owner", "password": "wrong-password"})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::UNAUTHORIZED);
-    let r = call(&t.app, Method::POST, "/api/v1/auth/login", &[], Some(json!({"username": "owner", "password": "a-strong-password"}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/auth/login",
+        &[],
+        Some(json!({"username": "owner", "password": "a-strong-password"})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::OK);
     // Audit log has entries
-    let r = call(&t.app, Method::GET, "/api/v1/admin/audit", &[("cookie", &cookie)], None).await;
+    let r = call(
+        &t.app,
+        Method::GET,
+        "/api/v1/admin/audit",
+        &[("cookie", &cookie)],
+        None,
+    )
+    .await;
     assert!(r.body["entries"].as_array().unwrap().len() >= 3);
 }
 
@@ -138,17 +233,39 @@ async fn login_rate_limited() {
     owner_session(&t).await;
     let mut last = StatusCode::OK;
     for _ in 0..15 {
-        last = call(&t.app, Method::POST, "/api/v1/auth/login", &[], Some(json!({"username": "owner", "password": "bad-password-x"}))).await.status;
+        last = call(
+            &t.app,
+            Method::POST,
+            "/api/v1/auth/login",
+            &[],
+            Some(json!({"username": "owner", "password": "bad-password-x"})),
+        )
+        .await
+        .status;
     }
     assert_eq!(last, StatusCode::TOO_MANY_REQUESTS);
 }
 
 async fn create_agent_token(t: &T, cookie: &str, csrf: &str, name: &str, policy: Value) -> String {
     let h = [("cookie", cookie), ("x-csrf-token", csrf)];
-    let r = call(&t.app, Method::POST, "/api/v1/admin/users", &h, Some(json!({"username": name, "role": "agent", "policy": policy}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/admin/users",
+        &h,
+        Some(json!({"username": name, "role": "agent", "policy": policy})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
     let uid = r.body["id"].as_str().unwrap().to_string();
-    let r = call(&t.app, Method::POST, "/api/v1/admin/tokens", &h, Some(json!({"user_id": uid, "name": "test"}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/admin/tokens",
+        &h,
+        Some(json!({"user_id": uid, "name": "test"})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
     r.body["token"].as_str().unwrap().to_string()
 }
@@ -157,50 +274,126 @@ async fn create_agent_token(t: &T, cookie: &str, csrf: &str, name: &str, policy:
 async fn agent_permissions_enforced() {
     let t = setup(AuthMode::Required);
     let (cookie, csrf) = owner_session(&t).await;
-    let img_token = create_agent_token(&t, &cookie, &csrf, "imgbot", json!({"allow": ["image.*"], "permissions": []})).await;
+    let img_token = create_agent_token(
+        &t,
+        &cookie,
+        &csrf,
+        "imgbot",
+        json!({"allow": ["image.*"], "permissions": []}),
+    )
+    .await;
     let bearer = format!("Bearer {img_token}");
     let auth = [("authorization", bearer.as_str())];
 
     // Discovery only shows permitted tools
     let r = call(&t.app, Method::GET, "/api/v1/tools", &auth, None).await;
-    let ids: Vec<&str> = r.body["tools"].as_array().unwrap().iter().map(|t| t["id"].as_str().unwrap()).collect();
+    let ids: Vec<&str> = r.body["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["id"].as_str().unwrap())
+        .collect();
     assert_eq!(ids, vec!["image.copy"]);
     // Invocation of a non-permitted tool is refused even though the agent knows its id
-    let r = call(&t.app, Method::POST, "/api/v1/tools/text.upper/run", &auth, Some(json!({"params": {"text": "x"}}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/text.upper/run",
+        &auth,
+        Some(json!({"params": {"text": "x"}})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
     // Agent can't access admin endpoints
     let r = call(&t.app, Method::GET, "/api/v1/admin/users", &auth, None).await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
     // Agent can't mint tokens with its token
-    let r = call(&t.app, Method::POST, "/api/v1/tokens", &auth, Some(json!({"name": "x"}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tokens",
+        &auth,
+        Some(json!({"name": "x"})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
 
     // Agent allowed the system tool by pattern but without the system_info capability: denied by the engine
-    let sys_token = create_agent_token(&t, &cookie, &csrf, "sysbot", json!({"allow": ["system.*"], "permissions": []})).await;
+    let sys_token = create_agent_token(
+        &t,
+        &cookie,
+        &csrf,
+        "sysbot",
+        json!({"allow": ["system.*"], "permissions": []}),
+    )
+    .await;
     let b2 = format!("Bearer {sys_token}");
-    let r = call(&t.app, Method::POST, "/api/v1/tools/system.secret_info/run", &[("authorization", &b2)], Some(json!({"params": {}}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/system.secret_info/run",
+        &[("authorization", &b2)],
+        Some(json!({"params": {}})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::OK);
     assert_eq!(r.body["status"], "failed");
     assert_eq!(r.body["error"]["code"], "permission_denied");
 
     // Revoked token stops working
-    let r = call(&t.app, Method::GET, "/api/v1/admin/tokens", &[("cookie", &cookie)], None).await;
-    let tid = r.body["tokens"].as_array().unwrap().iter().find(|t| t["username"] == "imgbot").unwrap()["id"].as_str().unwrap().to_string();
-    let r = call(&t.app, Method::DELETE, &format!("/api/v1/tokens/{tid}"), &[("cookie", &cookie), ("x-csrf-token", &csrf)], None).await;
+    let r = call(
+        &t.app,
+        Method::GET,
+        "/api/v1/admin/tokens",
+        &[("cookie", &cookie)],
+        None,
+    )
+    .await;
+    let tid = r.body["tokens"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["username"] == "imgbot")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let r = call(
+        &t.app,
+        Method::DELETE,
+        &format!("/api/v1/tokens/{tid}"),
+        &[("cookie", &cookie), ("x-csrf-token", &csrf)],
+        None,
+    )
+    .await;
     assert_eq!(r.status, StatusCode::OK);
     let r = call(&t.app, Method::GET, "/api/v1/tools", &auth, None).await;
     assert_eq!(r.status, StatusCode::UNAUTHORIZED);
     // Invalid token
-    let r = call(&t.app, Method::GET, "/api/v1/tools", &[("authorization", "Bearer dgb_0000")], None).await;
+    let r = call(
+        &t.app,
+        Method::GET,
+        "/api/v1/tools",
+        &[("authorization", "Bearer dgb_0000")],
+        None,
+    )
+    .await;
     assert_eq!(r.status, StatusCode::UNAUTHORIZED);
 }
 
 async fn upload(t: &T, auth: &[(&str, &str)], name: &str, data: &[u8]) -> Value {
-    let mut b = Request::builder().method(Method::PUT).uri(format!("/api/v1/files/raw?name={name}"));
+    let mut b = Request::builder()
+        .method(Method::PUT)
+        .uri(format!("/api/v1/files/raw?name={name}"));
     for (k, v) in auth {
         b = b.header(*k, *v);
     }
-    let resp = t.app.clone().oneshot(b.body(Body::from(data.to_vec())).unwrap()).await.unwrap();
+    let resp = t
+        .app
+        .clone()
+        .oneshot(b.body(Body::from(data.to_vec())).unwrap())
+        .await
+        .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     serde_json::from_slice(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap()
 }
@@ -218,7 +411,14 @@ async fn files_isolated_between_principals() {
     assert!(fid.starts_with("f_"));
 
     // A can run a tool on its file and download the artifact
-    let r = call(&t.app, Method::POST, "/api/v1/tools/image.copy/run", &[("authorization", &ba)], Some(json!({"params": {"input": fid}}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/image.copy/run",
+        &[("authorization", &ba)],
+        Some(json!({"params": {"input": fid}})),
+    )
+    .await;
     assert_eq!(r.body["status"], "succeeded", "{:?}", r.body);
     let art = r.body["result"]["artifacts"][0].clone();
     assert_eq!(art["name"], "secret-copy.txt");
@@ -227,17 +427,69 @@ async fn files_isolated_between_principals() {
     assert_eq!(d.raw, b"top secret");
 
     // B cannot read A's file, its artifacts, or use it as tool input
-    assert_eq!(call(&t.app, Method::GET, &format!("/api/v1/files/{fid}/content"), &[("authorization", &bb)], None).await.status, StatusCode::NOT_FOUND);
-    assert_eq!(call(&t.app, Method::GET, url, &[("authorization", &bb)], None).await.status, StatusCode::NOT_FOUND);
-    let r = call(&t.app, Method::POST, "/api/v1/tools/image.copy/run", &[("authorization", &bb)], Some(json!({"params": {"input": fid}}))).await;
+    assert_eq!(
+        call(
+            &t.app,
+            Method::GET,
+            &format!("/api/v1/files/{fid}/content"),
+            &[("authorization", &bb)],
+            None
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(&t.app, Method::GET, url, &[("authorization", &bb)], None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/image.copy/run",
+        &[("authorization", &bb)],
+        Some(json!({"params": {"input": fid}})),
+    )
+    .await;
     assert_eq!(r.body["status"], "failed");
     assert_eq!(r.body["error"]["code"], "invalid_input");
     // Host paths are never accepted as file inputs on the server
-    let r = call(&t.app, Method::POST, "/api/v1/tools/image.copy/run", &[("authorization", &bb)], Some(json!({"params": {"input": "/etc/passwd"}}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/image.copy/run",
+        &[("authorization", &bb)],
+        Some(json!({"params": {"input": "/etc/passwd"}})),
+    )
+    .await;
     assert_eq!(r.body["error"]["code"], "invalid_input");
     // B can't see A's job
-    let jid = call(&t.app, Method::GET, "/api/v1/jobs", &[("authorization", &ba)], None).await.body["jobs"][0]["id"].as_str().unwrap().to_string();
-    assert_eq!(call(&t.app, Method::GET, &format!("/api/v1/jobs/{jid}"), &[("authorization", &bb)], None).await.status, StatusCode::NOT_FOUND);
+    let jid = call(
+        &t.app,
+        Method::GET,
+        "/api/v1/jobs",
+        &[("authorization", &ba)],
+        None,
+    )
+    .await
+    .body["jobs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        call(
+            &t.app,
+            Method::GET,
+            &format!("/api/v1/jobs/{jid}"),
+            &[("authorization", &bb)],
+            None
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
     // Path traversal in upload names is neutralized
     let f2 = upload(&t, &[("authorization", &ba)], "..%2F..%2Fevil.sh", b"x").await;
     assert_eq!(f2["name"], "evil.sh");
@@ -247,29 +499,76 @@ async fn files_isolated_between_principals() {
 async fn validation_errors_and_cancellation() {
     let t = setup(AuthMode::None);
     // Unknown parameter
-    let r = call(&t.app, Method::POST, "/api/v1/tools/text.upper/run", &[], Some(json!({"params": {"txt": "x"}}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/text.upper/run",
+        &[],
+        Some(json!({"params": {"txt": "x"}})),
+    )
+    .await;
     assert_eq!(r.body["error"]["code"], "invalid_input");
     // Missing required
-    let r = call(&t.app, Method::POST, "/api/v1/tools/text.upper/run", &[], Some(json!({"params": {}}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/text.upper/run",
+        &[],
+        Some(json!({"params": {}})),
+    )
+    .await;
     assert_eq!(r.body["error"]["code"], "invalid_input");
     // Unknown tool
-    let r = call(&t.app, Method::POST, "/api/v1/tools/nope.nope/run", &[], Some(json!({"params": {}}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/nope.nope/run",
+        &[],
+        Some(json!({"params": {}})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::NOT_FOUND);
     // Long job: returns 202, then cancel
-    let r = call(&t.app, Method::POST, "/api/v1/tools/dev.sleep/run", &[], Some(json!({"params": {"seconds": 30}, "wait_seconds": 0}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/dev.sleep/run",
+        &[],
+        Some(json!({"params": {"seconds": 30}, "wait_seconds": 0})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::ACCEPTED);
     let id = r.body["id"].as_str().unwrap().to_string();
     tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-    let r = call(&t.app, Method::GET, &format!("/api/v1/jobs/{id}"), &[], None).await;
+    let r = call(
+        &t.app,
+        Method::GET,
+        &format!("/api/v1/jobs/{id}"),
+        &[],
+        None,
+    )
+    .await;
     assert_eq!(r.body["status"], "running");
-    let r = call(&t.app, Method::POST, &format!("/api/v1/jobs/{id}/cancel"), &[], None).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        &format!("/api/v1/jobs/{id}/cancel"),
+        &[],
+        None,
+    )
+    .await;
     assert_eq!(r.body["status"], "cancelled", "{:?}", r.body);
 }
 
 #[tokio::test]
 async fn no_auth_mode_refuses_public_bind() {
     let dir = tempfile::tempdir().unwrap();
-    let cfg = ServerConfig { data_dir: dir.path().to_path_buf(), auth: AuthMode::None, bind: "0.0.0.0:8420".parse().unwrap(), ..Default::default() };
+    let cfg = ServerConfig {
+        data_dir: dir.path().to_path_buf(),
+        auth: AuthMode::None,
+        bind: "0.0.0.0:8420".parse().unwrap(),
+        ..Default::default()
+    };
     assert!(AppState::build_with(cfg, Registry::new(), vec![]).is_err());
 }
 
@@ -277,22 +576,67 @@ async fn no_auth_mode_refuses_public_bind() {
 async fn mcp_endpoint() {
     let t = setup(AuthMode::Required);
     let (cookie, csrf) = owner_session(&t).await;
-    let token = create_agent_token(&t, &cookie, &csrf, "mcpbot", json!({"allow": ["text.*", "image.*"]})).await;
+    let token = create_agent_token(
+        &t,
+        &cookie,
+        &csrf,
+        "mcpbot",
+        json!({"allow": ["text.*", "image.*"]}),
+    )
+    .await;
     let bearer = format!("Bearer {token}");
     // No auth
-    let r = call(&t.app, Method::POST, "/mcp", &[], Some(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &[],
+        Some(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::UNAUTHORIZED);
-    let h = [("authorization", bearer.as_str()), ("accept", "application/json, text/event-stream")];
+    let h = [
+        ("authorization", bearer.as_str()),
+        ("accept", "application/json, text/event-stream"),
+    ];
     let r = call(&t.app, Method::POST, "/mcp", &h, Some(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}}))).await;
     assert_eq!(r.status, StatusCode::OK);
     assert_eq!(r.body["result"]["protocolVersion"], "2025-06-18");
-    let sid = r.headers.get("mcp-session-id").unwrap().to_str().unwrap().to_string();
-    let hs = [("authorization", bearer.as_str()), ("mcp-session-id", sid.as_str())];
-    let r = call(&t.app, Method::POST, "/mcp", &hs, Some(json!({"jsonrpc": "2.0", "method": "notifications/initialized"}))).await;
+    let sid = r
+        .headers
+        .get("mcp-session-id")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let hs = [
+        ("authorization", bearer.as_str()),
+        ("mcp-session-id", sid.as_str()),
+    ];
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &hs,
+        Some(json!({"jsonrpc": "2.0", "method": "notifications/initialized"})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::ACCEPTED);
     // tools/list shows only permitted tools (plus meta tools)
-    let r = call(&t.app, Method::POST, "/mcp", &hs, Some(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}))).await;
-    let names: Vec<String> = r.body["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &hs,
+        Some(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})),
+    )
+    .await;
+    let names: Vec<String> = r.body["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .collect();
     assert!(names.contains(&"text_upper".to_string()));
     assert!(names.contains(&"dogubako_search_tools".to_string()));
     assert!(!names.contains(&"system_secret_info".to_string()));
@@ -309,23 +653,72 @@ async fn mcp_endpoint() {
     assert_eq!(r.body["result"]["isError"], true);
     // Upload via MCP + run + resource read
     let r = call(&t.app, Method::POST, "/mcp", &hs, Some(json!({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "dogubako_upload_file", "arguments": {"name": "a.txt", "content_base64": "aGVsbG8="}}}))).await;
-    let fid = r.body["result"]["structuredContent"]["id"].as_str().unwrap().to_string();
+    let fid = r.body["result"]["structuredContent"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let r = call(&t.app, Method::POST, "/mcp", &hs, Some(json!({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "image_copy", "arguments": {"input": fid}}}))).await;
-    let link = r.body["result"]["content"].as_array().unwrap().iter().find(|c| c["type"] == "resource_link").unwrap()["uri"].as_str().unwrap().to_string();
-    let r = call(&t.app, Method::POST, "/mcp", &hs, Some(json!({"jsonrpc": "2.0", "id": 8, "method": "resources/read", "params": {"uri": link}}))).await;
+    let link = r.body["result"]["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["type"] == "resource_link")
+        .unwrap()["uri"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &hs,
+        Some(
+            json!({"jsonrpc": "2.0", "id": 8, "method": "resources/read", "params": {"uri": link}}),
+        ),
+    )
+    .await;
     assert_eq!(r.body["result"]["contents"][0]["text"], "hello");
     // Search meta-tool respects permissions
     let r = call(&t.app, Method::POST, "/mcp", &hs, Some(json!({"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "dogubako_search_tools", "arguments": {"query": "secret"}}}))).await;
     assert_eq!(r.body["result"]["structuredContent"]["total"], 0);
     // Compact discovery
-    let r = call(&t.app, Method::POST, "/mcp?discovery=compact", &hs, Some(json!({"jsonrpc": "2.0", "id": 10, "method": "tools/list"}))).await;
-    assert!(r.body["result"]["tools"].as_array().unwrap().iter().all(|t| t["name"].as_str().unwrap().starts_with("dogubako_")));
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp?discovery=compact",
+        &hs,
+        Some(json!({"jsonrpc": "2.0", "id": 10, "method": "tools/list"})),
+    )
+    .await;
+    assert!(r.body["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|t| t["name"].as_str().unwrap().starts_with("dogubako_")));
     // Session of another principal is rejected
     let other = create_agent_token(&t, &cookie, &csrf, "other", json!({"allow": ["*"]})).await;
     let bo = format!("Bearer {other}");
-    let r = call(&t.app, Method::POST, "/mcp", &[("authorization", &bo), ("mcp-session-id", &sid)], Some(json!({"jsonrpc": "2.0", "id": 11, "method": "tools/list"}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &[("authorization", &bo), ("mcp-session-id", &sid)],
+        Some(json!({"jsonrpc": "2.0", "id": 11, "method": "tools/list"})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::NOT_FOUND);
     // Foreign Origin rejected (DNS rebinding protection)
-    let r = call(&t.app, Method::POST, "/mcp", &[("authorization", &bearer), ("origin", "http://evil.example"), ("host", "localhost:8420")], Some(json!({"jsonrpc": "2.0", "id": 12, "method": "ping"}))).await;
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &[
+            ("authorization", &bearer),
+            ("origin", "http://evil.example"),
+            ("host", "localhost:8420"),
+        ],
+        Some(json!({"jsonrpc": "2.0", "id": 12, "method": "ping"})),
+    )
+    .await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
 }

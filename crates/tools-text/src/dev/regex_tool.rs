@@ -70,20 +70,41 @@ fn regex_tester() -> Arc<dyn Tool> {
                     prefix.push(c);
                 }
             }
-            let full = if prefix.is_empty() { pattern.to_string() } else { format!("(?{prefix}){pattern}") };
-            let re = fancy_regex::RegexBuilder::new(&full).backtrack_limit(1_000_000).build().map_err(|e| ToolError::invalid("pattern", e.to_string()))?;
-            names = re.capture_names().map(|n| n.map(|s| s.to_string())).collect();
+            let full = if prefix.is_empty() {
+                pattern.to_string()
+            } else {
+                format!("(?{prefix}){pattern}")
+            };
+            let re = fancy_regex::RegexBuilder::new(&full)
+                .backtrack_limit(1_000_000)
+                .build()
+                .map_err(|e| ToolError::invalid("pattern", e.to_string()))?;
+            names = re
+                .capture_names()
+                .map(|n| n.map(|s| s.to_string()))
+                .collect();
             for c in re.captures_iter(text) {
-                let c = c.map_err(|e| ToolError::invalid("pattern", format!("matching failed: {e}")))?;
+                let c =
+                    c.map_err(|e| ToolError::invalid("pattern", format!("matching failed: {e}")))?;
                 if matches.len() >= max {
                     truncated = true;
                     break;
                 }
                 let m0 = c.get(0).unwrap();
-                matches.push(M { start: m0.start(), end: m0.end(), groups: (1..c.len()).map(|i| c.get(i).map(|g| (g.start(), g.end()))).collect() });
+                matches.push(M {
+                    start: m0.start(),
+                    end: m0.end(),
+                    groups: (1..c.len())
+                        .map(|i| c.get(i).map(|g| (g.start(), g.end())))
+                        .collect(),
+                });
             }
             replaced = match p.opt_str("replacement") {
-                Some(r) => Some(re.try_replacen(text, 0, r).map_err(|e| ToolError::invalid("pattern", e.to_string()))?.into_owned()),
+                Some(r) => Some(
+                    re.try_replacen(text, 0, r)
+                        .map_err(|e| ToolError::invalid("pattern", e.to_string()))?
+                        .into_owned(),
+                ),
                 None => None,
             };
         } else {
@@ -93,16 +114,27 @@ fn regex_tester() -> Arc<dyn Tool> {
                 }
                 e => e,
             })?;
-            names = re.capture_names().map(|n| n.map(|s| s.to_string())).collect();
+            names = re
+                .capture_names()
+                .map(|n| n.map(|s| s.to_string()))
+                .collect();
             for c in re.captures_iter(text) {
                 if matches.len() >= max {
                     truncated = true;
                     break;
                 }
                 let m0 = c.get(0).unwrap();
-                matches.push(M { start: m0.start(), end: m0.end(), groups: (1..c.len()).map(|i| c.get(i).map(|g| (g.start(), g.end()))).collect() });
+                matches.push(M {
+                    start: m0.start(),
+                    end: m0.end(),
+                    groups: (1..c.len())
+                        .map(|i| c.get(i).map(|g| (g.start(), g.end())))
+                        .collect(),
+                });
             }
-            replaced = p.opt_str("replacement").map(|r| re.replace_all(text, r).into_owned());
+            replaced = p
+                .opt_str("replacement")
+                .map(|r| re.replace_all(text, r).into_owned());
         }
         let idx = Utf16Index::new(text);
         let group_names: Vec<Value> = names.iter().skip(1).map(|n| json!(n)).collect();
@@ -122,7 +154,14 @@ fn regex_tester() -> Arc<dyn Tool> {
                         v
                     })
                     .collect();
-                let spans: Vec<Value> = m.groups.iter().map(|g| g.map(|(s, e)| json!([idx.at(s), idx.at(e)])).unwrap_or(Value::Null)).collect();
+                let spans: Vec<Value> = m
+                    .groups
+                    .iter()
+                    .map(|g| {
+                        g.map(|(s, e)| json!([idx.at(s), idx.at(e)]))
+                            .unwrap_or(Value::Null)
+                    })
+                    .collect();
                 json!({
                     "start": idx.at(m.start),
                     "end": idx.at(m.end),
@@ -170,14 +209,41 @@ mod tests {
         assert_eq!(m["groups"], json!(["2024", "05"]));
         assert_eq!(m["named"]["y"], "2024");
         assert_eq!(out.data["replaced"], "é 05/2024 and 12/1999");
-        let out = h.run("dev.regex", json!({"pattern": "^b", "text": "a\nb", "flags": ["m"]})).await.unwrap();
+        let out = h
+            .run(
+                "dev.regex",
+                json!({"pattern": "^b", "text": "a\nb", "flags": ["m"]}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["count"], 1);
-        let err = h.run("dev.regex", json!({"pattern": "a(?=b)", "text": "ab"})).await.unwrap_err();
+        let err = h
+            .run("dev.regex", json!({"pattern": "a(?=b)", "text": "ab"}))
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("Extended"), "{err}");
-        let out = h.run("dev.regex", json!({"pattern": "(\\w)\\1", "text": "aa bc dd", "engine": "fancy"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.regex",
+                json!({"pattern": "(\\w)\\1", "text": "aa bc dd", "engine": "fancy"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["count"], 2);
-        let out = h.run("dev.regex", json!({"pattern": "A", "text": "a", "flags": ["i"], "engine": "fancy"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.regex",
+                json!({"pattern": "A", "text": "a", "flags": ["i"], "engine": "fancy"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["count"], 1);
-        assert_eq!(h.run("dev.regex", json!({"pattern": "[", "text": "x"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.regex", json!({"pattern": "[", "text": "x"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 }

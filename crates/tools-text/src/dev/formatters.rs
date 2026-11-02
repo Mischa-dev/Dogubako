@@ -5,11 +5,22 @@ use dogubako_core::prelude::*;
 use quick_xml::events::{BytesText, Event};
 
 pub fn tools() -> Vec<Arc<dyn Tool>> {
-    vec![json_tool(), yaml_tool(), toml_tool(), xml_tool(), sql_format(), convert()]
+    vec![
+        json_tool(),
+        yaml_tool(),
+        toml_tool(),
+        xml_tool(),
+        sql_format(),
+        convert(),
+    ]
 }
 
 fn indent_param() -> ParamSpec {
-    ParamSpec::choice("indent", &[("2", "2 spaces"), ("4", "4 spaces"), ("tab", "Tab")]).default_str("2")
+    ParamSpec::choice(
+        "indent",
+        &[("2", "2 spaces"), ("4", "4 spaces"), ("tab", "Tab")],
+    )
+    .default_str("2")
 }
 
 fn indent_str(p: &Params) -> String {
@@ -29,7 +40,13 @@ pub(crate) fn parse_json(text: &str, param: &str) -> ToolResult<Value> {
         let col = e.column();
         let snippet = text.lines().nth(line.saturating_sub(1)).unwrap_or("");
         let snippet: String = snippet.chars().take(200).collect();
-        ToolError::invalid(param, format!("{e}\n  {line} | {snippet}\n  {}^", " ".repeat(line.to_string().len() + col.saturating_sub(1) + 2)))
+        ToolError::invalid(
+            param,
+            format!(
+                "{e}\n  {line} | {snippet}\n  {}^",
+                " ".repeat(line.to_string().len() + col.saturating_sub(1) + 2)
+            ),
+        )
     })
 }
 
@@ -61,11 +78,17 @@ fn json_stats(v: &Value) -> (usize, usize) {
     // (depth, total values)
     match v {
         Value::Object(m) => {
-            let (d, n) = m.values().map(json_stats).fold((0, 0), |a, b| (a.0.max(b.0), a.1 + b.1));
+            let (d, n) = m
+                .values()
+                .map(json_stats)
+                .fold((0, 0), |a, b| (a.0.max(b.0), a.1 + b.1));
             (d + 1, n + 1)
         }
         Value::Array(a) => {
-            let (d, n) = a.iter().map(json_stats).fold((0, 0), |a, b| (a.0.max(b.0), a.1 + b.1));
+            let (d, n) = a
+                .iter()
+                .map(json_stats)
+                .fold((0, 0), |a, b| (a.0.max(b.0), a.1 + b.1));
             (d + 1, n + 1)
         }
         _ => (0, 1),
@@ -108,7 +131,16 @@ fn json_tool() -> Arc<dyn Tool> {
             _ => to_json_indent(&v, &indent_str(p)),
         };
         if p.bool("ascii") {
-            out = out.chars().map(|c| if c.is_ascii() { c.to_string() } else { crate::escape::backslash_escape(&c.to_string(), crate::escape::Lang::Java) }).collect();
+            out = out
+                .chars()
+                .map(|c| {
+                    if c.is_ascii() {
+                        c.to_string()
+                    } else {
+                        crate::escape::backslash_escape(&c.to_string(), crate::escape::Lang::Java)
+                    }
+                })
+                .collect();
         }
         Ok(ToolOutput::text_as(out, "application/json").with_data(data))
     })
@@ -129,7 +161,10 @@ pub(crate) fn parse_yaml_docs(text: &str, param: &str) -> ToolResult<Vec<Value>>
 
 fn yaml_err(e: serde_yaml_ng::Error, param: &str) -> ToolError {
     match e.location() {
-        Some(l) => ToolError::invalid(param, format!("{e} (line {}, column {})", l.line(), l.column())),
+        Some(l) => ToolError::invalid(
+            param,
+            format!("{e} (line {}, column {})", l.line(), l.column()),
+        ),
         None => ToolError::invalid(param, e.to_string()),
     }
 }
@@ -146,7 +181,9 @@ fn yaml_to_json(v: serde_yaml_ng::Value) -> Result<Value, String> {
                 json!(u)
             } else {
                 let f = n.as_f64().unwrap_or(f64::NAN);
-                serde_json::Number::from_f64(f).map(Value::Number).unwrap_or_else(|| json!(f.to_string()))
+                serde_json::Number::from_f64(f)
+                    .map(Value::Number)
+                    .unwrap_or_else(|| json!(f.to_string()))
             }
         }
         Y::String(s) => Value::String(s),
@@ -159,7 +196,10 @@ fn yaml_to_json(v: serde_yaml_ng::Value) -> Result<Value, String> {
                     Y::Number(n) => n.to_string(),
                     Y::Bool(b) => b.to_string(),
                     Y::Null => "null".into(),
-                    other => serde_yaml_ng::to_string(&other).map_err(|e| e.to_string())?.trim().to_string(),
+                    other => serde_yaml_ng::to_string(&other)
+                        .map_err(|e| e.to_string())?
+                        .trim()
+                        .to_string(),
                 };
                 o.insert(key, yaml_to_json(v)?);
             }
@@ -176,9 +216,30 @@ pub(crate) fn to_yaml(v: &Value) -> ToolResult<String> {
 fn yaml_tool() -> Arc<dyn Tool> {
     let spec = ToolSpec::new("dev.yaml", "YAML Formatter & Validator", Category::Dev)
         .describe("Validate and re-format YAML (multi-document aware), with error line and column")
-        .keywords(&["yaml", "yml", "validate", "lint", "format", "pretty print", "kubernetes", "docker compose"])
-        .param(ParamSpec::textarea("text").label("YAML").required().primary().syntax("yaml"))
-        .param(ParamSpec::choice("mode", &[("format", "Format"), ("validate", "Validate only")]).default_str("format"))
+        .keywords(&[
+            "yaml",
+            "yml",
+            "validate",
+            "lint",
+            "format",
+            "pretty print",
+            "kubernetes",
+            "docker compose",
+        ])
+        .param(
+            ParamSpec::textarea("text")
+                .label("YAML")
+                .required()
+                .primary()
+                .syntax("yaml"),
+        )
+        .param(
+            ParamSpec::choice(
+                "mode",
+                &[("format", "Format"), ("validate", "Validate only")],
+            )
+            .default_str("format"),
+        )
         .param(ParamSpec::boolean("sort_keys").label("Sort mapping keys"))
         .text_output("application/yaml")
         .ui("live");
@@ -203,7 +264,9 @@ pub(crate) fn parse_toml(text: &str, param: &str) -> ToolResult<Value> {
     let t: toml::Table = toml::from_str(text).map_err(|e| {
         let loc = e.span().map(|s| line_col(text, s.start));
         match loc {
-            Some((l, c)) => ToolError::invalid(param, format!("{} (line {l}, column {c})", e.message())),
+            Some((l, c)) => {
+                ToolError::invalid(param, format!("{} (line {l}, column {c})", e.message()))
+            }
             None => ToolError::invalid(param, e.message().to_string()),
         }
     })?;
@@ -212,7 +275,10 @@ pub(crate) fn parse_toml(text: &str, param: &str) -> ToolResult<Value> {
 
 pub(crate) fn to_toml(v: &Value) -> ToolResult<String> {
     if !v.is_object() {
-        return Err(ToolError::invalid("text", "TOML requires a table (object) at the top level"));
+        return Err(ToolError::invalid(
+            "text",
+            "TOML requires a table (object) at the top level",
+        ));
     }
     fn has_null(v: &Value) -> bool {
         match v {
@@ -223,22 +289,47 @@ pub(crate) fn to_toml(v: &Value) -> ToolResult<String> {
         }
     }
     if has_null(v) {
-        return Err(ToolError::invalid("text", "TOML has no null value; remove or replace null values first"));
+        return Err(ToolError::invalid(
+            "text",
+            "TOML has no null value; remove or replace null values first",
+        ));
     }
-    toml::to_string_pretty(v).map_err(|e| ToolError::invalid("text", format!("cannot represent as TOML: {e}")))
+    toml::to_string_pretty(v)
+        .map_err(|e| ToolError::invalid("text", format!("cannot represent as TOML: {e}")))
 }
 
 fn toml_tool() -> Arc<dyn Tool> {
     let spec = ToolSpec::new("dev.toml", "TOML Formatter & Validator", Category::Dev)
         .describe("Validate and re-format TOML with error line and column")
-        .keywords(&["toml", "cargo.toml", "pyproject", "config", "validate", "format", "lint"])
-        .param(ParamSpec::textarea("text").label("TOML").required().primary().syntax("toml"))
-        .param(ParamSpec::choice("mode", &[("format", "Format"), ("validate", "Validate only")]).default_str("format"))
+        .keywords(&[
+            "toml",
+            "cargo.toml",
+            "pyproject",
+            "config",
+            "validate",
+            "format",
+            "lint",
+        ])
+        .param(
+            ParamSpec::textarea("text")
+                .label("TOML")
+                .required()
+                .primary()
+                .syntax("toml"),
+        )
+        .param(
+            ParamSpec::choice(
+                "mode",
+                &[("format", "Format"), ("validate", "Validate only")],
+            )
+            .default_str("format"),
+        )
         .text_output("application/toml")
         .ui("live");
     sync_tool(spec, |_ctx, p| {
         let v = parse_toml(p.text("text"), "text")?;
-        let data = json!({"valid": true, "top_level_keys": v.as_object().map(|m| m.len()).unwrap_or(0)});
+        let data =
+            json!({"valid": true, "top_level_keys": v.as_object().map(|m| m.len()).unwrap_or(0)});
         if p.str("mode")? == "validate" {
             return Ok(ToolOutput::data(data));
         }
@@ -266,7 +357,9 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
         ToolError::invalid("text", format!("{e} (line {l}, column {c})"))
     };
     loop {
-        let ev = reader.read_event().map_err(|e| err(&reader, e.to_string()))?;
+        let ev = reader
+            .read_event()
+            .map_err(|e| err(&reader, e.to_string()))?;
         match &ev {
             Event::Start(_) => {
                 if depth == 0 {
@@ -298,21 +391,23 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
         }
         let ev = match ev {
             Event::GeneralRef(r) => Event::Text(BytesText::from_escaped(format!("&{};", &*r))),
-            Event::Text(t) if indent.is_some() => {
-                let s: &str = &t;
-                Event::Text(BytesText::from_escaped(s.trim().to_string()))
-            }
             e => e,
         };
         writer.write_event(ev).ctx("writing XML")?;
     }
     if depth > 0 {
-        return Err(ToolError::invalid("text", format!("unexpected end of document: {depth} element(s) not closed")));
+        return Err(ToolError::invalid(
+            "text",
+            format!("unexpected end of document: {depth} element(s) not closed"),
+        ));
     }
     if roots == 0 {
         return Err(ToolError::invalid("text", "no root element found"));
     }
-    Ok((String::from_utf8(writer.into_inner()).ctx("XML output")?, elements))
+    Ok((
+        String::from_utf8(writer.into_inner()).ctx("XML output")?,
+        elements,
+    ))
 }
 
 fn xml_tool() -> Arc<dyn Tool> {
@@ -346,12 +441,44 @@ fn xml_tool() -> Arc<dyn Tool> {
 
 fn sql_format() -> Arc<dyn Tool> {
     let spec = ToolSpec::new("dev.sql_format", "SQL Formatter", Category::Dev)
-        .describe("Format SQL queries with consistent indentation and keyword case (dialect-agnostic)")
-        .keywords(&["sql", "format", "beautify", "pretty print", "query", "postgres", "mysql", "sqlite"])
-        .param(ParamSpec::textarea("text").label("SQL").required().primary().syntax("sql"))
-        .param(ParamSpec::choice("keyword_case", &[("upper", "UPPERCASE"), ("lower", "lowercase"), ("preserve", "Preserve")]).default_str("upper"))
+        .describe(
+            "Format SQL queries with consistent indentation and keyword case (dialect-agnostic)",
+        )
+        .keywords(&[
+            "sql",
+            "format",
+            "beautify",
+            "pretty print",
+            "query",
+            "postgres",
+            "mysql",
+            "sqlite",
+        ])
+        .param(
+            ParamSpec::textarea("text")
+                .label("SQL")
+                .required()
+                .primary()
+                .syntax("sql"),
+        )
+        .param(
+            ParamSpec::choice(
+                "keyword_case",
+                &[
+                    ("upper", "UPPERCASE"),
+                    ("lower", "lowercase"),
+                    ("preserve", "Preserve"),
+                ],
+            )
+            .default_str("upper"),
+        )
         .param(indent_param())
-        .param(ParamSpec::integer("lines_between_queries").default_int(1).range(0.0, 5.0).advanced())
+        .param(
+            ParamSpec::integer("lines_between_queries")
+                .default_int(1)
+                .range(0.0, 5.0)
+                .advanced(),
+        )
         .text_output("application/sql")
         .ui("live");
     sync_tool(spec, |_ctx, p| {
@@ -370,7 +497,10 @@ fn sql_format() -> Arc<dyn Tool> {
             lines_between_queries: p.int_or("lines_between_queries", 1) as u8 + 1,
             ..Default::default()
         };
-        Ok(ToolOutput::text_as(sqlformat::format(p.text("text"), &QueryParams::None, &opts), "application/sql"))
+        Ok(ToolOutput::text_as(
+            sqlformat::format(p.text("text"), &QueryParams::None, &opts),
+            "application/sql",
+        ))
     })
 }
 
@@ -383,13 +513,16 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
     let mut reader = quick_xml::Reader::from_str(text);
     reader.config_mut().check_end_names = true;
     // stack of (name, object, text)
-    let mut stack: Vec<(String, serde_json::Map<String, Value>, String)> = vec![("#root".into(), serde_json::Map::new(), String::new())];
+    let mut stack: Vec<(String, serde_json::Map<String, Value>, String)> =
+        vec![("#root".into(), serde_json::Map::new(), String::new())];
     fn attrs(e: &quick_xml::events::BytesStart) -> ToolResult<serde_json::Map<String, Value>> {
         let mut m = serde_json::Map::new();
         for a in e.attributes() {
             let a = a.map_err(|e| ToolError::invalid("text", format!("bad attribute: {e}")))?;
             let k = a.key.as_ref().to_string();
-            let v = quick_xml::escape::unescape(&a.value).map(|c| c.into_owned()).unwrap_or_else(|_| a.value.to_string());
+            let v = quick_xml::escape::unescape(&a.value)
+                .map(|c| c.into_owned())
+                .unwrap_or_else(|_| a.value.to_string());
             m.insert(format!("@{k}"), Value::String(v));
         }
         Ok(m)
@@ -440,13 +573,17 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
             Event::End(_) => {
                 let (n, obj, txt) = stack.pop().unwrap();
                 let v = finish(obj, txt);
-                let parent = stack.last_mut().ok_or_else(|| ToolError::invalid("text", "unbalanced XML"))?;
+                let parent = stack
+                    .last_mut()
+                    .ok_or_else(|| ToolError::invalid("text", "unbalanced XML"))?;
                 add(&mut parent.1, n, v);
             }
             Event::Text(t) => stack.last_mut().unwrap().2.push_str(&t),
             Event::CData(t) => stack.last_mut().unwrap().2.push_str(&t),
             Event::GeneralRef(g) => {
-                let s = quick_xml::escape::unescape(&format!("&{};", &*g)).map(|c| c.into_owned()).unwrap_or_default();
+                let s = quick_xml::escape::unescape(&format!("&{};", &*g))
+                    .map(|c| c.into_owned())
+                    .unwrap_or_default();
                 stack.last_mut().unwrap().2.push_str(&s);
             }
             Event::Eof => break,
@@ -454,7 +591,10 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
         }
     }
     if stack.len() != 1 {
-        return Err(ToolError::invalid("text", "unexpected end of XML document (unclosed elements)"));
+        return Err(ToolError::invalid(
+            "text",
+            "unexpected end of XML document (unclosed elements)",
+        ));
     }
     let root = stack.pop().unwrap().1;
     if root.is_empty() {
@@ -468,7 +608,16 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
         crate::escape::xml_escape(s)
     }
     fn valid_name(n: &str) -> String {
-        let mut s: String = n.chars().map(|c| if c.is_alphanumeric() || "_-.:".contains(c) { c } else { '_' }).collect();
+        let mut s: String = n
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || "_-.:".contains(c) {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
         if s.is_empty() || !(s.chars().next().unwrap().is_alphabetic() || s.starts_with('_')) {
             s = format!("_{s}");
         }
@@ -486,9 +635,16 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
                 let n = valid_name(name);
                 out.push_str(&format!("{pad}<{n}"));
                 for (k, val) in m.iter().filter(|(k, _)| k.starts_with('@')) {
-                    out.push_str(&format!(" {}=\"{}\"", valid_name(&k[1..]), esc(&cell_string(val))));
+                    out.push_str(&format!(
+                        " {}=\"{}\"",
+                        valid_name(&k[1..]),
+                        esc(&cell_string(val))
+                    ));
                 }
-                let children: Vec<_> = m.iter().filter(|(k, _)| !k.starts_with('@') && *k != "#text").collect();
+                let children: Vec<_> = m
+                    .iter()
+                    .filter(|(k, _)| !k.starts_with('@') && *k != "#text")
+                    .collect();
                 let text = m.get("#text").map(cell_string);
                 if children.is_empty() && text.is_none() {
                     out.push_str("/>\n");
@@ -552,19 +708,29 @@ pub(crate) fn query_to_json(q: &str) -> Value {
 }
 
 pub(crate) fn json_to_query(v: &Value) -> ToolResult<String> {
-    let m = v.as_object().ok_or_else(|| ToolError::invalid("text", "a query string needs an object of key/value pairs"))?;
+    let m = v.as_object().ok_or_else(|| {
+        ToolError::invalid("text", "a query string needs an object of key/value pairs")
+    })?;
     let mut ser = url::form_urlencoded::Serializer::new(String::new());
     for (k, val) in m {
         match val {
             Value::Array(a) => {
                 for x in a {
                     if x.is_object() || x.is_array() {
-                        return Err(ToolError::invalid("text", format!("'{k}' contains nested data, which a query string cannot hold")));
+                        return Err(ToolError::invalid(
+                            "text",
+                            format!("'{k}' contains nested data, which a query string cannot hold"),
+                        ));
                     }
                     ser.append_pair(k, &cell_string(x));
                 }
             }
-            Value::Object(_) => return Err(ToolError::invalid("text", format!("'{k}' is a nested object, which a query string cannot hold"))),
+            Value::Object(_) => {
+                return Err(ToolError::invalid(
+                    "text",
+                    format!("'{k}' is a nested object, which a query string cannot hold"),
+                ))
+            }
             x => {
                 ser.append_pair(k, &cell_string(x));
             }
@@ -587,7 +753,11 @@ pub(crate) fn parse_any(text: &str, from: &str) -> ToolResult<Value> {
         "toml" => parse_toml(text, "text")?,
         "xml" => xml_to_json(text)?,
         "csv" | "tsv" => {
-            let delim = if from == "tsv" { b'\t' } else { crate::data::sniff_delimiter(text) };
+            let delim = if from == "tsv" {
+                b'\t'
+            } else {
+                crate::data::sniff_delimiter(text)
+            };
             let t = crate::data::parse_csv(text, delim, true)?;
             crate::data::rows_to_objects(&t, true)
         }
@@ -595,11 +765,19 @@ pub(crate) fn parse_any(text: &str, from: &str) -> ToolResult<Value> {
             text.lines()
                 .enumerate()
                 .filter(|(_, l)| !l.trim().is_empty())
-                .map(|(i, l)| serde_json::from_str(l).map_err(|e| ToolError::invalid("text", format!("line {}: {e}", i + 1))))
+                .map(|(i, l)| {
+                    serde_json::from_str(l)
+                        .map_err(|e| ToolError::invalid("text", format!("line {}: {e}", i + 1)))
+                })
                 .collect::<ToolResult<_>>()?,
         ),
         "query" => query_to_json(text),
-        other => return Err(ToolError::invalid("from", format!("unknown format {other}"))),
+        other => {
+            return Err(ToolError::invalid(
+                "from",
+                format!("unknown format {other}"),
+            ))
+        }
     })
 }
 
@@ -609,18 +787,26 @@ pub(crate) fn detect_format(text: &str) -> &'static str {
         if serde_json::from_str::<Value>(text).is_ok() {
             return "json";
         }
-        if t.starts_with('{') && text.lines().filter(|l| !l.trim().is_empty()).all(|l| serde_json::from_str::<Value>(l).is_ok()) {
+        if t.starts_with('{')
+            && text
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .all(|l| serde_json::from_str::<Value>(l).is_ok())
+        {
             return "ndjson";
         }
     }
     if t.starts_with('<') {
         return "xml";
     }
-    if toml::from_str::<toml::Table>(text).is_ok() && (t.starts_with('[') || text.lines().any(|l| l.contains(" = "))) {
+    if toml::from_str::<toml::Table>(text).is_ok()
+        && (t.starts_with('[') || text.lines().any(|l| l.contains(" = ")))
+    {
         return "toml";
     }
     let first = t.lines().next().unwrap_or("");
-    if !first.contains(' ') && first.contains('=') && !first.contains(": ") && !text.contains('\n') {
+    if !first.contains(' ') && first.contains('=') && !first.contains(": ") && !text.contains('\n')
+    {
         return "query";
     }
     if first.contains('\t') {
@@ -643,17 +829,42 @@ pub(crate) fn render_any(v: &Value, to: &str, root: &str) -> ToolResult<(String,
             let rows = match v {
                 Value::Array(a) => a.clone(),
                 Value::Object(_) => vec![v.clone()],
-                _ => return Err(ToolError::invalid("text", "CSV output needs an array of objects")),
+                _ => {
+                    return Err(ToolError::invalid(
+                        "text",
+                        "CSV output needs an array of objects",
+                    ))
+                }
             };
             let (cols, data) = crate::data::flatten_records(&rows, ".");
-            (crate::data::write_csv(&cols, &data, if to == "tsv" { b'\t' } else { b',' }, false)?, if to == "tsv" { "text/tab-separated-values" } else { "text/csv" })
+            (
+                crate::data::write_csv(
+                    &cols,
+                    &data,
+                    if to == "tsv" { b'\t' } else { b',' },
+                    false,
+                )?,
+                if to == "tsv" {
+                    "text/tab-separated-values"
+                } else {
+                    "text/csv"
+                },
+            )
         }
         "ndjson" => {
             let items = match v {
                 Value::Array(a) => a.clone(),
                 other => vec![other.clone()],
             };
-            (items.iter().map(|i| serde_json::to_string(i).unwrap_or_default()).collect::<Vec<_>>().join("\n") + "\n", "application/x-ndjson")
+            (
+                items
+                    .iter()
+                    .map(|i| serde_json::to_string(i).unwrap_or_default())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+                    + "\n",
+                "application/x-ndjson",
+            )
         }
         "query" => (json_to_query(v)?, "text/plain"),
         other => return Err(ToolError::invalid("to", format!("unknown format {other}"))),
@@ -708,62 +919,217 @@ mod tests {
     #[tokio::test]
     async fn json_tool() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("dev.json", json!({"text": "{\"b\":1,\"a\":[1,2]}", "sort_keys": true})).await.unwrap();
-        assert_eq!(out.text.unwrap(), "{\n  \"a\": [\n    1,\n    2\n  ],\n  \"b\": 1\n}");
-        let out = h.run("dev.json", json!({"text": "{ \"a\" : 1 }", "mode": "minify"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.json",
+                json!({"text": "{\"b\":1,\"a\":[1,2]}", "sort_keys": true}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            out.text.unwrap(),
+            "{\n  \"a\": [\n    1,\n    2\n  ],\n  \"b\": 1\n}"
+        );
+        let out = h
+            .run(
+                "dev.json",
+                json!({"text": "{ \"a\" : 1 }", "mode": "minify"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "{\"a\":1}");
-        let err = h.run("dev.json", json!({"text": "{\n  \"a\": 1,\n  \"b\": }"})).await.unwrap_err();
+        let err = h
+            .run("dev.json", json!({"text": "{\n  \"a\": 1,\n  \"b\": }"}))
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("line 3"), "{err}");
-        assert_eq!(h.run("dev.json", json!({"text": "  "})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.json", json!({"text": "  "}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
     async fn yaml_toml_xml() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("dev.yaml", json!({"text": "b: 1\na: [x, y]\n---\nc: true\n"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.yaml",
+                json!({"text": "b: 1\na: [x, y]\n---\nc: true\n"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["documents"], 2);
         assert!(out.text.unwrap().contains("---"));
-        let err = h.run("dev.yaml", json!({"text": "a: [1, 2\nb: 3"})).await.unwrap_err();
+        let err = h
+            .run("dev.yaml", json!({"text": "a: [1, 2\nb: 3"}))
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("line"), "{err}");
-        let out = h.run("dev.toml", json!({"text": "title='x'\n[owner]\nname = \"Tom\""})).await.unwrap();
+        let out = h
+            .run(
+                "dev.toml",
+                json!({"text": "title='x'\n[owner]\nname = \"Tom\""}),
+            )
+            .await
+            .unwrap();
         assert!(out.text.unwrap().contains("[owner]"));
-        let err = h.run("dev.toml", json!({"text": "a = \n"})).await.unwrap_err();
+        let err = h
+            .run("dev.toml", json!({"text": "a = \n"}))
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("line 1"), "{err}");
-        let out = h.run("dev.xml", json!({"text": "<a><b x=\"1\">t &amp; u</b><c/></a>"})).await.unwrap();
-        assert_eq!(out.text.unwrap(), "<a>\n  <b x=\"1\">t &amp; u</b>\n  <c/>\n</a>");
-        let out = h.run("dev.xml", json!({"text": "<a>\n  <b>x</b>\n</a>", "mode": "minify"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.xml",
+                json!({"text": "<a><b x=\"1\">t &amp; u</b><c/></a>"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            out.text.unwrap(),
+            "<a>\n  <b x=\"1\">t &amp; u</b>\n  <c/>\n</a>"
+        );
+        let out = h
+            .run(
+                "dev.xml",
+                json!({"text": "<a>\n  <b>x</b>\n</a>", "mode": "minify"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "<a><b>x</b></a>");
-        assert_eq!(h.run("dev.xml", json!({"text": "<a><b></a>"})).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(h.run("dev.xml", json!({"text": "<a>"})).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(h.run("dev.xml", json!({"text": "<a/><b/>"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.xml", json!({"text": "<a><b></a>"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            h.run("dev.xml", json!({"text": "<a>"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            h.run("dev.xml", json!({"text": "<a/><b/>"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
         // External entities are never expanded.
         let xxe = "<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY x SYSTEM \"file:///etc/passwd\">]><r>&x;</r>";
-        let out = h.run("dev.xml", json!({"text": xxe, "mode": "minify"})).await.unwrap().text.unwrap();
+        let out = h
+            .run("dev.xml", json!({"text": xxe, "mode": "minify"}))
+            .await
+            .unwrap()
+            .text
+            .unwrap();
         assert!(out.contains("&x;") && !out.contains("root:"));
     }
 
     #[tokio::test]
     async fn sql_and_convert() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("dev.sql_format", json!({"text": "select a, b from t where x = 1"})).await.unwrap().text.unwrap();
+        let out = h
+            .run(
+                "dev.sql_format",
+                json!({"text": "select a, b from t where x = 1"}),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
         assert!(out.starts_with("SELECT") && out.contains("\nFROM") && out.contains("WHERE"));
         let c = |t: &'static str, from: &'static str, to: &'static str| json!({"text": t, "from": from, "to": to});
-        let out = h.run("dev.convert", c("{\"a\": 1, \"b\": [true, null]}", "auto", "yaml")).await.unwrap();
+        let out = h
+            .run(
+                "dev.convert",
+                c("{\"a\": 1, \"b\": [true, null]}", "auto", "yaml"),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "a: 1\nb:\n- true\n- null\n");
         assert_eq!(out.data["from"], "json");
-        let out = h.run("dev.convert", c("a: 1\nb: x\n", "yaml", "toml")).await.unwrap().text.unwrap();
+        let out = h
+            .run("dev.convert", c("a: 1\nb: x\n", "yaml", "toml"))
+            .await
+            .unwrap()
+            .text
+            .unwrap();
         assert_eq!(out, "a = 1\nb = \"x\"\n");
-        let out = h.run("dev.convert", c("name,age\nAnn,30\nBob,", "csv", "json_min")).await.unwrap().text.unwrap();
-        assert_eq!(out, "[{\"name\":\"Ann\",\"age\":30},{\"name\":\"Bob\",\"age\":null}]");
-        let out = h.run("dev.convert", c("<r><i id=\"1\">a</i><i id=\"2\">b</i></r>", "xml", "json_min")).await.unwrap().text.unwrap();
-        assert_eq!(out, "{\"r\":{\"i\":[{\"@id\":\"1\",\"#text\":\"a\"},{\"@id\":\"2\",\"#text\":\"b\"}]}}");
-        let out = h.run("dev.convert", c("a=1&b=x%20y&a=2", "query", "json_min")).await.unwrap().text.unwrap();
+        let out = h
+            .run(
+                "dev.convert",
+                c("name,age\nAnn,30\nBob,", "csv", "json_min"),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        assert_eq!(
+            out,
+            "[{\"name\":\"Ann\",\"age\":30},{\"name\":\"Bob\",\"age\":null}]"
+        );
+        let out = h
+            .run(
+                "dev.convert",
+                c(
+                    "<r><i id=\"1\">a</i><i id=\"2\">b</i></r>",
+                    "xml",
+                    "json_min",
+                ),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        assert_eq!(
+            out,
+            "{\"r\":{\"i\":[{\"@id\":\"1\",\"#text\":\"a\"},{\"@id\":\"2\",\"#text\":\"b\"}]}}"
+        );
+        let out = h
+            .run("dev.convert", c("a=1&b=x%20y&a=2", "query", "json_min"))
+            .await
+            .unwrap()
+            .text
+            .unwrap();
         assert_eq!(out, "{\"a\":[\"1\",\"2\"],\"b\":\"x y\"}");
-        let out = h.run("dev.convert", c("[{\"a\":{\"b\":1}}]", "json", "csv")).await.unwrap().text.unwrap();
+        let out = h
+            .run("dev.convert", c("[{\"a\":{\"b\":1}}]", "json", "csv"))
+            .await
+            .unwrap()
+            .text
+            .unwrap();
         assert_eq!(out, "a.b\n1\n");
-        let out = h.run("dev.convert", c("{\"r\":{\"@id\":\"1\",\"v\":\"x<\"}}", "json", "xml")).await.unwrap().text.unwrap();
+        let out = h
+            .run(
+                "dev.convert",
+                c("{\"r\":{\"@id\":\"1\",\"v\":\"x<\"}}", "json", "xml"),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
         assert!(out.contains("<r id=\"1\">") && out.contains("<v>x&lt;</v>"));
-        assert_eq!(h.run("dev.convert", c("{\"a\": null}", "json", "toml")).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(h.run("dev.convert", c("{bad", "json", "yaml")).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.convert", c("{\"a\": null}", "json", "toml"))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            h.run("dev.convert", c("{bad", "json", "yaml"))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 }

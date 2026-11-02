@@ -8,14 +8,19 @@ use serde_json::json;
 #[derive(Debug)]
 pub struct ApiError {
     pub status: StatusCode,
-    pub code: String,
+    pub code: &'static str,
     pub message: String,
-    pub extra: Option<serde_json::Value>,
+    pub extra: Option<Box<serde_json::Value>>,
 }
 
 impl ApiError {
-    pub fn new(status: StatusCode, code: &str, message: impl Into<String>) -> Self {
-        ApiError { status, code: code.into(), message: message.into(), extra: None }
+    pub fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
+        ApiError {
+            status,
+            code,
+            message: message.into(),
+            extra: None,
+        }
     }
     pub fn bad_request(m: impl Into<String>) -> Self {
         Self::new(StatusCode::BAD_REQUEST, "bad_request", m)
@@ -45,8 +50,14 @@ impl ApiError {
 
 impl From<ToolError> for ApiError {
     fn from(e: ToolError) -> Self {
-        let status = StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY);
-        ApiError { status, code: e.code().into(), message: e.to_string(), extra: serde_json::to_value(&e).ok() }
+        let status =
+            StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY);
+        ApiError {
+            status,
+            code: e.code(),
+            message: e.to_string(),
+            extra: serde_json::to_value(&e).ok().map(Box::new),
+        }
     }
 }
 
@@ -73,11 +84,14 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let mut body = json!({"error": {"code": self.code, "message": self.message}});
         if let Some(x) = self.extra {
-            body["error"]["detail"] = x;
+            body["error"]["detail"] = *x;
         }
         let mut resp = (self.status, Json(body)).into_response();
         if self.status == StatusCode::UNAUTHORIZED {
-            resp.headers_mut().insert("www-authenticate", axum::http::HeaderValue::from_static("Bearer realm=\"dogubako\""));
+            resp.headers_mut().insert(
+                "www-authenticate",
+                axum::http::HeaderValue::from_static("Bearer realm=\"dogubako\""),
+            );
         }
         resp
     }

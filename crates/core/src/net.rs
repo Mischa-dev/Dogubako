@@ -22,13 +22,21 @@ impl reqwest::dns::Resolve for GuardedResolver {
         let policy = self.policy.clone();
         let host = name.as_str().to_string();
         Box::pin(async move {
-            policy.check_host(&host).map_err(|e| Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error + Send + Sync>)?;
-            let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), 0)).await?.collect();
-            let allowed: Vec<SocketAddr> = addrs.into_iter().filter(|a| policy.ip_allowed(a.ip())).collect();
+            policy.check_host(&host).map_err(|e| {
+                Box::new(std::io::Error::other(e.to_string()))
+                    as Box<dyn std::error::Error + Send + Sync>
+            })?;
+            let addrs: Vec<SocketAddr> =
+                tokio::net::lookup_host((host.as_str(), 0)).await?.collect();
+            let allowed: Vec<SocketAddr> = addrs
+                .into_iter()
+                .filter(|a| policy.ip_allowed(a.ip()))
+                .collect();
             if allowed.is_empty() {
                 return Err(Box::new(std::io::Error::other(format!(
                     "'{host}' resolves only to non-public addresses; blocked by network policy"
-                ))) as Box<dyn std::error::Error + Send + Sync>);
+                )))
+                    as Box<dyn std::error::Error + Send + Sync>);
             }
             Ok(Box::new(allowed.into_iter()) as reqwest::dns::Addrs)
         })
@@ -40,10 +48,16 @@ pub fn guarded_client(policy: NetPolicy) -> ToolResult<reqwest::Client> {
     let policy = Arc::new(policy);
     let redirect_policy = policy.clone();
     reqwest::Client::builder()
-        .user_agent(concat!("Dogubako/", env!("CARGO_PKG_VERSION"), " (+https://github.com/mischa-dev/dogubako)"))
+        .user_agent(concat!(
+            "Dogubako/",
+            env!("CARGO_PKG_VERSION"),
+            " (+https://github.com/mischa-dev/dogubako)"
+        ))
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(30))
-        .dns_resolver(Arc::new(GuardedResolver { policy: policy.clone() }))
+        .dns_resolver(Arc::new(GuardedResolver {
+            policy: policy.clone(),
+        }))
         .no_proxy()
         .redirect(reqwest::redirect::Policy::custom(move |attempt| {
             if attempt.previous().len() >= 5 {
@@ -66,17 +80,27 @@ pub fn guarded_client(policy: NetPolicy) -> ToolResult<reqwest::Client> {
 
 /// Validate a user-supplied URL before fetching it.
 pub fn check_url(policy: &NetPolicy, raw: &str) -> ToolResult<url::Url> {
-    let url = url::Url::parse(raw.trim()).map_err(|e| ToolError::invalid("url", format!("invalid URL: {e}")))?;
+    let url = url::Url::parse(raw.trim())
+        .map_err(|e| ToolError::invalid("url", format!("invalid URL: {e}")))?;
     if !matches!(url.scheme(), "http" | "https") {
-        return Err(ToolError::invalid("url", "only http and https URLs are supported"));
+        return Err(ToolError::invalid(
+            "url",
+            "only http and https URLs are supported",
+        ));
     }
-    let host = url.host_str().ok_or_else(|| ToolError::invalid("url", "URL has no host"))?;
+    let host = url
+        .host_str()
+        .ok_or_else(|| ToolError::invalid("url", "URL has no host"))?;
     policy.check_host(host)?;
     Ok(url)
 }
 
 /// Resolve `host:port` applying the policy; for raw TCP/TLS tools.
-pub async fn resolve_checked(policy: &NetPolicy, host: &str, port: u16) -> ToolResult<Vec<SocketAddr>> {
+pub async fn resolve_checked(
+    policy: &NetPolicy,
+    host: &str,
+    port: u16,
+) -> ToolResult<Vec<SocketAddr>> {
     policy.check_host(host)?;
     let h = host.trim_matches(['[', ']']);
     let addrs: Vec<SocketAddr> = if let Ok(ip) = h.parse::<IpAddr>() {
@@ -88,9 +112,14 @@ pub async fn resolve_checked(policy: &NetPolicy, host: &str, port: u16) -> ToolR
             .map_err(|e| ToolError::failed(format!("cannot resolve '{host}': {e}")))?
             .collect()
     };
-    let allowed: Vec<SocketAddr> = addrs.into_iter().filter(|a| policy.ip_allowed(a.ip())).collect();
+    let allowed: Vec<SocketAddr> = addrs
+        .into_iter()
+        .filter(|a| policy.ip_allowed(a.ip()))
+        .collect();
     if allowed.is_empty() {
-        return Err(ToolError::denied(format!("'{host}' resolves only to non-public addresses; blocked by network policy")));
+        return Err(ToolError::denied(format!(
+            "'{host}' resolves only to non-public addresses; blocked by network policy"
+        )));
     }
     Ok(allowed)
 }

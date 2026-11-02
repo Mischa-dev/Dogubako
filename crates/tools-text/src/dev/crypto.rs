@@ -14,7 +14,8 @@ pub fn tools() -> Vec<Arc<dyn Tool>> {
 }
 
 const EFF_WORDS: &str = include_str!("../../data/eff_large_wordlist.txt");
-const EFF_ATTRIBUTION: &str = "EFF Large Wordlist © Electronic Frontier Foundation, CC BY 3.0 US (https://www.eff.org/dice)";
+const EFF_ATTRIBUTION: &str =
+    "EFF Large Wordlist © Electronic Frontier Foundation, CC BY 3.0 US (https://www.eff.org/dice)";
 
 fn encode_digest(bytes: &[u8], enc: &str) -> String {
     match enc {
@@ -65,7 +66,12 @@ pub(crate) fn digest(alg: &str, data: &[u8]) -> ToolResult<Vec<u8>> {
         "blake2s" => blake2::Blake2s256::digest(data).to_vec(),
         "blake3" => blake3::hash(data).as_bytes().to_vec(),
         "crc32" => crc32fast::hash(data).to_be_bytes().to_vec(),
-        other => return Err(ToolError::invalid("algorithms", format!("unknown algorithm {other}"))),
+        other => {
+            return Err(ToolError::invalid(
+                "algorithms",
+                format!("unknown algorithm {other}"),
+            ))
+        }
     })
 }
 
@@ -87,7 +93,10 @@ fn hash() -> Arc<dyn Tool> {
         };
         let algs = p.list("algorithms");
         if algs.is_empty() {
-            return Err(ToolError::invalid("algorithms", "choose at least one algorithm"));
+            return Err(ToolError::invalid(
+                "algorithms",
+                "choose at least one algorithm",
+            ));
         }
         let enc = p.str_or("encoding", "hex");
         let cmp = p.opt_str("compare").map(|c| c.trim().to_string());
@@ -97,14 +106,18 @@ fn hash() -> Arc<dyn Tool> {
             let d = digest(a, &bytes)?;
             let s = encode_digest(&d, enc);
             if let Some(c) = &cmp {
-                if c.eq_ignore_ascii_case(&s) || c.eq_ignore_ascii_case(&hex::encode(&d)) || *c == base64::engine::general_purpose::STANDARD.encode(&d) {
+                if c.eq_ignore_ascii_case(&s)
+                    || c.eq_ignore_ascii_case(&hex::encode(&d))
+                    || *c == base64::engine::general_purpose::STANDARD.encode(&d)
+                {
                     matched = Some(a.clone());
                 }
             }
             let label = HASHES.iter().find(|h| h.0 == a).map(|h| h.1).unwrap_or(a);
             rows.push(vec![json!(label), json!(s)]);
         }
-        let mut data = json!({"bytes": bytes.len(), "table": table(&["algorithm", "digest"], rows.clone())});
+        let mut data =
+            json!({"bytes": bytes.len(), "table": table(&["algorithm", "digest"], rows.clone())});
         if cmp.is_some() {
             data["match"] = json!(matched.is_some());
             data["matched_algorithm"] = json!(matched);
@@ -124,7 +137,8 @@ fn hmac_bytes(alg: &str, key: &[u8], data: &[u8]) -> ToolResult<Vec<u8>> {
     use hmac::{Hmac, KeyInit, Mac};
     macro_rules! mac {
         ($h:ty) => {{
-            let mut m = <Hmac<$h> as KeyInit>::new_from_slice(key).map_err(|e| ToolError::invalid("key", e.to_string()))?;
+            let mut m = <Hmac<$h> as KeyInit>::new_from_slice(key)
+                .map_err(|e| ToolError::invalid("key", e.to_string()))?;
             m.update(data);
             m.finalize().into_bytes().to_vec()
         }};
@@ -135,7 +149,12 @@ fn hmac_bytes(alg: &str, key: &[u8], data: &[u8]) -> ToolResult<Vec<u8>> {
         "sha384" => mac!(sha2::Sha384),
         "sha512" => mac!(sha2::Sha512),
         "md5" => mac!(md5::Md5),
-        other => return Err(ToolError::invalid("algorithm", format!("unknown algorithm {other}"))),
+        other => {
+            return Err(ToolError::invalid(
+                "algorithm",
+                format!("unknown algorithm {other}"),
+            ))
+        }
     })
 }
 
@@ -161,19 +180,29 @@ fn hmac_tool() -> Arc<dyn Tool> {
     sync_tool(spec, |_ctx, p| {
         let key_s = p.str("key")?;
         let key = match p.str_or("key_format", "text") {
-            "hex" => hex::decode(key_s.trim()).map_err(|e| ToolError::invalid("key", format!("invalid hex key: {e}")))?,
-            "base64" => super::encoders::b64_decode_lenient(key_s).map_err(|e| ToolError::invalid("key", e))?,
+            "hex" => hex::decode(key_s.trim())
+                .map_err(|e| ToolError::invalid("key", format!("invalid hex key: {e}")))?,
+            "base64" => super::encoders::b64_decode_lenient(key_s)
+                .map_err(|e| ToolError::invalid("key", e))?,
             _ => key_s.as_bytes().to_vec(),
         };
         let alg = p.str("algorithm")?;
         let mac = hmac_bytes(alg, &key, p.text("text").as_bytes())?;
         let enc = p.str_or("encoding", "hex");
         let s = encode_digest(&mac, enc);
-        let mut data = json!({"algorithm": format!("HMAC-{}", alg.to_uppercase()), "bytes": mac.len()});
+        let mut data =
+            json!({"algorithm": format!("HMAC-{}", alg.to_uppercase()), "bytes": mac.len()});
         if let Some(exp) = p.opt_str("expected") {
             let e = exp.trim();
-            let e = e.split_once('=').filter(|(pre, _)| pre.chars().all(|c| c.is_ascii_alphanumeric())).map(|(_, v)| v).unwrap_or(e);
-            let candidate = hex::decode(e).ok().filter(|b| b.len() == mac.len()).or_else(|| super::encoders::b64_decode_lenient(e).ok());
+            let e = e
+                .split_once('=')
+                .filter(|(pre, _)| pre.chars().all(|c| c.is_ascii_alphanumeric()))
+                .map(|(_, v)| v)
+                .unwrap_or(e);
+            let candidate = hex::decode(e)
+                .ok()
+                .filter(|b| b.len() == mac.len())
+                .or_else(|| super::encoders::b64_decode_lenient(e).ok());
             let ok = candidate.map(|c| ct_eq(&c, &mac)).unwrap_or(false);
             data["valid"] = json!(ok);
         }
@@ -230,14 +259,20 @@ fn random() -> Arc<dyn Tool> {
                         "symbols" => p.str_or("symbols", "!@#$%^&*()-_=+[]{};:,.?/").to_string(),
                         _ => String::new(),
                     };
-                    let mut v: Vec<char> = chars.chars().filter(|c| !(excl && AMBIGUOUS.contains(*c))).collect();
+                    let mut v: Vec<char> = chars
+                        .chars()
+                        .filter(|c| !(excl && AMBIGUOUS.contains(*c)))
+                        .collect();
                     v.dedup();
                     if !v.is_empty() {
                         sets.push(v);
                     }
                 }
                 if sets.is_empty() {
-                    return Err(ToolError::invalid("charset", "choose at least one character set"));
+                    return Err(ToolError::invalid(
+                        "charset",
+                        "choose at least one character set",
+                    ));
                 }
                 let mut all: Vec<char> = sets.concat();
                 all.sort();
@@ -253,7 +288,11 @@ fn random() -> Arc<dyn Tool> {
                     }
                 };
                 let items = (0..count).map(|_| gen(&mut rng)).collect();
-                (items, len as f64 * (all.len() as f64).log2(), json!({"alphabet_size": all.len()}))
+                (
+                    items,
+                    len as f64 * (all.len() as f64).log2(),
+                    json!({"alphabet_size": all.len()}),
+                )
             }
             "passphrase" => {
                 let words: Vec<&str> = EFF_WORDS.lines().filter(|l| !l.is_empty()).collect();
@@ -268,7 +307,9 @@ fn random() -> Arc<dyn Tool> {
                                 let w = *words.choose(&mut rng).unwrap();
                                 if cap {
                                     let mut c = w.chars();
-                                    c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+                                    c.next()
+                                        .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+                                        .unwrap_or_default()
                                 } else {
                                     w.to_string()
                                 }
@@ -285,7 +326,11 @@ fn random() -> Arc<dyn Tool> {
                 if num {
                     bits += 10f64.log2() + (n as f64).log2();
                 }
-                (items, bits, json!({"wordlist": EFF_ATTRIBUTION, "wordlist_size": words.len()}))
+                (
+                    items,
+                    bits,
+                    json!({"wordlist": EFF_ATTRIBUTION, "wordlist_size": words.len()}),
+                )
             }
             "hex" | "base64" => {
                 let len = p.int_or("length", 20).max(1) as usize;
@@ -310,7 +355,10 @@ fn random() -> Arc<dyn Tool> {
                 let span = (hi as i128 - lo as i128 + 1) as f64;
                 let items: Vec<String> = if p.bool("unique") {
                     if (count as f64) > span {
-                        return Err(ToolError::invalid("count", format!("only {span} distinct values in range")));
+                        return Err(ToolError::invalid(
+                            "count",
+                            format!("only {span} distinct values in range"),
+                        ));
                     }
                     let mut seen = std::collections::HashSet::new();
                     let mut v = vec![];
@@ -322,7 +370,9 @@ fn random() -> Arc<dyn Tool> {
                     }
                     v
                 } else {
-                    (0..count).map(|_| rng.random_range(lo..=hi).to_string()).collect()
+                    (0..count)
+                        .map(|_| rng.random_range(lo..=hi).to_string())
+                        .collect()
                 };
                 (items, span.log2(), json!({}))
             }
@@ -345,7 +395,8 @@ fn random() -> Arc<dyn Tool> {
 // dev.uuid
 
 fn inspect_uuid(s: &str) -> ToolResult<Value> {
-    let u = uuid::Uuid::parse_str(s.trim()).map_err(|e| ToolError::invalid("uuid", e.to_string()))?;
+    let u =
+        uuid::Uuid::parse_str(s.trim()).map_err(|e| ToolError::invalid("uuid", e.to_string()))?;
     let variant = match u.get_variant() {
         uuid::Variant::NCS => "NCS (reserved)",
         uuid::Variant::RFC4122 => "RFC 9562 / RFC 4122",
@@ -382,7 +433,11 @@ fn inspect_uuid(s: &str) -> ToolResult<Value> {
         }
     }
     if let Some(node) = u.get_node_id() {
-        v["node_id"] = json!(node.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(":"));
+        v["node_id"] = json!(node
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<Vec<_>>()
+            .join(":"));
     }
     Ok(v)
 }
@@ -413,13 +468,16 @@ fn uuid_tool() -> Arc<dyn Tool> {
         let count = p.int_or("count", 1).max(1) as usize;
         let ver = p.str("version")?;
         let ns = || -> ToolResult<uuid::Uuid> {
-            Ok(match p.str_or("namespace", "dns").to_ascii_lowercase().as_str() {
-                "dns" => uuid::Uuid::NAMESPACE_DNS,
-                "url" => uuid::Uuid::NAMESPACE_URL,
-                "oid" => uuid::Uuid::NAMESPACE_OID,
-                "x500" => uuid::Uuid::NAMESPACE_X500,
-                other => uuid::Uuid::parse_str(other).map_err(|e| ToolError::invalid("namespace", e.to_string()))?,
-            })
+            Ok(
+                match p.str_or("namespace", "dns").to_ascii_lowercase().as_str() {
+                    "dns" => uuid::Uuid::NAMESPACE_DNS,
+                    "url" => uuid::Uuid::NAMESPACE_URL,
+                    "oid" => uuid::Uuid::NAMESPACE_OID,
+                    "x500" => uuid::Uuid::NAMESPACE_X500,
+                    other => uuid::Uuid::parse_str(other)
+                        .map_err(|e| ToolError::invalid("namespace", e.to_string()))?,
+                },
+            )
         };
         let mut rng = rand::rng();
         let mut node = [0u8; 6];
@@ -433,7 +491,9 @@ fn uuid_tool() -> Arc<dyn Tool> {
                 "v1" => uuid::Uuid::now_v1(&node),
                 "v6" => uuid::Uuid::now_v6(&node),
                 "v5" | "v3" => {
-                    let name = p.opt_str("name").ok_or_else(|| ToolError::invalid("name", "a name is required for name-based UUIDs"))?;
+                    let name = p.opt_str("name").ok_or_else(|| {
+                        ToolError::invalid("name", "a name is required for name-based UUIDs")
+                    })?;
                     if ver == "v5" {
                         uuid::Uuid::new_v5(&ns()?, name.as_bytes())
                     } else {
@@ -443,7 +503,11 @@ fn uuid_tool() -> Arc<dyn Tool> {
                 "nil" => uuid::Uuid::nil(),
                 _ => uuid::Uuid::max(),
             };
-            let mut s = if p.bool("no_hyphens") { u.simple().to_string() } else { u.hyphenated().to_string() };
+            let mut s = if p.bool("no_hyphens") {
+                u.simple().to_string()
+            } else {
+                u.hyphenated().to_string()
+            };
             if p.bool("uppercase") {
                 s = s.to_uppercase();
             }
@@ -460,8 +524,10 @@ fn uuid_tool() -> Arc<dyn Tool> {
 // dev.jwt
 
 fn b64url_json(part: &str, what: &str) -> ToolResult<Value> {
-    let bytes = super::encoders::b64_decode_lenient(part).map_err(|e| ToolError::invalid("token", format!("{what}: {e}")))?;
-    serde_json::from_slice(&bytes).map_err(|e| ToolError::invalid("token", format!("{what} is not valid JSON: {e}")))
+    let bytes = super::encoders::b64_decode_lenient(part)
+        .map_err(|e| ToolError::invalid("token", format!("{what}: {e}")))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|e| ToolError::invalid("token", format!("{what} is not valid JSON: {e}")))
 }
 
 fn jwt() -> Arc<dyn Tool> {
@@ -475,52 +541,94 @@ fn jwt() -> Arc<dyn Tool> {
         .output(OutputKind::Data)
         .ui("live");
     sync_tool(spec, |_ctx, p| {
-        let token: String = p.text("token").trim().trim_start_matches("Bearer ").trim().to_string();
+        let token: String = p
+            .text("token")
+            .trim()
+            .trim_start_matches("Bearer ")
+            .trim()
+            .to_string();
         let parts: Vec<&str> = token.split('.').collect();
         if parts.len() == 5 {
             return Err(ToolError::unsupported("this is an encrypted JWE token (5 parts); its payload cannot be decoded without the private key"));
         }
         if parts.len() != 3 {
-            return Err(ToolError::invalid("token", format!("a JWT has 3 dot-separated parts, found {}", parts.len())));
+            return Err(ToolError::invalid(
+                "token",
+                format!("a JWT has 3 dot-separated parts, found {}", parts.len()),
+            ));
         }
         let header = b64url_json(parts[0], "header")?;
         let claims = b64url_json(parts[1], "payload")?;
         let now = chrono::Utc::now().timestamp();
         let mut times = serde_json::Map::new();
         for k in ["exp", "iat", "nbf", "auth_time"] {
-            if let Some(t) = claims.get(k).and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))) {
+            if let Some(t) = claims
+                .get(k)
+                .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+            {
                 if let Some(dt) = chrono::DateTime::from_timestamp(t, 0) {
-                    times.insert(k.to_string(), json!(format!("{} ({})", dt.to_rfc3339(), super::time::relative(t - now))));
+                    times.insert(
+                        k.to_string(),
+                        json!(format!(
+                            "{} ({})",
+                            dt.to_rfc3339(),
+                            super::time::relative(t - now)
+                        )),
+                    );
                 }
             }
         }
-        let expired = claims.get("exp").and_then(|v| v.as_f64()).map(|e| (e as i64) < now);
-        let not_yet = claims.get("nbf").and_then(|v| v.as_f64()).map(|n| (n as i64) > now);
-        let alg = header.get("alg").and_then(|a| a.as_str()).unwrap_or("").to_string();
+        let expired = claims
+            .get("exp")
+            .and_then(|v| v.as_f64())
+            .map(|e| (e as i64) < now);
+        let not_yet = claims
+            .get("nbf")
+            .and_then(|v| v.as_f64())
+            .map(|n| (n as i64) > now);
+        let alg = header
+            .get("alg")
+            .and_then(|a| a.as_str())
+            .unwrap_or("")
+            .to_string();
         let mut sig_status = "NOT VERIFIED — no key supplied. Anyone can forge an unverified token; never trust its claims without verification.".to_string();
         let mut verified = Value::Null;
         if alg.eq_ignore_ascii_case("none") {
-            sig_status = "UNSIGNED (alg: none) — this token has no signature and must not be trusted".into();
+            sig_status =
+                "UNSIGNED (alg: none) — this token has no signature and must not be trusted".into();
             verified = json!(false);
         } else if p.has("secret") || p.opt_str("public_key").is_some() {
             use jsonwebtoken::{Algorithm, DecodingKey, Validation};
-            let algo: Algorithm = alg.parse().map_err(|_| ToolError::unsupported(format!("unsupported algorithm '{alg}'")))?;
+            let algo: Algorithm = alg
+                .parse()
+                .map_err(|_| ToolError::unsupported(format!("unsupported algorithm '{alg}'")))?;
             let key = if let Some(pem) = p.opt_str("public_key") {
                 let pem = pem.as_bytes();
                 match alg.get(..2) {
                     Some("RS") | Some("PS") => DecodingKey::from_rsa_pem(pem),
                     Some("ES") => DecodingKey::from_ec_pem(pem),
                     _ if alg == "EdDSA" => DecodingKey::from_ed_pem(pem),
-                    _ => return Err(ToolError::invalid("public_key", format!("a public key cannot verify {alg}; use the secret field"))),
+                    _ => {
+                        return Err(ToolError::invalid(
+                            "public_key",
+                            format!("a public key cannot verify {alg}; use the secret field"),
+                        ))
+                    }
                 }
                 .map_err(|e| ToolError::invalid("public_key", format!("invalid PEM key: {e}")))?
             } else {
                 let s = p.str("secret")?;
                 if !alg.starts_with("HS") {
-                    return Err(ToolError::invalid("secret", format!("{alg} tokens are verified with a public key, not a shared secret")));
+                    return Err(ToolError::invalid(
+                        "secret",
+                        format!("{alg} tokens are verified with a public key, not a shared secret"),
+                    ));
                 }
                 if p.bool("secret_base64") {
-                    DecodingKey::from_secret(&super::encoders::b64_decode_lenient(s).map_err(|e| ToolError::invalid("secret", e))?)
+                    DecodingKey::from_secret(
+                        &super::encoders::b64_decode_lenient(s)
+                            .map_err(|e| ToolError::invalid("secret", e))?,
+                    )
                 } else {
                     DecodingKey::from_secret(s.as_bytes())
                 }
@@ -565,61 +673,168 @@ mod tests {
         let out = h.run("dev.hash", json!({"text": "abc", "algorithms": ["md5", "sha256", "crc32", "blake3", "sha3_256"]})).await.unwrap();
         let rows = out.data["table"]["rows"].as_array().unwrap();
         assert_eq!(rows[0][1], "900150983cd24fb0d6963f7d28e17f72");
-        assert_eq!(rows[1][1], "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        assert_eq!(
+            rows[1][1],
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
         assert_eq!(rows[2][1], "352441c2");
-        assert_eq!(rows[3][1], "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85");
-        assert_eq!(rows[4][1], "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532");
+        assert_eq!(
+            rows[3][1],
+            "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85"
+        );
+        assert_eq!(
+            rows[4][1],
+            "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532"
+        );
         let out = h.run("dev.hash", json!({"text": "abc", "algorithms": ["md5"], "compare": "900150983CD24FB0D6963F7D28E17F72"})).await.unwrap();
         assert_eq!(out.data["match"], true);
-        assert_eq!(h.run("dev.hash", json!({"text": "x", "algorithms": []})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.hash", json!({"text": "x", "algorithms": []}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
         // RFC 4231 test case 2
-        let out = h.run("dev.hmac", json!({"text": "what do ya want for nothing?", "key": "Jefe"})).await.unwrap();
-        assert_eq!(out.text.unwrap(), "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+        let out = h
+            .run(
+                "dev.hmac",
+                json!({"text": "what do ya want for nothing?", "key": "Jefe"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            out.text.unwrap(),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
         let out = h
             .run("dev.hmac", json!({"text": "what do ya want for nothing?", "key": "Jefe", "expected": "sha256=5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"}))
             .await
             .unwrap();
         assert_eq!(out.data["valid"], true);
-        let out = h.run("dev.hmac", json!({"text": "x", "key": "Jefe", "expected": "00"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.hmac",
+                json!({"text": "x", "key": "Jefe", "expected": "00"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["valid"], false);
     }
 
     #[tokio::test]
     async fn randoms() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("dev.random", json!({"length": 16, "count": 5, "charset": ["lower", "digits"]})).await.unwrap();
+        let out = h
+            .run(
+                "dev.random",
+                json!({"length": 16, "count": 5, "charset": ["lower", "digits"]}),
+            )
+            .await
+            .unwrap();
         let t = out.text.unwrap();
         assert_eq!(t.lines().count(), 5);
-        assert!(t.lines().all(|l| l.len() == 16 && l.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) && l.chars().any(|c| c.is_ascii_digit())));
+        assert!(t.lines().all(|l| l.len() == 16
+            && l.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+            && l.chars().any(|c| c.is_ascii_digit())));
         assert!((out.data["entropy_bits"].as_f64().unwrap() - 82.7).abs() < 0.1);
-        let out = h.run("dev.random", json!({"kind": "passphrase", "words": 5, "separator": " "})).await.unwrap();
+        let out = h
+            .run(
+                "dev.random",
+                json!({"kind": "passphrase", "words": 5, "separator": " "}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap().split(' ').count(), 5);
         assert!(out.data["wordlist"].as_str().unwrap().contains("EFF"));
-        let out = h.run("dev.random", json!({"kind": "hex", "length": 8})).await.unwrap();
+        let out = h
+            .run("dev.random", json!({"kind": "hex", "length": 8}))
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap().len(), 16);
-        let out = h.run("dev.random", json!({"kind": "integer", "min": 1, "max": 5, "count": 5, "unique": true})).await.unwrap();
-        let mut v: Vec<i32> = out.text.unwrap().lines().map(|l| l.parse().unwrap()).collect();
+        let out = h
+            .run(
+                "dev.random",
+                json!({"kind": "integer", "min": 1, "max": 5, "count": 5, "unique": true}),
+            )
+            .await
+            .unwrap();
+        let mut v: Vec<i32> = out
+            .text
+            .unwrap()
+            .lines()
+            .map(|l| l.parse().unwrap())
+            .collect();
         v.sort();
         assert_eq!(v, [1, 2, 3, 4, 5]);
-        assert_eq!(h.run("dev.random", json!({"kind": "integer", "min": 5, "max": 1})).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(h.run("dev.random", json!({"charset": []})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.random", json!({"kind": "integer", "min": 5, "max": 1}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            h.run("dev.random", json!({"charset": []}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
     async fn uuids() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("dev.uuid", json!({"version": "v7", "count": 3})).await.unwrap().text.unwrap();
+        let out = h
+            .run("dev.uuid", json!({"version": "v7", "count": 3}))
+            .await
+            .unwrap()
+            .text
+            .unwrap();
         let ids: Vec<&str> = out.lines().collect();
         assert_eq!(ids.len(), 3);
-        let info = h.run("dev.uuid", json!({"mode": "inspect", "uuid": ids[0]})).await.unwrap();
+        let info = h
+            .run("dev.uuid", json!({"mode": "inspect", "uuid": ids[0]}))
+            .await
+            .unwrap();
         assert!(info.data["version"].as_str().unwrap().starts_with('7'));
         assert!(info.data["timestamp"].as_str().unwrap().starts_with("20"));
-        let out = h.run("dev.uuid", json!({"version": "v5", "namespace": "dns", "name": "example.com"})).await.unwrap().text.unwrap();
+        let out = h
+            .run(
+                "dev.uuid",
+                json!({"version": "v5", "namespace": "dns", "name": "example.com"}),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
         assert_eq!(out, "cfbff0d1-9375-5685-968c-48ce8b15ae17");
-        let out = h.run("dev.uuid", json!({"version": "v4", "uppercase": true, "no_hyphens": true})).await.unwrap().text.unwrap();
+        let out = h
+            .run(
+                "dev.uuid",
+                json!({"version": "v4", "uppercase": true, "no_hyphens": true}),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
         assert_eq!(out.len(), 32);
-        assert_eq!(h.run("dev.uuid", json!({"mode": "inspect", "uuid": "not-a-uuid"})).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(h.run("dev.uuid", json!({"version": "v5"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.uuid", json!({"mode": "inspect", "uuid": "not-a-uuid"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            h.run("dev.uuid", json!({"version": "v5"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
@@ -629,13 +844,40 @@ mod tests {
         let tok = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
         let out = h.run("dev.jwt", json!({"token": tok})).await.unwrap();
         assert_eq!(out.data["payload"]["name"], "John Doe");
-        assert!(out.data["signature"].as_str().unwrap().starts_with("NOT VERIFIED"));
-        assert!(out.data["times"]["iat"].as_str().unwrap().starts_with("2018-01-18"));
-        let out = h.run("dev.jwt", json!({"token": tok, "secret": "your-256-bit-secret"})).await.unwrap();
+        assert!(out.data["signature"]
+            .as_str()
+            .unwrap()
+            .starts_with("NOT VERIFIED"));
+        assert!(out.data["times"]["iat"]
+            .as_str()
+            .unwrap()
+            .starts_with("2018-01-18"));
+        let out = h
+            .run(
+                "dev.jwt",
+                json!({"token": tok, "secret": "your-256-bit-secret"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["signature_valid"], true);
-        let out = h.run("dev.jwt", json!({"token": tok, "secret": "wrong"})).await.unwrap();
+        let out = h
+            .run("dev.jwt", json!({"token": tok, "secret": "wrong"}))
+            .await
+            .unwrap();
         assert_eq!(out.data["signature_valid"], false);
-        assert_eq!(h.run("dev.jwt", json!({"token": "abc.def"})).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(h.run("dev.jwt", json!({"token": "!!.!!.!!"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.jwt", json!({"token": "abc.def"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            h.run("dev.jwt", json!({"token": "!!.!!.!!"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 }

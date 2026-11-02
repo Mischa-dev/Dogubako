@@ -14,14 +14,20 @@ use std::io::{IsTerminal, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-const RESERVED: &[&str] = &["json", "quiet", "verbose", "out", "force", "help", "version"];
+const RESERVED: &[&str] = &[
+    "json", "quiet", "verbose", "out", "force", "help", "version",
+];
 
 pub fn output_arg() -> Arg {
     Arg::new("__out").long("out").short('o').value_name("PATH").help("Where to save output files (file for a single output, otherwise a folder) [default: current folder]")
 }
 
 pub fn force_arg() -> Arg {
-    Arg::new("__force").long("force").short('f').action(ArgAction::SetTrue).help("Overwrite existing output files")
+    Arg::new("__force")
+        .long("force")
+        .short('f')
+        .action(ArgAction::SetTrue)
+        .help("Overwrite existing output files")
 }
 
 fn long_name(p: &ParamSpec) -> String {
@@ -40,17 +46,30 @@ fn help_for(p: &ParamSpec) -> String {
     }
     if let Some(d) = &p.default {
         if !p.is_file() && !d.is_null() && d != &json!("") {
-            h.push_str(&format!(" [default: {}]", d.as_str().map(|s| s.to_string()).unwrap_or_else(|| d.to_string())));
+            h.push_str(&format!(
+                " [default: {}]",
+                d.as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| d.to_string())
+            ));
         }
     }
     h
 }
 
 pub fn command_for(spec: &ToolSpec, avail: &Availability) -> Command {
-    let name = spec.id.split_once('.').map(|(_, r)| r).unwrap_or(&spec.id).replace('_', "-");
+    let name = spec
+        .id
+        .split_once('.')
+        .map(|(_, r)| r)
+        .unwrap_or(&spec.id)
+        .replace('_', "-");
     let mut about = spec.name.clone();
     if !avail.available {
-        about.push_str(&format!(" [unavailable: {}]", avail.reason.clone().unwrap_or_default()));
+        about.push_str(&format!(
+            " [unavailable: {}]",
+            avail.reason.clone().unwrap_or_default()
+        ));
     }
     let mut long_about = format!("{}\n\n{}", spec.name, spec.description);
     if !spec.requires.is_empty() {
@@ -64,14 +83,20 @@ pub fn command_for(spec: &ToolSpec, avail: &Availability) -> Command {
         match &p.kind {
             ParamKind::File { multiple, .. } if p.primary => {
                 a = a.value_name("FILE");
-                a = if *multiple { a.num_args(1..) } else { a.num_args(1) };
+                a = if *multiple {
+                    a.num_args(1..)
+                } else {
+                    a.num_args(1)
+                };
                 if *multiple {
                     a = a.action(ArgAction::Append);
                 }
             }
             ParamKind::Text { .. } if p.primary && !has_positional_text => {
                 has_positional_text = true;
-                a = a.value_name("TEXT").help(format!("{} (reads stdin when omitted)", help_for(p)));
+                a = a
+                    .value_name("TEXT")
+                    .help(format!("{} (reads stdin when omitted)", help_for(p)));
             }
             ParamKind::File { multiple, .. } => {
                 a = a.long(long_name(p)).value_name("FILE");
@@ -80,7 +105,12 @@ pub fn command_for(spec: &ToolSpec, avail: &Availability) -> Command {
                 }
             }
             ParamKind::Boolean => {
-                a = a.long(long_name(p)).num_args(0..=1).default_missing_value("true").value_name("BOOL").require_equals(true);
+                a = a
+                    .long(long_name(p))
+                    .num_args(0..=1)
+                    .default_missing_value("true")
+                    .value_name("BOOL")
+                    .require_equals(true);
             }
             ParamKind::Enum { options, multi } => {
                 let vals: Vec<String> = options.iter().map(|o| o.value.clone()).collect();
@@ -114,22 +144,34 @@ fn collect_params(spec: &ToolSpec, m: &ArgMatches) -> Result<Map<String, Value>,
             continue;
         }
         let v = match &p.kind {
-            ParamKind::File { multiple: true, .. } | ParamKind::Enum { multi: true, .. } => Value::Array(vals.into_iter().map(Value::String).collect()),
+            ParamKind::File { multiple: true, .. } | ParamKind::Enum { multi: true, .. } => {
+                Value::Array(vals.into_iter().map(Value::String).collect())
+            }
             ParamKind::File { .. } => Value::String(absolutize(&vals[0])),
             ParamKind::Path { .. } => Value::String(absolutize(&vals[0])),
             _ => Value::String(vals[0].clone()),
         };
         let v = match (&p.kind, v) {
-            (ParamKind::File { multiple: true, .. }, Value::Array(a)) => Value::Array(a.into_iter().map(|x| Value::String(absolutize(x.as_str().unwrap_or("")))).collect()),
+            (ParamKind::File { multiple: true, .. }, Value::Array(a)) => Value::Array(
+                a.into_iter()
+                    .map(|x| Value::String(absolutize(x.as_str().unwrap_or(""))))
+                    .collect(),
+            ),
             (_, v) => v,
         };
         map.insert(p.name.clone(), v);
     }
     // Primary text from stdin when not given.
-    if let Some(p) = spec.params.iter().find(|p| p.primary && matches!(p.kind, ParamKind::Text { .. })) {
+    if let Some(p) = spec
+        .params
+        .iter()
+        .find(|p| p.primary && matches!(p.kind, ParamKind::Text { .. }))
+    {
         if !map.contains_key(&p.name) && !std::io::stdin().is_terminal() {
             let mut s = String::new();
-            std::io::stdin().read_to_string(&mut s).map_err(|e| ToolError::input(format!("reading stdin: {e}")))?;
+            std::io::stdin()
+                .read_to_string(&mut s)
+                .map_err(|e| ToolError::input(format!("reading stdin: {e}")))?;
             map.insert(p.name.clone(), Value::String(s));
         }
     }
@@ -141,7 +183,9 @@ fn absolutize(p: &str) -> String {
     if path.is_absolute() {
         p.to_string()
     } else {
-        std::env::current_dir().map(|d| d.join(path).to_string_lossy().to_string()).unwrap_or_else(|_| p.to_string())
+        std::env::current_dir()
+            .map(|d| d.join(path).to_string_lossy().to_string())
+            .unwrap_or_else(|_| p.to_string())
     }
 }
 
@@ -154,14 +198,38 @@ pub async fn run_generated(engine: Engine, id: &str, m: &ArgMatches, out: &Out) 
         Ok(p) => p,
         Err(e) => return out.tool_error(&e),
     };
-    execute(engine, &spec, params, m.get_one::<String>("__out").cloned(), m.get_flag("__force"), out).await
+    execute(
+        engine,
+        &spec,
+        params,
+        m.get_one::<String>("__out").cloned(),
+        m.get_flag("__force"),
+        out,
+    )
+    .await
 }
 
 pub async fn run_generic(engine: Engine, m: &ArgMatches, out: &Out) -> i32 {
     let id = m.get_one::<String>("tool").unwrap().clone();
     let Some(tool) = engine.registry.find(&id) else {
-        let sugg: Vec<String> = engine.registry.search(&id.replace(['.', '_'], " ")).iter().take(5).map(|s| s.id.clone()).collect();
-        return out.error(&format!("unknown tool '{id}'{}", if sugg.is_empty() { String::new() } else { format!(" (did you mean: {})", sugg.join(", ")) }), 2);
+        let sugg: Vec<String> = engine
+            .registry
+            .search(&id.replace(['.', '_'], " "))
+            .iter()
+            .take(5)
+            .map(|s| s.id.clone())
+            .collect();
+        return out.error(
+            &format!(
+                "unknown tool '{id}'{}",
+                if sugg.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (did you mean: {})", sugg.join(", "))
+                }
+            ),
+            2,
+        );
     };
     let spec = tool.spec().clone();
     let mut params = Map::new();
@@ -179,7 +247,11 @@ pub async fn run_generic(engine: Engine, m: &ArgMatches, out: &Out) -> i32 {
         let pv = match spec.param_spec(&k).map(|p| &p.kind) {
             Some(ParamKind::File { multiple, .. }) => {
                 if *multiple {
-                    Value::Array(v.split(',').map(|s| Value::String(absolutize(s.trim()))).collect())
+                    Value::Array(
+                        v.split(',')
+                            .map(|s| Value::String(absolutize(s.trim())))
+                            .collect(),
+                    )
                 } else {
                     Value::String(absolutize(v))
                 }
@@ -189,10 +261,25 @@ pub async fn run_generic(engine: Engine, m: &ArgMatches, out: &Out) -> i32 {
         };
         params.insert(k, pv);
     }
-    execute(engine, &spec, params, m.get_one::<String>("__out").cloned(), m.get_flag("__force"), out).await
+    execute(
+        engine,
+        &spec,
+        params,
+        m.get_one::<String>("__out").cloned(),
+        m.get_flag("__force"),
+        out,
+    )
+    .await
 }
 
-async fn execute(engine: Engine, spec: &ToolSpec, params: Map<String, Value>, dest: Option<String>, force: bool, out: &Out) -> i32 {
+async fn execute(
+    engine: Engine,
+    spec: &ToolSpec,
+    params: Map<String, Value>,
+    dest: Option<String>,
+    force: bool,
+    out: &Out,
+) -> i32 {
     let tmp = match tempfile::Builder::new().prefix("dogubako-out-").tempdir() {
         Ok(t) => t,
         Err(e) => return out.error(&format!("cannot create temp dir: {e}"), 1),
@@ -246,7 +333,11 @@ async fn execute(engine: Engine, spec: &ToolSpec, params: Map<String, Value>, de
 }
 
 /// Move artifacts from the temp dir to their destination; returns final paths.
-fn save_outputs(output: &ToolOutput, dest: Option<&str>, force: bool) -> Result<Vec<PathBuf>, String> {
+fn save_outputs(
+    output: &ToolOutput,
+    dest: Option<&str>,
+    force: bool,
+) -> Result<Vec<PathBuf>, String> {
     if output.artifacts.is_empty() {
         return Ok(vec![]);
     }
@@ -256,14 +347,24 @@ fn save_outputs(output: &ToolOutput, dest: Option<&str>, force: bool) -> Result<
         }
         let bytes = std::fs::read(&output.artifacts[0].path).map_err(|e| e.to_string())?;
         use std::io::Write;
-        std::io::stdout().write_all(&bytes).map_err(|e| e.to_string())?;
+        std::io::stdout()
+            .write_all(&bytes)
+            .map_err(|e| e.to_string())?;
         return Ok(vec![PathBuf::from("-")]);
     }
     let dest_path = dest.map(PathBuf::from);
     let (dir, single_name): (PathBuf, Option<PathBuf>) = match &dest_path {
         None => (std::env::current_dir().map_err(|e| e.to_string())?, None),
-        Some(p) if p.is_dir() || dest.unwrap().ends_with('/') || dest.unwrap().ends_with('\\') => (p.clone(), None),
-        Some(p) if output.artifacts.len() == 1 => (p.parent().filter(|x| !x.as_os_str().is_empty()).map(|x| x.to_path_buf()).unwrap_or_else(|| PathBuf::from(".")), Some(p.clone())),
+        Some(p) if p.is_dir() || dest.unwrap().ends_with('/') || dest.unwrap().ends_with('\\') => {
+            (p.clone(), None)
+        }
+        Some(p) if output.artifacts.len() == 1 => (
+            p.parent()
+                .filter(|x| !x.as_os_str().is_empty())
+                .map(|x| x.to_path_buf())
+                .unwrap_or_else(|| PathBuf::from(".")),
+            Some(p.clone()),
+        ),
         Some(p) => (p.clone(), None),
     };
     std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
@@ -271,8 +372,14 @@ fn save_outputs(output: &ToolOutput, dest: Option<&str>, force: bool) -> Result<
     for a in &output.artifacts {
         let mut target = single_name.clone().unwrap_or_else(|| dir.join(&a.name));
         if target.exists() && !force {
-            let stem = target.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-            let ext = target.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+            let stem = target
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let ext = target
+                .extension()
+                .map(|e| format!(".{}", e.to_string_lossy()))
+                .unwrap_or_default();
             let parent = target.parent().unwrap_or(Path::new(".")).to_path_buf();
             let mut i = 1;
             while target.exists() {
@@ -281,7 +388,8 @@ fn save_outputs(output: &ToolOutput, dest: Option<&str>, force: bool) -> Result<
             }
         }
         if std::fs::rename(&a.path, &target).is_err() {
-            std::fs::copy(&a.path, &target).map_err(|e| format!("cannot write {}: {e}", target.display()))?;
+            std::fs::copy(&a.path, &target)
+                .map_err(|e| format!("cannot write {}: {e}", target.display()))?;
         }
         saved.push(target);
     }
@@ -304,7 +412,12 @@ pub fn tools_cmd(engine: &Engine, m: &ArgMatches, out: &Out) -> i32 {
         }
         Some(("search", s)) => {
             let q: Vec<String> = s.get_many::<String>("query").unwrap().cloned().collect();
-            let infos: Vec<_> = engine.registry.search(&q.join(" ")).into_iter().map(|s| engine.info(s)).collect();
+            let infos: Vec<_> = engine
+                .registry
+                .search(&q.join(" "))
+                .into_iter()
+                .map(|s| engine.info(s))
+                .collect();
             render::tool_list(&infos, out);
             if infos.is_empty() {
                 1

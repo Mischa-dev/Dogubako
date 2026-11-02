@@ -24,43 +24,263 @@ pub fn spec(engine: &Engine) -> Value {
         let entry = paths.entry(path.to_string()).or_insert_with(|| json!({}));
         entry[method] = v;
     };
-    add("/api/v1/status", "get", op("Instance status (public)", "meta", json!({"security": []})));
-    add("/api/v1/setup", "post", op("Create the owner account with the setup token (first run only)", "auth", json!({"security": []})));
-    add("/api/v1/auth/login", "post", op("Log in (sets a session cookie, returns a CSRF token)", "auth", json!({"security": [], "requestBody": {"content": {"application/json": {"schema": {"type": "object", "required": ["username", "password"], "properties": {"username": {"type": "string"}, "password": {"type": "string"}}}}}}})));
-    add("/api/v1/auth/logout", "post", op("Log out", "auth", json!({})));
-    add("/api/v1/auth/me", "get", op("Current principal, permissions and storage usage", "auth", json!({})));
-    add("/api/v1/tools", "get", op("List permitted tools with availability", "tools", json!({"parameters": [
-        {"name": "q", "in": "query", "schema": {"type": "string"}},
-        {"name": "category", "in": "query", "schema": {"type": "string"}}
-    ]})));
-    add("/api/v1/tools/{id}", "get", op("Describe a tool", "tools", json!({"parameters": [id_param("id")]})));
-    add("/api/v1/categories", "get", op("Categories with tool counts", "tools", json!({})));
+    add(
+        "/api/v1/status",
+        "get",
+        op("Instance status (public)", "meta", json!({"security": []})),
+    );
+    add(
+        "/api/v1/setup",
+        "post",
+        op(
+            "Create the owner account with the setup token (first run only)",
+            "auth",
+            json!({"security": []}),
+        ),
+    );
+    add(
+        "/api/v1/auth/login",
+        "post",
+        op(
+            "Log in (sets a session cookie, returns a CSRF token)",
+            "auth",
+            json!({"security": [], "requestBody": {"content": {"application/json": {"schema": {"type": "object", "required": ["username", "password"], "properties": {"username": {"type": "string"}, "password": {"type": "string"}}}}}}}),
+        ),
+    );
+    add(
+        "/api/v1/auth/logout",
+        "post",
+        op("Log out", "auth", json!({})),
+    );
+    add(
+        "/api/v1/auth/me",
+        "get",
+        op(
+            "Current principal, permissions and storage usage",
+            "auth",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/tools",
+        "get",
+        op(
+            "List permitted tools with availability",
+            "tools",
+            json!({"parameters": [
+                {"name": "q", "in": "query", "schema": {"type": "string"}},
+                {"name": "category", "in": "query", "schema": {"type": "string"}}
+            ]}),
+        ),
+    );
+    add(
+        "/api/v1/tools/{id}",
+        "get",
+        op(
+            "Describe a tool",
+            "tools",
+            json!({"parameters": [id_param("id")]}),
+        ),
+    );
+    add(
+        "/api/v1/categories",
+        "get",
+        op("Categories with tool counts", "tools", json!({})),
+    );
     add("/api/v1/jobs", "get", op("List my jobs", "jobs", json!({})));
-    add("/api/v1/jobs/{id}", "get", op("Job status/result (optionally wait_seconds)", "jobs", json!({"parameters": [id_param("id"), {"name": "wait_seconds", "in": "query", "schema": {"type": "integer"}}]})));
-    add("/api/v1/jobs/{id}", "delete", op("Delete a finished job and its outputs", "jobs", json!({"parameters": [id_param("id")]})));
-    add("/api/v1/jobs/{id}/events", "get", op("Server-sent events with job progress", "jobs", json!({"parameters": [id_param("id")]})));
-    add("/api/v1/jobs/{id}/cancel", "post", op("Cancel a job", "jobs", json!({"parameters": [id_param("id")]})));
-    add("/api/v1/jobs/{id}/artifacts.zip", "get", op("Download all outputs of a job as ZIP", "jobs", json!({"parameters": [id_param("id")]})));
-    add("/api/v1/files", "get", op("List my files", "files", json!({})));
-    add("/api/v1/files", "post", op("Upload files (multipart/form-data, any field name)", "files", json!({"requestBody": {"content": {"multipart/form-data": {"schema": {"type": "object", "properties": {"file": {"type": "string", "format": "binary"}}}}}}})));
-    add("/api/v1/files/raw", "put", op("Upload a file as the raw request body", "files", json!({"parameters": [{"name": "name", "in": "query", "required": true, "schema": {"type": "string"}}], "requestBody": {"content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}}})));
-    add("/api/v1/files/{id}", "get", op("File metadata", "files", json!({"parameters": [id_param("id")]})));
-    add("/api/v1/files/{id}", "delete", op("Delete a file", "files", json!({"parameters": [id_param("id")]})));
-    add("/api/v1/files/{id}/content", "get", op("Download file content (supports Range; inline=1 for safe previews)", "files", json!({"parameters": [id_param("id"), {"name": "inline", "in": "query", "schema": {"type": "boolean"}}]})));
-    add("/api/v1/tokens", "get", op("My API tokens", "tokens", json!({})));
-    add("/api/v1/tokens", "post", op("Create an API token for myself (optionally narrower scope)", "tokens", json!({})));
-    add("/api/v1/tokens/{id}", "delete", op("Revoke a token", "tokens", json!({"parameters": [id_param("id")]})));
-    add("/api/v1/deps", "get", op("External dependency status", "system", json!({})));
-    add("/api/v1/models", "get", op("Optional models and download state", "system", json!({})));
-    add("/api/v1/models/{id}/download", "post", op("Download a model (admin)", "system", json!({"parameters": [id_param("id")]})));
-    add("/api/v1/admin/users", "get", op("List users and agents (admin)", "admin", json!({})));
-    add("/api/v1/admin/users", "post", op("Create a user or agent (admin)", "admin", json!({})));
-    add("/api/v1/admin/users/{id}", "patch", op("Update role, policy, disabled state (admin)", "admin", json!({"parameters": [id_param("id")]})));
-    add("/api/v1/admin/users/{id}", "delete", op("Delete user/agent and their files (admin)", "admin", json!({"parameters": [id_param("id")]})));
-    add("/api/v1/admin/tokens", "get", op("All tokens (admin)", "admin", json!({})));
-    add("/api/v1/admin/tokens", "post", op("Create a token for any user/agent (admin)", "admin", json!({})));
-    add("/api/v1/admin/audit", "get", op("Security & execution audit log (admin)", "admin", json!({})));
-    add("/mcp", "post", op("MCP Streamable HTTP endpoint (JSON-RPC 2.0)", "mcp", json!({})));
+    add(
+        "/api/v1/jobs/{id}",
+        "get",
+        op(
+            "Job status/result (optionally wait_seconds)",
+            "jobs",
+            json!({"parameters": [id_param("id"), {"name": "wait_seconds", "in": "query", "schema": {"type": "integer"}}]}),
+        ),
+    );
+    add(
+        "/api/v1/jobs/{id}",
+        "delete",
+        op(
+            "Delete a finished job and its outputs",
+            "jobs",
+            json!({"parameters": [id_param("id")]}),
+        ),
+    );
+    add(
+        "/api/v1/jobs/{id}/events",
+        "get",
+        op(
+            "Server-sent events with job progress",
+            "jobs",
+            json!({"parameters": [id_param("id")]}),
+        ),
+    );
+    add(
+        "/api/v1/jobs/{id}/cancel",
+        "post",
+        op(
+            "Cancel a job",
+            "jobs",
+            json!({"parameters": [id_param("id")]}),
+        ),
+    );
+    add(
+        "/api/v1/jobs/{id}/artifacts.zip",
+        "get",
+        op(
+            "Download all outputs of a job as ZIP",
+            "jobs",
+            json!({"parameters": [id_param("id")]}),
+        ),
+    );
+    add(
+        "/api/v1/files",
+        "get",
+        op("List my files", "files", json!({})),
+    );
+    add(
+        "/api/v1/files",
+        "post",
+        op(
+            "Upload files (multipart/form-data, any field name)",
+            "files",
+            json!({"requestBody": {"content": {"multipart/form-data": {"schema": {"type": "object", "properties": {"file": {"type": "string", "format": "binary"}}}}}}}),
+        ),
+    );
+    add(
+        "/api/v1/files/raw",
+        "put",
+        op(
+            "Upload a file as the raw request body",
+            "files",
+            json!({"parameters": [{"name": "name", "in": "query", "required": true, "schema": {"type": "string"}}], "requestBody": {"content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}}}),
+        ),
+    );
+    add(
+        "/api/v1/files/{id}",
+        "get",
+        op(
+            "File metadata",
+            "files",
+            json!({"parameters": [id_param("id")]}),
+        ),
+    );
+    add(
+        "/api/v1/files/{id}",
+        "delete",
+        op(
+            "Delete a file",
+            "files",
+            json!({"parameters": [id_param("id")]}),
+        ),
+    );
+    add(
+        "/api/v1/files/{id}/content",
+        "get",
+        op(
+            "Download file content (supports Range; inline=1 for safe previews)",
+            "files",
+            json!({"parameters": [id_param("id"), {"name": "inline", "in": "query", "schema": {"type": "boolean"}}]}),
+        ),
+    );
+    add(
+        "/api/v1/tokens",
+        "get",
+        op("My API tokens", "tokens", json!({})),
+    );
+    add(
+        "/api/v1/tokens",
+        "post",
+        op(
+            "Create an API token for myself (optionally narrower scope)",
+            "tokens",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/tokens/{id}",
+        "delete",
+        op(
+            "Revoke a token",
+            "tokens",
+            json!({"parameters": [id_param("id")]}),
+        ),
+    );
+    add(
+        "/api/v1/deps",
+        "get",
+        op("External dependency status", "system", json!({})),
+    );
+    add(
+        "/api/v1/models",
+        "get",
+        op("Optional models and download state", "system", json!({})),
+    );
+    add(
+        "/api/v1/models/{id}/download",
+        "post",
+        op(
+            "Download a model (admin)",
+            "system",
+            json!({"parameters": [id_param("id")]}),
+        ),
+    );
+    add(
+        "/api/v1/admin/users",
+        "get",
+        op("List users and agents (admin)", "admin", json!({})),
+    );
+    add(
+        "/api/v1/admin/users",
+        "post",
+        op("Create a user or agent (admin)", "admin", json!({})),
+    );
+    add(
+        "/api/v1/admin/users/{id}",
+        "patch",
+        op(
+            "Update role, policy, disabled state (admin)",
+            "admin",
+            json!({"parameters": [id_param("id")]}),
+        ),
+    );
+    add(
+        "/api/v1/admin/users/{id}",
+        "delete",
+        op(
+            "Delete user/agent and their files (admin)",
+            "admin",
+            json!({"parameters": [id_param("id")]}),
+        ),
+    );
+    add(
+        "/api/v1/admin/tokens",
+        "get",
+        op("All tokens (admin)", "admin", json!({})),
+    );
+    add(
+        "/api/v1/admin/tokens",
+        "post",
+        op(
+            "Create a token for any user/agent (admin)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/admin/audit",
+        "get",
+        op("Security & execution audit log (admin)", "admin", json!({})),
+    );
+    add(
+        "/mcp",
+        "post",
+        op(
+            "MCP Streamable HTTP endpoint (JSON-RPC 2.0)",
+            "mcp",
+            json!({}),
+        ),
+    );
 
     let mut tool_paths = Map::new();
     for spec in engine.registry.specs() {

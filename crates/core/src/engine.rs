@@ -118,23 +118,39 @@ impl Engine {
             .iter()
             .map(|d| self.deps.status(d))
             .filter(|s| !s.found)
-            .map(|s| MissingDep { id: s.id, name: s.name, hint: s.install_hint })
+            .map(|s| MissingDep {
+                id: s.id,
+                name: s.name,
+                hint: s.install_hint,
+            })
             .collect();
         let missing_model = spec.requires_model.as_ref().filter(|g| !self.models.group_available(g)).map(|g| {
             format!("No '{g}' model installed. Download one in Settings → Models or with `dogubako models download <id>`.")
         });
         let reason = if !platform_supported {
-            Some(format!("Not supported on {:?}", crate::spec::Platform::current()))
+            Some(format!(
+                "Not supported on {:?}",
+                crate::spec::Platform::current()
+            ))
         } else if let Some(m) = missing.first() {
             Some(format!("Requires {}", m.name))
         } else {
             missing_model.clone()
         };
-        Availability { available: platform_supported && missing.is_empty() && missing_model.is_none(), platform_supported, missing, missing_model, reason }
+        Availability {
+            available: platform_supported && missing.is_empty() && missing_model.is_none(),
+            platform_supported,
+            missing,
+            missing_model,
+            reason,
+        }
     }
 
     pub fn info(&self, spec: &ToolSpec) -> ToolInfo {
-        ToolInfo { spec: spec.clone(), availability: self.availability(spec) }
+        ToolInfo {
+            spec: spec.clone(),
+            availability: self.availability(spec),
+        }
     }
 
     pub fn list(&self) -> Vec<ToolInfo> {
@@ -144,25 +160,44 @@ impl Engine {
     /// Run a tool. All checks happen here, regardless of the interface.
     pub async fn run(&self, req: RunRequest<'_>) -> ToolResult<(ToolOutput, RunStats)> {
         let started = Instant::now();
-        let tool = self.registry.find(req.tool_id).ok_or_else(|| ToolError::NotFound { id: req.tool_id.to_string() })?.clone();
+        let tool = self
+            .registry
+            .find(req.tool_id)
+            .ok_or_else(|| ToolError::NotFound {
+                id: req.tool_id.to_string(),
+            })?
+            .clone();
         let spec = tool.spec().clone();
 
         if let Some(auth) = req.authorize {
             if !auth(&spec) {
-                return Err(ToolError::denied(format!("not authorized to use '{}'", spec.id)));
+                return Err(ToolError::denied(format!(
+                    "not authorized to use '{}'",
+                    spec.id
+                )));
             }
         }
         if !spec.supports_current_platform() {
-            return Err(ToolError::unsupported(format!("'{}' is not supported on this platform", spec.id)));
+            return Err(ToolError::unsupported(format!(
+                "'{}' is not supported on this platform",
+                spec.id
+            )));
         }
         let missing_perms = req.permissions.missing(&spec.permissions);
         if !missing_perms.is_empty() {
             let names: Vec<&str> = missing_perms.iter().map(|p| p.id()).collect();
-            return Err(ToolError::denied(format!("'{}' requires permission(s): {}", spec.id, names.join(", "))));
+            return Err(ToolError::denied(format!(
+                "'{}' requires permission(s): {}",
+                spec.id,
+                names.join(", ")
+            )));
         }
         let avail = self.availability(&spec);
         if let Some(m) = avail.missing.first() {
-            return Err(ToolError::MissingDependency { dependency: m.id.clone(), hint: m.hint.clone() });
+            return Err(ToolError::MissingDependency {
+                dependency: m.id.clone(),
+                hint: m.hint.clone(),
+            });
         }
         if let Some(m) = avail.missing_model {
             return Err(ToolError::MissingModel { message: m });
@@ -172,7 +207,9 @@ impl Engine {
         let params = validate(&spec, &req.params, req.resolver, &fs)?;
 
         std::fs::create_dir_all(&self.config.temp_root)?;
-        let work = tempfile::Builder::new().prefix("dgb-run-").tempdir_in(&self.config.temp_root)?;
+        let work = tempfile::Builder::new()
+            .prefix("dgb-run-")
+            .tempdir_in(&self.config.temp_root)?;
         std::fs::create_dir_all(&req.out_dir)?;
         let out_dir = std::fs::canonicalize(&req.out_dir)?;
 
@@ -193,7 +230,8 @@ impl Engine {
         }
         .build();
 
-        let mut timeout = Duration::from_secs(spec.timeout_secs.min(self.config.limits.max_timeout_secs));
+        let mut timeout =
+            Duration::from_secs(spec.timeout_secs.min(self.config.limits.max_timeout_secs));
         if let Some(t) = req.timeout {
             timeout = timeout.min(t);
         }
@@ -211,18 +249,29 @@ impl Engine {
 
         // Artifacts must live inside the output directory.
         for a in &mut output.artifacts {
-            let canon = std::fs::canonicalize(&a.path).map_err(|e| ToolError::failed(format!("artifact '{}' missing: {e}", a.name)))?;
+            let canon = std::fs::canonicalize(&a.path)
+                .map_err(|e| ToolError::failed(format!("artifact '{}' missing: {e}", a.name)))?;
             if !canon.starts_with(&out_dir) {
-                return Err(ToolError::failed(format!("tool returned an artifact outside its output directory: {}", a.name)));
+                return Err(ToolError::failed(format!(
+                    "tool returned an artifact outside its output directory: {}",
+                    a.name
+                )));
             }
             a.path = canon;
-            a.size = std::fs::metadata(&a.path).map(|m| m.len()).unwrap_or(a.size);
+            a.size = std::fs::metadata(&a.path)
+                .map(|m| m.len())
+                .unwrap_or(a.size);
         }
         if output.data.is_null() {
             output.data = Value::Object(Map::new());
         }
         drop(work);
-        Ok((output, RunStats { duration_ms: started.elapsed().as_millis() as u64 }))
+        Ok((
+            output,
+            RunStats {
+                duration_ms: started.elapsed().as_millis() as u64,
+            },
+        ))
     }
 }
 
@@ -233,21 +282,43 @@ mod tests {
 
     fn tools() -> Vec<Arc<dyn Tool>> {
         vec![
-            async_tool(ToolSpec::new("dev.slow", "Slow", Category::Dev).describe("sleeps").timeout(1), |ctx, _p| async move {
-                #[cfg(unix)]
-                ctx.command_path("sleep".into(), "sleep").arg("30").run().await?;
-                #[cfg(not(unix))]
-                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-                let _ = ctx;
-                Ok(ToolOutput::text("never"))
-            }),
-            sync_tool(ToolSpec::new("dev.escape", "Escape", Category::Dev).describe("returns artifact outside out dir"), |ctx, _p| {
-                let p = ctx.work_dir().join("x.txt");
-                std::fs::write(&p, "x")?;
-                Ok(ToolOutput::files(vec![ctx.artifact(&p)?]))
-            }),
-            sync_tool(ToolSpec::new("network.fake", "Net", Category::Network).describe("needs network").permission(Permission::Network), |_c, _p| Ok(ToolOutput::text("ok"))),
-            sync_tool(ToolSpec::new("video.fake", "Needs dep", Category::Video).describe("needs a missing dep").requires(&["definitely-not-a-dep"]), |_c, _p| Ok(ToolOutput::text("ok"))),
+            async_tool(
+                ToolSpec::new("dev.slow", "Slow", Category::Dev)
+                    .describe("sleeps")
+                    .timeout(1),
+                |ctx, _p| async move {
+                    #[cfg(unix)]
+                    ctx.command_path("sleep".into(), "sleep")
+                        .arg("30")
+                        .run()
+                        .await?;
+                    #[cfg(not(unix))]
+                    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                    let _ = ctx;
+                    Ok(ToolOutput::text("never"))
+                },
+            ),
+            sync_tool(
+                ToolSpec::new("dev.escape", "Escape", Category::Dev)
+                    .describe("returns artifact outside out dir"),
+                |ctx, _p| {
+                    let p = ctx.work_dir().join("x.txt");
+                    std::fs::write(&p, "x")?;
+                    Ok(ToolOutput::files(vec![ctx.artifact(&p)?]))
+                },
+            ),
+            sync_tool(
+                ToolSpec::new("network.fake", "Net", Category::Network)
+                    .describe("needs network")
+                    .permission(Permission::Network),
+                |_c, _p| Ok(ToolOutput::text("ok")),
+            ),
+            sync_tool(
+                ToolSpec::new("video.fake", "Needs dep", Category::Video)
+                    .describe("needs a missing dep")
+                    .requires(&["definitely-not-a-dep"]),
+                |_c, _p| Ok(ToolOutput::text("ok")),
+            ),
             sync_tool(
                 ToolSpec::new("dev.types", "Types", Category::Dev)
                     .describe("coercion")
@@ -255,7 +326,11 @@ mod tests {
                     .param(ParamSpec::boolean("flag"))
                     .param(ParamSpec::choice_of("mode", &["a", "b"]).default_str("a"))
                     .param(ParamSpec::color("c").default_str("#abc")),
-                |_c, p| Ok(ToolOutput::data(json!({"n": p.int("n")?, "flag": p.bool("flag"), "mode": p.str("mode")?, "c": p.str("c")?}))),
+                |_c, p| {
+                    Ok(ToolOutput::data(
+                        json!({"n": p.int("n")?, "flag": p.bool("flag"), "mode": p.str("mode")?, "c": p.str("c")?}),
+                    ))
+                },
             ),
         ]
     }
@@ -313,19 +388,43 @@ mod tests {
             })
             .await;
         assert_eq!(r.unwrap_err().code(), "permission_denied");
-        assert_eq!(h.run("video.fake", json!({})).await.unwrap_err().code(), "missing_dependency");
-        assert_eq!(h.run("nope.nope", json!({})).await.unwrap_err().code(), "not_found");
+        assert_eq!(
+            h.run("video.fake", json!({})).await.unwrap_err().code(),
+            "missing_dependency"
+        );
+        assert_eq!(
+            h.run("nope.nope", json!({})).await.unwrap_err().code(),
+            "not_found"
+        );
     }
 
     #[tokio::test]
     async fn validation_and_coercion() {
         let h = TestHarness::new(tools());
-        let o = h.run("dev.types", json!({"n": "5", "flag": "yes", "mode": "B"})).await.unwrap();
-        assert_eq!(o.data, json!({"n": 5, "flag": true, "mode": "b", "c": "#aabbcc"}));
-        for bad in [json!({"n": 11}), json!({"n": "x"}), json!({}), json!({"n": 1, "mode": "z"}), json!({"n": 1, "c": "red"}), json!({"n": 1, "extra": 1})] {
-            assert_eq!(h.run("dev.types", bad.clone()).await.unwrap_err().code(), "invalid_input", "{bad}");
+        let o = h
+            .run("dev.types", json!({"n": "5", "flag": "yes", "mode": "B"}))
+            .await
+            .unwrap();
+        assert_eq!(
+            o.data,
+            json!({"n": 5, "flag": true, "mode": "b", "c": "#aabbcc"})
+        );
+        for bad in [
+            json!({"n": 11}),
+            json!({"n": "x"}),
+            json!({}),
+            json!({"n": 1, "mode": "z"}),
+            json!({"n": 1, "c": "red"}),
+            json!({"n": 1, "extra": 1}),
+        ] {
+            assert_eq!(
+                h.run("dev.types", bad.clone()).await.unwrap_err().code(),
+                "invalid_input",
+                "{bad}"
+            );
         }
-        let json_schema = crate::schema::input_schema(h.engine.registry.get("dev.types").unwrap().spec(), "path");
+        let json_schema =
+            crate::schema::input_schema(h.engine.registry.get("dev.types").unwrap().spec(), "path");
         assert_eq!(json_schema["required"], json!(["n"]));
         assert_eq!(json_schema["properties"]["mode"]["enum"], json!(["a", "b"]));
     }

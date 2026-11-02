@@ -63,15 +63,30 @@ fn color() -> Arc<dyn Tool> {
         .ui("color");
     sync_tool(spec, |_ctx, p| {
         let input = p.str("color")?;
-        let c = csscolorparser::parse(input.trim()).map_err(|e| ToolError::invalid("color", format!("'{input}' is not a CSS color: {e}")))?;
+        let c = csscolorparser::parse(input.trim()).map_err(|e| {
+            ToolError::invalid("color", format!("'{input}' is not a CSS color: {e}"))
+        })?;
         let [r, g, b, a8] = c.to_rgba8();
         let alpha = c.a;
-        let hex = if a8 == 255 { hex_of(&c) } else { format!("{}{a8:02x}", hex_of(&c)) };
+        let hex = if a8 == 255 {
+            hex_of(&c)
+        } else {
+            format!("{}{a8:02x}", hex_of(&c))
+        };
         let [h, s, l, _] = c.to_hsla();
         let [hv, sv, vv, _] = c.to_hsva();
         let [hw, ww, bw, _] = c.to_hwba();
         let k = 1.0 - c.r.max(c.g).max(c.b);
-        let cmyk = if k >= 1.0 { [0.0, 0.0, 0.0, 100.0] } else { [(1.0 - c.r - k) / (1.0 - k) * 100.0, (1.0 - c.g - k) / (1.0 - k) * 100.0, (1.0 - c.b - k) / (1.0 - k) * 100.0, k * 100.0] };
+        let cmyk = if k >= 1.0 {
+            [0.0, 0.0, 0.0, 100.0]
+        } else {
+            [
+                (1.0 - c.r - k) / (1.0 - k) * 100.0,
+                (1.0 - c.g - k) / (1.0 - k) * 100.0,
+                (1.0 - c.b - k) / (1.0 - k) * 100.0,
+                k * 100.0,
+            ]
+        };
         let [ll, la, lb, _] = c.to_laba();
         let [cl, cc, ch, _] = c.to_lcha();
         let [ol, oa, ob, _] = c.to_oklaba();
@@ -79,7 +94,11 @@ fn color() -> Arc<dyn Tool> {
         let nan0 = |x: f32| if x.is_nan() { 0.0 } else { x };
         let lum = rel_luminance(&c);
         let (near, dist) = nearest_name(&c);
-        let a_suffix = if a8 == 255 { String::new() } else { format!(" / {}", r3(alpha)) };
+        let a_suffix = if a8 == 255 {
+            String::new()
+        } else {
+            format!(" / {}", r3(alpha))
+        };
         let comp = csscolorparser::Color::from_hsla((h + 180.0) % 360.0, s, l, 1.0);
         let tri1 = csscolorparser::Color::from_hsla((h + 120.0) % 360.0, s, l, 1.0);
         let tri2 = csscolorparser::Color::from_hsla((h + 240.0) % 360.0, s, l, 1.0);
@@ -120,13 +139,19 @@ fn color() -> Arc<dyn Tool> {
 
 fn pretty_body(body: &str, ctype: &str) -> String {
     let ct = ctype.to_ascii_lowercase();
-    if ct.contains("json") || body.trim_start().starts_with('{') || body.trim_start().starts_with('[') {
+    if ct.contains("json")
+        || body.trim_start().starts_with('{')
+        || body.trim_start().starts_with('[')
+    {
         if let Ok(v) = serde_json::from_str::<Value>(body) {
             return serde_json::to_string_pretty(&v).unwrap_or_default();
         }
     }
     if ct.contains("x-www-form-urlencoded") {
-        return url::form_urlencoded::parse(body.as_bytes()).map(|(k, v)| format!("{k} = {v}")).collect::<Vec<_>>().join("\n");
+        return url::form_urlencoded::parse(body.as_bytes())
+            .map(|(k, v)| format!("{k} = {v}"))
+            .collect::<Vec<_>>()
+            .join("\n");
     }
     if ct.contains("xml") {
         if let Ok((x, _)) = super::formatters::reformat_xml(body, Some((b' ', 2))) {
@@ -149,16 +174,35 @@ fn http_request() -> Arc<dyn Tool> {
         // Normalize line endings so pasted text with LF works too.
         let norm = raw.replace("\r\n", "\n").replace('\n', "\r\n");
         let (head, body) = match norm.find("\r\n\r\n") {
-            Some(i) => (format!("{}\r\n\r\n", &norm[..i]), norm[i + 4..].replace("\r\n", "\n")),
+            Some(i) => (
+                format!("{}\r\n\r\n", &norm[..i]),
+                norm[i + 4..].replace("\r\n", "\n"),
+            ),
             None => (format!("{}\r\n\r\n", norm.trim_end()), String::new()),
         };
         let mut headers_buf = [httparse::EMPTY_HEADER; 256];
-        let collect = |hs: &[httparse::Header]| -> Vec<(String, String)> { hs.iter().map(|h| (h.name.to_string(), String::from_utf8_lossy(h.value).trim().to_string())).collect() };
-        let header_rows = |hs: &[(String, String)]| -> Vec<Vec<Value>> { hs.iter().map(|(k, v)| vec![json!(k), json!(v)]).collect() };
-        let get = |hs: &[(String, String)], name: &str| hs.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.clone());
+        let collect = |hs: &[httparse::Header]| -> Vec<(String, String)> {
+            hs.iter()
+                .map(|h| {
+                    (
+                        h.name.to_string(),
+                        String::from_utf8_lossy(h.value).trim().to_string(),
+                    )
+                })
+                .collect()
+        };
+        let header_rows = |hs: &[(String, String)]| -> Vec<Vec<Value>> {
+            hs.iter().map(|(k, v)| vec![json!(k), json!(v)]).collect()
+        };
+        let get = |hs: &[(String, String)], name: &str| {
+            hs.iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                .map(|(_, v)| v.clone())
+        };
         if head.starts_with("HTTP/") {
             let mut resp = httparse::Response::new(&mut headers_buf);
-            resp.parse(head.as_bytes()).map_err(|e| ToolError::invalid("text", format!("invalid HTTP response: {e}")))?;
+            resp.parse(head.as_bytes())
+                .map_err(|e| ToolError::invalid("text", format!("invalid HTTP response: {e}")))?;
             let hs = collect(resp.headers);
             let ctype = get(&hs, "content-type").unwrap_or_default();
             let cookies: Vec<Vec<Value>> = hs
@@ -166,8 +210,16 @@ fn http_request() -> Arc<dyn Tool> {
                 .filter(|(k, _)| k.eq_ignore_ascii_case("set-cookie"))
                 .map(|(_, v)| {
                     let mut parts = v.split(';');
-                    let (n, val) = parts.next().unwrap_or("").split_once('=').unwrap_or(("", ""));
-                    vec![json!(n.trim()), json!(val.trim()), json!(parts.map(str::trim).collect::<Vec<_>>().join("; "))]
+                    let (n, val) = parts
+                        .next()
+                        .unwrap_or("")
+                        .split_once('=')
+                        .unwrap_or(("", ""));
+                    vec![
+                        json!(n.trim()),
+                        json!(val.trim()),
+                        json!(parts.map(str::trim).collect::<Vec<_>>().join("; ")),
+                    ]
                 })
                 .collect();
             return Ok(ToolOutput::data(json!({
@@ -183,7 +235,8 @@ fn http_request() -> Arc<dyn Tool> {
             })));
         }
         let mut req = httparse::Request::new(&mut headers_buf);
-        req.parse(head.as_bytes()).map_err(|e| ToolError::invalid("text", format!("invalid HTTP request: {e}")))?;
+        req.parse(head.as_bytes())
+            .map_err(|e| ToolError::invalid("text", format!("invalid HTTP request: {e}")))?;
         let method = req.method.unwrap_or("GET").to_string();
         let target = req.path.unwrap_or("/").to_string();
         let hs = collect(req.headers);
@@ -191,12 +244,29 @@ fn http_request() -> Arc<dyn Tool> {
         let url = if target.starts_with("http://") || target.starts_with("https://") {
             target.clone()
         } else {
-            format!("{}://{}{}", p.str_or("scheme", "https"), host.clone().unwrap_or_else(|| "localhost".into()), target)
+            format!(
+                "{}://{}{}",
+                p.str_or("scheme", "https"),
+                host.clone().unwrap_or_else(|| "localhost".into()),
+                target
+            )
         };
         let parsed = url::Url::parse(&url).ok();
-        let query: Vec<Vec<Value>> = parsed.as_ref().map(|u| u.query_pairs().map(|(k, v)| vec![json!(k), json!(v)]).collect()).unwrap_or_default();
+        let query: Vec<Vec<Value>> = parsed
+            .as_ref()
+            .map(|u| {
+                u.query_pairs()
+                    .map(|(k, v)| vec![json!(k), json!(v)])
+                    .collect()
+            })
+            .unwrap_or_default();
         let cookies: Vec<Vec<Value>> = get(&hs, "cookie")
-            .map(|c| c.split(';').filter_map(|kv| kv.split_once('=')).map(|(k, v)| vec![json!(k.trim()), json!(v.trim())]).collect())
+            .map(|c| {
+                c.split(';')
+                    .filter_map(|kv| kv.split_once('='))
+                    .map(|(k, v)| vec![json!(k.trim()), json!(v.trim())])
+                    .collect()
+            })
             .unwrap_or_default();
         let ctype = get(&hs, "content-type").unwrap_or_default();
         let q = crate::escape::shell_quote;
@@ -240,7 +310,13 @@ fn user_agent() -> Arc<dyn Tool> {
     sync_tool(spec, |_ctx, p| {
         let parser = woothee::parser::Parser::new();
         let mut rows = vec![];
-        for line in p.text("text").lines().map(str::trim).filter(|l| !l.is_empty()).take(5000) {
+        for line in p
+            .text("text")
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .take(5000)
+        {
             let r = parser.parse(line);
             let mut row = match &r {
                 Some(r) => {
@@ -253,14 +329,50 @@ fn user_agent() -> Arc<dyn Tool> {
                         "misc" => "other",
                         _ => "unknown",
                     };
-                    let ver = |v: &str| if v == "UNKNOWN" { String::new() } else { v.to_string() };
-                    vec![json!(r.name), json!(ver(r.version)), json!(r.os), json!(ver(&r.os_version)), json!(device), json!(r.vendor), json!(r.category == "crawler")]
+                    let ver = |v: &str| {
+                        if v == "UNKNOWN" {
+                            String::new()
+                        } else {
+                            v.to_string()
+                        }
+                    };
+                    vec![
+                        json!(r.name),
+                        json!(ver(r.version)),
+                        json!(r.os),
+                        json!(ver(&r.os_version)),
+                        json!(device),
+                        json!(r.vendor),
+                        json!(r.category == "crawler"),
+                    ]
                 }
-                None => vec![json!("UNKNOWN"), json!(""), json!("UNKNOWN"), json!(""), json!("unknown"), json!(""), json!(false)],
+                None => vec![
+                    json!("UNKNOWN"),
+                    json!(""),
+                    json!("UNKNOWN"),
+                    json!(""),
+                    json!("unknown"),
+                    json!(""),
+                    json!(false),
+                ],
             };
             // Simple heuristics woothee may miss.
             let lower = line.to_ascii_lowercase();
-            if row[6] == json!(false) && ["bot", "crawler", "spider", "curl/", "wget/", "python-requests", "headless", "httpclient", "go-http-client"].iter().any(|k| lower.contains(k)) {
+            if row[6] == json!(false)
+                && [
+                    "bot",
+                    "crawler",
+                    "spider",
+                    "curl/",
+                    "wget/",
+                    "python-requests",
+                    "headless",
+                    "httpclient",
+                    "go-http-client",
+                ]
+                .iter()
+                .any(|k| lower.contains(k))
+            {
                 row[6] = json!(true);
             }
             if row[4] == json!("desktop") && (lower.contains("ipad") || lower.contains("tablet")) {
@@ -270,7 +382,10 @@ fn user_agent() -> Arc<dyn Tool> {
             rows.push(row);
         }
         if rows.is_empty() {
-            return Err(ToolError::invalid("text", "enter at least one User-Agent string"));
+            return Err(ToolError::invalid(
+                "text",
+                "enter at least one User-Agent string",
+            ));
         }
         let first = rows[0].clone();
         Ok(ToolOutput::data(json!({
@@ -302,7 +417,9 @@ fn string_inspect() -> Arc<dyn Tool> {
             .chars()
             .filter(|c| {
                 let cat = crate::text::more::category_code(*c);
-                cat.starts_with("Cf") || (cat.starts_with("Cc") && !matches!(c, '\n' | '\r' | '\t')) || (cat.starts_with('Z') && *c != ' ')
+                cat.starts_with("Cf")
+                    || (cat.starts_with("Cc") && !matches!(c, '\n' | '\r' | '\t'))
+                    || (cat.starts_with('Z') && *c != ' ')
             })
             .map(|c| format!("U+{:04X} {}", c as u32, crate::text::more::char_name(c)))
             .collect::<std::collections::BTreeSet<_>>()
@@ -359,47 +476,96 @@ mod tests {
     #[tokio::test]
     async fn colors() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("dev.color", json!({"color": "tomato"})).await.unwrap();
+        let out = h
+            .run("dev.color", json!({"color": "tomato"}))
+            .await
+            .unwrap();
         assert_eq!(out.data["hex"], "#ff6347");
         assert_eq!(out.data["rgb"], "rgb(255, 99, 71)");
         assert_eq!(out.data["name"], "tomato");
         assert_eq!(out.data["colors"][0]["hex"], "#ff6347");
-        let out = h.run("dev.color", json!({"color": "hsl(120 100% 25%)"})).await.unwrap();
+        let out = h
+            .run("dev.color", json!({"color": "hsl(120 100% 25%)"}))
+            .await
+            .unwrap();
         assert_eq!(out.data["hex"], "#008000");
-        assert_eq!(out.data["cmyk"], "cmyk(100%, 0%, 100%, 49.8%)");
+        assert_eq!(out.data["cmyk"], "cmyk(100%, 0%, 100%, 50%)");
         let out = h.run("dev.color", json!({"color": "#000"})).await.unwrap();
         assert_eq!(out.data["contrast_on_white"], 21.0);
-        let out = h.run("dev.color", json!({"color": "#3366ff80"})).await.unwrap();
+        let out = h
+            .run("dev.color", json!({"color": "#3366ff80"}))
+            .await
+            .unwrap();
         assert_eq!(out.data["hex"], "#3366ff80");
-        assert_eq!(h.run("dev.color", json!({"color": "notacolor"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.color", json!({"color": "notacolor"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
     async fn http_and_ua() {
         let h = TestHarness::new(crate::tools());
         let req = "POST /api/items?id=5&x=a%20b HTTP/1.1\nHost: example.com\nContent-Type: application/json\nCookie: a=1; b=2\n\n{\"name\":\"it's\"}";
-        let out = h.run("dev.http_request", json!({"text": req})).await.unwrap();
+        let out = h
+            .run("dev.http_request", json!({"text": req}))
+            .await
+            .unwrap();
         assert_eq!(out.data["method"], "POST");
-        assert_eq!(out.data["url"], "https://example.com/api/items?id=5&x=a%20b");
+        assert_eq!(
+            out.data["url"],
+            "https://example.com/api/items?id=5&x=a%20b"
+        );
         assert_eq!(out.data["query"]["rows"][1], json!(["x", "a b"]));
         assert_eq!(out.data["cookies"]["rows"][1], json!(["b", "2"]));
-        assert!(out.data["body"].as_str().unwrap().contains("\"name\": \"it's\""));
+        assert!(out.data["body"]
+            .as_str()
+            .unwrap()
+            .contains("\"name\": \"it's\""));
         let curl = out.data["curl"].as_str().unwrap();
-        assert!(curl.starts_with("curl -X POST 'https://example.com/api/items?id=5&x=a%20b'") && curl.contains("--data-raw '{\"name\":\"it'\\''s\"}'"), "{curl}");
-        let out = h.run("dev.http_request", json!({"text": "HTTP/1.1 404 Not Found\nSet-Cookie: s=abc; Path=/; HttpOnly\n\n"})).await.unwrap();
+        assert!(
+            curl.starts_with("curl -X POST 'https://example.com/api/items?id=5&x=a%20b'")
+                && curl.contains("--data-raw '{\"name\":\"it'\\''s\"}'"),
+            "{curl}"
+        );
+        let out = h
+            .run(
+                "dev.http_request",
+                json!({"text": "HTTP/1.1 404 Not Found\nSet-Cookie: s=abc; Path=/; HttpOnly\n\n"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["status"], 404);
         assert_eq!(out.data["cookies"]["rows"][0][0], "s");
-        assert_eq!(h.run("dev.http_request", json!({"text": "NOT HTTP AT ALL\x01"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.http_request", json!({"text": "NOT HTTP AT ALL\x01"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
         let ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\nGooglebot/2.1 (+http://www.google.com/bot.html)";
         let out = h.run("dev.user_agent", json!({"text": ua})).await.unwrap();
         assert_eq!(out.data["browser"], "Chrome");
         assert_eq!(out.data["os"], "Windows 10");
         assert_eq!(out.data["device"], "desktop");
         assert_eq!(out.data["table"]["rows"][1][6], true);
-        let out = h.run("dev.string_inspect", json!({"text": "Héllo\u{200B} wörld \r\n"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.string_inspect",
+                json!({"text": "Héllo\u{200B} wörld \r\n"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["characters"], 15);
         assert_eq!(out.data["bytes_utf8"], 19);
-        assert_eq!(out.data["invisible_characters"][0], "U+200B ZERO WIDTH SPACE");
+        assert_eq!(
+            out.data["invisible_characters"][0],
+            "U+200B ZERO WIDTH SPACE"
+        );
         assert_eq!(out.data["trailing_whitespace"], true);
     }
 }

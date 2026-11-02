@@ -19,12 +19,17 @@ pub const TOKEN_PREFIX: &str = "dgb_";
 pub const LOCAL_USER_ID: &str = "local";
 
 pub fn hash_password(pw: &str) -> Result<String, String> {
-    Argon2::default().hash_password(pw.as_bytes()).map(|h| h.to_string()).map_err(|e| e.to_string())
+    Argon2::default()
+        .hash_password(pw.as_bytes())
+        .map(|h| h.to_string())
+        .map_err(|e| e.to_string())
 }
 
 pub fn verify_password(pw: &str, hash: &str) -> bool {
     match PasswordHash::new(hash) {
-        Ok(parsed) => Argon2::default().verify_password(pw.as_bytes(), &parsed).is_ok(),
+        Ok(parsed) => Argon2::default()
+            .verify_password(pw.as_bytes(), &parsed)
+            .is_ok(),
         Err(_) => false,
     }
 }
@@ -38,7 +43,9 @@ pub fn dummy_verify() {
 
 pub fn validate_password(pw: &str) -> Result<(), ApiError> {
     if pw.chars().count() < 10 {
-        return Err(ApiError::bad_request("password must be at least 10 characters"));
+        return Err(ApiError::bad_request(
+            "password must be at least 10 characters",
+        ));
     }
     if pw.len() > 512 {
         return Err(ApiError::bad_request("password is too long"));
@@ -47,11 +54,15 @@ pub fn validate_password(pw: &str) -> Result<(), ApiError> {
 }
 
 pub fn validate_username(u: &str) -> Result<(), ApiError> {
-    let ok = (2..=64).contains(&u.len()) && u.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '@'));
+    let ok = (2..=64).contains(&u.len())
+        && u.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '@'));
     if ok {
         Ok(())
     } else {
-        Err(ApiError::bad_request("username must be 2-64 characters: letters, digits, _ - . @"))
+        Err(ApiError::bad_request(
+            "username must be 2-64 characters: letters, digits, _ - . @",
+        ))
     }
 }
 
@@ -88,7 +99,11 @@ pub struct RateLimiter {
 
 impl RateLimiter {
     pub fn new(max: u32, window: Duration) -> Self {
-        RateLimiter { window, max, hits: Mutex::new(HashMap::new()) }
+        RateLimiter {
+            window,
+            max,
+            hits: Mutex::new(HashMap::new()),
+        }
     }
     /// Record an attempt; returns false if over the limit.
     pub fn check(&self, key: &str) -> bool {
@@ -149,8 +164,16 @@ pub fn authenticate(state: &AppState, parts: &Parts) -> Result<Option<Principal>
     if state.cfg.auth == AuthMode::None {
         return Ok(Some(local_principal()));
     }
-    if let Some(auth) = parts.headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()) {
-        let token = auth.strip_prefix("Bearer ").or_else(|| auth.strip_prefix("bearer ")).unwrap_or("").trim();
+    if let Some(auth) = parts
+        .headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+    {
+        let token = auth
+            .strip_prefix("Bearer ")
+            .or_else(|| auth.strip_prefix("bearer "))
+            .unwrap_or("")
+            .trim();
         if !token.starts_with(TOKEN_PREFIX) {
             return Err(ApiError::unauthorized("invalid bearer token"));
         }
@@ -179,7 +202,11 @@ pub fn authenticate(state: &AppState, parts: &Parts) -> Result<Option<Principal>
             }
             let safe = matches!(parts.method, Method::GET | Method::HEAD | Method::OPTIONS);
             if !safe {
-                let sent = parts.headers.get("x-csrf-token").and_then(|v| v.to_str().ok()).unwrap_or("");
+                let sent = parts
+                    .headers
+                    .get("x-csrf-token")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("");
                 if !constant_time_eq(sent, &csrf) {
                     return Err(ApiError::forbidden("missing or invalid CSRF token"));
                 }
@@ -202,7 +229,10 @@ pub fn authenticate(state: &AppState, parts: &Parts) -> Result<Option<Principal>
 impl FromRequestParts<AppState> for Principal {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         match authenticate(state, parts)? {
             Some(p) => Ok(p),
             None => Err(ApiError::unauthorized("authentication required")),
@@ -215,7 +245,10 @@ pub struct Admin(pub Principal);
 
 impl FromRequestParts<AppState> for Admin {
     type Rejection = ApiError;
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let p = Principal::from_request_parts(parts, state).await?;
         if !p.is_admin() {
             return Err(ApiError::forbidden("administrator privileges required"));

@@ -23,7 +23,9 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 
 pub fn router(state: AppState) -> Router<AppState> {
-    let upload_limit = (state.cfg.max_upload_mb as usize).saturating_mul(1024 * 1024).saturating_add(1024 * 1024);
+    let upload_limit = (state.cfg.max_upload_mb as usize)
+        .saturating_mul(1024 * 1024)
+        .saturating_add(1024 * 1024);
     Router::new()
         .route("/status", get(status))
         .route("/setup", post(setup))
@@ -40,8 +42,16 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/jobs/{id}/events", get(job_events))
         .route("/jobs/{id}/cancel", post(cancel_job))
         .route("/jobs/{id}/artifacts.zip", get(job_zip))
-        .route("/files", get(list_files).post(upload_multipart).layer(DefaultBodyLimit::max(upload_limit)))
-        .route("/files/raw", put(upload_raw).layer(DefaultBodyLimit::max(upload_limit)))
+        .route(
+            "/files",
+            get(list_files)
+                .post(upload_multipart)
+                .layer(DefaultBodyLimit::max(upload_limit)),
+        )
+        .route(
+            "/files/raw",
+            put(upload_raw).layer(DefaultBodyLimit::max(upload_limit)),
+        )
         .route("/files/{id}", get(get_file).delete(delete_file))
         .route("/files/{id}/content", get(file_content))
         .route("/tokens", get(my_tokens).post(create_my_token))
@@ -53,7 +63,10 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/models/{id}", delete(model_delete))
         .route("/extensions", get(extensions))
         .route("/admin/users", get(admin_users).post(admin_create_user))
-        .route("/admin/users/{id}", axum::routing::patch(admin_update_user).delete(admin_delete_user))
+        .route(
+            "/admin/users/{id}",
+            axum::routing::patch(admin_update_user).delete(admin_delete_user),
+        )
         .route("/admin/users/{id}/password", post(admin_set_password))
         .route("/admin/tokens", get(admin_tokens).post(admin_create_token))
         .route("/admin/audit", get(admin_audit))
@@ -84,22 +97,47 @@ struct SetupReq {
     password: String,
 }
 
-async fn setup(State(s): State<AppState>, ClientIp(ip): ClientIp, Json(r): Json<SetupReq>) -> ApiResult<Response> {
+async fn setup(
+    State(s): State<AppState>,
+    ClientIp(ip): ClientIp,
+    Json(r): Json<SetupReq>,
+) -> ApiResult<Response> {
     if !s.login_limiter.check(&format!("setup:{ip}")) {
         return Err(ApiError::too_many("too many attempts; try again later"));
     }
-    let expected = s.setup_token.lock().unwrap().clone().ok_or_else(|| ApiError::conflict("setup already completed"))?;
+    let expected = s
+        .setup_token
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or_else(|| ApiError::conflict("setup already completed"))?;
     if !auth::constant_time_eq(r.setup_token.trim(), &expected) {
         s.db.audit(&r.username, "setup", "", "denied", &ip, "bad setup token");
-        return Err(ApiError::forbidden("invalid setup token (see the server log)"));
+        return Err(ApiError::forbidden(
+            "invalid setup token (see the server log)",
+        ));
     }
     auth::validate_username(&r.username)?;
     auth::validate_password(&r.password)?;
     let hash = auth::hash_password(&r.password).map_err(ApiError::internal)?;
     let id = format!("u_{}", auth::random_token(8));
-    s.db.create_user(&id, &r.username, Some(&hash), Role::Owner, &Policy::for_role(Role::Owner), "Instance owner")?;
+    s.db.create_user(
+        &id,
+        &r.username,
+        Some(&hash),
+        Role::Owner,
+        &Policy::for_role(Role::Owner),
+        "Instance owner",
+    )?;
     *s.setup_token.lock().unwrap() = None;
-    s.db.audit(&r.username, "setup", &id, "ok", &ip, "owner account created");
+    s.db.audit(
+        &r.username,
+        "setup",
+        &id,
+        "ok",
+        &ip,
+        "owner account created",
+    );
     start_session(&s, &id, &ip, "")
 }
 
@@ -108,9 +146,15 @@ fn start_session(s: &AppState, user_id: &str, ip: &str, ua: &str) -> ApiResult<R
     let csrf = auth::random_token(16);
     let ttl = (s.cfg.session_hours as i64) * 3600;
     s.db.create_session(&auth::sha256_hex(&sid), user_id, &csrf, ttl, ip, ua)?;
-    let user = s.db.user(user_id).ok_or_else(|| ApiError::internal("user vanished"))?;
-    let mut resp = Json(json!({"ok": true, "csrf_token": csrf, "user": user_json(&user)})).into_response();
-    resp.headers_mut().insert(header::SET_COOKIE, HeaderValue::from_str(&auth::session_cookie(&sid, ttl, s.cfg.secure_cookies)).unwrap());
+    let user =
+        s.db.user(user_id)
+            .ok_or_else(|| ApiError::internal("user vanished"))?;
+    let mut resp =
+        Json(json!({"ok": true, "csrf_token": csrf, "user": user_json(&user)})).into_response();
+    resp.headers_mut().insert(
+        header::SET_COOKIE,
+        HeaderValue::from_str(&auth::session_cookie(&sid, ttl, s.cfg.secure_cookies)).unwrap(),
+    );
     Ok(resp)
 }
 
@@ -120,18 +164,31 @@ struct LoginReq {
     password: String,
 }
 
-async fn login(State(s): State<AppState>, ClientIp(ip): ClientIp, headers: HeaderMap, Json(r): Json<LoginReq>) -> ApiResult<Response> {
+async fn login(
+    State(s): State<AppState>,
+    ClientIp(ip): ClientIp,
+    headers: HeaderMap,
+    Json(r): Json<LoginReq>,
+) -> ApiResult<Response> {
     if s.cfg.auth == AuthMode::None {
-        return Err(ApiError::bad_request("authentication is disabled on this instance"));
+        return Err(ApiError::bad_request(
+            "authentication is disabled on this instance",
+        ));
     }
     let ukey = format!("user:{}", r.username.to_lowercase());
     if !s.login_limiter.check(&format!("ip:{ip}")) || !s.login_limiter.check(&ukey) {
         s.db.audit(&r.username, "login", "", "rate_limited", &ip, "");
-        return Err(ApiError::too_many("too many login attempts; try again in a few minutes"));
+        return Err(ApiError::too_many(
+            "too many login attempts; try again in a few minutes",
+        ));
     }
     let user = s.db.user_by_name(&r.username);
     let ok = match &user {
-        Some(u) if !u.disabled && u.role != Role::Agent => u.password_hash.as_deref().map(|h| auth::verify_password(&r.password, h)).unwrap_or(false),
+        Some(u) if !u.disabled && u.role != Role::Agent => u
+            .password_hash
+            .as_deref()
+            .map(|h| auth::verify_password(&r.password, h))
+            .unwrap_or(false),
         _ => {
             auth::dummy_verify();
             false
@@ -145,21 +202,37 @@ async fn login(State(s): State<AppState>, ClientIp(ip): ClientIp, headers: Heade
     s.login_limiter.reset(&ukey);
     s.db.touch_user(&user.id);
     s.db.audit(&user.username, "login", &user.id, "ok", &ip, "");
-    let ua = headers.get(header::USER_AGENT).and_then(|v| v.to_str().ok()).unwrap_or("").chars().take(200).collect::<String>();
+    let ua = headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .chars()
+        .take(200)
+        .collect::<String>();
     start_session(&s, &user.id, &ip, &ua)
 }
 
-async fn logout(State(s): State<AppState>, headers: HeaderMap, p: Principal) -> ApiResult<Response> {
+async fn logout(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    p: Principal,
+) -> ApiResult<Response> {
     if let Some(c) = headers.get(header::COOKIE).and_then(|v| v.to_str().ok()) {
         for kv in c.split(';') {
-            if let Some(v) = kv.trim().strip_prefix(&format!("{}=", auth::SESSION_COOKIE)) {
+            if let Some(v) = kv
+                .trim()
+                .strip_prefix(&format!("{}=", auth::SESSION_COOKIE))
+            {
                 s.db.delete_session(&auth::sha256_hex(v));
             }
         }
     }
     s.db.audit(&p.username, "logout", &p.user_id, "ok", "", "");
     let mut resp = Json(json!({"ok": true})).into_response();
-    resp.headers_mut().insert(header::SET_COOKIE, HeaderValue::from_str(&auth::session_cookie("", 0, s.cfg.secure_cookies)).unwrap());
+    resp.headers_mut().insert(
+        header::SET_COOKIE,
+        HeaderValue::from_str(&auth::session_cookie("", 0, s.cfg.secure_cookies)).unwrap(),
+    );
     Ok(resp)
 }
 
@@ -190,13 +263,29 @@ struct PwChange {
     new_password: String,
 }
 
-async fn change_password(State(s): State<AppState>, p: Principal, ClientIp(ip): ClientIp, Json(r): Json<PwChange>) -> ApiResult<Json<Value>> {
-    let u = s.db.user(&p.user_id).ok_or_else(|| ApiError::not_found("user"))?;
-    if p.via != "session" || !u.password_hash.as_deref().map(|h| auth::verify_password(&r.current_password, h)).unwrap_or(false) {
+async fn change_password(
+    State(s): State<AppState>,
+    p: Principal,
+    ClientIp(ip): ClientIp,
+    Json(r): Json<PwChange>,
+) -> ApiResult<Json<Value>> {
+    let u =
+        s.db.user(&p.user_id)
+            .ok_or_else(|| ApiError::not_found("user"))?;
+    if p.via != "session"
+        || !u
+            .password_hash
+            .as_deref()
+            .map(|h| auth::verify_password(&r.current_password, h))
+            .unwrap_or(false)
+    {
         return Err(ApiError::forbidden("current password is incorrect"));
     }
     auth::validate_password(&r.new_password)?;
-    s.db.set_password(&u.id, &auth::hash_password(&r.new_password).map_err(ApiError::internal)?)?;
+    s.db.set_password(
+        &u.id,
+        &auth::hash_password(&r.new_password).map_err(ApiError::internal)?,
+    )?;
     s.db.audit(&p.username, "password.change", &u.id, "ok", &ip, "");
     Ok(Json(json!({"ok": true, "relogin": true})))
 }
@@ -214,7 +303,11 @@ struct ToolQuery {
 fn tool_json(s: &AppState, p: &Principal, info: &ToolInfo) -> Value {
     let mut v = serde_json::to_value(info).unwrap_or_default();
     let perms = p.permissions(s.host_fs_enabled());
-    let missing: Vec<&str> = perms.missing(&info.spec.permissions).iter().map(|x| x.id()).collect();
+    let missing: Vec<&str> = perms
+        .missing(&info.spec.permissions)
+        .iter()
+        .map(|x| x.id())
+        .collect();
     v["permitted"] = json!(p.can_use(&info.spec) && missing.is_empty());
     if !missing.is_empty() {
         v["missing_permissions"] = json!(missing);
@@ -223,22 +316,45 @@ fn tool_json(s: &AppState, p: &Principal, info: &ToolInfo) -> Value {
     v
 }
 
-async fn list_tools(State(s): State<AppState>, p: Principal, Query(q): Query<ToolQuery>) -> Json<Value> {
+async fn list_tools(
+    State(s): State<AppState>,
+    p: Principal,
+    Query(q): Query<ToolQuery>,
+) -> Json<Value> {
     let specs: Vec<_> = match q.q.as_deref().filter(|x| !x.trim().is_empty()) {
-        Some(query) => s.engine.registry.search(query).into_iter().cloned().collect(),
+        Some(query) => s
+            .engine
+            .registry
+            .search(query)
+            .into_iter()
+            .cloned()
+            .collect(),
         None => s.engine.registry.specs().cloned().collect(),
     };
     let tools: Vec<Value> = specs
         .iter()
-        .filter(|spec| q.category.as_deref().map(|c| spec.category.id() == c).unwrap_or(true))
+        .filter(|spec| {
+            q.category
+                .as_deref()
+                .map(|c| spec.category.id() == c)
+                .unwrap_or(true)
+        })
         .filter(|spec| q.all && p.is_admin() || p.can_use(spec))
         .map(|spec| tool_json(&s, &p, &s.engine.info(spec)))
         .collect();
     Json(json!({"tools": tools, "count": tools.len()}))
 }
 
-async fn get_tool(State(s): State<AppState>, p: Principal, Path(id): Path<String>) -> ApiResult<Json<Value>> {
-    let t = s.engine.registry.find(&id).ok_or_else(|| ApiError::not_found("unknown tool"))?;
+async fn get_tool(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    let t = s
+        .engine
+        .registry
+        .find(&id)
+        .ok_or_else(|| ApiError::not_found("unknown tool"))?;
     if !p.can_use(t.spec()) && !p.is_admin() {
         return Err(ApiError::not_found("unknown tool"));
     }
@@ -249,7 +365,12 @@ async fn categories(State(s): State<AppState>, p: Principal) -> Json<Value> {
     let cats: Vec<Value> = Category::ALL
         .iter()
         .map(|c| {
-            let n = s.engine.registry.by_category(*c).filter(|t| p.can_use(t)).count();
+            let n = s
+                .engine
+                .registry
+                .by_category(*c)
+                .filter(|t| p.can_use(t))
+                .count();
             json!({"id": c.id(), "label": c.label(), "description": c.description(), "count": n})
         })
         .collect();
@@ -275,11 +396,26 @@ fn job_out(s: &AppState, mut j: JobView) -> Value {
     serde_json::to_value(j).unwrap_or_default()
 }
 
-async fn run_tool(State(s): State<AppState>, p: Principal, Path(id): Path<String>, Json(r): Json<RunReq>) -> ApiResult<Response> {
-    let job = s.jobs.submit(&p, &id, r.params, if p.via == "token" { "api" } else { "web" }, s.cfg.user_quota_mb)?;
+async fn run_tool(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+    Json(r): Json<RunReq>,
+) -> ApiResult<Response> {
+    let job = s.jobs.submit(
+        &p,
+        &id,
+        r.params,
+        if p.via == "token" { "api" } else { "web" },
+        s.cfg.user_quota_mb,
+    )?;
     let wait = Duration::from_secs(r.wait_seconds.unwrap_or(30).min(600));
     let job = s.jobs.wait(&p.user_id, &job.id, wait).await.unwrap_or(job);
-    let code = if job.status.is_terminal() { StatusCode::OK } else { StatusCode::ACCEPTED };
+    let code = if job.status.is_terminal() {
+        StatusCode::OK
+    } else {
+        StatusCode::ACCEPTED
+    };
     Ok((code, Json(job_out(&s, job))).into_response())
 }
 
@@ -292,17 +428,28 @@ struct JobsQuery {
     all: bool,
 }
 
-async fn list_jobs(State(s): State<AppState>, p: Principal, Query(q): Query<JobsQuery>) -> Json<Value> {
-    let owner = if q.all && p.is_admin() { None } else { Some(p.user_id.as_str()) };
-    let jobs: Vec<Value> = s
-        .db
-        .jobs(owner, q.limit.unwrap_or(50).clamp(1, 500))
-        .into_iter()
-        .map(|j| {
-            let live = j.owner.as_deref().and_then(|o| s.jobs.get(o, &j.id)).unwrap_or(j);
-            job_out(&s, live)
-        })
-        .collect();
+async fn list_jobs(
+    State(s): State<AppState>,
+    p: Principal,
+    Query(q): Query<JobsQuery>,
+) -> Json<Value> {
+    let owner = if q.all && p.is_admin() {
+        None
+    } else {
+        Some(p.user_id.as_str())
+    };
+    let jobs: Vec<Value> =
+        s.db.jobs(owner, q.limit.unwrap_or(50).clamp(1, 500))
+            .into_iter()
+            .map(|j| {
+                let live = j
+                    .owner
+                    .as_deref()
+                    .and_then(|o| s.jobs.get(o, &j.id))
+                    .unwrap_or(j);
+                job_out(&s, live)
+            })
+            .collect();
     Json(json!({"jobs": jobs}))
 }
 
@@ -311,20 +458,46 @@ struct WaitQuery {
     wait_seconds: Option<u64>,
 }
 
-async fn get_job(State(s): State<AppState>, p: Principal, Path(id): Path<String>, Query(q): Query<WaitQuery>) -> ApiResult<Json<Value>> {
+async fn get_job(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+    Query(q): Query<WaitQuery>,
+) -> ApiResult<Json<Value>> {
     let wait = Duration::from_secs(q.wait_seconds.unwrap_or(0).min(600));
-    let j = s.jobs.wait(&p.user_id, &id, wait).await.ok_or_else(|| ApiError::not_found("job not found"))?;
+    let j = s
+        .jobs
+        .wait(&p.user_id, &id, wait)
+        .await
+        .ok_or_else(|| ApiError::not_found("job not found"))?;
     Ok(Json(job_out(&s, j)))
 }
 
-async fn cancel_job(State(s): State<AppState>, p: Principal, Path(id): Path<String>) -> ApiResult<Json<Value>> {
-    s.jobs.cancel(&p.user_id, &id).ok_or_else(|| ApiError::not_found("job not found"))?;
-    let j = s.jobs.wait(&p.user_id, &id, Duration::from_secs(5)).await.ok_or_else(|| ApiError::not_found("job not found"))?;
+async fn cancel_job(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    s.jobs
+        .cancel(&p.user_id, &id)
+        .ok_or_else(|| ApiError::not_found("job not found"))?;
+    let j = s
+        .jobs
+        .wait(&p.user_id, &id, Duration::from_secs(5))
+        .await
+        .ok_or_else(|| ApiError::not_found("job not found"))?;
     Ok(Json(job_out(&s, j)))
 }
 
-async fn delete_job(State(s): State<AppState>, p: Principal, Path(id): Path<String>) -> ApiResult<Json<Value>> {
-    let j = s.jobs.get(&p.user_id, &id).ok_or_else(|| ApiError::not_found("job not found"))?;
+async fn delete_job(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    let j = s
+        .jobs
+        .get(&p.user_id, &id)
+        .ok_or_else(|| ApiError::not_found("job not found"))?;
     if !j.status.is_terminal() {
         return Err(ApiError::conflict("job is still running; cancel it first"));
     }
@@ -337,12 +510,21 @@ async fn delete_job(State(s): State<AppState>, p: Principal, Path(id): Path<Stri
     Ok(Json(json!({"ok": true})))
 }
 
-async fn job_events(State(s): State<AppState>, p: Principal, Path(id): Path<String>) -> ApiResult<Response> {
-    let initial = s.jobs.get(&p.user_id, &id).ok_or_else(|| ApiError::not_found("job not found"))?;
+async fn job_events(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+) -> ApiResult<Response> {
+    let initial = s
+        .jobs
+        .get(&p.user_id, &id)
+        .ok_or_else(|| ApiError::not_found("job not found"))?;
     let rx = s.jobs.subscribe(&p.user_id, &id);
     let state = s.clone();
     let stream = async_stream_job(state, initial, rx);
-    Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))).into_response())
+    Ok(Sse::new(stream)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+        .into_response())
 }
 
 fn async_stream_job(
@@ -353,27 +535,48 @@ fn async_stream_job(
     let first = futures::stream::once({
         let s = s.clone();
         let v = initial.clone();
-        async move { Ok(Event::default().event("job").data(job_out(&s, v).to_string())) }
+        async move {
+            Ok(Event::default()
+                .event("job")
+                .data(job_out(&s, v).to_string()))
+        }
     });
     let rest = match rx {
-        Some(rx) if !initial.status.is_terminal() => tokio_stream::wrappers::WatchStream::from_changes(rx)
-            .scan(false, |done, v: JobView| {
-                if *done {
-                    return futures::future::ready(None);
-                }
-                *done = v.status.is_terminal();
-                futures::future::ready(Some(v))
-            })
-            .map(move |v| Ok(Event::default().event("job").data(job_out(&s, v).to_string())))
-            .boxed(),
+        Some(rx) if !initial.status.is_terminal() => {
+            tokio_stream::wrappers::WatchStream::from_changes(rx)
+                .scan(false, |done, v: JobView| {
+                    if *done {
+                        return futures::future::ready(None);
+                    }
+                    *done = v.status.is_terminal();
+                    futures::future::ready(Some(v))
+                })
+                .map(move |v| {
+                    Ok(Event::default()
+                        .event("job")
+                        .data(job_out(&s, v).to_string()))
+                })
+                .boxed()
+        }
         _ => futures::stream::empty().boxed(),
     };
     first.chain(rest)
 }
 
-async fn job_zip(State(s): State<AppState>, p: Principal, Path(id): Path<String>) -> ApiResult<Response> {
-    let _ = s.jobs.get(&p.user_id, &id).ok_or_else(|| ApiError::not_found("job not found"))?;
-    let files: Vec<_> = s.db.files_for_job(&id).into_iter().filter(|f| f.owner_id == p.user_id).collect();
+async fn job_zip(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+) -> ApiResult<Response> {
+    let _ = s
+        .jobs
+        .get(&p.user_id, &id)
+        .ok_or_else(|| ApiError::not_found("job not found"))?;
+    let files: Vec<_> =
+        s.db.files_for_job(&id)
+            .into_iter()
+            .filter(|f| f.owner_id == p.user_id)
+            .collect();
     if files.is_empty() {
         return Err(ApiError::not_found("job has no output files"));
     }
@@ -383,7 +586,8 @@ async fn job_zip(State(s): State<AppState>, p: Principal, Path(id): Path<String>
     tokio::task::spawn_blocking(move || -> std::io::Result<()> {
         let f = std::fs::File::create(&path)?;
         let mut z = zip::ZipWriter::new(f);
-        let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
         let mut used = std::collections::HashSet::new();
         for file in &files2 {
             let mut name = file.view.name.clone();
@@ -412,7 +616,10 @@ async fn job_zip(State(s): State<AppState>, p: Principal, Path(id): Path<String>
     Ok(Response::builder()
         .header(header::CONTENT_TYPE, "application/zip")
         .header(header::CONTENT_LENGTH, len)
-        .header(header::CONTENT_DISPOSITION, format!("attachment; filename=\"dogubako-{id}.zip\""))
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"dogubako-{id}.zip\""),
+        )
         .body(body)
         .unwrap())
 }
@@ -421,7 +628,9 @@ async fn job_zip(State(s): State<AppState>, p: Principal, Path(id): Path<String>
 
 async fn list_files(State(s): State<AppState>, p: Principal) -> Json<Value> {
     let used = s.db.storage_used(&p.user_id);
-    Json(json!({"files": s.storage.list(&p.user_id), "used": used, "quota": p.quota_bytes(s.cfg.user_quota_mb)}))
+    Json(
+        json!({"files": s.storage.list(&p.user_id), "used": used, "quota": p.quota_bytes(s.cfg.user_quota_mb)}),
+    )
 }
 
 async fn check_quota(s: &AppState, p: &Principal, incoming: u64) -> ApiResult<()> {
@@ -432,34 +641,63 @@ async fn check_quota(s: &AppState, p: &Principal, incoming: u64) -> ApiResult<()
     Ok(())
 }
 
-async fn upload_multipart(State(s): State<AppState>, p: Principal, mut mp: Multipart) -> ApiResult<Json<Value>> {
+async fn upload_multipart(
+    State(s): State<AppState>,
+    p: Principal,
+    mut mp: Multipart,
+) -> ApiResult<Json<Value>> {
     let max = p.max_upload_bytes(s.cfg.max_upload_mb);
     let mut out = vec![];
-    while let Some(mut field) = mp.next_field().await.map_err(|e| ApiError::bad_request(format!("invalid multipart body: {e}")))? {
-        let Some(name) = field.file_name().map(|n| n.to_string()) else { continue };
+    while let Some(mut field) = mp
+        .next_field()
+        .await
+        .map_err(|e| ApiError::bad_request(format!("invalid multipart body: {e}")))?
+    {
+        let Some(name) = field.file_name().map(|n| n.to_string()) else {
+            continue;
+        };
         check_quota(&s, &p, 0).await?;
         let tmp = tempfile::NamedTempFile::new_in(s.cfg.tmp_dir())?;
         let (std_file, tmp_path) = tmp.into_parts();
         let mut f = tokio::fs::File::from_std(std_file);
         let mut written: u64 = 0;
-        while let Some(chunk) = field.chunk().await.map_err(|e| ApiError::bad_request(format!("upload interrupted: {e}")))? {
+        while let Some(chunk) = field
+            .chunk()
+            .await
+            .map_err(|e| ApiError::bad_request(format!("upload interrupted: {e}")))?
+        {
             written += chunk.len() as u64;
             if written > max {
-                return Err(ApiError::too_large(format!("file exceeds the upload limit of {} MB", max / 1024 / 1024)));
+                return Err(ApiError::too_large(format!(
+                    "file exceeds the upload limit of {} MB",
+                    max / 1024 / 1024
+                )));
             }
             f.write_all(&chunk).await?;
         }
         f.flush().await?;
         drop(f);
         check_quota(&s, &p, written).await?;
-        let path = tmp_path.keep().map_err(|e| ApiError::internal(e.to_string()))?;
+        let path = tmp_path
+            .keep()
+            .map_err(|e| ApiError::internal(e.to_string()))?;
         let view = s.storage.store(&p.user_id, &name, &path, "upload", None)?;
         out.push(view);
     }
     if out.is_empty() {
         return Err(ApiError::bad_request("no file fields in upload"));
     }
-    s.db.audit(&p.username, "file.upload", &out.iter().map(|f| f.id.clone()).collect::<Vec<_>>().join(","), "ok", "", "");
+    s.db.audit(
+        &p.username,
+        "file.upload",
+        &out.iter()
+            .map(|f| f.id.clone())
+            .collect::<Vec<_>>()
+            .join(","),
+        "ok",
+        "",
+        "",
+    );
     Ok(Json(json!({"files": out})))
 }
 
@@ -468,7 +706,12 @@ struct RawQuery {
     name: String,
 }
 
-async fn upload_raw(State(s): State<AppState>, p: Principal, Query(q): Query<RawQuery>, body: Body) -> ApiResult<Json<Value>> {
+async fn upload_raw(
+    State(s): State<AppState>,
+    p: Principal,
+    Query(q): Query<RawQuery>,
+    body: Body,
+) -> ApiResult<Json<Value>> {
     let max = p.max_upload_bytes(s.cfg.max_upload_mb);
     check_quota(&s, &p, 0).await?;
     let tmp = tempfile::NamedTempFile::new_in(s.cfg.tmp_dir())?;
@@ -487,19 +730,37 @@ async fn upload_raw(State(s): State<AppState>, p: Principal, Query(q): Query<Raw
     f.flush().await?;
     drop(f);
     check_quota(&s, &p, written).await?;
-    let path = tmp_path.keep().map_err(|e| ApiError::internal(e.to_string()))?;
-    let view = s.storage.store(&p.user_id, &q.name, &path, "upload", None)?;
+    let path = tmp_path
+        .keep()
+        .map_err(|e| ApiError::internal(e.to_string()))?;
+    let view = s
+        .storage
+        .store(&p.user_id, &q.name, &path, "upload", None)?;
     s.db.audit(&p.username, "file.upload", &view.id, "ok", "", "raw");
     Ok(Json(serde_json::to_value(view).unwrap()))
 }
 
-async fn get_file(State(s): State<AppState>, p: Principal, Path(id): Path<String>) -> ApiResult<Json<Value>> {
-    let f = s.storage.get(&p.user_id, &id).ok_or_else(|| ApiError::not_found("file not found"))?;
+async fn get_file(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    let f = s
+        .storage
+        .get(&p.user_id, &id)
+        .ok_or_else(|| ApiError::not_found("file not found"))?;
     Ok(Json(serde_json::to_value(f.view).unwrap()))
 }
 
-async fn delete_file(State(s): State<AppState>, p: Principal, Path(id): Path<String>) -> ApiResult<Json<Value>> {
-    let f = s.storage.get(&p.user_id, &id).ok_or_else(|| ApiError::not_found("file not found"))?;
+async fn delete_file(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    let f = s
+        .storage
+        .get(&p.user_id, &id)
+        .ok_or_else(|| ApiError::not_found("file not found"))?;
     s.storage.delete(&f)?;
     Ok(Json(json!({"ok": true})))
 }
@@ -515,16 +776,43 @@ fn inline_safe(mime: &str) -> bool {
     (mime.starts_with("image/") && mime != "image/svg+xml")
         || mime.starts_with("audio/")
         || mime.starts_with("video/")
-        || matches!(mime, "application/pdf" | "text/plain" | "image/svg+xml" | "application/json" | "text/csv" | "text/vtt")
+        || matches!(
+            mime,
+            "application/pdf"
+                | "text/plain"
+                | "image/svg+xml"
+                | "application/json"
+                | "text/csv"
+                | "text/vtt"
+        )
 }
 
-async fn file_content(State(s): State<AppState>, p: Principal, Path(id): Path<String>, Query(q): Query<ContentQuery>, headers: HeaderMap) -> ApiResult<Response> {
-    let f = s.storage.get(&p.user_id, &id).ok_or_else(|| ApiError::not_found("file not found"))?;
-    let file = tokio::fs::File::open(&f.path).await.map_err(|_| ApiError::not_found("file content missing"))?;
+async fn file_content(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+    Query(q): Query<ContentQuery>,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
+    let f = s
+        .storage
+        .get(&p.user_id, &id)
+        .ok_or_else(|| ApiError::not_found("file not found"))?;
+    let file = tokio::fs::File::open(&f.path)
+        .await
+        .map_err(|_| ApiError::not_found("file content missing"))?;
     let len = file.metadata().await?.len();
     let inline = q.inline && inline_safe(&f.view.mime);
     // Text-like types are served as text/plain when inline to avoid script execution.
-    let ctype = if inline && matches!(f.view.mime.as_str(), "application/json" | "text/csv" | "text/vtt") { "text/plain; charset=utf-8".to_string() } else { f.view.mime.clone() };
+    let ctype = if inline
+        && matches!(
+            f.view.mime.as_str(),
+            "application/json" | "text/csv" | "text/vtt"
+        ) {
+        "text/plain; charset=utf-8".to_string()
+    } else {
+        f.view.mime.clone()
+    };
     let disp = format!(
         "{}; filename=\"{}\"; filename*=UTF-8''{}",
         if inline { "inline" } else { "attachment" },
@@ -539,7 +827,11 @@ async fn file_content(State(s): State<AppState>, p: Principal, Path(id): Path<St
         .header(header::ACCEPT_RANGES, "bytes")
         .header(header::CACHE_CONTROL, "private, max-age=3600");
     // Simple single-range support for media seeking.
-    if let Some(range) = headers.get(header::RANGE).and_then(|r| r.to_str().ok()).and_then(|r| parse_range(r, len)) {
+    if let Some(range) = headers
+        .get(header::RANGE)
+        .and_then(|r| r.to_str().ok())
+        .and_then(|r| parse_range(r, len))
+    {
         use tokio::io::{AsyncReadExt, AsyncSeekExt};
         let (start, end) = range;
         let mut file = file;
@@ -549,9 +841,14 @@ async fn file_content(State(s): State<AppState>, p: Principal, Path(id): Path<St
             .status(StatusCode::PARTIAL_CONTENT)
             .header(header::CONTENT_RANGE, format!("bytes {start}-{end}/{len}"))
             .header(header::CONTENT_LENGTH, end - start + 1);
-        return Ok(builder.body(Body::from_stream(tokio_util::io::ReaderStream::new(take))).unwrap());
+        return Ok(builder
+            .body(Body::from_stream(tokio_util::io::ReaderStream::new(take)))
+            .unwrap());
     }
-    Ok(builder.header(header::CONTENT_LENGTH, len).body(Body::from_stream(tokio_util::io::ReaderStream::new(file))).unwrap())
+    Ok(builder
+        .header(header::CONTENT_LENGTH, len)
+        .body(Body::from_stream(tokio_util::io::ReaderStream::new(file)))
+        .unwrap())
 }
 
 fn parse_range(h: &str, len: u64) -> Option<(u64, u64)> {
@@ -565,7 +862,11 @@ fn parse_range(h: &str, len: u64) -> Option<(u64, u64)> {
         (len.saturating_sub(n), len - 1)
     } else {
         let start: u64 = a.parse().ok()?;
-        let end: u64 = if b.is_empty() { len - 1 } else { b.parse::<u64>().ok()?.min(len - 1) };
+        let end: u64 = if b.is_empty() {
+            len - 1
+        } else {
+            b.parse::<u64>().ok()?.min(len - 1)
+        };
         (start, end)
     };
     (start <= end && start < len).then_some((start, end))
@@ -573,7 +874,13 @@ fn parse_range(h: &str, len: u64) -> Option<(u64, u64)> {
 
 fn percent_encode(s: &str) -> String {
     s.bytes()
-        .map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") })
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
         .collect()
 }
 
@@ -588,7 +895,12 @@ struct TokenReq {
     scope: Option<Policy>,
 }
 
-fn create_token_for(s: &AppState, actor: &Principal, target: &UserRow, r: &TokenReq) -> ApiResult<Value> {
+fn create_token_for(
+    s: &AppState,
+    actor: &Principal,
+    target: &UserRow,
+    r: &TokenReq,
+) -> ApiResult<Value> {
     if r.name.trim().is_empty() || r.name.len() > 100 {
         return Err(ApiError::bad_request("token name must be 1-100 characters"));
     }
@@ -598,28 +910,59 @@ fn create_token_for(s: &AppState, actor: &Principal, target: &UserRow, r: &Token
     let (plain, hash, prefix) = auth::new_api_token();
     let id = format!("t_{}", auth::random_token(8));
     let expires = r.expires_days.filter(|d| *d > 0).map(|d| now() + d * 86400);
-    s.db.create_token(&id, &target.id, r.name.trim(), &hash, &prefix, r.scope.as_ref(), expires)?;
-    s.db.audit(&actor.username, "token.create", &format!("{id} for {}", target.username), "ok", "", &r.name);
-    Ok(json!({"id": id, "token": plain, "prefix": prefix, "expires_at": expires, "note": "Store this token now; it cannot be shown again."}))
+    s.db.create_token(
+        &id,
+        &target.id,
+        r.name.trim(),
+        &hash,
+        &prefix,
+        r.scope.as_ref(),
+        expires,
+    )?;
+    s.db.audit(
+        &actor.username,
+        "token.create",
+        &format!("{id} for {}", target.username),
+        "ok",
+        "",
+        &r.name,
+    );
+    Ok(
+        json!({"id": id, "token": plain, "prefix": prefix, "expires_at": expires, "note": "Store this token now; it cannot be shown again."}),
+    )
 }
 
 async fn my_tokens(State(s): State<AppState>, p: Principal) -> Json<Value> {
     Json(json!({"tokens": s.db.tokens(Some(&p.user_id))}))
 }
 
-async fn create_my_token(State(s): State<AppState>, p: Principal, Json(r): Json<TokenReq>) -> ApiResult<Json<Value>> {
+async fn create_my_token(
+    State(s): State<AppState>,
+    p: Principal,
+    Json(r): Json<TokenReq>,
+) -> ApiResult<Json<Value>> {
     if p.via == "token" {
         return Err(ApiError::forbidden("tokens cannot mint other tokens"));
     }
     if r.user_id.as_deref().is_some_and(|u| u != p.user_id) {
-        return Err(ApiError::forbidden("use the admin endpoint to create tokens for others"));
+        return Err(ApiError::forbidden(
+            "use the admin endpoint to create tokens for others",
+        ));
     }
-    let u = s.db.user(&p.user_id).ok_or_else(|| ApiError::not_found("user"))?;
+    let u =
+        s.db.user(&p.user_id)
+            .ok_or_else(|| ApiError::not_found("user"))?;
     Ok(Json(create_token_for(&s, &p, &u, &r)?))
 }
 
-async fn revoke_token(State(s): State<AppState>, p: Principal, Path(id): Path<String>) -> ApiResult<Json<Value>> {
-    let owner = s.db.token_owner(&id).ok_or_else(|| ApiError::not_found("token not found"))?;
+async fn revoke_token(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    let owner =
+        s.db.token_owner(&id)
+            .ok_or_else(|| ApiError::not_found("token not found"))?;
     if owner != p.user_id && !p.is_admin() {
         return Err(ApiError::not_found("token not found"));
     }
@@ -671,16 +1014,32 @@ async fn models(State(s): State<AppState>, _p: Principal) -> Json<Value> {
     Json(json!({"models": models, "downloads": downloads}))
 }
 
-async fn model_download(State(s): State<AppState>, Admin(p): Admin, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+async fn model_download(
+    State(s): State<AppState>,
+    Admin(p): Admin,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
     if dogubako_core::models::model_spec(&id).is_none() {
         return Err(ApiError::not_found("unknown model"));
     }
     {
         let mut d = s.downloads.lock().unwrap();
-        if d.get(&id).map(|x| x.status == "downloading").unwrap_or(false) {
+        if d.get(&id)
+            .map(|x| x.status == "downloading")
+            .unwrap_or(false)
+        {
             return Err(ApiError::conflict("already downloading"));
         }
-        d.insert(id.clone(), DownloadState { model: id.clone(), done: 0, total: 0, status: "downloading".into(), error: None });
+        d.insert(
+            id.clone(),
+            DownloadState {
+                model: id.clone(),
+                done: 0,
+                total: 0,
+                status: "downloading".into(),
+                error: None,
+            },
+        );
     }
     s.db.audit(&p.username, "model.download", &id, "started", "", "");
     let st = s.clone();
@@ -715,7 +1074,11 @@ async fn model_download(State(s): State<AppState>, Admin(p): Admin, Path(id): Pa
     Ok(Json(json!({"ok": true})))
 }
 
-async fn model_delete(State(s): State<AppState>, Admin(p): Admin, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+async fn model_delete(
+    State(s): State<AppState>,
+    Admin(p): Admin,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
     s.engine.models.remove(&id)?;
     s.db.audit(&p.username, "model.delete", &id, "ok", "", "");
     Ok(Json(json!({"ok": true})))
@@ -739,27 +1102,34 @@ struct CreateUser {
 }
 
 async fn admin_users(State(s): State<AppState>, Admin(_): Admin) -> Json<Value> {
-    let users: Vec<Value> = s
-        .db
-        .users()
-        .iter()
-        .filter(|u| u.id != LOCAL_USER_ID || s.cfg.auth == AuthMode::None)
-        .map(|u| {
-            let mut v = user_json(u);
-            v["storage_used"] = json!(s.db.storage_used(&u.id));
-            v
-        })
-        .collect();
+    let users: Vec<Value> =
+        s.db.users()
+            .iter()
+            .filter(|u| u.id != LOCAL_USER_ID || s.cfg.auth == AuthMode::None)
+            .map(|u| {
+                let mut v = user_json(u);
+                v["storage_used"] = json!(s.db.storage_used(&u.id));
+                v
+            })
+            .collect();
     Json(json!({"users": users}))
 }
 
-async fn admin_create_user(State(s): State<AppState>, Admin(a): Admin, Json(r): Json<CreateUser>) -> ApiResult<Json<Value>> {
+async fn admin_create_user(
+    State(s): State<AppState>,
+    Admin(a): Admin,
+    Json(r): Json<CreateUser>,
+) -> ApiResult<Json<Value>> {
     auth::validate_username(&r.username)?;
     if r.role == Role::Owner && a.role != Role::Owner {
         return Err(ApiError::forbidden("only the owner can create owners"));
     }
     let hash = match (r.role, &r.password) {
-        (Role::Agent, Some(_)) => return Err(ApiError::bad_request("agents authenticate with API tokens, not passwords")),
+        (Role::Agent, Some(_)) => {
+            return Err(ApiError::bad_request(
+                "agents authenticate with API tokens, not passwords",
+            ))
+        }
         (Role::Agent, None) => None,
         (_, Some(pw)) => {
             auth::validate_password(pw)?;
@@ -771,8 +1141,22 @@ async fn admin_create_user(State(s): State<AppState>, Admin(a): Admin, Json(r): 
     policy.validate().map_err(ApiError::bad_request)?;
     let prefix = if r.role == Role::Agent { "a" } else { "u" };
     let id = format!("{prefix}_{}", auth::random_token(8));
-    s.db.create_user(&id, &r.username, hash.as_deref(), r.role, &policy, &r.description)?;
-    s.db.audit(&a.username, "user.create", &format!("{} ({})", r.username, r.role.as_str()), "ok", "", &serde_json::to_string(&policy).unwrap_or_default());
+    s.db.create_user(
+        &id,
+        &r.username,
+        hash.as_deref(),
+        r.role,
+        &policy,
+        &r.description,
+    )?;
+    s.db.audit(
+        &a.username,
+        "user.create",
+        &format!("{} ({})", r.username, r.role.as_str()),
+        "ok",
+        "",
+        &serde_json::to_string(&policy).unwrap_or_default(),
+    );
     Ok(Json(user_json(&s.db.user(&id).unwrap())))
 }
 
@@ -784,17 +1168,28 @@ struct UpdateUser {
     description: Option<String>,
 }
 
-async fn admin_update_user(State(s): State<AppState>, Admin(a): Admin, Path(id): Path<String>, Json(r): Json<UpdateUser>) -> ApiResult<Json<Value>> {
-    let mut u = s.db.user(&id).ok_or_else(|| ApiError::not_found("user not found"))?;
+async fn admin_update_user(
+    State(s): State<AppState>,
+    Admin(a): Admin,
+    Path(id): Path<String>,
+    Json(r): Json<UpdateUser>,
+) -> ApiResult<Json<Value>> {
+    let mut u =
+        s.db.user(&id)
+            .ok_or_else(|| ApiError::not_found("user not found"))?;
     if (u.role == Role::Owner || r.role == Some(Role::Owner)) && a.role != Role::Owner {
         return Err(ApiError::forbidden("only the owner can modify owners"));
     }
     if id == a.user_id && (r.disabled == Some(true) || r.role.is_some_and(|x| x != u.role)) {
-        return Err(ApiError::bad_request("you cannot disable yourself or change your own role"));
+        return Err(ApiError::bad_request(
+            "you cannot disable yourself or change your own role",
+        ));
     }
     if let Some(role) = r.role {
         if (role == Role::Agent) != (u.role == Role::Agent) {
-            return Err(ApiError::bad_request("cannot convert between agents and human users"));
+            return Err(ApiError::bad_request(
+                "cannot convert between agents and human users",
+            ));
         }
         u.role = role;
     }
@@ -809,12 +1204,25 @@ async fn admin_update_user(State(s): State<AppState>, Admin(a): Admin, Path(id):
         u.description = d.chars().take(500).collect();
     }
     s.db.update_user(&u)?;
-    s.db.audit(&a.username, "user.update", &u.username, "ok", "", &serde_json::to_string(&u.policy).unwrap_or_default());
+    s.db.audit(
+        &a.username,
+        "user.update",
+        &u.username,
+        "ok",
+        "",
+        &serde_json::to_string(&u.policy).unwrap_or_default(),
+    );
     Ok(Json(user_json(&u)))
 }
 
-async fn admin_delete_user(State(s): State<AppState>, Admin(a): Admin, Path(id): Path<String>) -> ApiResult<Json<Value>> {
-    let u = s.db.user(&id).ok_or_else(|| ApiError::not_found("user not found"))?;
+async fn admin_delete_user(
+    State(s): State<AppState>,
+    Admin(a): Admin,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    let u =
+        s.db.user(&id)
+            .ok_or_else(|| ApiError::not_found("user not found"))?;
     if id == a.user_id || u.role == Role::Owner && a.role != Role::Owner {
         return Err(ApiError::forbidden("cannot delete this account"));
     }
@@ -831,17 +1239,36 @@ struct SetPw {
     password: String,
 }
 
-async fn admin_set_password(State(s): State<AppState>, Admin(a): Admin, Path(id): Path<String>, Json(r): Json<SetPw>) -> ApiResult<Json<Value>> {
-    let u = s.db.user(&id).ok_or_else(|| ApiError::not_found("user not found"))?;
+async fn admin_set_password(
+    State(s): State<AppState>,
+    Admin(a): Admin,
+    Path(id): Path<String>,
+    Json(r): Json<SetPw>,
+) -> ApiResult<Json<Value>> {
+    let u =
+        s.db.user(&id)
+            .ok_or_else(|| ApiError::not_found("user not found"))?;
     if u.role == Role::Agent {
         return Err(ApiError::bad_request("agents use API tokens"));
     }
     if u.role == Role::Owner && a.role != Role::Owner {
-        return Err(ApiError::forbidden("only the owner can reset an owner's password"));
+        return Err(ApiError::forbidden(
+            "only the owner can reset an owner's password",
+        ));
     }
     auth::validate_password(&r.password)?;
-    s.db.set_password(&id, &auth::hash_password(&r.password).map_err(ApiError::internal)?)?;
-    s.db.audit(&a.username, "user.password_reset", &u.username, "ok", "", "");
+    s.db.set_password(
+        &id,
+        &auth::hash_password(&r.password).map_err(ApiError::internal)?,
+    )?;
+    s.db.audit(
+        &a.username,
+        "user.password_reset",
+        &u.username,
+        "ok",
+        "",
+        "",
+    );
     Ok(Json(json!({"ok": true})))
 }
 
@@ -849,11 +1276,19 @@ async fn admin_tokens(State(s): State<AppState>, Admin(_): Admin) -> Json<Value>
     Json(json!({"tokens": s.db.tokens(None)}))
 }
 
-async fn admin_create_token(State(s): State<AppState>, Admin(a): Admin, Json(r): Json<TokenReq>) -> ApiResult<Json<Value>> {
+async fn admin_create_token(
+    State(s): State<AppState>,
+    Admin(a): Admin,
+    Json(r): Json<TokenReq>,
+) -> ApiResult<Json<Value>> {
     let uid = r.user_id.clone().unwrap_or_else(|| a.user_id.clone());
-    let u = s.db.user(&uid).ok_or_else(|| ApiError::not_found("user not found"))?;
+    let u =
+        s.db.user(&uid)
+            .ok_or_else(|| ApiError::not_found("user not found"))?;
     if u.role == Role::Owner && a.role != Role::Owner {
-        return Err(ApiError::forbidden("only the owner can mint tokens for owners"));
+        return Err(ApiError::forbidden(
+            "only the owner can mint tokens for owners",
+        ));
     }
     Ok(Json(create_token_for(&s, &a, &u, &r)?))
 }
@@ -864,7 +1299,11 @@ struct AuditQuery {
     before: Option<i64>,
 }
 
-async fn admin_audit(State(s): State<AppState>, Admin(_): Admin, Query(q): Query<AuditQuery>) -> Json<Value> {
+async fn admin_audit(
+    State(s): State<AppState>,
+    Admin(_): Admin,
+    Query(q): Query<AuditQuery>,
+) -> Json<Value> {
     Json(json!({"entries": s.db.audit_log(q.limit.unwrap_or(200).clamp(1, 1000), q.before)}))
 }
 

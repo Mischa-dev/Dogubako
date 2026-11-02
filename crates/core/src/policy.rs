@@ -22,10 +22,15 @@ impl FsPolicy {
         FsPolicy { roots: None }
     }
     pub fn deny_all() -> Self {
-        FsPolicy { roots: Some(vec![]) }
+        FsPolicy {
+            roots: Some(vec![]),
+        }
     }
     pub fn roots(roots: Vec<PathBuf>) -> Self {
-        let canon = roots.into_iter().filter_map(|r| std::fs::canonicalize(&r).ok()).collect();
+        let canon = roots
+            .into_iter()
+            .filter_map(|r| std::fs::canonicalize(&r).ok())
+            .collect();
         FsPolicy { roots: Some(canon) }
     }
 
@@ -39,11 +44,14 @@ impl FsPolicy {
         }
         if let Some(roots) = &self.roots {
             if roots.is_empty() {
-                return Err(ToolError::denied("host filesystem access is disabled on this instance"));
+                return Err(ToolError::denied(
+                    "host filesystem access is disabled on this instance",
+                ));
             }
         }
-        let canon = std::fs::canonicalize(path)
-            .map_err(|e| ToolError::invalid(param, format!("cannot access '{}': {e}", path.display())))?;
+        let canon = std::fs::canonicalize(path).map_err(|e| {
+            ToolError::invalid(param, format!("cannot access '{}': {e}", path.display()))
+        })?;
         self.check_canonical(param, &canon)?;
         Ok(canon)
     }
@@ -51,13 +59,21 @@ impl FsPolicy {
     /// Validate a path that may not exist yet (e.g. a rename target): the
     /// parent must exist and be allowed, and the file name must be plain.
     pub fn check_new(&self, param: &str, path: &Path) -> ToolResult<PathBuf> {
-        let name = path.file_name().ok_or_else(|| ToolError::invalid(param, "path has no file name"))?;
-        let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+        let name = path
+            .file_name()
+            .ok_or_else(|| ToolError::invalid(param, "path has no file name"))?;
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
         let parent = self.check(param, parent)?;
         let target = parent.join(name);
         if let Ok(meta) = std::fs::symlink_metadata(&target) {
             if meta.file_type().is_symlink() {
-                return Err(ToolError::invalid(param, "refusing to write through a symlink"));
+                return Err(ToolError::invalid(
+                    param,
+                    "refusing to write through a symlink",
+                ));
             }
         }
         Ok(target)
@@ -71,7 +87,10 @@ impl FsPolicy {
                     Ok(())
                 } else {
                     Err(ToolError::PermissionDenied {
-                        message: format!("'{}' for '{param}' is outside the allowed folders", canon.display()),
+                        message: format!(
+                            "'{}' for '{param}' is outside the allowed folders",
+                            canon.display()
+                        ),
                     })
                 }
             }
@@ -91,13 +110,19 @@ pub struct NetPolicy {
 
 impl Default for NetPolicy {
     fn default() -> Self {
-        NetPolicy { allow_private: true, deny_hosts: vec![] }
+        NetPolicy {
+            allow_private: true,
+            deny_hosts: vec![],
+        }
     }
 }
 
 impl NetPolicy {
     pub fn public_only() -> Self {
-        NetPolicy { allow_private: false, deny_hosts: vec![] }
+        NetPolicy {
+            allow_private: false,
+            deny_hosts: vec![],
+        }
     }
 
     pub fn ip_allowed(&self, ip: IpAddr) -> bool {
@@ -106,16 +131,30 @@ impl NetPolicy {
 
     pub fn check_host(&self, host: &str) -> ToolResult<()> {
         let h = host.trim_end_matches('.').to_ascii_lowercase();
-        if self.deny_hosts.iter().any(|d| h == *d || h.ends_with(&format!(".{d}"))) {
-            return Err(ToolError::denied(format!("host '{host}' is blocked by policy")));
+        if self
+            .deny_hosts
+            .iter()
+            .any(|d| h == *d || h.ends_with(&format!(".{d}")))
+        {
+            return Err(ToolError::denied(format!(
+                "host '{host}' is blocked by policy"
+            )));
         }
         if !self.allow_private {
-            if h == "localhost" || h.ends_with(".localhost") || h.ends_with(".internal") || h.ends_with(".local") {
-                return Err(ToolError::denied(format!("host '{host}' is an internal name; blocked by network policy")));
+            if h == "localhost"
+                || h.ends_with(".localhost")
+                || h.ends_with(".internal")
+                || h.ends_with(".local")
+            {
+                return Err(ToolError::denied(format!(
+                    "host '{host}' is an internal name; blocked by network policy"
+                )));
             }
             if let Ok(ip) = h.trim_matches(['[', ']']).parse::<IpAddr>() {
                 if !is_public_ip(ip) {
-                    return Err(ToolError::denied(format!("address {ip} is not public; blocked by network policy")));
+                    return Err(ToolError::denied(format!(
+                        "address {ip} is not public; blocked by network policy"
+                    )));
                 }
             }
         }
@@ -162,15 +201,18 @@ pub fn is_public_ip(ip: IpAddr) -> bool {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct PermissionSet(pub BTreeSet<Permission>);
 
+impl FromIterator<Permission> for PermissionSet {
+    fn from_iter<I: IntoIterator<Item = Permission>>(it: I) -> Self {
+        PermissionSet(it.into_iter().collect())
+    }
+}
+
 impl PermissionSet {
     pub fn all() -> Self {
         PermissionSet(Permission::ALL.into_iter().collect())
     }
     pub fn none() -> Self {
         PermissionSet(BTreeSet::new())
-    }
-    pub fn from_iter(it: impl IntoIterator<Item = Permission>) -> Self {
-        PermissionSet(it.into_iter().collect())
     }
     pub fn has(&self, p: Permission) -> bool {
         self.0.contains(&p)
@@ -255,11 +297,17 @@ pub fn sanitize_filename(name: &str) -> String {
             Component::Normal(s) => Some(s.to_string_lossy().to_string()),
             _ => None,
         })
-        .last()
+        .next_back()
         .unwrap_or_default();
     let mut s: String = base
         .chars()
-        .map(|c| if c.is_control() || "<>:\"/\\|?*".contains(c) { '_' } else { c })
+        .map(|c| {
+            if c.is_control() || "<>:\"/\\|?*".contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect();
     s = s.trim().trim_matches('.').to_string();
     if s.is_empty() {
@@ -267,11 +315,17 @@ pub fn sanitize_filename(name: &str) -> String {
     }
     // Windows reserved device names
     let upper = s.split('.').next().unwrap_or("").to_ascii_uppercase();
-    if ["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "LPT1", "LPT2", "LPT3"].contains(&upper.as_str()) {
+    if [
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "LPT1", "LPT2", "LPT3",
+    ]
+    .contains(&upper.as_str())
+    {
         s = format!("_{s}");
     }
     if s.len() > 200 {
-        let ext = Path::new(&s).extension().map(|e| e.to_string_lossy().to_string());
+        let ext = Path::new(&s)
+            .extension()
+            .map(|e| e.to_string_lossy().to_string());
         let mut cut: String = s.chars().take(180).collect();
         if let Some(e) = ext {
             cut = format!("{cut}.{e}");
@@ -287,7 +341,19 @@ mod tests {
 
     #[test]
     fn public_ip_checks() {
-        for private in ["127.0.0.1", "10.1.2.3", "192.168.1.1", "172.16.0.1", "169.254.169.254", "100.100.1.1", "::1", "fe80::1", "fd00::1", "::ffff:10.0.0.1", "0.0.0.0"] {
+        for private in [
+            "127.0.0.1",
+            "10.1.2.3",
+            "192.168.1.1",
+            "172.16.0.1",
+            "169.254.169.254",
+            "100.100.1.1",
+            "::1",
+            "fe80::1",
+            "fd00::1",
+            "::ffff:10.0.0.1",
+            "0.0.0.0",
+        ] {
             assert!(!is_public_ip(private.parse().unwrap()), "{private}");
         }
         for public in ["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111"] {
@@ -312,13 +378,27 @@ mod tests {
         let pol = FsPolicy::roots(vec![dir.path().to_path_buf()]);
         assert!(pol.check("p", &dir.path().join("a.txt")).is_ok());
         assert!(pol.check("p", &other.path().join("b.txt")).is_err());
-        assert!(pol.check("p", &dir.path().join("../").join(other.path().file_name().unwrap()).join("b.txt")).is_err());
+        assert!(pol
+            .check(
+                "p",
+                &dir.path()
+                    .join("../")
+                    .join(other.path().file_name().unwrap())
+                    .join("b.txt")
+            )
+            .is_err());
         #[cfg(unix)]
         {
-            std::os::unix::fs::symlink(other.path().join("b.txt"), dir.path().join("link")).unwrap();
-            assert!(pol.check("p", &dir.path().join("link")).is_err(), "symlink escape must be rejected");
+            std::os::unix::fs::symlink(other.path().join("b.txt"), dir.path().join("link"))
+                .unwrap();
+            assert!(
+                pol.check("p", &dir.path().join("link")).is_err(),
+                "symlink escape must be rejected"
+            );
         }
-        assert!(FsPolicy::deny_all().check("p", &dir.path().join("a.txt")).is_err());
+        assert!(FsPolicy::deny_all()
+            .check("p", &dir.path().join("a.txt"))
+            .is_err());
     }
 
     #[test]

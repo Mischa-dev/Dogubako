@@ -24,7 +24,10 @@ impl Out {
 
     pub fn error(&self, msg: &str, code: i32) -> i32 {
         if self.json {
-            println!("{}", json!({"ok": false, "error": {"code": "error", "message": msg}}));
+            println!(
+                "{}",
+                json!({"ok": false, "error": {"code": "error", "message": msg}})
+            );
         } else {
             eprintln!("error: {msg}");
         }
@@ -48,14 +51,24 @@ impl Out {
             return None;
         }
         let b = ProgressBar::new(1000);
-        b.set_style(ProgressStyle::with_template("{spinner} {prefix} [{bar:30}] {percent:>3}% {msg}").unwrap().progress_chars("━━ "));
+        b.set_style(
+            ProgressStyle::with_template("{spinner} {prefix} [{bar:30}] {percent:>3}% {msg}")
+                .unwrap()
+                .progress_chars("━━ "),
+        );
         b.set_prefix(label.to_string());
         b.enable_steady_tick(std::time::Duration::from_millis(100));
         Some(b)
     }
 }
 
-pub fn print_output(spec: &ToolSpec, o: &ToolOutput, saved: &[PathBuf], duration_ms: u64, out: &Out) {
+pub fn print_output(
+    spec: &ToolSpec,
+    o: &ToolOutput,
+    saved: &[PathBuf],
+    duration_ms: u64,
+    out: &Out,
+) {
     if out.json {
         let artifacts: Vec<Value> = o
             .artifacts
@@ -94,7 +107,15 @@ pub fn print_output(spec: &ToolSpec, o: &ToolOutput, saved: &[PathBuf], duration
 fn print_data(d: &Value) {
     if let Some(t) = d.get("table") {
         print_table(t);
-        let rest: serde_json::Map<String, Value> = d.as_object().map(|o| o.iter().filter(|(k, _)| *k != "table").map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default();
+        let rest: serde_json::Map<String, Value> = d
+            .as_object()
+            .map(|o| {
+                o.iter()
+                    .filter(|(k, _)| *k != "table")
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
         if !rest.is_empty() {
             println!();
             print_kv(&Value::Object(rest), 0);
@@ -135,7 +156,10 @@ fn print_kv(v: &Value, indent: usize) {
                             }
                         }
                     }
-                    Value::Array(a) => println!("{pad}{k:w$}  {}", a.iter().map(scalar).collect::<Vec<_>>().join(", ")),
+                    Value::Array(a) => println!(
+                        "{pad}{k:w$}  {}",
+                        a.iter().map(scalar).collect::<Vec<_>>().join(", ")
+                    ),
                     _ => println!("{pad}{k:w$}  {}", scalar(val)),
                 }
             }
@@ -150,13 +174,27 @@ fn print_kv(v: &Value, indent: usize) {
 }
 
 fn print_table(t: &Value) {
-    let cols: Vec<String> = t.get("columns").and_then(|c| c.as_array()).map(|a| a.iter().map(scalar).collect()).unwrap_or_default();
+    let cols: Vec<String> = t
+        .get("columns")
+        .and_then(|c| c.as_array())
+        .map(|a| a.iter().map(scalar).collect())
+        .unwrap_or_default();
     let rows: Vec<Vec<String>> = t
         .get("rows")
         .and_then(|r| r.as_array())
-        .map(|rs| rs.iter().map(|r| r.as_array().map(|c| c.iter().map(scalar).collect()).unwrap_or_default()).collect())
+        .map(|rs| {
+            rs.iter()
+                .map(|r| {
+                    r.as_array()
+                        .map(|c| c.iter().map(scalar).collect())
+                        .unwrap_or_default()
+                })
+                .collect()
+        })
         .unwrap_or_default();
-    let n = cols.len().max(rows.iter().map(|r| r.len()).max().unwrap_or(0));
+    let n = cols
+        .len()
+        .max(rows.iter().map(|r| r.len()).max().unwrap_or(0));
     let mut widths = vec![0usize; n];
     for (i, c) in cols.iter().enumerate() {
         widths[i] = widths[i].max(c.chars().count());
@@ -180,7 +218,14 @@ fn print_table(t: &Value) {
     };
     if !cols.is_empty() {
         println!("{}", fmt_row(&cols));
-        println!("{}", widths.iter().map(|w| "─".repeat(*w)).collect::<Vec<_>>().join("  "));
+        println!(
+            "{}",
+            widths
+                .iter()
+                .map(|w| "─".repeat(*w))
+                .collect::<Vec<_>>()
+                .join("  ")
+        );
     }
     for r in &rows {
         println!("{}", fmt_row(r));
@@ -207,7 +252,15 @@ pub fn tool_list(infos: &[ToolInfo], out: &Out) {
         println!("  {mark} {:w$}  {}", i.spec.id, i.spec.description);
     }
     let unavailable = infos.iter().filter(|i| !i.availability.available).count();
-    out.info(&format!("\n{} tools{}", infos.len(), if unavailable > 0 { format!(" ({unavailable} marked · need extra dependencies — see `dogubako deps`)") } else { String::new() }));
+    out.info(&format!(
+        "\n{} tools{}",
+        infos.len(),
+        if unavailable > 0 {
+            format!(" ({unavailable} marked · need extra dependencies — see `dogubako deps`)")
+        } else {
+            String::new()
+        }
+    ));
 }
 
 pub fn tool_info(i: &ToolInfo, out: &Out) {
@@ -218,32 +271,75 @@ pub fn tool_info(i: &ToolInfo, out: &Out) {
         println!("{}", serde_json::to_string_pretty(&v).unwrap());
         return;
     }
-    let cli = format!("dogubako {} {}", s.category.id(), s.id.split_once('.').map(|x| x.1).unwrap_or("").replace('_', "-"));
+    let cli = format!(
+        "dogubako {} {}",
+        s.category.id(),
+        s.id.split_once('.')
+            .map(|x| x.1)
+            .unwrap_or("")
+            .replace('_', "-")
+    );
     println!("{} ({})\n{}\n", s.name, s.id, s.description);
     println!("Usage:     {cli} --help");
-    println!("Available: {}", if i.availability.available { "yes".to_string() } else { format!("no — {}", i.availability.reason.clone().unwrap_or_default()) });
+    println!(
+        "Available: {}",
+        if i.availability.available {
+            "yes".to_string()
+        } else {
+            format!("no — {}", i.availability.reason.clone().unwrap_or_default())
+        }
+    );
     if !s.requires.is_empty() {
         println!("Requires:  {}", s.requires.join(", "));
     }
     if !s.permissions.is_empty() {
-        println!("Permissions: {}", s.permissions.iter().map(|p| p.id()).collect::<Vec<_>>().join(", "));
+        println!(
+            "Permissions: {}",
+            s.permissions
+                .iter()
+                .map(|p| p.id())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
     println!("\nParameters:");
     for p in &s.params {
         let kind = match &p.kind {
             ParamKind::Text { .. } => "text".to_string(),
             ParamKind::Secret => "secret".into(),
-            ParamKind::Integer { min, max } => format!("integer{}", range(min.map(|x| x as f64), max.map(|x| x as f64))),
+            ParamKind::Integer { min, max } => format!(
+                "integer{}",
+                range(min.map(|x| x as f64), max.map(|x| x as f64))
+            ),
             ParamKind::Number { min, max, .. } => format!("number{}", range(*min, *max)),
             ParamKind::Boolean => "boolean".into(),
-            ParamKind::Enum { options, multi } => format!("{}one of: {}", if *multi { "any " } else { "" }, options.iter().map(|o| o.value.as_str()).collect::<Vec<_>>().join("|")),
+            ParamKind::Enum { options, multi } => format!(
+                "{}one of: {}",
+                if *multi { "any " } else { "" },
+                options
+                    .iter()
+                    .map(|o| o.value.as_str())
+                    .collect::<Vec<_>>()
+                    .join("|")
+            ),
             ParamKind::Color => "color".into(),
-            ParamKind::File { multiple, .. } => if *multiple { "files".into() } else { "file".into() },
+            ParamKind::File { multiple, .. } => {
+                if *multiple {
+                    "files".into()
+                } else {
+                    "file".into()
+                }
+            }
             ParamKind::Path { .. } => "path".into(),
             ParamKind::Json { .. } => "json".into(),
         };
         let req = if p.required { " (required)" } else { "" };
-        let def = p.default.as_ref().filter(|d| !d.is_null()).map(|d| format!(" [default: {}]", scalar(d))).unwrap_or_default();
+        let def = p
+            .default
+            .as_ref()
+            .filter(|d| !d.is_null())
+            .map(|d| format!(" [default: {}]", scalar(d)))
+            .unwrap_or_default();
         println!("  {:<18} {kind}{req}{def}", p.name);
         if !p.description.is_empty() {
             println!("  {:<18} {}", "", p.description);
@@ -267,11 +363,26 @@ pub fn deps(engine: &Engine, out: &Out) -> i32 {
         return 0;
     }
     for d in &deps {
-        let users = engine.registry.specs().filter(|s| s.requires.contains(&d.id)).count();
+        let users = engine
+            .registry
+            .specs()
+            .filter(|s| s.requires.contains(&d.id))
+            .count();
         if d.found {
-            println!("  ✓ {:<20} {:<14} {}", d.name, d.version.clone().unwrap_or_default(), d.path.as_ref().map(|p| p.display().to_string()).unwrap_or_default());
+            println!(
+                "  ✓ {:<20} {:<14} {}",
+                d.name,
+                d.version.clone().unwrap_or_default(),
+                d.path
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default()
+            );
         } else {
-            println!("  ✗ {:<20} {:<14} {} tool(s) need it — {}", d.name, "missing", users, d.install_hint);
+            println!(
+                "  ✗ {:<20} {:<14} {} tool(s) need it — {}",
+                d.name, "missing", users, d.install_hint
+            );
         }
     }
     0
@@ -282,27 +393,75 @@ pub fn matrix(engine: &Engine) {
     use dogubako_core::spec::{Category, Platform};
     let specs: Vec<&ToolSpec> = engine.registry.specs().collect();
     println!("# Capability matrix\n");
-    println!("Generated from the tool registry by `dogubako tools matrix` (Dogubako {}). {} tools.\n", env!("CARGO_PKG_VERSION"), specs.len());
+    println!(
+        "Generated from the tool registry by `dogubako tools matrix` (Dogubako {}). {} tools.\n",
+        env!("CARGO_PKG_VERSION"),
+        specs.len()
+    );
     println!("Legend — Engine: **native** = built into Dogubako (no external programs), **external** = invokes the listed program(s), **model** = needs a downloadable local model, **network** = makes outbound requests. Platforms: L = Linux, M = macOS, W = Windows.\n");
     println!("| Category | Tools | Native | External | Model | Network |\n|---|---:|---:|---:|---:|---:|");
     for c in Category::ALL {
         let in_cat: Vec<_> = specs.iter().filter(|s| s.category == c).collect();
-        if in_cat.is_empty() { continue; }
-        let count = |e: dogubako_core::spec::Execution| in_cat.iter().filter(|s| s.execution == e).count();
+        if in_cat.is_empty() {
+            continue;
+        }
+        let count =
+            |e: dogubako_core::spec::Execution| in_cat.iter().filter(|s| s.execution == e).count();
         use dogubako_core::spec::Execution::*;
-        println!("| {} | {} | {} | {} | {} | {} |", c.label(), in_cat.len(), count(Native), count(External), count(Model), count(Network));
+        println!(
+            "| {} | {} | {} | {} | {} | {} |",
+            c.label(),
+            in_cat.len(),
+            count(Native),
+            count(External),
+            count(Model),
+            count(Network)
+        );
     }
     for c in Category::ALL {
         let in_cat: Vec<_> = specs.iter().filter(|s| s.category == c).collect();
-        if in_cat.is_empty() { continue; }
+        if in_cat.is_empty() {
+            continue;
+        }
         println!("\n## {}\n\n| Tool | Id | Engine | Requires | Platforms | Permissions |\n|---|---|---|---|---|---|", c.label());
         for s in in_cat {
-            let plats: String = [(Platform::Linux, "L"), (Platform::Macos, "M"), (Platform::Windows, "W")].iter().filter(|(p, _)| s.platforms.contains(p)).map(|(_, l)| *l).collect::<Vec<_>>().join(" ");
+            let plats: String = [
+                (Platform::Linux, "L"),
+                (Platform::Macos, "M"),
+                (Platform::Windows, "W"),
+            ]
+            .iter()
+            .filter(|(p, _)| s.platforms.contains(p))
+            .map(|(_, l)| *l)
+            .collect::<Vec<_>>()
+            .join(" ");
             let mut req = s.requires.join(", ");
-            if let Some(m) = &s.requires_model { if !req.is_empty() { req.push_str(", "); } req.push_str(&format!("model: {m}")); }
+            if let Some(m) = &s.requires_model {
+                if !req.is_empty() {
+                    req.push_str(", ");
+                }
+                req.push_str(&format!("model: {m}"));
+            }
             let eng = format!("{:?}", s.execution).to_lowercase();
-            let perms = s.permissions.iter().map(|p| p.id()).collect::<Vec<_>>().join(", ");
-            println!("| {} | `{}` | {} | {} | {} | {} |", s.name.replace('|', "/"), s.id, eng, if req.is_empty() { "—".into() } else { req }, plats, if perms.is_empty() { "—".into() } else { perms });
+            let perms = s
+                .permissions
+                .iter()
+                .map(|p| p.id())
+                .collect::<Vec<_>>()
+                .join(", ");
+            println!(
+                "| {} | `{}` | {} | {} | {} | {} |",
+                s.name.replace('|', "/"),
+                s.id,
+                eng,
+                if req.is_empty() { "—".into() } else { req },
+                plats,
+                if perms.is_empty() {
+                    "—".into()
+                } else {
+                    perms
+                }
+            );
         }
     }
 }

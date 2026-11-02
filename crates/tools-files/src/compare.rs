@@ -49,7 +49,7 @@ fn compare() -> Arc<dyn Tool> {
                 break;
             }
             offset += n as u64;
-            if offset % (64 << 20) == 0 {
+            if offset.is_multiple_of(64 << 20) {
                 ctx.check_cancelled()?;
             }
         }

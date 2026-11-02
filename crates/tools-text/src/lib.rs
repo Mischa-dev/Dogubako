@@ -27,7 +27,11 @@ mod tests {
         for t in &tools {
             let s = t.spec();
             assert!(seen.insert(s.id.clone()), "duplicate id {}", s.id);
-            assert!(s.id.starts_with(&format!("{}.", s.category.id())), "{} has wrong category", s.id);
+            assert!(
+                s.id.starts_with(&format!("{}.", s.category.id())),
+                "{} has wrong category",
+                s.id
+            );
             assert!(!s.description.is_empty(), "{} lacks a description", s.id);
         }
     }

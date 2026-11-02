@@ -90,7 +90,7 @@ impl<'a> Extractor<'a> {
                 self.max_entries
             )));
         }
-        if self.entries % 256 == 0 {
+        if self.entries.is_multiple_of(256) {
             self.ctx.check_cancelled()?;
         }
         Ok(())

@@ -22,7 +22,11 @@ pub async fn models(engine: &Engine, m: &ArgMatches, out: &Out) -> i32 {
                     s.spec.id,
                     human_size(s.spec.size_bytes),
                     s.spec.description,
-                    if s.installed && !s.verified { " (no upstream checksum)" } else { "" }
+                    if s.installed && !s.verified {
+                        " (no upstream checksum)"
+                    } else {
+                        ""
+                    }
                 );
             }
             0
@@ -37,8 +41,8 @@ pub async fn models(engine: &Engine, m: &ArgMatches, out: &Out) -> i32 {
                     id,
                     move |done, total| {
                         if let Some(b) = &b2 {
-                            if total > 0 {
-                                b.set_position(done * 1000 / total);
+                            if let Some(pos) = (done * 1000).checked_div(total) {
+                                b.set_position(pos);
                             }
                             b.set_message(format!("{} / {}", human_size(done), human_size(total)));
                         }

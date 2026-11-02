@@ -30,7 +30,11 @@ pub fn file_url(id: &str) -> String {
 impl Storage {
     pub fn new(dir: PathBuf, db: Arc<Db>, retention_hours: u64) -> std::io::Result<Self> {
         std::fs::create_dir_all(&dir)?;
-        Ok(Storage { dir, db, retention_secs: (retention_hours as i64).max(1) * 3600 })
+        Ok(Storage {
+            dir,
+            db,
+            retention_secs: (retention_hours as i64).max(1) * 3600,
+        })
     }
 
     fn path_for(&self, id: &str) -> PathBuf {
@@ -42,7 +46,14 @@ impl Storage {
     }
 
     /// Move a fully-written temporary file into storage.
-    pub fn store(&self, owner: &str, name: &str, tmp: &Path, source: &str, job_id: Option<&str>) -> std::io::Result<FileView> {
+    pub fn store(
+        &self,
+        owner: &str,
+        name: &str,
+        tmp: &Path,
+        source: &str,
+        job_id: Option<&str>,
+    ) -> std::io::Result<FileView> {
         let id = new_file_id();
         let dest = self.path_for(&id);
         if std::fs::rename(tmp, &dest).is_err() {
@@ -52,7 +63,11 @@ impl Storage {
         let size = std::fs::metadata(&dest)?.len();
         let name = dogubako_core::policy::sanitize_filename(name);
         let mime = dogubako_core::util::mime_for_path(Path::new(&name));
-        let mime = if mime == "application/octet-stream" { dogubako_core::util::mime_for_path(&dest) } else { mime };
+        let mime = if mime == "application/octet-stream" {
+            dogubako_core::util::mime_for_path(&dest)
+        } else {
+            mime
+        };
         let view = FileView {
             id: id.clone(),
             name,
@@ -65,14 +80,31 @@ impl Storage {
             url: Some(file_url(&id)),
         };
         self.db
-            .insert_file(&StoredFile { view: view.clone(), owner_id: owner.into(), path: dest.to_string_lossy().to_string() })
+            .insert_file(&StoredFile {
+                view: view.clone(),
+                owner_id: owner.into(),
+                path: dest.to_string_lossy().to_string(),
+            })
             .map_err(std::io::Error::other)?;
         Ok(view)
     }
 
-    pub fn register_artifact(&self, owner: &str, job_id: &str, a: &Artifact) -> std::io::Result<ArtifactView> {
+    pub fn register_artifact(
+        &self,
+        owner: &str,
+        job_id: &str,
+        a: &Artifact,
+    ) -> std::io::Result<ArtifactView> {
         let v = self.store(owner, &a.name, &a.path, "artifact", Some(job_id))?;
-        Ok(ArtifactView { id: Some(v.id.clone()), name: v.name, mime: a.mime.clone(), size: v.size, label: a.label.clone(), url: v.url, path: None })
+        Ok(ArtifactView {
+            id: Some(v.id.clone()),
+            name: v.name,
+            mime: a.mime.clone(),
+            size: v.size,
+            label: a.label.clone(),
+            url: v.url,
+            path: None,
+        })
     }
 
     /// Lookup a file owned by `owner`.
@@ -80,10 +112,13 @@ impl Storage {
         if !valid_file_id(id) {
             return None;
         }
-        self.db.file(id).filter(|f| f.owner_id == owner).map(|mut f| {
-            f.view.url = Some(file_url(&f.view.id));
-            f
-        })
+        self.db
+            .file(id)
+            .filter(|f| f.owner_id == owner)
+            .map(|mut f| {
+                f.view.url = Some(file_url(&f.view.id));
+                f
+            })
     }
 
     pub fn list(&self, owner: &str) -> Vec<FileView> {
@@ -102,7 +137,9 @@ impl Storage {
         if p.starts_with(&self.dir) {
             let _ = std::fs::remove_file(&p);
         }
-        self.db.delete_file(&f.view.id).map_err(std::io::Error::other)
+        self.db
+            .delete_file(&f.view.id)
+            .map_err(std::io::Error::other)
     }
 
     /// Delete expired files; returns count.
@@ -116,7 +153,10 @@ impl Storage {
     }
 
     pub fn resolver(self: &Arc<Self>, owner: &str) -> StoredResolver {
-        StoredResolver { storage: self.clone(), owner: owner.to_string() }
+        StoredResolver {
+            storage: self.clone(),
+            owner: owner.to_string(),
+        }
     }
 }
 
@@ -130,13 +170,27 @@ impl FileResolver for StoredResolver {
     fn resolve(&self, param: &str, value: &str) -> ToolResult<InputFile> {
         let id = value.trim().trim_start_matches("dogubako://files/");
         if !valid_file_id(id) {
-            return Err(ToolError::invalid(param, format!("'{value}' is not a file id (upload the file first and pass its id, e.g. f_…)")));
+            return Err(ToolError::invalid(
+                param,
+                format!(
+                    "'{value}' is not a file id (upload the file first and pass its id, e.g. f_…)"
+                ),
+            ));
         }
-        let f = self.storage.get(&self.owner, id).ok_or_else(|| ToolError::invalid(param, format!("file '{id}' not found")))?;
+        let f = self
+            .storage
+            .get(&self.owner, id)
+            .ok_or_else(|| ToolError::invalid(param, format!("file '{id}' not found")))?;
         let path = PathBuf::from(&f.path);
         if !path.is_file() {
-            return Err(ToolError::invalid(param, format!("file '{id}' is no longer available")));
+            return Err(ToolError::invalid(
+                param,
+                format!("file '{id}' is no longer available"),
+            ));
         }
-        Ok(InputFile { path, name: f.view.name })
+        Ok(InputFile {
+            path,
+            name: f.view.name,
+        })
     }
 }

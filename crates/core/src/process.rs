@@ -44,7 +44,10 @@ const ENV_PASSTHROUGH: &[&str] = &[
 macro_rules! set_rlimit {
     ($res:expr, $v:expr) => {{
         let v = $v;
-        let lim = libc::rlimit { rlim_cur: v as libc::rlim_t, rlim_max: v as libc::rlim_t };
+        let lim = libc::rlimit {
+            rlim_cur: v as libc::rlim_t,
+            rlim_max: v as libc::rlim_t,
+        };
         libc::setrlimit($res, &lim);
     }};
 }
@@ -111,7 +114,8 @@ impl Exec {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        self.args.extend(it.into_iter().map(|s| s.as_ref().to_os_string()));
+        self.args
+            .extend(it.into_iter().map(|s| s.as_ref().to_os_string()));
         self
     }
     /// Add an argument only when `cond` is true.
@@ -171,7 +175,11 @@ impl Exec {
         let out = self.run_unchecked().await?;
         match out.exit_code {
             Some(c) if ok.contains(&c) => Ok(out),
-            code => Err(ToolError::External { program: display, exit_code: code, stderr: summarize_stderr(&out.stderr) }),
+            code => Err(ToolError::External {
+                program: display,
+                exit_code: code,
+                stderr: summarize_stderr(&out.stderr),
+            }),
         }
     }
 
@@ -187,10 +195,13 @@ impl Exec {
 
         let (program, mut args): (PathBuf, Vec<OsString>) = match limits.sandbox {
             SandboxMode::Bwrap if cfg!(target_os = "linux") => {
-                let bwrap = ctx
-                    .deps()
-                    .path("bwrap")
-                    .ok_or_else(|| ToolError::MissingDependency { dependency: "bwrap".into(), hint: "sandbox mode 'bwrap' requires bubblewrap".into() })?;
+                let bwrap =
+                    ctx.deps()
+                        .path("bwrap")
+                        .ok_or_else(|| ToolError::MissingDependency {
+                            dependency: "bwrap".into(),
+                            hint: "sandbox mode 'bwrap' requires bubblewrap".into(),
+                        })?;
                 let mut a: Vec<OsString> = vec![];
                 let mut push = |s: &str| a.push(s.into());
                 push("--die-with-parent");
@@ -207,7 +218,9 @@ impl Exec {
                 push("/dev");
                 push("--tmpfs");
                 push("/tmp");
-                for sys in ["/usr", "/bin", "/sbin", "/lib", "/lib64", "/lib32", "/etc", "/opt", "/nix"] {
+                for sys in [
+                    "/usr", "/bin", "/sbin", "/lib", "/lib64", "/lib32", "/etc", "/opt", "/nix",
+                ] {
                     if Path::new(sys).exists() {
                         a.push("--ro-bind".into());
                         a.push(sys.into());
@@ -246,7 +259,11 @@ impl Exec {
         cmd.args(&args)
             .current_dir(&cwd)
             .env_clear()
-            .stdin(if self.stdin.is_some() { Stdio::piped() } else { Stdio::null() })
+            .stdin(if self.stdin.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
@@ -351,7 +368,9 @@ impl Exec {
                         tail.push('\n');
                         if tail.len() > STDERR_TAIL * 2 {
                             let cut = tail.len() - STDERR_TAIL;
-                            let cut = (cut..tail.len()).find(|i| tail.is_char_boundary(*i)).unwrap_or(cut);
+                            let cut = (cut..tail.len())
+                                .find(|i| tail.is_char_boundary(*i))
+                                .unwrap_or(cut);
                             tail.drain(..cut);
                         }
                     }
@@ -361,7 +380,9 @@ impl Exec {
             tail
         });
 
-        let timeout = self.timeout.unwrap_or(Duration::from_secs(limits.max_timeout_secs));
+        let timeout = self
+            .timeout
+            .unwrap_or(Duration::from_secs(limits.max_timeout_secs));
         let cancel = ctx.cancel_token();
         let status = tokio::select! {
             s = child.wait() => s.map_err(|e| ToolError::failed(format!("waiting for {}: {e}", self.display)))?,
@@ -379,7 +400,12 @@ impl Exec {
         let stdout = stdout_task
             .await
             .map_err(|e| ToolError::failed(e.to_string()))?
-            .map_err(|_| ToolError::limit(format!("{} produced more than {max_stdout} bytes of output", self.display)))?;
+            .map_err(|_| {
+                ToolError::limit(format!(
+                    "{} produced more than {max_stdout} bytes of output",
+                    self.display
+                ))
+            })?;
         let stderr = stderr_task.await.unwrap_or_default();
         #[cfg(unix)]
         let exit_code = {
@@ -389,15 +415,28 @@ impl Exec {
         #[cfg(not(unix))]
         let exit_code = status.code();
         if let (Some(_), Some(code)) = (limits.max_memory_mb, exit_code) {
-            if code == 128 + 9 || stderr.contains("std::bad_alloc") || stderr.contains("Cannot allocate memory") {
-                return Err(ToolError::limit(format!("{} exceeded its memory limit", self.display)));
+            if code == 128 + 9
+                || stderr.contains("std::bad_alloc")
+                || stderr.contains("Cannot allocate memory")
+            {
+                return Err(ToolError::limit(format!(
+                    "{} exceeded its memory limit",
+                    self.display
+                )));
             }
         }
-        Ok(ExecOutput { exit_code, stdout, stderr })
+        Ok(ExecOutput {
+            exit_code,
+            stdout,
+            stderr,
+        })
     }
 }
 
-async fn read_until_any<R: tokio::io::AsyncBufRead + Unpin>(r: &mut R, out: &mut Vec<u8>) -> std::io::Result<usize> {
+async fn read_until_any<R: tokio::io::AsyncBufRead + Unpin>(
+    r: &mut R,
+    out: &mut Vec<u8>,
+) -> std::io::Result<usize> {
     let mut total = 0;
     loop {
         let (done, used) = {

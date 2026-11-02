@@ -1,7 +1,9 @@
 //! Time tools: Unix timestamps, date math, time zones and cron.
 
 use crate::util::*;
-use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Offset, TimeZone, Utc};
+use chrono::{
+    DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Offset, TimeZone, Utc,
+};
 use chrono_tz::Tz;
 use dogubako_core::prelude::*;
 
@@ -43,19 +45,57 @@ pub(crate) fn parse_loose(s: &str, day_first: bool) -> Option<NaiveDateTime> {
         }
     }
     // Offsets / Z on ISO-like strings without seconds etc.
-    for f in ["%Y-%m-%dT%H:%M:%S%.f%z", "%Y-%m-%d %H:%M:%S%.f%z", "%Y-%m-%d %H:%M:%S %z", "%Y-%m-%dT%H:%M%z"] {
+    for f in [
+        "%Y-%m-%dT%H:%M:%S%.f%z",
+        "%Y-%m-%d %H:%M:%S%.f%z",
+        "%Y-%m-%d %H:%M:%S %z",
+        "%Y-%m-%dT%H:%M%z",
+    ] {
         if let Ok(d) = DateTime::parse_from_str(s, f) {
             return Some(d.naive_local());
         }
     }
-    let slash_dt: &[&str] = if day_first { &["%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M"] } else { &["%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M"] };
+    let slash_dt: &[&str] = if day_first {
+        &[
+            "%d/%m/%Y %H:%M:%S",
+            "%d/%m/%Y %H:%M",
+            "%m/%d/%Y %H:%M:%S",
+            "%m/%d/%Y %H:%M",
+        ]
+    } else {
+        &[
+            "%m/%d/%Y %H:%M:%S",
+            "%m/%d/%Y %H:%M",
+            "%d/%m/%Y %H:%M:%S",
+            "%d/%m/%Y %H:%M",
+        ]
+    };
     for f in slash_dt {
         if let Ok(d) = NaiveDateTime::parse_from_str(s, f) {
             return Some(d);
         }
     }
-    let slash: &[&str] = if day_first { &["%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%m-%d-%Y"] } else { &["%m/%d/%Y", "%d/%m/%Y", "%m-%d-%Y", "%d-%m-%Y"] };
-    const D: &[&str] = &["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%d.%m.%Y", "%B %d, %Y", "%b %d, %Y", "%B %d %Y", "%b %d %Y", "%d %B %Y", "%d %b %Y", "%A, %B %d, %Y", "%a, %b %d, %Y", "%d-%b-%Y", "%Y-%j"];
+    let slash: &[&str] = if day_first {
+        &["%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%m-%d-%Y"]
+    } else {
+        &["%m/%d/%Y", "%d/%m/%Y", "%m-%d-%Y", "%d-%m-%Y"]
+    };
+    const D: &[&str] = &[
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%Y.%m.%d",
+        "%d.%m.%Y",
+        "%B %d, %Y",
+        "%b %d, %Y",
+        "%B %d %Y",
+        "%b %d %Y",
+        "%d %B %Y",
+        "%d %b %Y",
+        "%A, %B %d, %Y",
+        "%a, %b %d, %Y",
+        "%d-%b-%Y",
+        "%Y-%j",
+    ];
     for f in D.iter().chain(slash.iter()) {
         if let Ok(d) = NaiveDate::parse_from_str(s, f) {
             return Some(d.and_time(NaiveTime::MIN));
@@ -75,14 +115,26 @@ pub(crate) fn parse_loose(s: &str, day_first: bool) -> Option<NaiveDateTime> {
 pub(crate) fn relative(delta_secs: i64) -> String {
     let a = delta_secs.unsigned_abs();
     let (n, unit) = match a {
-        0..=44 => return if delta_secs == 0 { "now".into() } else if delta_secs > 0 { "in a few seconds".into() } else { "a few seconds ago".into() },
+        0..=44 => {
+            return if delta_secs == 0 {
+                "now".into()
+            } else if delta_secs > 0 {
+                "in a few seconds".into()
+            } else {
+                "a few seconds ago".into()
+            }
+        }
         45..=3599 => ((a + 30) / 60, "minute"),
         3600..=86_399 => ((a + 1800) / 3600, "hour"),
         86_400..=2_591_999 => ((a + 43_200) / 86_400, "day"),
         2_592_000..=31_535_999 => ((a + 1_296_000) / 2_592_000, "month"),
         _ => ((a + 15_768_000) / 31_536_000, "year"),
     };
-    let unit = if n == 1 { unit.to_string() } else { format!("{unit}s") };
+    let unit = if n == 1 {
+        unit.to_string()
+    } else {
+        format!("{unit}s")
+    };
     if delta_secs > 0 {
         format!("in {n} {unit}")
     } else {
@@ -96,16 +148,34 @@ fn parse_tz(s: &str, param: &str) -> ToolResult<Tz> {
         return Ok(Tz::UTC);
     }
     s.parse::<Tz>()
-        .or_else(|_| chrono_tz::TZ_VARIANTS.iter().find(|t| t.name().eq_ignore_ascii_case(s)).copied().ok_or(()))
-        .map_err(|_| ToolError::invalid(param, format!("unknown time zone '{s}' (use an IANA name like Europe/Berlin)")))
+        .or_else(|_| {
+            chrono_tz::TZ_VARIANTS
+                .iter()
+                .find(|t| t.name().eq_ignore_ascii_case(s))
+                .copied()
+                .ok_or(())
+        })
+        .map_err(|_| {
+            ToolError::invalid(
+                param,
+                format!("unknown time zone '{s}' (use an IANA name like Europe/Berlin)"),
+            )
+        })
 }
 
 fn tz_param(name: &str, default: &str) -> ParamSpec {
-    ParamSpec::text(name).default_str(default).placeholder("Europe/Berlin")
+    ParamSpec::text(name)
+        .default_str(default)
+        .placeholder("Europe/Berlin")
 }
 
 /// Interpret user input as an instant: "now", a Unix number (unit auto-detected) or a date string in `tz`.
-pub(crate) fn parse_instant(s: &str, tz: Tz, unit: &str, param: &str) -> ToolResult<(DateTime<Utc>, &'static str)> {
+pub(crate) fn parse_instant(
+    s: &str,
+    tz: Tz,
+    unit: &str,
+    param: &str,
+) -> ToolResult<(DateTime<Utc>, &'static str)> {
     let t = s.trim();
     if t.is_empty() || t.eq_ignore_ascii_case("now") {
         return Ok((Utc::now(), "now"));
@@ -134,7 +204,8 @@ pub(crate) fn parse_instant(s: &str, tz: Tz, unit: &str, param: &str) -> ToolRes
         };
         let secs = nanos.div_euclid(1_000_000_000) as i64;
         let ns = nanos.rem_euclid(1_000_000_000) as u32;
-        let dt = DateTime::from_timestamp(secs, ns).ok_or_else(|| ToolError::invalid(param, "timestamp out of range"))?;
+        let dt = DateTime::from_timestamp(secs, ns)
+            .ok_or_else(|| ToolError::invalid(param, "timestamp out of range"))?;
         return Ok((
             dt,
             match unit {
@@ -151,13 +222,24 @@ pub(crate) fn parse_instant(s: &str, tz: Tz, unit: &str, param: &str) -> ToolRes
     if let Ok(d) = DateTime::parse_from_rfc2822(t) {
         return Ok((d.with_timezone(&Utc), "date"));
     }
-    for f in ["%Y-%m-%dT%H:%M:%S%.f%z", "%Y-%m-%d %H:%M:%S%.f%z", "%Y-%m-%d %H:%M:%S %z"] {
+    for f in [
+        "%Y-%m-%dT%H:%M:%S%.f%z",
+        "%Y-%m-%d %H:%M:%S%.f%z",
+        "%Y-%m-%d %H:%M:%S %z",
+    ] {
         if let Ok(d) = DateTime::parse_from_str(t, f) {
             return Ok((d.with_timezone(&Utc), "date"));
         }
     }
-    let naive = parse_loose(t, false).ok_or_else(|| ToolError::invalid(param, format!("could not understand '{t}' as a date or timestamp")))?;
-    let local = tz.from_local_datetime(&naive).earliest().ok_or_else(|| ToolError::invalid(param, format!("{naive} does not exist in {tz} (DST gap)")))?;
+    let naive = parse_loose(t, false).ok_or_else(|| {
+        ToolError::invalid(
+            param,
+            format!("could not understand '{t}' as a date or timestamp"),
+        )
+    })?;
+    let local = tz.from_local_datetime(&naive).earliest().ok_or_else(|| {
+        ToolError::invalid(param, format!("{naive} does not exist in {tz} (DST gap)"))
+    })?;
     Ok((local.with_timezone(&Utc), "date"))
 }
 
@@ -195,7 +277,8 @@ fn timestamp() -> Arc<dyn Tool> {
         .ui("live");
     sync_tool(spec, |_ctx, p| {
         let tz = parse_tz(p.str_or("timezone", "UTC"), "timezone")?;
-        let (dt, interpreted) = parse_instant(p.text("value"), tz, p.str_or("unit", "auto"), "value")?;
+        let (dt, interpreted) =
+            parse_instant(p.text("value"), tz, p.str_or("unit", "auto"), "value")?;
         let mut d = describe_instant(dt, tz);
         d["interpreted_as"] = json!(interpreted);
         Ok(ToolOutput::data(d))
@@ -205,7 +288,12 @@ fn timestamp() -> Arc<dyn Tool> {
 /// Parse "1y 2mo 3w 4d 5h 6m 7s", "-90m" or ISO 8601 "P1Y2M3DT4H5M6S".
 pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
     let t = s.trim();
-    let bad = || ToolError::invalid("duration", format!("could not parse duration '{t}' (try '1d 2h', '-30m' or 'P1DT2H')"));
+    let bad = || {
+        ToolError::invalid(
+            "duration",
+            format!("could not parse duration '{t}' (try '1d 2h', '-30m' or 'P1DT2H')"),
+        )
+    };
     let (neg, body) = match t.strip_prefix('-') {
         Some(r) => (true, r.trim()),
         None => (false, t.trim_start_matches('+').trim()),
@@ -259,18 +347,28 @@ pub(crate) fn parse_duration(s: &str) -> ToolResult<(i32, Duration)> {
                 "mo" | "month" | "months" => months += n as i64,
                 "w" | "week" | "weeks" => dur += Duration::milliseconds((n * 604_800_000.0) as i64),
                 "d" | "day" | "days" => dur += Duration::milliseconds((n * 86_400_000.0) as i64),
-                "h" | "hr" | "hrs" | "hour" | "hours" => dur += Duration::milliseconds((n * 3_600_000.0) as i64),
-                "m" | "min" | "mins" | "minute" | "minutes" => dur += Duration::milliseconds((n * 60_000.0) as i64),
+                "h" | "hr" | "hrs" | "hour" | "hours" => {
+                    dur += Duration::milliseconds((n * 3_600_000.0) as i64)
+                }
+                "m" | "min" | "mins" | "minute" | "minutes" => {
+                    dur += Duration::milliseconds((n * 60_000.0) as i64)
+                }
                 "ms" | "millisecond" | "milliseconds" => dur += Duration::milliseconds(n as i64),
                 _ => dur += Duration::milliseconds((n * 1000.0) as i64),
             }
         }
-        let rest: String = body.chars().filter(|c| !c.is_whitespace() && *c != ',').collect();
+        let rest: String = body
+            .chars()
+            .filter(|c| !c.is_whitespace() && *c != ',')
+            .collect();
         if matched == 0 || rest.is_empty() {
             return Err(bad());
         }
         let stripped = re.replace_all(body, "");
-        if stripped.chars().any(|c| !c.is_whitespace() && c != ',' && c != '+') {
+        if stripped
+            .chars()
+            .any(|c| !c.is_whitespace() && c != ',' && c != '+')
+        {
             return Err(bad());
         }
     }
@@ -290,17 +388,28 @@ fn add_months<T: TimeZone>(dt: DateTime<T>, months: i32) -> Option<DateTime<T>> 
 fn calendar_diff(a: NaiveDateTime, b: NaiveDateTime) -> String {
     let (start, end, sign) = if a <= b { (a, b, "") } else { (b, a, "-") };
     let mut months = (end.year() - start.year()) * 12 + end.month() as i32 - start.month() as i32;
-    let mut probe = start.checked_add_months(chrono::Months::new(months.max(0) as u32)).unwrap_or(start);
+    let mut probe = start
+        .checked_add_months(chrono::Months::new(months.max(0) as u32))
+        .unwrap_or(start);
     if probe > end {
         months -= 1;
-        probe = start.checked_add_months(chrono::Months::new(months.max(0) as u32)).unwrap_or(start);
+        probe = start
+            .checked_add_months(chrono::Months::new(months.max(0) as u32))
+            .unwrap_or(start);
     }
     let rem = end - probe;
     let (y, mo) = (months / 12, months % 12);
     let days = rem.num_days();
     let secs = rem.num_seconds() - days * 86_400;
     let mut parts = vec![];
-    for (n, u) in [(y as i64, "year"), (mo as i64, "month"), (days, "day"), (secs / 3600, "hour"), ((secs % 3600) / 60, "minute"), (secs % 60, "second")] {
+    for (n, u) in [
+        (y as i64, "year"),
+        (mo as i64, "month"),
+        (days, "day"),
+        (secs / 3600, "hour"),
+        ((secs % 3600) / 60, "minute"),
+        (secs % 60, "second"),
+    ] {
         if n != 0 {
             parts.push(format!("{n} {u}{}", if n == 1 { "" } else { "s" }));
         }
@@ -333,7 +442,9 @@ fn datetime() -> Arc<dyn Tool> {
             if day_first {
                 if let Some(n) = parse_loose(s, true) {
                     if s.contains('/') {
-                        return tz.from_local_datetime(&n).earliest().ok_or_else(|| ToolError::invalid(name, "time does not exist in this zone (DST gap)"));
+                        return tz.from_local_datetime(&n).earliest().ok_or_else(|| {
+                            ToolError::invalid(name, "time does not exist in this zone (DST gap)")
+                        });
                     }
                 }
             }
@@ -343,14 +454,17 @@ fn datetime() -> Arc<dyn Tool> {
         let render = |d: &DateTime<Tz>| -> ToolResult<String> {
             use std::fmt::Write;
             let mut s = String::new();
-            write!(s, "{}", d.format(fmt)).map_err(|_| ToolError::invalid("format", "invalid strftime format"))?;
+            write!(s, "{}", d.format(fmt))
+                .map_err(|_| ToolError::invalid("format", "invalid strftime format"))?;
             Ok(s)
         };
         match p.str("operation")? {
             "add" => {
                 let d = get("date")?;
                 let (months, dur) = parse_duration(p.str("duration")?)?;
-                let r = add_months(d, months).and_then(|x| x.checked_add_signed(dur)).ok_or_else(|| ToolError::invalid("duration", "result is out of range"))?;
+                let r = add_months(d, months)
+                    .and_then(|x| x.checked_add_signed(dur))
+                    .ok_or_else(|| ToolError::invalid("duration", "result is out of range"))?;
                 let mut out = describe_instant(r.with_timezone(&Utc), tz);
                 out["formatted"] = json!(render(&r)?);
                 out["start"] = json!(render(&d)?);
@@ -359,11 +473,15 @@ fn datetime() -> Arc<dyn Tool> {
             "diff" => {
                 let a = get("date")?;
                 let b = get("date2")?;
-                let d = b.clone().signed_duration_since(a.clone());
+                let d = b.signed_duration_since(a);
                 let secs = d.num_seconds();
                 let bd = |x: &DateTime<Tz>| x.date_naive();
                 let business = {
-                    let (s, e) = if bd(&a) <= bd(&b) { (bd(&a), bd(&b)) } else { (bd(&b), bd(&a)) };
+                    let (s, e) = if bd(&a) <= bd(&b) {
+                        (bd(&a), bd(&b))
+                    } else {
+                        (bd(&b), bd(&a))
+                    };
                     let mut n = 0i64;
                     let mut c = s;
                     let total = (e - s).num_days();
@@ -414,7 +532,14 @@ fn timezone() -> Arc<dyn Tool> {
         .ui("live");
     sync_tool(spec, |_ctx, p| {
         let now = Utc::now();
-        let fmt_off = |secs: i32| format!("UTC{}{:02}:{:02}", if secs < 0 { '-' } else { '+' }, secs.abs() / 3600, (secs.abs() % 3600) / 60);
+        let fmt_off = |secs: i32| {
+            format!(
+                "UTC{}{:02}:{:02}",
+                if secs < 0 { '-' } else { '+' },
+                secs.abs() / 3600,
+                (secs.abs() % 3600) / 60
+            )
+        };
         if p.str("mode")? == "list" {
             let q = p.text("search").to_lowercase();
             let rows: Vec<Vec<Value>> = chrono_tz::TZ_VARIANTS
@@ -422,15 +547,27 @@ fn timezone() -> Arc<dyn Tool> {
                 .filter(|t| q.is_empty() || t.name().to_lowercase().contains(&q))
                 .map(|t| {
                     let l = now.with_timezone(t);
-                    vec![json!(t.name()), json!(fmt_off(l.offset().fix().local_minus_utc())), json!(l.format("%Z").to_string()), json!(l.format("%Y-%m-%d %H:%M").to_string())]
+                    vec![
+                        json!(t.name()),
+                        json!(fmt_off(l.offset().fix().local_minus_utc())),
+                        json!(l.format("%Z").to_string()),
+                        json!(l.format("%Y-%m-%d %H:%M").to_string()),
+                    ]
                 })
                 .collect();
-            return Ok(ToolOutput::data(json!({"count": rows.len(), "table": table(&["zone", "offset", "abbreviation", "current time"], rows)})));
+            return Ok(ToolOutput::data(
+                json!({"count": rows.len(), "table": table(&["zone", "offset", "abbreviation", "current time"], rows)}),
+            ));
         }
         let from = parse_tz(p.str_or("from", "UTC"), "from")?;
         let (dt, _) = parse_instant(p.text("date"), from, "auto", "date")?;
         let mut zones = vec![from];
-        for z in p.text("to").split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        for z in p
+            .text("to")
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             let tz = parse_tz(z, "to")?;
             if !zones.contains(&tz) {
                 zones.push(tz);
@@ -447,10 +584,18 @@ fn timezone() -> Arc<dyn Tool> {
                     -1 => "previous day".into(),
                     n => format!("{n:+} days"),
                 };
-                vec![json!(t.name()), json!(l.format("%Y-%m-%d %H:%M:%S").to_string()), json!(l.format("%Z").to_string()), json!(fmt_off(l.offset().fix().local_minus_utc())), json!(day)]
+                vec![
+                    json!(t.name()),
+                    json!(l.format("%Y-%m-%d %H:%M:%S").to_string()),
+                    json!(l.format("%Z").to_string()),
+                    json!(fmt_off(l.offset().fix().local_minus_utc())),
+                    json!(day),
+                ]
             })
             .collect();
-        Ok(ToolOutput::data(json!({"utc": dt.to_rfc3339(), "table": table(&["zone", "local time", "abbreviation", "offset", "day"], rows)})))
+        Ok(ToolOutput::data(
+            json!({"utc": dt.to_rfc3339(), "table": table(&["zone", "local time", "abbreviation", "offset", "day"], rows)}),
+        ))
     })
 }
 
@@ -467,7 +612,8 @@ fn cron() -> Arc<dyn Tool> {
     sync_tool(spec, |_ctx, p| {
         use std::str::FromStr;
         let expr = p.str("expression")?.trim();
-        let cron = croner::Cron::from_str(expr).map_err(|e| ToolError::invalid("expression", e.to_string()))?;
+        let cron = croner::Cron::from_str(expr)
+            .map_err(|e| ToolError::invalid("expression", e.to_string()))?;
         let tz = parse_tz(p.str_or("timezone", "UTC"), "timezone")?;
         let (start, _) = parse_instant(p.str_or("start", "now"), tz, "auto", "start")?;
         let start = start.with_timezone(&tz);
@@ -476,10 +622,19 @@ fn cron() -> Arc<dyn Tool> {
         let runs: Vec<Vec<Value>> = cron
             .iter_after(start)
             .take(n)
-            .map(|t| vec![json!(t.format("%Y-%m-%d %H:%M:%S %Z").to_string()), json!(t.format("%A").to_string()), json!(relative(t.timestamp() - now))])
+            .map(|t| {
+                vec![
+                    json!(t.format("%Y-%m-%d %H:%M:%S %Z").to_string()),
+                    json!(t.format("%A").to_string()),
+                    json!(relative(t.timestamp() - now)),
+                ]
+            })
             .collect();
         if runs.is_empty() {
-            return Err(ToolError::invalid("expression", "this expression never matches"));
+            return Err(ToolError::invalid(
+                "expression",
+                "this expression never matches",
+            ));
         }
         Ok(ToolOutput::text(cron.describe()).with_data(json!({
             "description": cron.describe(),
@@ -497,14 +652,32 @@ mod tests {
     #[test]
     fn loose_parsing() {
         use super::parse_loose;
-        assert_eq!(parse_loose("2024-03-15", false).unwrap().to_string(), "2024-03-15 00:00:00");
-        assert_eq!(parse_loose("03/04/2024", false).unwrap().to_string(), "2024-03-04 00:00:00");
-        assert_eq!(parse_loose("03/04/2024", true).unwrap().to_string(), "2024-04-03 00:00:00");
-        assert_eq!(parse_loose("March 5, 2024", false).unwrap().to_string(), "2024-03-05 00:00:00");
-        assert_eq!(parse_loose("15.03.2024 10:30", false).unwrap().to_string(), "2024-03-15 10:30:00");
+        assert_eq!(
+            parse_loose("2024-03-15", false).unwrap().to_string(),
+            "2024-03-15 00:00:00"
+        );
+        assert_eq!(
+            parse_loose("03/04/2024", false).unwrap().to_string(),
+            "2024-03-04 00:00:00"
+        );
+        assert_eq!(
+            parse_loose("03/04/2024", true).unwrap().to_string(),
+            "2024-04-03 00:00:00"
+        );
+        assert_eq!(
+            parse_loose("March 5, 2024", false).unwrap().to_string(),
+            "2024-03-05 00:00:00"
+        );
+        assert_eq!(
+            parse_loose("15.03.2024 10:30", false).unwrap().to_string(),
+            "2024-03-15 10:30:00"
+        );
         assert!(parse_loose("hello", false).is_none());
         assert!(parse_loose("123", false).is_none());
-        assert_eq!(super::parse_duration("1d 2h").unwrap().1.num_seconds(), 93_600);
+        assert_eq!(
+            super::parse_duration("1d 2h").unwrap().1.num_seconds(),
+            93_600
+        );
         assert_eq!(super::parse_duration("P1M2DT3H").unwrap().0, 1);
         assert!(super::parse_duration("banana").is_err());
     }
@@ -512,17 +685,44 @@ mod tests {
     #[tokio::test]
     async fn timestamps() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("dev.timestamp", json!({"value": "1700000000", "timezone": "Europe/Berlin"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.timestamp",
+                json!({"value": "1700000000", "timezone": "Europe/Berlin"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["iso8601_utc"], "2023-11-14T22:13:20Z");
         assert_eq!(out.data["local"], "2023-11-14 23:13:20");
         assert_eq!(out.data["utc_offset"], "+01:00");
-        let out = h.run("dev.timestamp", json!({"value": "1700000000123"})).await.unwrap();
+        let out = h
+            .run("dev.timestamp", json!({"value": "1700000000123"}))
+            .await
+            .unwrap();
         assert_eq!(out.data["interpreted_as"], "milliseconds");
         assert_eq!(out.data["unix_milliseconds"], 1700000000123i64);
-        let out = h.run("dev.timestamp", json!({"value": "2024-01-01 00:00", "timezone": "America/New_York"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.timestamp",
+                json!({"value": "2024-01-01 00:00", "timezone": "America/New_York"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["unix_seconds"], 1704085200);
-        assert_eq!(h.run("dev.timestamp", json!({"value": "gibberish"})).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(h.run("dev.timestamp", json!({"timezone": "Mars/Base"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.timestamp", json!({"value": "gibberish"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            h.run("dev.timestamp", json!({"timezone": "Mars/Base"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
@@ -530,13 +730,40 @@ mod tests {
         let h = TestHarness::new(crate::tools());
         let out = h.run("dev.datetime", json!({"operation": "add", "date": "2024-01-31", "duration": "1mo 1d", "format": "%Y-%m-%d"})).await.unwrap();
         assert_eq!(out.text.unwrap(), "2024-03-01");
-        let out = h.run("dev.datetime", json!({"operation": "diff", "date": "2024-01-01", "date2": "2025-03-04 06:00"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.datetime",
+                json!({"operation": "diff", "date": "2024-01-01", "date2": "2025-03-04 06:00"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["human"], "1 year, 2 months, 3 days, 6 hours");
-        let out = h.run("dev.datetime", json!({"operation": "diff", "date": "2024-06-03", "date2": "2024-06-10"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.datetime",
+                json!({"operation": "diff", "date": "2024-06-03", "date2": "2024-06-10"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["weekdays_between"], 5);
-        let out = h.run("dev.datetime", json!({"date": "2024-07-04T12:00:00Z", "format": "%A %d %B %Y"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.datetime",
+                json!({"date": "2024-07-04T12:00:00Z", "format": "%A %d %B %Y"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "Thursday 04 July 2024");
-        assert_eq!(h.run("dev.datetime", json!({"operation": "add", "duration": "soon"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run(
+                "dev.datetime",
+                json!({"operation": "add", "duration": "soon"})
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
@@ -546,14 +773,35 @@ mod tests {
         let rows = out.data["table"]["rows"].as_array().unwrap();
         assert_eq!(rows[1][1], "2024-07-01 00:00:00");
         assert_eq!(rows[2][1], "2024-07-01 16:00:00");
-        let out = h.run("dev.timezone", json!({"mode": "list", "search": "berlin"})).await.unwrap();
+        let out = h
+            .run("dev.timezone", json!({"mode": "list", "search": "berlin"}))
+            .await
+            .unwrap();
         assert_eq!(out.data["count"], 1);
-        assert_eq!(h.run("dev.timezone", json!({"to": "Nowhere/City"})).await.unwrap_err().code(), "invalid_input");
-        let out = h.run("dev.cron", json!({"expression": "30 9 * * MON", "count": 3, "start": "2024-01-01T00:00:00Z"})).await.unwrap();
+        assert_eq!(
+            h.run("dev.timezone", json!({"to": "Nowhere/City"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        let out = h
+            .run(
+                "dev.cron",
+                json!({"expression": "30 9 * * MON", "count": 3, "start": "2024-01-01T00:00:00Z"}),
+            )
+            .await
+            .unwrap();
         let rows = out.data["table"]["rows"].as_array().unwrap();
         assert_eq!(rows[0][0], "2024-01-01 09:30:00 UTC");
         assert_eq!(rows[1][0], "2024-01-08 09:30:00 UTC");
         assert!(!out.text.unwrap().is_empty());
-        assert_eq!(h.run("dev.cron", json!({"expression": "61 * * * *"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.cron", json!({"expression": "61 * * * *"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 }

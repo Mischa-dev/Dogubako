@@ -66,19 +66,39 @@ pub struct ToolOutput {
 
 impl ToolOutput {
     pub fn new() -> Self {
-        ToolOutput { data: Value::Null, ..Default::default() }
+        ToolOutput {
+            data: Value::Null,
+            ..Default::default()
+        }
     }
     pub fn text(s: impl Into<String>) -> Self {
-        ToolOutput { text: Some(s.into()), text_mime: Some("text/plain".into()), data: Value::Null, ..Default::default() }
+        ToolOutput {
+            text: Some(s.into()),
+            text_mime: Some("text/plain".into()),
+            data: Value::Null,
+            ..Default::default()
+        }
     }
     pub fn text_as(s: impl Into<String>, mime: &str) -> Self {
-        ToolOutput { text: Some(s.into()), text_mime: Some(mime.into()), data: Value::Null, ..Default::default() }
+        ToolOutput {
+            text: Some(s.into()),
+            text_mime: Some(mime.into()),
+            data: Value::Null,
+            ..Default::default()
+        }
     }
     pub fn data(v: Value) -> Self {
-        ToolOutput { data: v, ..Default::default() }
+        ToolOutput {
+            data: v,
+            ..Default::default()
+        }
     }
     pub fn files(a: Vec<Artifact>) -> Self {
-        ToolOutput { data: Value::Null, artifacts: a, ..Default::default() }
+        ToolOutput {
+            data: Value::Null,
+            artifacts: a,
+            ..Default::default()
+        }
     }
     pub fn with_text(mut self, s: impl Into<String>, mime: &str) -> Self {
         self.text = Some(s.into());
@@ -189,14 +209,20 @@ impl ToolContext {
     pub fn progress(&self, fraction: f32, message: impl Into<String>) {
         if let Some(p) = &self.inner.progress {
             let m: String = message.into();
-            p(ProgressEvent { fraction: Some(fraction.clamp(0.0, 1.0)), message: if m.is_empty() { None } else { Some(m) } });
+            p(ProgressEvent {
+                fraction: Some(fraction.clamp(0.0, 1.0)),
+                message: if m.is_empty() { None } else { Some(m) },
+            });
         }
     }
 
     /// Report a status message without a fraction.
     pub fn message(&self, message: impl Into<String>) {
         if let Some(p) = &self.inner.progress {
-            p(ProgressEvent { fraction: None, message: Some(message.into()) });
+            p(ProgressEvent {
+                fraction: None,
+                message: Some(message.into()),
+            });
         }
     }
 
@@ -205,11 +231,19 @@ impl ToolContext {
         let clean = sanitize_filename(name);
         let mut used = self.inner.used_names.lock().unwrap();
         let p = Path::new(&clean);
-        let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "file".into());
-        let ext = p.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+        let stem = p
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "file".into());
+        let ext = p
+            .extension()
+            .map(|e| format!(".{}", e.to_string_lossy()))
+            .unwrap_or_default();
         let mut candidate = clean.clone();
         let mut i = 2;
-        while used.contains(&candidate.to_lowercase()) || self.inner.out_dir.join(&candidate).exists() {
+        while used.contains(&candidate.to_lowercase())
+            || self.inner.out_dir.join(&candidate).exists()
+        {
             candidate = format!("{stem}-{i}{ext}");
             i += 1;
         }
@@ -232,9 +266,20 @@ impl ToolContext {
     /// Describe a produced file as an artifact.
     pub fn artifact(&self, path: impl AsRef<Path>) -> ToolResult<Artifact> {
         let path = path.as_ref();
-        let meta = std::fs::metadata(path).map_err(|e| ToolError::failed(format!("output file missing ({}): {e}", path.display())))?;
-        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "output".into());
-        Ok(Artifact { path: path.to_path_buf(), mime: crate::util::mime_for_path(path), name, size: meta.len(), label: None })
+        let meta = std::fs::metadata(path).map_err(|e| {
+            ToolError::failed(format!("output file missing ({}): {e}", path.display()))
+        })?;
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "output".into());
+        Ok(Artifact {
+            path: path.to_path_buf(),
+            mime: crate::util::mime_for_path(path),
+            name,
+            size: meta.len(),
+            label: None,
+        })
     }
 
     pub fn artifact_labeled(&self, path: impl AsRef<Path>, label: &str) -> ToolResult<Artifact> {
@@ -255,7 +300,10 @@ impl ToolContext {
         let status = self.inner.deps.status(dep_id);
         match status.path {
             Some(p) => Ok(Exec::new(self.clone(), p, status.name)),
-            None => Err(ToolError::MissingDependency { dependency: dep_id.to_string(), hint: status.install_hint }),
+            None => Err(ToolError::MissingDependency {
+                dependency: dep_id.to_string(),
+                hint: status.install_hint,
+            }),
         }
     }
 
@@ -264,13 +312,22 @@ impl ToolContext {
     pub fn command_sibling(&self, dep_id: &str, binary: &str) -> ToolResult<Exec> {
         let status = self.inner.deps.status(dep_id);
         let Some(p) = status.path else {
-            return Err(ToolError::MissingDependency { dependency: dep_id.to_string(), hint: status.install_hint });
+            return Err(ToolError::MissingDependency {
+                dependency: dep_id.to_string(),
+                hint: status.install_hint,
+            });
         };
-        let exe = if cfg!(windows) { format!("{binary}.exe") } else { binary.to_string() };
+        let exe = if cfg!(windows) {
+            format!("{binary}.exe")
+        } else {
+            binary.to_string()
+        };
         let sib = p.parent().map(|d| d.join(&exe)).filter(|c| c.is_file());
-        let path = sib.or_else(|| which::which(binary).ok()).ok_or_else(|| ToolError::MissingDependency {
-            dependency: binary.to_string(),
-            hint: status.install_hint.clone(),
+        let path = sib.or_else(|| which::which(binary).ok()).ok_or_else(|| {
+            ToolError::MissingDependency {
+                dependency: binary.to_string(),
+                hint: status.install_hint.clone(),
+            }
         })?;
         Ok(Exec::new(self.clone(), path, binary.to_string()))
     }
@@ -286,7 +343,9 @@ impl ToolContext {
         T: Send + 'static,
         F: FnOnce() -> ToolResult<T> + Send + 'static,
     {
-        tokio::task::spawn_blocking(f).await.map_err(|e| ToolError::failed(format!("worker panicked: {e}")))?
+        tokio::task::spawn_blocking(f)
+            .await
+            .map_err(|e| ToolError::failed(format!("worker panicked: {e}")))?
     }
 
     /// HTTP client that enforces the network policy (SSRF guard).
@@ -342,7 +401,9 @@ impl ContextBuilder {
 // Closure-based tools, so most tools are a spec + a function.
 
 type SyncFn = dyn Fn(&ToolContext, &Params) -> ToolResult<ToolOutput> + Send + Sync;
-type AsyncFn = dyn Fn(ToolContext, Params) -> Pin<Box<dyn Future<Output = ToolResult<ToolOutput>> + Send>> + Send + Sync;
+type AsyncFn = dyn Fn(ToolContext, Params) -> Pin<Box<dyn Future<Output = ToolResult<ToolOutput>> + Send>>
+    + Send
+    + Sync;
 
 /// A tool whose body is a synchronous function, run on the blocking pool.
 pub struct SyncTool {
@@ -383,7 +444,10 @@ pub fn sync_tool<F>(spec: ToolSpec, f: F) -> Arc<dyn Tool>
 where
     F: Fn(&ToolContext, &Params) -> ToolResult<ToolOutput> + Send + Sync + 'static,
 {
-    Arc::new(SyncTool { spec, f: Arc::new(f) })
+    Arc::new(SyncTool {
+        spec,
+        f: Arc::new(f),
+    })
 }
 
 /// Create a tool from an async function.
@@ -392,5 +456,8 @@ where
     F: Fn(ToolContext, Params) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = ToolResult<ToolOutput>> + Send + 'static,
 {
-    Arc::new(AsyncTool { spec, f: Box::new(move |c, p| Box::pin(f(c, p))) })
+    Arc::new(AsyncTool {
+        spec,
+        f: Box::new(move |c, p| Box::pin(f(c, p))),
+    })
 }

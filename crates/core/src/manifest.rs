@@ -40,7 +40,9 @@
 
 use crate::error::{ToolError, ToolResult};
 use crate::params::Params;
-use crate::spec::{Category, Execution, OutputKind, ParamKind, ParamSpec, Permission, Platform, ToolSpec};
+use crate::spec::{
+    Category, Execution, OutputKind, ParamKind, ParamSpec, Permission, Platform, ToolSpec,
+};
 use crate::tool::{Tool, ToolContext, ToolOutput};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -50,7 +52,23 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 const FORBIDDEN_PROGRAMS: &[&str] = &[
-    "sh", "bash", "zsh", "fish", "dash", "ksh", "csh", "tcsh", "cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "env", "sudo", "doas", "su",
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "dash",
+    "ksh",
+    "csh",
+    "tcsh",
+    "cmd",
+    "cmd.exe",
+    "powershell",
+    "powershell.exe",
+    "pwsh",
+    "env",
+    "sudo",
+    "doas",
+    "su",
 ];
 
 #[derive(Debug, Deserialize)]
@@ -120,10 +138,21 @@ pub struct ExternalTool {
 /// Parse a manifest from TOML text.
 pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> {
     let mut m: Manifest = toml::from_str(text).map_err(|e| format!("invalid manifest: {e}"))?;
-    let category = Category::parse(&m.tool.category).ok_or_else(|| format!("unknown category '{}'", m.tool.category))?;
-    let prog_name = Path::new(&m.command.program).file_name().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
-    if FORBIDDEN_PROGRAMS.contains(&prog_name.as_str()) || prog_name.starts_with("python") || prog_name.starts_with("perl") || prog_name.starts_with("node") {
-        return Err(format!("program '{}' is an interpreter/shell and is not allowed in manifests", m.command.program));
+    let category = Category::parse(&m.tool.category)
+        .ok_or_else(|| format!("unknown category '{}'", m.tool.category))?;
+    let prog_name = Path::new(&m.command.program)
+        .file_name()
+        .map(|s| s.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if FORBIDDEN_PROGRAMS.contains(&prog_name.as_str())
+        || prog_name.starts_with("python")
+        || prog_name.starts_with("perl")
+        || prog_name.starts_with("node")
+    {
+        return Err(format!(
+            "program '{}' is an interpreter/shell and is not allowed in manifests",
+            m.command.program
+        ));
     }
     for p in &mut m.params {
         if p.label.is_empty() {
@@ -133,11 +162,15 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
             }
             p.label = l;
         }
-        if matches!(p.kind, ParamKind::Path { .. }) && !m.tool.permissions.iter().any(|x| x == "host_fs_read") {
+        if matches!(p.kind, ParamKind::Path { .. })
+            && !m.tool.permissions.iter().any(|x| x == "host_fs_read")
+        {
             m.tool.permissions.push("host_fs_read".into());
         }
     }
-    let mut spec = ToolSpec::new(&m.tool.id, &m.tool.name, category).describe(&m.tool.description).execution(Execution::External);
+    let mut spec = ToolSpec::new(&m.tool.id, &m.tool.name, category)
+        .describe(&m.tool.description)
+        .execution(Execution::External);
     spec.version = m.tool.version.clone();
     spec.keywords = m.tool.keywords.clone();
     spec.params = m.params.clone();
@@ -164,7 +197,9 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
         for ph in placeholders(s) {
             let base = ph.split('.').next().unwrap_or("");
             if !["output", "workdir"].contains(&base) && !known.contains(&base) {
-                return Err(format!("placeholder '{{{ph}}}' does not match any parameter"));
+                return Err(format!(
+                    "placeholder '{{{ph}}}' does not match any parameter"
+                ));
             }
         }
         Ok(())
@@ -174,7 +209,9 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
             ArgItem::Plain(s) => check(s)?,
             ArgItem::Group { when, args } => {
                 if !known.contains(&when.as_str()) {
-                    return Err(format!("group condition '{when}' does not match any parameter"));
+                    return Err(format!(
+                        "group condition '{when}' does not match any parameter"
+                    ));
                 }
                 for s in args {
                     check(s)?;
@@ -185,7 +222,12 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     if let Some(f) = &m.output.file {
         check(f)?;
     }
-    Ok(ExternalTool { spec, program: m.command.program, args: m.command.args, output: m.output })
+    Ok(ExternalTool {
+        spec,
+        program: m.command.program,
+        args: m.command.args,
+        output: m.output,
+    })
 }
 
 fn placeholders(s: &str) -> Vec<String> {
@@ -211,16 +253,32 @@ fn value_str(v: &Value) -> String {
 }
 
 impl ExternalTool {
-    fn expand(&self, s: &str, params: &Params, output: &Option<PathBuf>, ctx: &ToolContext) -> ToolResult<String> {
+    fn expand(
+        &self,
+        s: &str,
+        params: &Params,
+        output: &Option<PathBuf>,
+        ctx: &ToolContext,
+    ) -> ToolResult<String> {
         let mut result = String::new();
         let mut rest = s;
         while let Some(i) = rest.find('{') {
             result.push_str(&rest[..i]);
-            let j = rest[i..].find('}').ok_or_else(|| ToolError::failed("unterminated placeholder"))?;
+            let j = rest[i..]
+                .find('}')
+                .ok_or_else(|| ToolError::failed("unterminated placeholder"))?;
             let ph = &rest[i + 1..i + j];
-            let (base, attr) = ph.split_once('.').map(|(a, b)| (a, Some(b))).unwrap_or((ph, None));
+            let (base, attr) = ph
+                .split_once('.')
+                .map(|(a, b)| (a, Some(b)))
+                .unwrap_or((ph, None));
             let value = if base == "output" {
-                output.as_ref().map(|p| p.to_string_lossy().to_string()).ok_or_else(|| ToolError::failed("manifest uses {output} without [output].file"))?
+                output
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .ok_or_else(|| {
+                        ToolError::failed("manifest uses {output} without [output].file")
+                    })?
             } else if base == "workdir" {
                 ctx.work_dir().to_string_lossy().to_string()
             } else if let Some(f) = params.opt_file(base) {
@@ -231,7 +289,10 @@ impl ExternalTool {
                     _ => f.path.to_string_lossy().to_string(),
                 }
             } else {
-                params.get(base).map(value_str).ok_or_else(|| ToolError::invalid(base, "is required by the command"))?
+                params
+                    .get(base)
+                    .map(value_str)
+                    .ok_or_else(|| ToolError::invalid(base, "is required by the command"))?
             };
             result.push_str(&value);
             rest = &rest[i + j + 1..];
@@ -295,7 +356,10 @@ impl Tool for ExternalTool {
             if p.exists() {
                 result = result.with_artifact(ctx.artifact(&p)?);
             } else {
-                return Err(ToolError::failed(format!("{} did not produce the expected output file", self.program)));
+                return Err(ToolError::failed(format!(
+                    "{} did not produce the expected output file",
+                    self.program
+                )));
             }
         }
         Ok(result)
@@ -311,13 +375,19 @@ pub struct TrustStore {
 
 impl TrustStore {
     pub fn load(path: &Path) -> Self {
-        std::fs::read_to_string(path).ok().and_then(|s| toml::from_str(&s).ok()).unwrap_or_default()
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| toml::from_str(&s).ok())
+            .unwrap_or_default()
     }
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         if let Some(p) = path.parent() {
             std::fs::create_dir_all(p)?;
         }
-        std::fs::write(path, toml::to_string_pretty(self).map_err(std::io::Error::other)?)
+        std::fs::write(
+            path,
+            toml::to_string_pretty(self).map_err(std::io::Error::other)?,
+        )
     }
 }
 
@@ -339,34 +409,57 @@ pub fn load_extensions(dir: &Path, trust_all: bool) -> (Vec<Arc<dyn Tool>>, Vec<
     let trust = TrustStore::load(&dir.join("trusted.toml"));
     let mut tools: Vec<Arc<dyn Tool>> = vec![];
     let mut status = vec![];
-    let Ok(entries) = std::fs::read_dir(dir) else { return (tools, status) };
-    let mut files: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.extension().map(|e| e == "toml").unwrap_or(false)).collect();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return (tools, status);
+    };
+    let mut files: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().map(|e| e == "toml").unwrap_or(false))
+        .collect();
     files.sort();
     for path in files {
         let file = path.file_name().unwrap().to_string_lossy().to_string();
         if file == "trusted.toml" {
             continue;
         }
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
         let sha = sha256_hex(text.as_bytes());
         match parse_manifest(&text, &file) {
             Ok(t) => {
                 let id = t.spec.id.clone();
-                let trusted = trust_all || trust.trusted.get(&id).map(|h| *h == sha).unwrap_or(false);
+                let trusted =
+                    trust_all || trust.trusted.get(&id).map(|h| *h == sha).unwrap_or(false);
                 if trusted {
                     tools.push(Arc::new(t));
-                    status.push(ExtensionStatus { file, id: Some(id), sha256: sha, loaded: true, error: None });
+                    status.push(ExtensionStatus {
+                        file,
+                        id: Some(id),
+                        sha256: sha,
+                        loaded: true,
+                        error: None,
+                    });
                 } else {
                     status.push(ExtensionStatus {
                         file,
                         id: Some(id.clone()),
                         sha256: sha,
                         loaded: false,
-                        error: Some(format!("not trusted (run `dogubako extensions trust {id}` after reviewing it)")),
+                        error: Some(format!(
+                            "not trusted (run `dogubako extensions trust {id}` after reviewing it)"
+                        )),
                     });
                 }
             }
-            Err(e) => status.push(ExtensionStatus { file, id: None, sha256: sha, loaded: false, error: Some(e) }),
+            Err(e) => status.push(ExtensionStatus {
+                file,
+                id: None,
+                sha256: sha,
+                loaded: false,
+                error: Some(e),
+            }),
         }
     }
     (tools, status)
@@ -405,9 +498,15 @@ type = "boolean"
     #[test]
     fn rejects_shells_and_unknown_placeholders() {
         let bad = M.replace("program = \"head\"", "program = \"/bin/sh\"");
-        assert!(parse_manifest(&bad, "x").err().unwrap().contains("not allowed"));
+        assert!(parse_manifest(&bad, "x")
+            .err()
+            .unwrap()
+            .contains("not allowed"));
         let bad = M.replace("\"{lines}\"", "\"{nope}\"");
-        assert!(parse_manifest(&bad, "x").err().unwrap().contains("placeholder"));
+        assert!(parse_manifest(&bad, "x")
+            .err()
+            .unwrap()
+            .contains("placeholder"));
         let bad = M.replace("category = \"text\"", "category = \"bogus\"");
         assert!(parse_manifest(&bad, "x").is_err());
     }
@@ -419,9 +518,15 @@ type = "boolean"
         let h = crate::testing::TestHarness::new(vec![std::sync::Arc::new(tool)]);
         // A file name with shell metacharacters must be passed verbatim.
         let p = h.write("a; rm -rf x $(id).txt", b"one\ntwo\nthree\n");
-        let out = h.run("text.ext_head", serde_json::json!({"input": p, "lines": 2})).await.unwrap();
+        let out = h
+            .run("text.ext_head", serde_json::json!({"input": p, "lines": 2}))
+            .await
+            .unwrap();
         assert_eq!(out.text.as_deref(), Some("one\ntwo\n"));
-        let err = h.run("text.ext_head", serde_json::json!({"input": p, "lines": 0})).await.unwrap_err();
+        let err = h
+            .run("text.ext_head", serde_json::json!({"input": p, "lines": 0}))
+            .await
+            .unwrap_err();
         assert_eq!(err.code(), "invalid_input");
     }
 
@@ -433,12 +538,17 @@ type = "boolean"
         assert!(tools.is_empty());
         assert!(!st[0].loaded);
         let mut ts = TrustStore::default();
-        ts.trusted.insert("text.ext_head".into(), sha256_hex(M.as_bytes()));
+        ts.trusted
+            .insert("text.ext_head".into(), sha256_hex(M.as_bytes()));
         ts.save(&dir.path().join("trusted.toml")).unwrap();
         let (tools, _) = load_extensions(dir.path(), false);
         assert_eq!(tools.len(), 1);
         // Modifying the manifest revokes trust.
-        std::fs::write(dir.path().join("head.toml"), M.replace("First lines", "Changed")).unwrap();
+        std::fs::write(
+            dir.path().join("head.toml"),
+            M.replace("First lines", "Changed"),
+        )
+        .unwrap();
         let (tools, _) = load_extensions(dir.path(), false);
         assert!(tools.is_empty());
     }

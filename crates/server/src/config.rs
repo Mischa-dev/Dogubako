@@ -75,7 +75,10 @@ impl Default for ServerConfig {
             user_quota_mb: 10240,
             file_retention_hours: 24,
             job_retention_days: 14,
-            max_concurrent_jobs: std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2).clamp(1, 16),
+            max_concurrent_jobs: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(2)
+                .clamp(1, 16),
             per_user_concurrency: 2,
             fs_roots: vec![],
             allow_private_network: false,
@@ -94,7 +97,9 @@ impl Default for ServerConfig {
 }
 
 fn env(k: &str) -> Option<String> {
-    std::env::var(format!("DOGUBAKO_{k}")).ok().filter(|v| !v.is_empty())
+    std::env::var(format!("DOGUBAKO_{k}"))
+        .ok()
+        .filter(|v| !v.is_empty())
 }
 
 fn env_bool(k: &str) -> Option<bool> {
@@ -106,26 +111,42 @@ fn env_num<T: std::str::FromStr>(k: &str) -> Option<T> {
 }
 
 fn env_list(k: &str) -> Option<Vec<String>> {
-    env(k).map(|v| v.split([',', ';']).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+    env(k).map(|v| {
+        v.split([',', ';'])
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    })
 }
 
 impl ServerConfig {
     /// Load config file (if any) then apply environment overrides.
     pub fn load(explicit_file: Option<PathBuf>) -> anyhow_lite::Result<Self> {
-        let data_dir = env("DATA_DIR").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("./data"));
-        let file = explicit_file.or_else(|| env("CONFIG").map(PathBuf::from)).or_else(|| {
-            let p = data_dir.join("dogubako.toml");
-            p.is_file().then_some(p)
-        });
+        let data_dir = env("DATA_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("./data"));
+        let file = explicit_file
+            .or_else(|| env("CONFIG").map(PathBuf::from))
+            .or_else(|| {
+                let p = data_dir.join("dogubako.toml");
+                p.is_file().then_some(p)
+            });
         let mut cfg = match &file {
             Some(f) => {
-                let text = std::fs::read_to_string(f).map_err(|e| anyhow_lite::Error(format!("reading {}: {e}", f.display())))?;
-                toml::from_str::<ServerConfig>(&text).map_err(|e| anyhow_lite::Error(format!("parsing {}: {e}", f.display())))?
+                let text = std::fs::read_to_string(f)
+                    .map_err(|e| anyhow_lite::Error(format!("reading {}: {e}", f.display())))?;
+                toml::from_str::<ServerConfig>(&text)
+                    .map_err(|e| anyhow_lite::Error(format!("parsing {}: {e}", f.display())))?
             }
-            None => ServerConfig { data_dir: data_dir.clone(), ..Default::default() },
+            None => ServerConfig {
+                data_dir: data_dir.clone(),
+                ..Default::default()
+            },
         };
         if let Some(v) = env("BIND") {
-            cfg.bind = v.parse().map_err(|e| anyhow_lite::Error(format!("DOGUBAKO_BIND: {e}")))?;
+            cfg.bind = v
+                .parse()
+                .map_err(|e| anyhow_lite::Error(format!("DOGUBAKO_BIND: {e}")))?;
         }
         if let Some(v) = env("DATA_DIR") {
             cfg.data_dir = PathBuf::from(v);
@@ -185,7 +206,11 @@ impl ServerConfig {
             cfg.allowed_origins = v;
         }
         if let Some(v) = env("SANDBOX") {
-            cfg.sandbox = if v == "bwrap" { SandboxMode::Bwrap } else { SandboxMode::None };
+            cfg.sandbox = if v == "bwrap" {
+                SandboxMode::Bwrap
+            } else {
+                SandboxMode::None
+            };
         }
         if let Some(v) = env("EXEC_MEMORY_MB") {
             cfg.exec_memory_mb = v.parse().ok().filter(|n: &u64| *n > 0);
@@ -209,23 +234,32 @@ impl ServerConfig {
     }
 
     pub fn validate(&self) -> anyhow_lite::Result<()> {
-        if self.auth == AuthMode::None && !self.bind.ip().is_loopback() && !self.allow_insecure_no_auth {
+        if self.auth == AuthMode::None
+            && !self.bind.ip().is_loopback()
+            && !self.allow_insecure_no_auth
+        {
             return Err(anyhow_lite::Error(format!(
                 "refusing to run without authentication on non-loopback address {}. Use DOGUBAKO_AUTH=required, bind to 127.0.0.1, or set DOGUBAKO_ALLOW_INSECURE_NO_AUTH=1 if you really mean it.",
                 self.bind
             )));
         }
         if !["full", "compact"].contains(&self.mcp_discovery.as_str()) {
-            return Err(anyhow_lite::Error("mcp_discovery must be 'full' or 'compact'".into()));
+            return Err(anyhow_lite::Error(
+                "mcp_discovery must be 'full' or 'compact'".into(),
+            ));
         }
         Ok(())
     }
 
     pub fn models_dir(&self) -> PathBuf {
-        self.models_dir.clone().unwrap_or_else(|| self.data_dir.join("models"))
+        self.models_dir
+            .clone()
+            .unwrap_or_else(|| self.data_dir.join("models"))
     }
     pub fn extensions_dir(&self) -> PathBuf {
-        self.extensions_dir.clone().unwrap_or_else(|| self.data_dir.join("extensions"))
+        self.extensions_dir
+            .clone()
+            .unwrap_or_else(|| self.data_dir.join("extensions"))
     }
     pub fn files_dir(&self) -> PathBuf {
         self.data_dir.join("files")

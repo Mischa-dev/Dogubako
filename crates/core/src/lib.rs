@@ -29,8 +29,12 @@ pub mod util;
 pub mod prelude {
     pub use crate::error::{Context, ToolError, ToolResult};
     pub use crate::params::{InputFile, Params};
-    pub use crate::spec::{Category, Execution, OutputKind, ParamSpec, PathKind, Permission, Platform, ToolSpec};
-    pub use crate::tool::{async_tool, sync_tool, Artifact, Environment, Tool, ToolContext, ToolOutput};
+    pub use crate::spec::{
+        Category, Execution, OutputKind, ParamSpec, PathKind, Permission, Platform, ToolSpec,
+    };
+    pub use crate::tool::{
+        async_tool, sync_tool, Artifact, Environment, Tool, ToolContext, ToolOutput,
+    };
     pub use crate::util::{human_size, suffixed, with_extension};
     pub use serde_json::{json, Value};
     pub use std::sync::Arc;

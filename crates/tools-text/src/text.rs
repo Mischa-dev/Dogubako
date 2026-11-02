@@ -28,7 +28,10 @@ pub fn tools() -> Vec<Arc<dyn Tool>> {
 }
 
 fn text_param() -> ParamSpec {
-    ParamSpec::textarea("text").label("Text").required().primary()
+    ParamSpec::textarea("text")
+        .label("Text")
+        .required()
+        .primary()
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +85,10 @@ fn sentence_case(s: &str) -> String {
     }
     // Standalone pronoun "i".
     let words: Vec<&str> = out.split_word_bounds().collect();
-    words.iter().map(|w| if *w == "i" { "I" } else { w }).collect()
+    words
+        .iter()
+        .map(|w| if *w == "i" { "I" } else { w })
+        .collect()
 }
 
 pub(crate) fn convert_case(text: &str, case: &str) -> ToolResult<String> {
@@ -113,7 +119,13 @@ pub(crate) fn convert_case(text: &str, case: &str) -> ToolResult<String> {
         "sentence" => sentence_case(text),
         "invert" => text
             .chars()
-            .map(|c| if c.is_uppercase() { c.to_lowercase().collect::<String>() } else { c.to_uppercase().collect() })
+            .map(|c| {
+                if c.is_uppercase() {
+                    c.to_lowercase().collect::<String>()
+                } else {
+                    c.to_uppercase().collect()
+                }
+            })
             .collect(),
         "alternating" => {
             let mut upper = false;
@@ -142,7 +154,12 @@ pub(crate) fn convert_case(text: &str, case: &str) -> ToolResult<String> {
         "dot" => per_line(&|s| s.to_snake_case().replace('_', ".")),
         "path" => per_line(&|s| s.to_snake_case().replace('_', "/")),
         "words" => per_line(&|s| s.to_title_case().to_lowercase()),
-        other => return Err(ToolError::invalid("case", format!("unknown case '{other}'"))),
+        other => {
+            return Err(ToolError::invalid(
+                "case",
+                format!("unknown case '{other}'"),
+            ))
+        }
     })
 }
 
@@ -177,18 +194,30 @@ fn change_case() -> Arc<dyn Tool> {
         )
         .text_output("text/plain")
         .ui("live");
-    sync_tool(spec, |_ctx, p| Ok(ToolOutput::text(convert_case(p.text("text"), p.str("case")?)?)))
+    sync_tool(spec, |_ctx, p| {
+        Ok(ToolOutput::text(convert_case(
+            p.text("text"),
+            p.str("case")?,
+        )?))
+    })
 }
 
 // ---------------------------------------------------------------------------
 // text.count
 
 pub(crate) fn word_frequencies(text: &str, min_len: usize, stop: bool) -> Vec<(String, usize)> {
-    let stopwords: HashSet<&str> = if stop { STOPWORDS.iter().copied().collect() } else { HashSet::new() };
+    let stopwords: HashSet<&str> = if stop {
+        STOPWORDS.iter().copied().collect()
+    } else {
+        HashSet::new()
+    };
     let mut freq: HashMap<String, usize> = HashMap::new();
     for w in text.unicode_words() {
         let w = w.to_lowercase();
-        if w.chars().count() < min_len || stopwords.contains(w.as_str()) || w.chars().all(|c| c.is_numeric()) {
+        if w.chars().count() < min_len
+            || stopwords.contains(w.as_str())
+            || w.chars().all(|c| c.is_numeric())
+        {
             continue;
         }
         *freq.entry(w).or_default() += 1;
@@ -199,14 +228,147 @@ pub(crate) fn word_frequencies(text: &str, min_len: usize, stop: bool) -> Vec<(S
 }
 
 const STOPWORDS: &[&str] = &[
-    "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "as", "at", "be", "because", "been", "before",
-    "being", "below", "between", "both", "but", "by", "can", "could", "did", "do", "does", "doing", "down", "during", "each", "few", "for", "from",
-    "further", "had", "has", "have", "having", "he", "her", "here", "hers", "herself", "him", "himself", "his", "how", "i", "if", "in", "into",
-    "is", "it", "its", "itself", "just", "me", "more", "most", "my", "myself", "no", "nor", "not", "now", "of", "off", "on", "once", "only", "or",
-    "other", "our", "ours", "ourselves", "out", "over", "own", "same", "she", "should", "so", "some", "such", "than", "that", "the", "their",
-    "theirs", "them", "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too", "under", "until", "up", "very",
-    "was", "we", "were", "what", "when", "where", "which", "while", "who", "whom", "why", "will", "with", "would", "you", "your", "yours",
-    "yourself", "yourselves", "s", "t", "don", "doesn", "didn", "isn", "aren", "wasn", "weren", "won", "ll", "re", "ve", "d", "m",
+    "a",
+    "about",
+    "above",
+    "after",
+    "again",
+    "against",
+    "all",
+    "am",
+    "an",
+    "and",
+    "any",
+    "are",
+    "as",
+    "at",
+    "be",
+    "because",
+    "been",
+    "before",
+    "being",
+    "below",
+    "between",
+    "both",
+    "but",
+    "by",
+    "can",
+    "could",
+    "did",
+    "do",
+    "does",
+    "doing",
+    "down",
+    "during",
+    "each",
+    "few",
+    "for",
+    "from",
+    "further",
+    "had",
+    "has",
+    "have",
+    "having",
+    "he",
+    "her",
+    "here",
+    "hers",
+    "herself",
+    "him",
+    "himself",
+    "his",
+    "how",
+    "i",
+    "if",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "itself",
+    "just",
+    "me",
+    "more",
+    "most",
+    "my",
+    "myself",
+    "no",
+    "nor",
+    "not",
+    "now",
+    "of",
+    "off",
+    "on",
+    "once",
+    "only",
+    "or",
+    "other",
+    "our",
+    "ours",
+    "ourselves",
+    "out",
+    "over",
+    "own",
+    "same",
+    "she",
+    "should",
+    "so",
+    "some",
+    "such",
+    "than",
+    "that",
+    "the",
+    "their",
+    "theirs",
+    "them",
+    "themselves",
+    "then",
+    "there",
+    "these",
+    "they",
+    "this",
+    "those",
+    "through",
+    "to",
+    "too",
+    "under",
+    "until",
+    "up",
+    "very",
+    "was",
+    "we",
+    "were",
+    "what",
+    "when",
+    "where",
+    "which",
+    "while",
+    "who",
+    "whom",
+    "why",
+    "will",
+    "with",
+    "would",
+    "you",
+    "your",
+    "yours",
+    "yourself",
+    "yourselves",
+    "s",
+    "t",
+    "don",
+    "doesn",
+    "didn",
+    "isn",
+    "aren",
+    "wasn",
+    "weren",
+    "won",
+    "ll",
+    "re",
+    "ve",
+    "d",
+    "m",
 ];
 
 fn fmt_duration(minutes: f64) -> String {
@@ -237,14 +399,33 @@ fn count() -> Arc<dyn Tool> {
         let chars = t.chars().count();
         let graphemes = t.graphemes(true).count();
         let no_ws = t.chars().filter(|c| !c.is_whitespace()).count();
-        let lines = if t.is_empty() { 0 } else { split_lines(t).0.len() };
-        let sentences = t.unicode_sentences().filter(|s| s.chars().any(|c| c.is_alphanumeric())).count();
-        let paragraphs = t.replace("\r\n", "\n").split("\n\n").filter(|p| !p.trim().is_empty()).count();
+        let lines = if t.is_empty() {
+            0
+        } else {
+            split_lines(t).0.len()
+        };
+        let sentences = t
+            .unicode_sentences()
+            .filter(|s| s.chars().any(|c| c.is_alphanumeric()))
+            .count();
+        let paragraphs = t
+            .replace("\r\n", "\n")
+            .split("\n\n")
+            .filter(|p| !p.trim().is_empty())
+            .count();
         let rw = p.int_or("reading_wpm", 238).max(1) as f64;
         let sw = p.int_or("speaking_wpm", 150).max(1) as f64;
         let top = word_frequencies(t, 1, p.bool("ignore_stopwords"));
-        let top: Vec<Vec<Value>> = top.into_iter().take(p.int_or("top", 10) as usize).map(|(w, c)| vec![json!(w), json!(c)]).collect();
-        let avg_word = if words > 0 { t.unicode_words().map(|w| w.chars().count()).sum::<usize>() as f64 / words as f64 } else { 0.0 };
+        let top: Vec<Vec<Value>> = top
+            .into_iter()
+            .take(p.int_or("top", 10) as usize)
+            .map(|(w, c)| vec![json!(w), json!(c)])
+            .collect();
+        let avg_word = if words > 0 {
+            t.unicode_words().map(|w| w.chars().count()).sum::<usize>() as f64 / words as f64
+        } else {
+            0.0
+        };
         Ok(ToolOutput::data(json!({
             "characters": chars,
             "characters_no_spaces": no_ws,
@@ -269,7 +450,13 @@ fn leading_number(s: &str) -> Option<f64> {
     let t = s.trim_start();
     let end = t
         .char_indices()
-        .take_while(|(i, c)| c.is_ascii_digit() || *c == '.' || ((*c == '-' || *c == '+') && *i == 0) || *c == 'e' || *c == 'E')
+        .take_while(|(i, c)| {
+            c.is_ascii_digit()
+                || *c == '.'
+                || ((*c == '-' || *c == '+') && *i == 0)
+                || *c == 'e'
+                || *c == 'E'
+        })
         .last()
         .map(|(i, c)| i + c.len_utf8())?;
     // shrink until it parses (handles "1.2.3", "3e" ...)
@@ -322,7 +509,12 @@ fn sort_lines() -> Arc<dyn Tool> {
                 (None, Some(_)) => std::cmp::Ordering::Greater,
                 (None, None) => natural_cmp(&key(a), &key(b)),
             }),
-            "length" => lines.sort_by(|a, b| a.chars().count().cmp(&b.chars().count()).then_with(|| natural_cmp(&key(a), &key(b)))),
+            "length" => lines.sort_by(|a, b| {
+                a.chars()
+                    .count()
+                    .cmp(&b.chars().count())
+                    .then_with(|| natural_cmp(&key(a), &key(b)))
+            }),
             "random" => {
                 use rand::seq::SliceRandom;
                 lines.shuffle(&mut rand::rng());
@@ -352,9 +544,17 @@ fn dedupe_lines() -> Arc<dyn Tool> {
         .ui("live");
     sync_tool(spec, |_ctx, p| {
         let (lines, trailing) = split_lines(p.text("text"));
-        let (ic, iw, ke) = (p.bool("ignore_case"), p.bool("ignore_whitespace"), p.bool("keep_empty"));
+        let (ic, iw, ke) = (
+            p.bool("ignore_case"),
+            p.bool("ignore_whitespace"),
+            p.bool("keep_empty"),
+        );
         let key = |s: &str| {
-            let mut k = if iw { s.split_whitespace().collect::<Vec<_>>().join(" ") } else { s.to_string() };
+            let mut k = if iw {
+                s.split_whitespace().collect::<Vec<_>>().join(" ")
+            } else {
+                s.to_string()
+            };
             if ic {
                 k = k.to_lowercase();
             }
@@ -363,7 +563,11 @@ fn dedupe_lines() -> Arc<dyn Tool> {
         let last = p.str("keep")? == "last";
         let mut seen = HashSet::new();
         let mut keep = vec![false; lines.len()];
-        let order: Box<dyn Iterator<Item = usize>> = if last { Box::new((0..lines.len()).rev()) } else { Box::new(0..lines.len()) };
+        let order: Box<dyn Iterator<Item = usize>> = if last {
+            Box::new((0..lines.len()).rev())
+        } else {
+            Box::new(0..lines.len())
+        };
         for i in order {
             if ke && lines[i].trim().is_empty() {
                 keep[i] = true;
@@ -371,9 +575,15 @@ fn dedupe_lines() -> Arc<dyn Tool> {
             }
             keep[i] = seen.insert(key(lines[i]));
         }
-        let out: Vec<&str> = lines.iter().zip(&keep).filter(|(_, k)| **k).map(|(l, _)| *l).collect();
+        let out: Vec<&str> = lines
+            .iter()
+            .zip(&keep)
+            .filter(|(_, k)| **k)
+            .map(|(l, _)| *l)
+            .collect();
         let removed = lines.len() - out.len();
-        Ok(ToolOutput::text(join_lines(&out, trailing)).with_data(json!({"removed": removed, "kept": out.len(), "total": lines.len()})))
+        Ok(ToolOutput::text(join_lines(&out, trailing))
+            .with_data(json!({"removed": removed, "kept": out.len(), "total": lines.len()})))
     })
 }
 
@@ -407,7 +617,11 @@ fn trim() -> Arc<dyn Tool> {
         let tabs = p.bool("tabs_to_spaces");
         let mut out: Vec<String> = Vec::with_capacity(lines.len());
         for l in lines {
-            let mut s = if tabs { l.replace('\t', "    ") } else { l.to_string() };
+            let mut s = if tabs {
+                l.replace('\t', "    ")
+            } else {
+                l.to_string()
+            };
             s = match mode {
                 "both" => s.trim().to_string(),
                 "leading" => s.trim_start().to_string(),
@@ -416,7 +630,11 @@ fn trim() -> Arc<dyn Tool> {
             };
             if collapse {
                 let lead_len = s.len() - s.trim_start_matches([' ', '\t']).len();
-                let lead = if mode == "none" || mode == "trailing" { s[..lead_len].to_string() } else { String::new() };
+                let lead = if mode == "none" || mode == "trailing" {
+                    s[..lead_len].to_string()
+                } else {
+                    String::new()
+                };
                 let mut c = String::with_capacity(s.len());
                 let mut prev_space = false;
                 for ch in s[lead_len..].chars() {
@@ -539,8 +757,16 @@ fn replace() -> Arc<dyn Tool> {
         .keywords(&["find", "replace", "substitute", "search"])
         .param(text_param())
         .param(ParamSpec::text("find").label("Find").required())
-        .param(ParamSpec::text("replace").label("Replace with").default_str(""))
-        .param(ParamSpec::boolean("case_sensitive").label("Case sensitive").default_bool(true))
+        .param(
+            ParamSpec::text("replace")
+                .label("Replace with")
+                .default_str(""),
+        )
+        .param(
+            ParamSpec::boolean("case_sensitive")
+                .label("Case sensitive")
+                .default_bool(true),
+        )
         .param(ParamSpec::boolean("whole_word").label("Whole words only"))
         .text_output("text/plain")
         .ui("live");
@@ -566,7 +792,9 @@ fn replace() -> Arc<dyn Tool> {
                 let after = text[m.end()..].chars().next();
                 let first = m.as_str().chars().next().unwrap();
                 let lastc = m.as_str().chars().next_back().unwrap();
-                if (is_word_char(first) && before.is_some_and(is_word_char)) || (is_word_char(lastc) && after.is_some_and(is_word_char)) {
+                if (is_word_char(first) && before.is_some_and(is_word_char))
+                    || (is_word_char(lastc) && after.is_some_and(is_word_char))
+                {
                     continue;
                 }
             }
@@ -599,7 +827,12 @@ pub(crate) fn build_regex(pattern: &str, flags: &[String]) -> ToolResult<regex::
 pub(crate) fn flag_param() -> ParamSpec {
     ParamSpec::multi_choice(
         "flags",
-        &[("i", "i – ignore case"), ("m", "m – ^/$ match at line breaks"), ("s", "s – . matches newline"), ("x", "x – verbose (ignore whitespace, # comments)")],
+        &[
+            ("i", "i – ignore case"),
+            ("m", "m – ^/$ match at line breaks"),
+            ("s", "s – . matches newline"),
+            ("x", "x – verbose (ignore whitespace, # comments)"),
+        ],
     )
     .label("Flags")
     .default_value(json!([]))
@@ -623,9 +856,14 @@ fn regex_replace() -> Arc<dyn Tool> {
         let limit = p.int_or("limit", 0).max(0) as usize;
         let total = re.find_iter(text).count();
         let rep = p.text("replacement");
-        let out = if p.bool("literal") { re.replacen(text, limit, regex::NoExpand(rep)) } else { re.replacen(text, limit, rep) };
+        let out = if p.bool("literal") {
+            re.replacen(text, limit, regex::NoExpand(rep))
+        } else {
+            re.replacen(text, limit, rep)
+        };
         let n = if limit == 0 { total } else { total.min(limit) };
-        Ok(ToolOutput::text(out.into_owned()).with_data(json!({"matches": total, "replacements": n})))
+        Ok(ToolOutput::text(out.into_owned())
+            .with_data(json!({"matches": total, "replacements": n})))
     })
 }
 
@@ -691,9 +929,17 @@ fn diff() -> Arc<dyn Tool> {
             }
         }
         let line_diff = cfg.diff_lines(a, b);
-        let unified = line_diff.unified_diff().context_radius(p.int_or("context", 3) as usize).header("original", "changed").to_string();
+        let unified = line_diff
+            .unified_diff()
+            .context_radius(p.int_or("context", 3) as usize)
+            .header("original", "changed")
+            .to_string();
         let identical = a == b;
-        Ok(ToolOutput::text_as(if identical { String::new() } else { unified }, "text/x-diff").with_data(json!({
+        Ok(ToolOutput::text_as(
+            if identical { String::new() } else { unified },
+            "text/x-diff",
+        )
+        .with_data(json!({
             "identical": identical,
             "similarity": (d.ratio() * 1000.0).round() / 1000.0,
             "insertions": ins,
@@ -712,14 +958,21 @@ pub(crate) fn do_escape(format: &str, unescape: bool, s: &str) -> ToolResult<Str
         ("json", false) => escape::backslash_escape(s, Lang::Json),
         ("json", true) => {
             let t = s.trim();
-            let quoted = if t.len() >= 2 && t.starts_with('"') && t.ends_with('"') { t.to_string() } else { format!("\"{s}\"") };
-            serde_json::from_str::<String>(&quoted).map_err(|e| bad(format!("invalid JSON string: {e}")))?
+            let quoted = if t.len() >= 2 && t.starts_with('"') && t.ends_with('"') {
+                t.to_string()
+            } else {
+                format!("\"{s}\"")
+            };
+            serde_json::from_str::<String>(&quoted)
+                .map_err(|e| bad(format!("invalid JSON string: {e}")))?
         }
         ("javascript", false) => escape::backslash_escape(s, Lang::Js),
         ("c", false) => escape::backslash_escape(s, Lang::C),
         ("java", false) => escape::backslash_escape(s, Lang::Java),
         ("python", false) => escape::backslash_escape(s, Lang::Python),
-        ("javascript" | "java" | "python", true) => escape::backslash_unescape(s, false).map_err(bad)?,
+        ("javascript" | "java" | "python", true) => {
+            escape::backslash_unescape(s, false).map_err(bad)?
+        }
         ("c", true) => escape::backslash_unescape(s, true).map_err(bad)?,
         ("html", false) => escape::html_escape(s, false),
         ("html", true) => escape::html_unescape(s),
@@ -736,7 +989,11 @@ pub(crate) fn do_escape(format: &str, unescape: bool, s: &str) -> ToolResult<Str
         ("sql", false) => s.replace('\'', "''"),
         ("sql", true) => {
             let t = s.trim();
-            let inner = if t.len() >= 2 && t.starts_with('\'') && t.ends_with('\'') { &t[1..t.len() - 1] } else { s };
+            let inner = if t.len() >= 2 && t.starts_with('\'') && t.ends_with('\'') {
+                &t[1..t.len() - 1]
+            } else {
+                s
+            };
             inner.replace("''", "'")
         }
         (f, _) => return Err(ToolError::invalid("format", format!("unknown format {f}"))),
@@ -771,7 +1028,13 @@ fn escape_tool() -> Arc<dyn Tool> {
         .param(ParamSpec::choice("mode", &[("escape", "Escape"), ("unescape", "Unescape")]).default_str("escape"))
         .text_output("text/plain")
         .ui("live");
-    sync_tool(spec, |_ctx, p| Ok(ToolOutput::text(do_escape(p.str("format")?, p.str("mode")? == "unescape", p.text("text"))?)))
+    sync_tool(spec, |_ctx, p| {
+        Ok(ToolOutput::text(do_escape(
+            p.str("format")?,
+            p.str("mode")? == "unescape",
+            p.text("text"),
+        )?))
+    })
 }
 
 #[cfg(test)]
@@ -801,12 +1064,32 @@ mod tests {
             t("kebab", "hello-world-foo"),
             t("constant", "HELLO_WORLD_FOO"),
             t("dot", "hello.world.foo"),
-            t("invert", "hELLO wORLD-fOO"),
+            t("invert", "hELLO WORLD-FOO"),
         ] {
-            assert_eq!(txt(&h, "text.case", json!({"text": "Hello world-foo", "case": case})).await, want, "{case}");
+            assert_eq!(
+                txt(
+                    &h,
+                    "text.case",
+                    json!({"text": "Hello world-foo", "case": case})
+                )
+                .await,
+                want,
+                "{case}"
+            );
         }
-        assert_eq!(txt(&h, "text.case", json!({"text": "HELLO. how are you? i am fine", "case": "sentence"})).await, "Hello. How are you? I am fine");
-        let err = h.run("text.case", json!({"text": "x", "case": "nope"})).await.unwrap_err();
+        assert_eq!(
+            txt(
+                &h,
+                "text.case",
+                json!({"text": "HELLO. how are you? i am fine", "case": "sentence"})
+            )
+            .await,
+            "Hello. How are you? I am fine"
+        );
+        let err = h
+            .run("text.case", json!({"text": "x", "case": "nope"}))
+            .await
+            .unwrap_err();
         assert_eq!(err.code(), "invalid_input");
         let err = h.run("text.case", json!({"bogus": 1})).await.unwrap_err();
         assert_eq!(err.code(), "invalid_input");
@@ -814,7 +1097,13 @@ mod tests {
 
     #[tokio::test]
     async fn count() {
-        let out = h().run("text.count", json!({"text": "Hello world. Hello again!\n\nNew para."})).await.unwrap();
+        let out = h()
+            .run(
+                "text.count",
+                json!({"text": "Hello world. Hello again!\n\nNew para."}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["words"], 6);
         assert_eq!(out.data["sentences"], 3);
         assert_eq!(out.data["paragraphs"], 2);
@@ -825,30 +1114,99 @@ mod tests {
     #[tokio::test]
     async fn sort_and_dedupe() {
         let h = h();
-        assert_eq!(txt(&h, "text.sort_lines", json!({"text": "f10\nf2\nF1\n", "mode": "natural"})).await, "F1\nf2\nf10\n");
-        assert_eq!(txt(&h, "text.sort_lines", json!({"text": "10\n9\nx\n-1", "mode": "numeric"})).await, "-1\n9\n10\nx");
-        assert_eq!(txt(&h, "text.sort_lines", json!({"text": "b\na\nb", "mode": "alpha", "unique": true, "reverse": true})).await, "b\na");
-        let shuffled = txt(&h, "text.sort_lines", json!({"text": "1\n2\n3", "mode": "random"})).await;
+        assert_eq!(
+            txt(
+                &h,
+                "text.sort_lines",
+                json!({"text": "f10\nf2\nF1\n", "mode": "natural"})
+            )
+            .await,
+            "F1\nf2\nf10\n"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "text.sort_lines",
+                json!({"text": "10\n9\nx\n-1", "mode": "numeric"})
+            )
+            .await,
+            "-1\n9\n10\nx"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "text.sort_lines",
+                json!({"text": "b\na\nb", "mode": "alpha", "unique": true, "reverse": true})
+            )
+            .await,
+            "b\na"
+        );
+        let shuffled = txt(
+            &h,
+            "text.sort_lines",
+            json!({"text": "1\n2\n3", "mode": "random"}),
+        )
+        .await;
         let mut v: Vec<&str> = shuffled.lines().collect();
         v.sort();
         assert_eq!(v, ["1", "2", "3"]);
-        let out = h.run("text.dedupe_lines", json!({"text": "a\nB\nb \nA\nc", "ignore_case": true, "ignore_whitespace": true})).await.unwrap();
+        let out = h
+            .run(
+                "text.dedupe_lines",
+                json!({"text": "a\nB\nb \nA\nc", "ignore_case": true, "ignore_whitespace": true}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "a\nB\nc");
         assert_eq!(out.data["removed"], 2);
-        let out = h.run("text.dedupe_lines", json!({"text": "a\nb\na", "keep": "last"})).await.unwrap();
+        let out = h
+            .run(
+                "text.dedupe_lines",
+                json!({"text": "a\nb\na", "keep": "last"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "b\na");
     }
 
     #[tokio::test]
     async fn trim_and_endings() {
         let h = h();
-        assert_eq!(txt(&h, "text.trim", json!({"text": "  a   b \n\n\n c\t\td  \n"})).await, "a b\n\nc d");
-        assert_eq!(txt(&h, "text.trim", json!({"text": "a\n\nb", "empty_lines": "remove"})).await, "a\nb");
-        let out = h.run("text.line_endings", json!({"text": "a\r\nb\nc", "to": "crlf"})).await.unwrap();
+        assert_eq!(
+            txt(
+                &h,
+                "text.trim",
+                json!({"text": "  a   b \n\n\n c\t\td  \n"})
+            )
+            .await,
+            "a b\n\nc d"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "text.trim",
+                json!({"text": "a\n\nb", "empty_lines": "remove"})
+            )
+            .await,
+            "a\nb"
+        );
+        let out = h
+            .run(
+                "text.line_endings",
+                json!({"text": "a\r\nb\nc", "to": "crlf"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "a\r\nb\r\nc");
         assert_eq!(out.data["detected"], "mixed");
         let f = h.write("w.txt", b"x\r\ny\r\n");
-        let out = h.run("text.line_endings", json!({"file": f.to_str().unwrap(), "to": "lf"})).await.unwrap();
+        let out = h
+            .run(
+                "text.line_endings",
+                json!({"file": f.to_str().unwrap(), "to": "lf"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(std::fs::read(&out.artifacts[0].path).unwrap(), b"x\ny\n");
         assert_eq!(out.data["detected"], "CRLF");
     }
@@ -859,23 +1217,62 @@ mod tests {
         let out = h.run("text.replace", json!({"text": "cat Cat concat cat.", "find": "cat", "replace": "dog", "case_sensitive": false, "whole_word": true})).await.unwrap();
         assert_eq!(out.text.unwrap(), "dog dog concat dog.");
         assert_eq!(out.data["replacements"], 3);
-        assert_eq!(h.run("text.replace", json!({"text": "x", "find": ""})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("text.replace", json!({"text": "x", "find": ""}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
         let out = h.run("text.regex_replace", json!({"text": "john@example bob@test", "pattern": "(?P<u>\\w+)@(\\w+)", "replacement": "$2:${u}"})).await.unwrap();
         assert_eq!(out.text.unwrap(), "example:john test:bob");
         assert_eq!(out.data["matches"], 2);
-        assert_eq!(txt(&h, "text.regex_replace", json!({"text": "A a", "pattern": "a", "replacement": "b", "flags": ["i"]})).await, "b b");
-        assert_eq!(h.run("text.regex_replace", json!({"text": "x", "pattern": "(unclosed"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            txt(
+                &h,
+                "text.regex_replace",
+                json!({"text": "A a", "pattern": "a", "replacement": "b", "flags": ["i"]})
+            )
+            .await,
+            "b b"
+        );
+        assert_eq!(
+            h.run(
+                "text.regex_replace",
+                json!({"text": "x", "pattern": "(unclosed"})
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
     async fn diff() {
         let h = h();
-        let out = h.run("text.diff", json!({"original": "the quick fox\nline2\n", "changed": "the slow fox\nline2\n"})).await.unwrap();
+        let out = h
+            .run(
+                "text.diff",
+                json!({"original": "the quick fox\nline2\n", "changed": "the slow fox\nline2\n"}),
+            )
+            .await
+            .unwrap();
         let d = out.data["diff"].as_array().unwrap();
-        assert!(d.iter().any(|c| c["tag"] == "delete" && c["text"] == "quick"));
-        assert!(d.iter().any(|c| c["tag"] == "insert" && c["text"] == "slow"));
+        assert!(d
+            .iter()
+            .any(|c| c["tag"] == "delete" && c["text"] == "quick"));
+        assert!(d
+            .iter()
+            .any(|c| c["tag"] == "insert" && c["text"] == "slow"));
         assert!(out.text.unwrap().contains("-the quick fox"));
-        let out = h.run("text.diff", json!({"original": "same", "changed": "same", "granularity": "char"})).await.unwrap();
+        let out = h
+            .run(
+                "text.diff",
+                json!({"original": "same", "changed": "same", "granularity": "char"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["identical"], true);
     }
 
@@ -883,16 +1280,60 @@ mod tests {
     async fn escapes() {
         let h = h();
         let e = |f: &'static str, m: &'static str, t: &'static str| json!({"format": f, "mode": m, "text": t});
-        assert_eq!(txt(&h, "text.escape", e("json", "escape", "a\"b\n")).await, "a\\\"b\\n");
-        assert_eq!(txt(&h, "text.escape", e("json", "unescape", "a\\\"b\\n\\u00e9")).await, "a\"b\né");
-        assert_eq!(txt(&h, "text.escape", e("html", "escape", "<a href='x'>")).await, "&lt;a href=&#39;x&#39;&gt;");
-        assert_eq!(txt(&h, "text.escape", e("html", "unescape", "&lt;&eacute;&#x41;")).await, "<éA");
-        assert_eq!(txt(&h, "text.escape", e("shell", "escape", "it's")).await, "'it'\\''s'");
-        assert_eq!(txt(&h, "text.escape", e("sql", "escape", "O'Brien")).await, "O''Brien");
-        assert_eq!(txt(&h, "text.escape", e("url", "escape", "a b&c")).await, "a%20b%26c");
-        assert_eq!(txt(&h, "text.escape", e("regex", "escape", "a.b*")).await, "a\\.b\\*");
-        assert_eq!(txt(&h, "text.escape", e("csv", "escape", "a,b")).await, "\"a,b\"");
-        assert_eq!(h.run("text.escape", e("json", "unescape", "bad \\q")).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(h.run("text.escape", e("xml", "unescape", "&bogus;")).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            txt(&h, "text.escape", e("json", "escape", "a\"b\n")).await,
+            "a\\\"b\\n"
+        );
+        assert_eq!(
+            txt(&h, "text.escape", e("json", "unescape", "a\\\"b\\n\\u00e9")).await,
+            "a\"b\né"
+        );
+        assert_eq!(
+            txt(&h, "text.escape", e("html", "escape", "<a href='x'>")).await,
+            "&lt;a href=&#39;x&#39;&gt;"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "text.escape",
+                e("html", "unescape", "&lt;&eacute;&#x41;")
+            )
+            .await,
+            "<éA"
+        );
+        assert_eq!(
+            txt(&h, "text.escape", e("shell", "escape", "it's")).await,
+            "'it'\\''s'"
+        );
+        assert_eq!(
+            txt(&h, "text.escape", e("sql", "escape", "O'Brien")).await,
+            "O''Brien"
+        );
+        assert_eq!(
+            txt(&h, "text.escape", e("url", "escape", "a b&c")).await,
+            "a%20b%26c"
+        );
+        assert_eq!(
+            txt(&h, "text.escape", e("regex", "escape", "a.b*")).await,
+            "a\\.b\\*"
+        );
+        assert_eq!(
+            txt(&h, "text.escape", e("csv", "escape", "a,b")).await,
+            "\"a,b\""
+        );
+        assert_eq!(
+            h.run("text.escape", e("json", "unescape", "bad \\q"))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            h.run("text.escape", e("xml", "unescape", "&bogus;"))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 }

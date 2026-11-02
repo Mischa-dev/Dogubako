@@ -56,7 +56,13 @@ pub trait McpBackend: Send + Sync {
     /// "path" (local paths) or "id" (stored file ids).
     fn file_mode(&self) -> &'static str;
     /// Start a tool run; wait up to `wait` for completion.
-    async fn run_tool(&self, tool_id: &str, args: Map<String, Value>, progress: Option<ProgressFn>, wait: Duration) -> Result<JobView, ToolError>;
+    async fn run_tool(
+        &self,
+        tool_id: &str,
+        args: Map<String, Value>,
+        progress: Option<ProgressFn>,
+        wait: Duration,
+    ) -> Result<JobView, ToolError>;
     async fn job(&self, job_id: &str, wait: Duration) -> Result<JobView, ToolError>;
     async fn cancel_job(&self, job_id: &str) -> Result<JobView, ToolError>;
     async fn upload(&self, name: &str, bytes: Vec<u8>) -> Result<FileView, ToolError>;
@@ -102,8 +108,16 @@ const META_TOOLS: &[&str] = &[
 ];
 
 impl McpServer {
-    pub fn new(backend: Arc<dyn McpBackend>, mode: DiscoveryMode, instance_name: impl Into<String>) -> Self {
-        McpServer { backend, mode, instance_name: instance_name.into() }
+    pub fn new(
+        backend: Arc<dyn McpBackend>,
+        mode: DiscoveryMode,
+        instance_name: impl Into<String>,
+    ) -> Self {
+        McpServer {
+            backend,
+            mode,
+            instance_name: instance_name.into(),
+        }
     }
 
     /// Handle one parsed JSON-RPC message (request, notification or batch).
@@ -116,10 +130,17 @@ impl McpServer {
                     out.push(r);
                 }
             }
-            return if out.is_empty() { None } else { Some(Value::Array(out)) };
+            return if out.is_empty() {
+                None
+            } else {
+                Some(Value::Array(out))
+            };
         }
         let id = msg.get("id").cloned();
-        let method = msg.get("method").and_then(|m| m.as_str()).map(|s| s.to_string());
+        let method = msg
+            .get("method")
+            .and_then(|m| m.as_str())
+            .map(|s| s.to_string());
         let Some(method) = method else {
             // A response from the client (we never send requests) – ignore.
             return id.map(|id| rpc_error(&id, -32600, "invalid request: missing method"));
@@ -154,8 +175,15 @@ impl McpServer {
     }
 
     fn initialize(&self, params: &Value) -> Value {
-        let requested = params.get("protocolVersion").and_then(|v| v.as_str()).unwrap_or(LATEST_VERSION);
-        let version = if SUPPORTED_VERSIONS.contains(&requested) { requested } else { LATEST_VERSION };
+        let requested = params
+            .get("protocolVersion")
+            .and_then(|v| v.as_str())
+            .unwrap_or(LATEST_VERSION);
+        let version = if SUPPORTED_VERSIONS.contains(&requested) {
+            requested
+        } else {
+            LATEST_VERSION
+        };
         let n = self.backend.tools().len();
         let mode_hint = match self.mode {
             DiscoveryMode::Full => "All permitted tools are listed directly; meta-tools are also available.",
@@ -184,12 +212,16 @@ impl McpServer {
         let s = &info.spec;
         let mut desc = s.description.clone();
         if !info.availability.available {
-            desc = format!("{desc} [UNAVAILABLE on this host: {}]", info.availability.reason.clone().unwrap_or_default());
+            desc = format!(
+                "{desc} [UNAVAILABLE on this host: {}]",
+                info.availability.reason.clone().unwrap_or_default()
+            );
         }
         if s.output.kind == OutputKind::Files {
             desc.push_str(" Returns output files as resource links.");
         }
-        let read_only = s.permissions.iter().all(|p| *p != Permission::HostFsWrite) && !s.destructive;
+        let read_only =
+            s.permissions.iter().all(|p| *p != Permission::HostFsWrite) && !s.destructive;
         json!({
             "name": s.mcp_name(),
             "title": s.name,
@@ -296,7 +328,9 @@ impl McpServer {
             all.extend(infos.iter().map(|i| self.tool_entry(i)));
         }
         let start = match params.get("cursor").and_then(|c| c.as_str()) {
-            Some(c) => c.parse::<usize>().map_err(|_| (-32602, "invalid cursor".to_string()))?,
+            Some(c) => c
+                .parse::<usize>()
+                .map_err(|_| (-32602, "invalid cursor".to_string()))?,
             None => 0,
         };
         let end = (start + PAGE_SIZE).min(all.len());
@@ -310,16 +344,25 @@ impl McpServer {
 
     async fn tools_call(&self, params: &Value, notify: Option<Notifier>) -> Value {
         let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
-        let args = params.get("arguments").and_then(|a| a.as_object()).cloned().unwrap_or_default();
-        let progress_token = params.get("_meta").and_then(|m| m.get("progressToken")).cloned();
+        let args = params
+            .get("arguments")
+            .and_then(|a| a.as_object())
+            .cloned()
+            .unwrap_or_default();
+        let progress_token = params
+            .get("_meta")
+            .and_then(|m| m.get("progressToken"))
+            .cloned();
         let progress: Option<ProgressFn> = match (progress_token, notify) {
-            (Some(tok), Some(n)) => Some(Arc::new(move |ev: dogubako_core::tool::ProgressEvent| {
-                let mut p = json!({"progressToken": tok, "progress": ev.fraction.map(|f| (f * 100.0) as f64).unwrap_or(0.0), "total": 100.0});
-                if let Some(m) = ev.message {
-                    p["message"] = json!(m);
-                }
-                n(json!({"jsonrpc": "2.0", "method": "notifications/progress", "params": p}));
-            })),
+            (Some(tok), Some(n)) => {
+                Some(Arc::new(move |ev: dogubako_core::tool::ProgressEvent| {
+                    let mut p = json!({"progressToken": tok, "progress": ev.fraction.map(|f| (f * 100.0) as f64).unwrap_or(0.0), "total": 100.0});
+                    if let Some(m) = ev.message {
+                        p["message"] = json!(m);
+                    }
+                    n(json!({"jsonrpc": "2.0", "method": "notifications/progress", "params": p}));
+                }))
+            }
             _ => None,
         };
         match self.call_inner(name, args, progress).await {
@@ -328,13 +371,33 @@ impl McpServer {
         }
     }
 
-    async fn call_inner(&self, name: &str, args: Map<String, Value>, progress: Option<ProgressFn>) -> Result<Value, ToolError> {
-        let wait_arg = |a: &Map<String, Value>, d: u64| Duration::from_secs(a.get("wait_seconds").and_then(|w| w.as_u64()).unwrap_or(d).min(600));
+    async fn call_inner(
+        &self,
+        name: &str,
+        args: Map<String, Value>,
+        progress: Option<ProgressFn>,
+    ) -> Result<Value, ToolError> {
+        let wait_arg = |a: &Map<String, Value>, d: u64| {
+            Duration::from_secs(
+                a.get("wait_seconds")
+                    .and_then(|w| w.as_u64())
+                    .unwrap_or(d)
+                    .min(600),
+            )
+        };
         match name {
             "dogubako_search_tools" => {
-                let q = args.get("query").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+                let q = args
+                    .get("query")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_lowercase();
                 let cat = args.get("category").and_then(|v| v.as_str());
-                let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(25).clamp(1, 500) as usize;
+                let limit = args
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(25)
+                    .clamp(1, 500) as usize;
                 let tools = self.backend.tools();
                 let mut scored: Vec<(usize, &ToolInfo)> = vec![];
                 let terms: Vec<&str> = q.split_whitespace().collect();
@@ -344,10 +407,27 @@ impl McpServer {
                             continue;
                         }
                     }
-                    let hay = format!("{} {} {} {} {}", t.spec.id, t.spec.name, t.spec.description, t.spec.keywords.join(" "), t.spec.category.label()).to_lowercase();
+                    let hay = format!(
+                        "{} {} {} {} {}",
+                        t.spec.id,
+                        t.spec.name,
+                        t.spec.description,
+                        t.spec.keywords.join(" "),
+                        t.spec.category.label()
+                    )
+                    .to_lowercase();
                     if terms.iter().all(|term| hay.contains(term)) {
                         let name_l = t.spec.name.to_lowercase();
-                        let score = terms.iter().map(|term| if name_l.contains(term) || t.spec.id.contains(term) { 3 } else { 1 }).sum::<usize>();
+                        let score = terms
+                            .iter()
+                            .map(|term| {
+                                if name_l.contains(term) || t.spec.id.contains(term) {
+                                    3
+                                } else {
+                                    1
+                                }
+                            })
+                            .sum::<usize>();
                         scored.push((score, t));
                     }
                 }
@@ -369,11 +449,25 @@ impl McpServer {
                 } else {
                     results
                         .iter()
-                        .map(|r| format!("- {} — {}{}", r["id"].as_str().unwrap_or(""), r["description"].as_str().unwrap_or(""), if r["available"] == json!(false) { " (unavailable)" } else { "" }))
+                        .map(|r| {
+                            format!(
+                                "- {} — {}{}",
+                                r["id"].as_str().unwrap_or(""),
+                                r["description"].as_str().unwrap_or(""),
+                                if r["available"] == json!(false) {
+                                    " (unavailable)"
+                                } else {
+                                    ""
+                                }
+                            )
+                        })
                         .collect::<Vec<_>>()
                         .join("\n")
                 };
-                Ok(ok_result(text, json!({"tools": results, "total": scored.len()})))
+                Ok(ok_result(
+                    text,
+                    json!({"tools": results, "total": scored.len()}),
+                ))
             }
             "dogubako_describe_tool" => {
                 let id = args.get("tool").and_then(|v| v.as_str()).unwrap_or("");
@@ -387,13 +481,27 @@ impl McpServer {
                     "permissions": s.permissions, "timeout_secs": s.timeout_secs, "destructive": s.destructive,
                     "platforms": s.platforms, "availability": info.availability, "permitted": true,
                 });
-                Ok(ok_result(serde_json::to_string_pretty(&v).unwrap_or_default(), v))
+                Ok(ok_result(
+                    serde_json::to_string_pretty(&v).unwrap_or_default(),
+                    v,
+                ))
             }
             "dogubako_run_tool" => {
-                let id = args.get("tool").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let tool_args = args.get("arguments").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+                let id = args
+                    .get("tool")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let tool_args = args
+                    .get("arguments")
+                    .and_then(|v| v.as_object())
+                    .cloned()
+                    .unwrap_or_default();
                 let info = self.find(&id)?;
-                let job = self.backend.run_tool(&info.spec.id, tool_args, progress, wait_arg(&args, 60)).await?;
+                let job = self
+                    .backend
+                    .run_tool(&info.spec.id, tool_args, progress, wait_arg(&args, 60))
+                    .await?;
                 Ok(job_result(&job))
             }
             "dogubako_job_status" => {
@@ -416,27 +524,58 @@ impl McpServer {
                     })
                     .filter(|v| v["tools"].as_u64().unwrap_or(0) > 0)
                     .collect();
-                let text = cats.iter().map(|c| format!("- {} ({} tools): {}", c["id"].as_str().unwrap_or(""), c["tools"], c["description"].as_str().unwrap_or(""))).collect::<Vec<_>>().join("\n");
+                let text = cats
+                    .iter()
+                    .map(|c| {
+                        format!(
+                            "- {} ({} tools): {}",
+                            c["id"].as_str().unwrap_or(""),
+                            c["tools"],
+                            c["description"].as_str().unwrap_or("")
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 Ok(ok_result(text, json!({"categories": cats})))
             }
             "dogubako_upload_file" => {
-                let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("upload.bin");
-                let b64 = args.get("content_base64").and_then(|v| v.as_str()).unwrap_or("");
+                let name = args
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("upload.bin");
+                let b64 = args
+                    .get("content_base64")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if (b64.len() as u64) * 3 / 4 > self.backend.max_upload() {
-                    return Err(ToolError::limit("file exceeds the MCP upload limit; use the HTTP upload endpoint"));
+                    return Err(ToolError::limit(
+                        "file exceeds the MCP upload limit; use the HTTP upload endpoint",
+                    ));
                 }
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(b64.trim())
-                    .map_err(|e| ToolError::invalid("content_base64", format!("invalid base64: {e}")))?;
+                    .map_err(|e| {
+                        ToolError::invalid("content_base64", format!("invalid base64: {e}"))
+                    })?;
                 let f = self.backend.upload(name, bytes).await?;
-                Ok(ok_result(format!("Uploaded '{}' as {} ({} bytes). Use this id for file parameters.", f.name, f.id, f.size), serde_json::to_value(&f)?))
+                Ok(ok_result(
+                    format!(
+                        "Uploaded '{}' as {} ({} bytes). Use this id for file parameters.",
+                        f.name, f.id, f.size
+                    ),
+                    serde_json::to_value(&f)?,
+                ))
             }
             "dogubako_list_files" => {
                 let files = self.backend.list_files().await?;
                 let text = if files.is_empty() {
                     "No files.".into()
                 } else {
-                    files.iter().map(|f| format!("- {} {} ({} bytes, {})", f.id, f.name, f.size, f.mime)).collect::<Vec<_>>().join("\n")
+                    files
+                        .iter()
+                        .map(|f| format!("- {} {} ({} bytes, {})", f.id, f.name, f.size, f.mime))
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 };
                 Ok(ok_result(text, json!({"files": files})))
             }
@@ -444,7 +583,10 @@ impl McpServer {
                 // Direct invocation by MCP name. Works in compact mode too:
                 // listing is about context size, not authorization.
                 let info = self.find(other)?;
-                let job = self.backend.run_tool(&info.spec.id, args, progress, self.backend.default_wait()).await?;
+                let job = self
+                    .backend
+                    .run_tool(&info.spec.id, args, progress, self.backend.default_wait())
+                    .await?;
                 Ok(job_result(&job))
             }
         }
@@ -455,11 +597,17 @@ impl McpServer {
             .tools()
             .into_iter()
             .find(|t| t.spec.id == name || t.spec.mcp_name() == name)
-            .ok_or_else(|| ToolError::NotFound { id: format!("{name} (unknown or not permitted)") })
+            .ok_or_else(|| ToolError::NotFound {
+                id: format!("{name} (unknown or not permitted)"),
+            })
     }
 
     async fn resources_list(&self) -> Result<Value, (i64, String)> {
-        let files = self.backend.list_files().await.map_err(|e| (-32603, e.to_string()))?;
+        let files = self
+            .backend
+            .list_files()
+            .await
+            .map_err(|e| (-32603, e.to_string()))?;
         let res: Vec<Value> = files
             .iter()
             .take(500)
@@ -470,12 +618,29 @@ impl McpServer {
 
     async fn resources_read(&self, params: &Value) -> Result<Value, (i64, String)> {
         let uri = params.get("uri").and_then(|u| u.as_str()).unwrap_or("");
-        let id = uri.strip_prefix("dogubako://files/").ok_or((-32602, format!("unknown resource uri: {uri}")))?;
-        let (f, bytes) = self.backend.read_file(id).await.map_err(|e| (-32002, e.to_string()))?;
+        let id = uri
+            .strip_prefix("dogubako://files/")
+            .ok_or((-32602, format!("unknown resource uri: {uri}")))?;
+        let (f, bytes) = self
+            .backend
+            .read_file(id)
+            .await
+            .map_err(|e| (-32002, e.to_string()))?;
         if bytes.len() as u64 > MAX_INLINE_RESOURCE {
-            return Err((-32603, format!("resource too large for inline transfer ({} bytes); download it from {}", bytes.len(), f.url.clone().unwrap_or_default())));
+            return Err((
+                -32603,
+                format!(
+                    "resource too large for inline transfer ({} bytes); download it from {}",
+                    bytes.len(),
+                    f.url.clone().unwrap_or_default()
+                ),
+            ));
         }
-        let is_text = f.mime.starts_with("text/") || matches!(f.mime.as_str(), "application/json" | "application/xml" | "image/svg+xml" | "application/x-subrip");
+        let is_text = f.mime.starts_with("text/")
+            || matches!(
+                f.mime.as_str(),
+                "application/json" | "application/xml" | "image/svg+xml" | "application/x-subrip"
+            );
         let content = if is_text {
             json!({"uri": uri, "mimeType": f.mime, "text": String::from_utf8_lossy(&bytes)})
         } else {
@@ -505,7 +670,19 @@ pub fn job_result(job: &JobView) -> Value {
             let mut content = vec![];
             let mut summary = String::new();
             if let Some(t) = &r.text {
-                let shown: String = if t.len() > 200_000 { format!("{}… [truncated, {} bytes total]", &t[..t.char_indices().nth(200_000).map(|(i, _)| i).unwrap_or(t.len())], t.len()) } else { t.clone() };
+                let shown: String = if t.len() > 200_000 {
+                    format!(
+                        "{}… [truncated, {} bytes total]",
+                        &t[..t
+                            .char_indices()
+                            .nth(200_000)
+                            .map(|(i, _)| i)
+                            .unwrap_or(t.len())],
+                        t.len()
+                    )
+                } else {
+                    t.clone()
+                };
                 summary.push_str(&shown);
             } else if !r.data.is_null() && r.data != json!({}) {
                 summary.push_str(&serde_json::to_string_pretty(&r.data).unwrap_or_default());
@@ -521,8 +698,14 @@ pub fn job_result(job: &JobView) -> Value {
                         a.name,
                         a.mime,
                         a.size,
-                        a.id.as_ref().map(|i| format!(" id={i}")).unwrap_or_default(),
-                        a.path.as_ref().map(|p| format!(" path={p}")).or_else(|| a.url.as_ref().map(|u| format!(" url={u}"))).unwrap_or_default()
+                        a.id.as_ref()
+                            .map(|i| format!(" id={i}"))
+                            .unwrap_or_default(),
+                        a.path
+                            .as_ref()
+                            .map(|p| format!(" path={p}"))
+                            .or_else(|| a.url.as_ref().map(|u| format!(" url={u}")))
+                            .unwrap_or_default()
                     ));
                 }
             }
@@ -547,7 +730,10 @@ pub fn job_result(job: &JobView) -> Value {
             v
         }
         JobStatus::Queued | JobStatus::Running => {
-            let pct = job.progress.map(|p| format!(" ({:.0}%)", p * 100.0)).unwrap_or_default();
+            let pct = job
+                .progress
+                .map(|p| format!(" ({:.0}%)", p * 100.0))
+                .unwrap_or_default();
             json!({
                 "content": [{"type": "text", "text": format!("Job {} is {}{pct}. Call dogubako_job_status with job_id=\"{}\" (optionally wait_seconds) to get the result.", job.id, job.status.as_str(), job.id)}],
                 "structuredContent": {"job_id": job.id, "status": job.status.as_str(), "progress": job.progress, "message": job.message},

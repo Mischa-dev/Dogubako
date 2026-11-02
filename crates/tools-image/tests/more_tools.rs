@@ -617,11 +617,22 @@ async fn face_detection_with_model() {
     assert_eq!(img.get_pixel(5, 5).0, [0, 0, 0]);
     assert!(!out.data["regions"].as_array().unwrap().is_empty());
     // Optional real photo (e.g. rustface's assets/test/scientists.jpg) to check actual detection.
-    if let Some(photo) = std::env::var_os("DOGUBAKO_TEST_FACE_IMAGE").filter(|p| std::path::Path::new(p).is_file()) {
+    if let Some(photo) =
+        std::env::var_os("DOGUBAKO_TEST_FACE_IMAGE").filter(|p| std::path::Path::new(p).is_file())
+    {
         let photo = std::path::PathBuf::from(photo);
-        let out = h.run("image.face_detect", json!({"input": s(&photo)})).await.unwrap();
+        let out = h
+            .run("image.face_detect", json!({"input": s(&photo)}))
+            .await
+            .unwrap();
         assert!(out.data["faces"].as_u64().unwrap() > 0, "{}", out.data);
-        let out = h.run("image.face_blur", json!({"input": [s(&photo)], "mode": "pixelate"})).await.unwrap();
+        let out = h
+            .run(
+                "image.face_blur",
+                json!({"input": [s(&photo)], "mode": "pixelate"}),
+            )
+            .await
+            .unwrap();
         assert!(out.data["faces"].as_u64().unwrap() > 0);
     }
 }

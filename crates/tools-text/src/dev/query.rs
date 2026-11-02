@@ -24,8 +24,20 @@ fn input_doc(p: &Params) -> ToolResult<Value> {
 fn doc_params(label: &str) -> Vec<ParamSpec> {
     vec![
         ParamSpec::textarea("text").label(label).syntax("json"),
-        ParamSpec::file("file").label("Or upload a file").accept(&[".json", ".yaml", ".yml", ".toml", "application/json"]),
-        ParamSpec::choice("format", &[("json", "JSON"), ("yaml", "YAML"), ("toml", "TOML")]).label("Input format").default_str("json").advanced(),
+        ParamSpec::file("file").label("Or upload a file").accept(&[
+            ".json",
+            ".yaml",
+            ".yml",
+            ".toml",
+            "application/json",
+        ]),
+        ParamSpec::choice(
+            "format",
+            &[("json", "JSON"), ("yaml", "YAML"), ("toml", "TOML")],
+        )
+        .label("Input format")
+        .default_str("json")
+        .advanced(),
     ]
 }
 
@@ -43,12 +55,19 @@ fn jsonpath() -> Arc<dyn Tool> {
     sync_tool(spec, |_ctx, p| {
         let doc = input_doc(p)?;
         let q = p.str("query")?;
-        let path = serde_json_path::JsonPath::parse(q).map_err(|e| ToolError::invalid("query", e.to_string()))?;
+        let path = serde_json_path::JsonPath::parse(q)
+            .map_err(|e| ToolError::invalid("query", e.to_string()))?;
         let located = path.query_located(&doc);
-        let nodes: Vec<(String, Value)> = located.into_iter().map(|n| (n.location().to_string(), n.node().clone())).collect();
+        let nodes: Vec<(String, Value)> = located
+            .into_iter()
+            .map(|n| (n.location().to_string(), n.node().clone()))
+            .collect();
         let values: Vec<Value> = nodes.iter().map(|(_, v)| v.clone()).collect();
         let paths: Vec<Value> = nodes.iter().map(|(l, _)| json!(l)).collect();
-        Ok(ToolOutput::text_as(serde_json::to_string_pretty(&values)?, "application/json").with_data(json!({"count": values.len(), "paths": paths})))
+        Ok(
+            ToolOutput::text_as(serde_json::to_string_pretty(&values)?, "application/json")
+                .with_data(json!({"count": values.len(), "paths": paths})),
+        )
     })
 }
 
@@ -59,19 +78,47 @@ pub(crate) fn run_jq(program: &str, input: &Value, max_out: usize) -> ToolResult
     use jaq_core::load::{Arena, File, Loader};
     use jaq_core::{data, unwrap_valr, Compiler, Ctx, Vars};
     let input_s = serde_json::to_string(input)?;
-    let input = jaq_json::read::parse_single(input_s.as_bytes()).map_err(|e| ToolError::failed(format!("reading input: {e:?}")))?;
-    let defs = jaq_core::defs().chain(jaq_std::defs()).chain(jaq_json::defs());
+    let input = jaq_json::read::parse_single(input_s.as_bytes())
+        .map_err(|e| ToolError::failed(format!("reading input: {e:?}")))?;
+    let defs = jaq_core::defs()
+        .chain(jaq_std::defs())
+        .chain(jaq_json::defs());
     // `env` would expose the host process environment; never offer it.
-    let funs = jaq_core::funs().chain(jaq_std::funs()).chain(jaq_json::funs()).filter(|f| !matches!(f.0, "env" | "input" | "inputs"));
+    let funs = jaq_core::funs()
+        .chain(jaq_std::funs())
+        .chain(jaq_json::funs())
+        .filter(|f| !matches!(f.0, "env" | "input" | "inputs"));
     let loader = Loader::new(defs);
     let arena = Arena::default();
     let modules = loader
-        .load(&arena, File { code: program, path: () })
-        .map_err(|errs| ToolError::invalid("filter", errs.iter().map(|(_, e)| format!("{e:?}")).collect::<Vec<_>>().join("; ")))?;
+        .load(
+            &arena,
+            File {
+                code: program,
+                path: (),
+            },
+        )
+        .map_err(|errs| {
+            ToolError::invalid(
+                "filter",
+                errs.iter()
+                    .map(|(_, e)| format!("{e:?}"))
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            )
+        })?;
     let filter = Compiler::default()
         .with_funs(funs)
         .compile(modules)
-        .map_err(|errs| ToolError::invalid("filter", errs.iter().map(|(_, e)| format!("{e:?}")).collect::<Vec<_>>().join("; ")))?;
+        .map_err(|errs| {
+            ToolError::invalid(
+                "filter",
+                errs.iter()
+                    .map(|(_, e)| format!("{e:?}"))
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            )
+        })?;
     let ctx = Ctx::<data::JustLut<jaq_json::Val>>::new(&filter.lut, Vars::new([]));
     let mut out = vec![];
     for r in filter.id.run((ctx, input)).map(unwrap_valr) {
@@ -110,8 +157,13 @@ fn jq() -> Arc<dyn Tool> {
                 _ => serde_json::to_string_pretty(v).unwrap_or_default(),
             })
             .collect();
-        let mime = if raw { "text/plain" } else { "application/json" };
-        let mut out = ToolOutput::text_as(lines.join("\n"), mime).with_data(json!({"results": results.len()}));
+        let mime = if raw {
+            "text/plain"
+        } else {
+            "application/json"
+        };
+        let mut out = ToolOutput::text_as(lines.join("\n"), mime)
+            .with_data(json!({"results": results.len()}));
         if results.len() >= max {
             out = out.warn(format!("Output limited to {max} results"));
         }
@@ -127,17 +179,28 @@ pub(crate) fn schema_validate(schema: &Value, instance: &Value) -> ToolResult<To
         Value::String(s) => parse_json(s, "schema")?,
         v => v.clone(),
     };
-    let validator = jsonschema::validator_for(&schema).map_err(|e| ToolError::invalid("schema", format!("invalid schema: {e}")))?;
+    let validator = jsonschema::validator_for(&schema)
+        .map_err(|e| ToolError::invalid("schema", format!("invalid schema: {e}")))?;
     let mut rows = vec![];
     let mut total = 0usize;
     for e in validator.iter_errors(instance) {
         total += 1;
         if rows.len() < 1000 {
             let path = e.instance_path().to_string();
-            rows.push(vec![json!(if path.is_empty() { "/".to_string() } else { path }), json!(e.to_string()), json!(e.schema_path().to_string())]);
+            rows.push(vec![
+                json!(if path.is_empty() {
+                    "/".to_string()
+                } else {
+                    path
+                }),
+                json!(e.to_string()),
+                json!(e.schema_path().to_string()),
+            ]);
         }
     }
-    let mut out = ToolOutput::data(json!({"valid": total == 0, "errors": total, "table": table(&["instance path", "error", "schema path"], rows)}));
+    let mut out = ToolOutput::data(
+        json!({"valid": total == 0, "errors": total, "table": table(&["instance path", "error", "schema path"], rows)}),
+    );
     if total > 1000 {
         out = out.warn(format!("Showing the first 1000 of {total} errors"));
     }
@@ -166,7 +229,13 @@ fn ptr_escape(k: &str) -> String {
     k.replace('~', "~0").replace('/', "~1")
 }
 
-fn diff_values(path: &str, a: &Value, b: &Value, array_by_index: bool, out: &mut Vec<(String, &'static str, Value, Value)>) {
+fn diff_values(
+    path: &str,
+    a: &Value,
+    b: &Value,
+    array_by_index: bool,
+    out: &mut Vec<(String, &'static str, Value, Value)>,
+) {
     match (a, b) {
         (Value::Object(x), Value::Object(y)) => {
             for (k, va) in x {
@@ -178,7 +247,12 @@ fn diff_values(path: &str, a: &Value, b: &Value, array_by_index: bool, out: &mut
             }
             for (k, vb) in y {
                 if !x.contains_key(k) {
-                    out.push((format!("{path}/{}", ptr_escape(k)), "added", Value::Null, vb.clone()));
+                    out.push((
+                        format!("{path}/{}", ptr_escape(k)),
+                        "added",
+                        Value::Null,
+                        vb.clone(),
+                    ));
                 }
             }
         }
@@ -208,7 +282,16 @@ fn diff_values(path: &str, a: &Value, b: &Value, array_by_index: bool, out: &mut
             }
         }
         _ if a == b => {}
-        _ => out.push((if path.is_empty() { "/".into() } else { path.to_string() }, "changed", a.clone(), b.clone())),
+        _ => out.push((
+            if path.is_empty() {
+                "/".into()
+            } else {
+                path.to_string()
+            },
+            "changed",
+            a.clone(),
+            b.clone(),
+        )),
     }
 }
 
@@ -243,8 +326,18 @@ fn diff_json() -> Arc<dyn Tool> {
         diff_values("", &a, &b, !p.bool("ignore_array_order"), &mut diffs);
         let count = |k: &str| diffs.iter().filter(|d| d.1 == k).count();
         let (added, removed, changed) = (count("added"), count("removed"), count("changed"));
-        let show = |v: &Value| if v.is_null() { Value::Null } else { json!(serde_json::to_string(v).unwrap_or_default()) };
-        let rows: Vec<Vec<Value>> = diffs.iter().take(5000).map(|(path, kind, x, y)| vec![json!(path), json!(kind), show(x), show(y)]).collect();
+        let show = |v: &Value| {
+            if v.is_null() {
+                Value::Null
+            } else {
+                json!(serde_json::to_string(v).unwrap_or_default())
+            }
+        };
+        let rows: Vec<Vec<Value>> = diffs
+            .iter()
+            .take(5000)
+            .map(|(path, kind, x, y)| vec![json!(path), json!(kind), show(x), show(y)])
+            .collect();
         Ok(ToolOutput::data(json!({
             "identical": diffs.is_empty(),
             "added": added,
@@ -265,41 +358,122 @@ mod tests {
     #[tokio::test]
     async fn jsonpath_and_jq() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("dev.jsonpath", json!({"query": "$.store.book[?@.price < 10].title", "text": STORE})).await.unwrap();
+        let out = h
+            .run(
+                "dev.jsonpath",
+                json!({"query": "$.store.book[?@.price < 10].title", "text": STORE}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "[\n  \"A\"\n]");
         assert_eq!(out.data["paths"][0], "$['store']['book'][0]['title']");
-        let out = h.run("dev.jsonpath", json!({"query": "$.a", "text": "a: 1\n", "format": "yaml"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.jsonpath",
+                json!({"query": "$.a", "text": "a: 1\n", "format": "yaml"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["count"], 1);
-        assert_eq!(h.run("dev.jsonpath", json!({"query": "$[", "text": "{}"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.jsonpath", json!({"query": "$[", "text": "{}"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
         let out = h.run("dev.jq", json!({"filter": "[.store.book[] | select(.price > 10) | .title]", "text": STORE, "compact": true})).await.unwrap();
         assert_eq!(out.text.unwrap(), "[\"B\"]");
-        let out = h.run("dev.jq", json!({"filter": ".store.book | map(.price) | add", "text": STORE})).await.unwrap();
+        let out = h
+            .run(
+                "dev.jq",
+                json!({"filter": ".store.book | map(.price) | add", "text": STORE}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "20");
-        let out = h.run("dev.jq", json!({"filter": ".store.book[].title", "text": STORE, "raw": true})).await.unwrap();
+        let out = h
+            .run(
+                "dev.jq",
+                json!({"filter": ".store.book[].title", "text": STORE, "raw": true}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.text.unwrap(), "A\nB");
-        assert_eq!(h.run("dev.jq", json!({"filter": "env", "text": "{}"})).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(h.run("dev.jq", json!({"filter": ".[", "text": "{}"})).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(h.run("dev.jq", json!({"filter": "error(\"boom\")", "text": "{}"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.jq", json!({"filter": "env", "text": "{}"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            h.run("dev.jq", json!({"filter": ".[", "text": "{}"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            h.run("dev.jq", json!({"filter": "error(\"boom\")", "text": "{}"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
     async fn schema_and_diff() {
         let h = TestHarness::new(crate::tools());
         let schema = r#"{"type":"object","required":["name"],"properties":{"age":{"type":"integer","minimum":0}}}"#;
-        let out = h.run("dev.json_schema_validate", json!({"schema": schema, "text": "{\"age\": -1}"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.json_schema_validate",
+                json!({"schema": schema, "text": "{\"age\": -1}"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["valid"], false);
         assert_eq!(out.data["errors"], 2);
-        let out = h.run("dev.json_schema_validate", json!({"schema": schema, "text": "{\"name\": \"x\", \"age\": 3}"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.json_schema_validate",
+                json!({"schema": schema, "text": "{\"name\": \"x\", \"age\": 3}"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["valid"], true);
-        assert_eq!(h.run("dev.json_schema_validate", json!({"schema": "{\"type\": 5}", "text": "{}"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run(
+                "dev.json_schema_validate",
+                json!({"schema": "{\"type\": 5}", "text": "{}"})
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            "invalid_input"
+        );
         let out = h.run("dev.diff_json", json!({"original": "{\"a\":1,\"b\":[1,2],\"c\":{\"d\":true}}", "changed": "{\"a\":2,\"b\":[1,2,3],\"c\":{}}"})).await.unwrap();
         assert_eq!(out.data["changed"], 1);
         assert_eq!(out.data["added"], 1);
         assert_eq!(out.data["removed"], 1);
         assert_eq!(out.data["table"]["rows"][0][0], "/a");
-        let out = h.run("dev.diff_json", json!({"original": "[1,2]", "changed": "[2,1]", "ignore_array_order": true})).await.unwrap();
+        let out = h
+            .run(
+                "dev.diff_json",
+                json!({"original": "[1,2]", "changed": "[2,1]", "ignore_array_order": true}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["identical"], true);
-        let out = h.run("dev.diff_json", json!({"original": "a: 1", "changed": "{\"a\": 1}"})).await.unwrap();
+        let out = h
+            .run(
+                "dev.diff_json",
+                json!({"original": "a: 1", "changed": "{\"a\": 1}"}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["identical"], true);
     }
 }

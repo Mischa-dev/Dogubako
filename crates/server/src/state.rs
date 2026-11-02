@@ -51,9 +51,20 @@ impl AppState {
     }
 
     /// Build with an explicit registry (used by tests and embedders).
-    pub fn build_with(cfg: ServerConfig, registry: dogubako_core::registry::Registry, extensions: Vec<ExtensionStatus>) -> Result<AppState, crate::config::anyhow_lite::Error> {
+    pub fn build_with(
+        cfg: ServerConfig,
+        registry: dogubako_core::registry::Registry,
+        extensions: Vec<ExtensionStatus>,
+    ) -> Result<AppState, crate::config::anyhow_lite::Error> {
         cfg.validate()?;
-        for d in [cfg.data_dir.clone(), cfg.files_dir(), cfg.jobs_dir(), cfg.tmp_dir(), cfg.models_dir(), cfg.extensions_dir()] {
+        for d in [
+            cfg.data_dir.clone(),
+            cfg.files_dir(),
+            cfg.jobs_dir(),
+            cfg.tmp_dir(),
+            cfg.models_dir(),
+            cfg.extensions_dir(),
+        ] {
             std::fs::create_dir_all(&d)?;
         }
         #[cfg(unix)]
@@ -79,14 +90,30 @@ impl AppState {
         limits.sandbox = cfg.sandbox;
         let engine_cfg = EngineConfig {
             limits,
-            fs: if cfg.fs_roots.is_empty() { FsPolicy::deny_all() } else { FsPolicy::roots(cfg.fs_roots.clone()) },
-            net: if cfg.allow_private_network { NetPolicy::default() } else { NetPolicy::public_only() },
+            fs: if cfg.fs_roots.is_empty() {
+                FsPolicy::deny_all()
+            } else {
+                FsPolicy::roots(cfg.fs_roots.clone())
+            },
+            net: if cfg.allow_private_network {
+                NetPolicy::default()
+            } else {
+                NetPolicy::public_only()
+            },
             temp_root: cfg.tmp_dir(),
             models_dir: cfg.models_dir(),
             env: Environment::Server,
         };
-        let engine = Arc::new(Engine::new(registry, engine_cfg, vec![cfg.data_dir.join("bin")]));
-        let storage = Arc::new(Storage::new(cfg.files_dir(), db.clone(), cfg.file_retention_hours)?);
+        let engine = Arc::new(Engine::new(
+            registry,
+            engine_cfg,
+            vec![cfg.data_dir.join("bin")],
+        ));
+        let storage = Arc::new(Storage::new(
+            cfg.files_dir(),
+            db.clone(),
+            cfg.file_retention_hours,
+        )?);
         let jobs = Arc::new(JobManager::new(
             db.clone(),
             engine.clone(),
@@ -98,10 +125,21 @@ impl AppState {
             Duration::from_secs(cfg.max_job_seconds),
         ));
         if cfg.auth == AuthMode::None && db.user(LOCAL_USER_ID).is_none() {
-            db.create_user(LOCAL_USER_ID, "local", None, Role::Owner, &Policy::for_role(Role::Owner), "Implicit user (authentication disabled)")?;
+            db.create_user(
+                LOCAL_USER_ID,
+                "local",
+                None,
+                Role::Owner,
+                &Policy::for_role(Role::Owner),
+                "Implicit user (authentication disabled)",
+            )?;
         }
         let setup_token = if cfg.auth == AuthMode::Required && db.user_count() == 0 {
-            Some(cfg.setup_token.clone().unwrap_or_else(|| crate::auth::random_token(16)))
+            Some(
+                cfg.setup_token
+                    .clone()
+                    .unwrap_or_else(|| crate::auth::random_token(16)),
+            )
         } else {
             None
         };

@@ -226,7 +226,9 @@ pub enum ParamKind {
         multiple: bool,
     },
     /// A path on the host filesystem (requires host_fs permission).
-    Path { kind: PathKind },
+    Path {
+        kind: PathKind,
+    },
     /// Arbitrary JSON value (e.g. list of regions), optionally with a schema.
     Json {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -289,20 +291,49 @@ impl ParamSpec {
         }
     }
     pub fn text(name: &str) -> Self {
-        Self::new(name, ParamKind::Text { multiline: false, max_len: None, syntax: None, placeholder: None })
+        Self::new(
+            name,
+            ParamKind::Text {
+                multiline: false,
+                max_len: None,
+                syntax: None,
+                placeholder: None,
+            },
+        )
     }
     /// Multi-line text input (the common "paste your text here" field).
     pub fn textarea(name: &str) -> Self {
-        Self::new(name, ParamKind::Text { multiline: true, max_len: None, syntax: None, placeholder: None })
+        Self::new(
+            name,
+            ParamKind::Text {
+                multiline: true,
+                max_len: None,
+                syntax: None,
+                placeholder: None,
+            },
+        )
     }
     pub fn secret(name: &str) -> Self {
         Self::new(name, ParamKind::Secret)
     }
     pub fn integer(name: &str) -> Self {
-        Self::new(name, ParamKind::Integer { min: None, max: None })
+        Self::new(
+            name,
+            ParamKind::Integer {
+                min: None,
+                max: None,
+            },
+        )
     }
     pub fn number(name: &str) -> Self {
-        Self::new(name, ParamKind::Number { min: None, max: None, step: None })
+        Self::new(
+            name,
+            ParamKind::Number {
+                min: None,
+                max: None,
+                step: None,
+            },
+        )
     }
     pub fn boolean(name: &str) -> Self {
         Self::new(name, ParamKind::Boolean).default_value(Value::Bool(false))
@@ -314,7 +345,10 @@ impl ParamSpec {
             ParamKind::Enum {
                 options: options
                     .iter()
-                    .map(|(v, l)| EnumOption { value: v.to_string(), label: l.to_string() })
+                    .map(|(v, l)| EnumOption {
+                        value: v.to_string(),
+                        label: l.to_string(),
+                    })
                     .collect(),
                 multi: false,
             },
@@ -336,10 +370,22 @@ impl ParamSpec {
         Self::new(name, ParamKind::Color)
     }
     pub fn file(name: &str) -> Self {
-        Self::new(name, ParamKind::File { accept: vec![], multiple: false })
+        Self::new(
+            name,
+            ParamKind::File {
+                accept: vec![],
+                multiple: false,
+            },
+        )
     }
     pub fn files(name: &str) -> Self {
-        Self::new(name, ParamKind::File { accept: vec![], multiple: true })
+        Self::new(
+            name,
+            ParamKind::File {
+                accept: vec![],
+                multiple: true,
+            },
+        )
     }
     pub fn path(name: &str, kind: PathKind) -> Self {
         Self::new(name, ParamKind::Path { kind })
@@ -447,12 +493,18 @@ impl ParamSpec {
     pub fn show_if(mut self, param: &str, values: &[&str]) -> Self {
         self.show_if = Some(ShowIf {
             param: param.to_string(),
-            values: values.iter().map(|v| Value::String(v.to_string())).collect(),
+            values: values
+                .iter()
+                .map(|v| Value::String(v.to_string()))
+                .collect(),
         });
         self
     }
     pub fn show_if_bool(mut self, param: &str, value: bool) -> Self {
-        self.show_if = Some(ShowIf { param: param.to_string(), values: vec![Value::Bool(value)] });
+        self.show_if = Some(ShowIf {
+            param: param.to_string(),
+            values: vec![Value::Bool(value)],
+        });
         self
     }
 
@@ -491,7 +543,12 @@ pub struct OutputSpec {
 
 impl Default for OutputSpec {
     fn default() -> Self {
-        OutputSpec { kind: OutputKind::Data, description: String::new(), text_mime: None, data_schema: None }
+        OutputSpec {
+            kind: OutputKind::Data,
+            description: String::new(),
+            text_mime: None,
+            data_schema: None,
+        }
     }
 }
 

@@ -42,7 +42,17 @@ pub fn new_job_id() -> String {
 }
 
 impl JobManager {
-    pub fn new(db: Arc<Db>, engine: Arc<Engine>, storage: Arc<Storage>, jobs_dir: PathBuf, max_concurrent: usize, per_user: usize, host_fs_enabled: bool, max_job: Duration) -> Self {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        db: Arc<Db>,
+        engine: Arc<Engine>,
+        storage: Arc<Storage>,
+        jobs_dir: PathBuf,
+        max_concurrent: usize,
+        per_user: usize,
+        host_fs_enabled: bool,
+        max_job: Duration,
+    ) -> Self {
         let _ = std::fs::create_dir_all(&jobs_dir);
         JobManager {
             db,
@@ -65,7 +75,9 @@ impl JobManager {
     fn user_sem(&self, p: &Principal) -> Arc<Semaphore> {
         let n = p.concurrency(self.per_user_default);
         let mut m = self.user_sems.lock().unwrap();
-        m.entry(format!("{}:{n}", p.user_id)).or_insert_with(|| Arc::new(Semaphore::new(n))).clone()
+        m.entry(format!("{}:{n}", p.user_id))
+            .or_insert_with(|| Arc::new(Semaphore::new(n)))
+            .clone()
     }
 
     pub fn running_count(&self) -> usize {
@@ -73,15 +85,38 @@ impl JobManager {
     }
 
     /// Validate and enqueue a job; returns immediately with the queued view.
-    pub fn submit(self: &Arc<Self>, principal: &Principal, tool_id: &str, params: Map<String, Value>, via: &str, quota_default_mb: u64) -> ApiResult<JobView> {
-        let tool = self.engine.registry.find(tool_id).ok_or_else(|| ApiError::not_found(format!("unknown tool '{tool_id}'")))?;
+    pub fn submit(
+        self: &Arc<Self>,
+        principal: &Principal,
+        tool_id: &str,
+        params: Map<String, Value>,
+        via: &str,
+        quota_default_mb: u64,
+    ) -> ApiResult<JobView> {
+        let tool = self
+            .engine
+            .registry
+            .find(tool_id)
+            .ok_or_else(|| ApiError::not_found(format!("unknown tool '{tool_id}'")))?;
         let spec = tool.spec().clone();
         if !principal.can_use(&spec) {
-            self.db.audit(&principal.username, "tool.denied", &spec.id, "denied", "", via);
-            return Err(ApiError::forbidden(format!("you are not permitted to use '{}'", spec.id)));
+            self.db.audit(
+                &principal.username,
+                "tool.denied",
+                &spec.id,
+                "denied",
+                "",
+                via,
+            );
+            return Err(ApiError::forbidden(format!(
+                "you are not permitted to use '{}'",
+                spec.id
+            )));
         }
         if self.db.storage_used(&principal.user_id) >= principal.quota_bytes(quota_default_mb) {
-            return Err(ApiError::too_large("storage quota exceeded; delete some files first"));
+            return Err(ApiError::too_large(
+                "storage quota exceeded; delete some files first",
+            ));
         }
         // Redact secrets before persisting parameters.
         let mut stored = params.clone();
@@ -106,7 +141,14 @@ impl JobManager {
         self.db.insert_job(&view, &principal.user_id, via)?;
         let (tx, _rx) = watch::channel(view.clone());
         let cancel = CancellationToken::new();
-        self.live.lock().unwrap().insert(view.id.clone(), Live { tx: tx.clone(), cancel: cancel.clone(), owner: principal.user_id.clone() });
+        self.live.lock().unwrap().insert(
+            view.id.clone(),
+            Live {
+                tx: tx.clone(),
+                cancel: cancel.clone(),
+                owner: principal.user_id.clone(),
+            },
+        );
 
         let me = self.clone();
         let p = principal.clone();
@@ -118,7 +160,15 @@ impl JobManager {
         Ok(view)
     }
 
-    async fn execute(self: Arc<Self>, job_id: String, p: Principal, params: Map<String, Value>, tx: watch::Sender<JobView>, cancel: CancellationToken, via: String) {
+    async fn execute(
+        self: Arc<Self>,
+        job_id: String,
+        p: Principal,
+        params: Map<String, Value>,
+        tx: watch::Sender<JobView>,
+        cancel: CancellationToken,
+        via: String,
+    ) {
         let user_sem = self.user_sem(&p);
         let permits = tokio::select! {
             r = async {
@@ -162,7 +212,11 @@ impl JobManager {
         let resolver = self.storage.resolver(&p.user_id);
         let principal = p.clone();
         let authorize = move |s: &dogubako_core::spec::ToolSpec| principal.can_use(s);
-        let fs = if self.host_fs_enabled { None } else { Some(FsPolicy::deny_all()) };
+        let fs = if self.host_fs_enabled {
+            None
+        } else {
+            Some(FsPolicy::deny_all())
+        };
         let result = self
             .engine
             .run(RunRequest {
@@ -187,7 +241,9 @@ impl JobManager {
                 for a in &out.artifacts {
                     match self.storage.register_artifact(&p.user_id, &job_id, a) {
                         Ok(v) => artifacts.push(v),
-                        Err(e) => err = Some(ToolError::failed(format!("storing output failed: {e}"))),
+                        Err(e) => {
+                            err = Some(ToolError::failed(format!("storing output failed: {e}")))
+                        }
                     }
                 }
                 if let Some(e) = err {
@@ -207,14 +263,29 @@ impl JobManager {
                 }
             }
             Err(e) => {
-                view.status = if matches!(e, ToolError::Cancelled) { JobStatus::Cancelled } else { JobStatus::Failed };
+                view.status = if matches!(e, ToolError::Cancelled) {
+                    JobStatus::Cancelled
+                } else {
+                    JobStatus::Failed
+                };
                 view.error = Some(e);
             }
         }
         let _ = std::fs::remove_dir_all(&out_dir);
         let outcome = view.status.as_str().to_string();
-        let detail = view.error.as_ref().map(|e| format!("{via}: {e}")).unwrap_or(via);
-        self.db.audit(&p.username, "tool.run", &view.tool_id, &outcome, "", &detail);
+        let detail = view
+            .error
+            .as_ref()
+            .map(|e| format!("{via}: {e}"))
+            .unwrap_or(via);
+        self.db.audit(
+            &p.username,
+            "tool.run",
+            &view.tool_id,
+            &outcome,
+            "",
+            &detail,
+        );
         drop(permits);
         self.finish(view, &tx);
     }
@@ -235,12 +306,19 @@ impl JobManager {
             }
             return None;
         }
-        self.db.job(id).filter(|j| j.owner.as_deref() == Some(owner))
+        self.db
+            .job(id)
+            .filter(|j| j.owner.as_deref() == Some(owner))
     }
 
     /// Subscribe to updates of a live job.
     pub fn subscribe(&self, owner: &str, id: &str) -> Option<watch::Receiver<JobView>> {
-        self.live.lock().unwrap().get(id).filter(|l| l.owner == owner).map(|l| l.tx.subscribe())
+        self.live
+            .lock()
+            .unwrap()
+            .get(id)
+            .filter(|l| l.owner == owner)
+            .map(|l| l.tx.subscribe())
     }
 
     /// Wait up to `wait` for a job to reach a terminal state.

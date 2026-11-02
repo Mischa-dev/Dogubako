@@ -9,7 +9,14 @@ use num_bigint::BigInt;
 use num_traits::{Signed, Zero};
 
 pub fn tools() -> Vec<Arc<dyn Tool>> {
-    vec![base64_tool(), url_encode(), html_entities(), hex_tool(), number_base(), binary_text()]
+    vec![
+        base64_tool(),
+        url_encode(),
+        html_entities(),
+        hex_tool(),
+        number_base(),
+        binary_text(),
+    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -20,8 +27,14 @@ const URL_ANY: GeneralPurpose = GeneralPurpose::new(&alphabet::URL_SAFE, NO_PAD_
 
 pub(crate) fn b64_decode_lenient(s: &str) -> Result<Vec<u8>, String> {
     let clean: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-    let engine = if clean.contains(['-', '_']) { &URL_ANY } else { &STD_ANY };
-    engine.decode(clean.as_bytes()).map_err(|e| format!("invalid Base64: {e}"))
+    let engine = if clean.contains(['-', '_']) {
+        &URL_ANY
+    } else {
+        &STD_ANY
+    };
+    engine
+        .decode(clean.as_bytes())
+        .map_err(|e| format!("invalid Base64: {e}"))
 }
 
 fn ext_for_mime(m: &str) -> &'static str {
@@ -76,8 +89,14 @@ fn base64_tool() -> Arc<dyn Tool> {
     sync_tool(spec, |ctx, p| {
         if p.str("mode")? == "encode" {
             let (bytes, mime) = match p.opt_file("file") {
-                Some(f) => (read_file(f)?, dogubako_core::util::mime_for_path(std::path::Path::new(&f.name))),
-                None => (p.text("text").as_bytes().to_vec(), "text/plain;charset=utf-8".to_string()),
+                Some(f) => (
+                    read_file(f)?,
+                    dogubako_core::util::mime_for_path(std::path::Path::new(&f.name)),
+                ),
+                None => (
+                    p.text("text").as_bytes().to_vec(),
+                    "text/plain;charset=utf-8".to_string(),
+                ),
             };
             let engine = match (p.bool("url_safe"), p.bool("no_padding")) {
                 (false, false) => base64::engine::general_purpose::STANDARD,
@@ -88,7 +107,12 @@ fn base64_tool() -> Arc<dyn Tool> {
             let mut enc = engine.encode(&bytes);
             let wrap = p.int_or("wrap", 0) as usize;
             if wrap > 0 {
-                enc = enc.as_bytes().chunks(wrap).map(|c| std::str::from_utf8(c).unwrap()).collect::<Vec<_>>().join("\n");
+                enc = enc
+                    .as_bytes()
+                    .chunks(wrap)
+                    .map(|c| std::str::from_utf8(c).unwrap())
+                    .collect::<Vec<_>>()
+                    .join("\n");
             }
             if p.bool("data_uri") {
                 enc = format!("data:{mime};base64,{enc}");
@@ -98,11 +122,22 @@ fn base64_tool() -> Arc<dyn Tool> {
         let mut s = p.text("text").trim();
         let mut mime: Option<String> = None;
         if let Some(rest) = s.strip_prefix("data:") {
-            let (meta, payload) = rest.split_once(',').ok_or_else(|| ToolError::invalid("text", "malformed data: URI (missing comma)"))?;
+            let (meta, payload) = rest
+                .split_once(',')
+                .ok_or_else(|| ToolError::invalid("text", "malformed data: URI (missing comma)"))?;
             if !meta.ends_with(";base64") {
-                return Err(ToolError::invalid("text", "data: URI is not Base64-encoded"));
+                return Err(ToolError::invalid(
+                    "text",
+                    "data: URI is not Base64-encoded",
+                ));
             }
-            mime = Some(meta.trim_end_matches(";base64").split(';').next().unwrap_or("").to_string());
+            mime = Some(
+                meta.trim_end_matches(";base64")
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .to_string(),
+            );
             s = payload;
         }
         let bytes = b64_decode_lenient(s).map_err(|e| ToolError::invalid("text", e))?;
@@ -110,10 +145,19 @@ fn base64_tool() -> Arc<dyn Tool> {
         let as_text = match out_mode {
             "text" => true,
             "file" => false,
-            _ => std::str::from_utf8(&bytes).is_ok() && !bytes.iter().any(|b| *b == 0) && mime.as_deref().map_or(true, |m| m.starts_with("text/") || m.is_empty()),
+            _ => {
+                std::str::from_utf8(&bytes).is_ok()
+                    && !bytes.contains(&0)
+                    && mime
+                        .as_deref()
+                        .is_none_or(|m| m.starts_with("text/") || m.is_empty())
+            }
         };
         if as_text {
-            return Ok(ToolOutput::text(String::from_utf8_lossy(&bytes).into_owned()).with_data(json!({"bytes": bytes.len()})));
+            return Ok(
+                ToolOutput::text(String::from_utf8_lossy(&bytes).into_owned())
+                    .with_data(json!({"bytes": bytes.len()})),
+            );
         }
         let sniffed = dogubako_core::util::sniff_bytes(&bytes).map(|s| s.to_string());
         let m = sniffed.or(mime).unwrap_or_default();
@@ -159,7 +203,11 @@ fn html_entities() -> Arc<dyn Tool> {
         .ui("live");
     sync_tool(spec, |_ctx, p| {
         let t = p.text("text");
-        Ok(ToolOutput::text(if p.str("mode")? == "encode" { escape::html_escape(t, p.bool("non_ascii")) } else { escape::html_unescape(t) }))
+        Ok(ToolOutput::text(if p.str("mode")? == "encode" {
+            escape::html_escape(t, p.bool("non_ascii"))
+        } else {
+            escape::html_unescape(t)
+        }))
     })
 }
 
@@ -169,7 +217,10 @@ fn html_entities() -> Arc<dyn Tool> {
 fn parse_hex(s: &str) -> Result<Vec<u8>, String> {
     let mut digits = String::with_capacity(s.len());
     for tok in s.split(|c: char| c.is_whitespace() || c == ',' || c == ':' || c == '-') {
-        let tok = tok.trim_start_matches("0x").trim_start_matches("0X").trim_start_matches("\\x");
+        let tok = tok
+            .trim_start_matches("0x")
+            .trim_start_matches("0X")
+            .trim_start_matches("\\x");
         let tok = tok.replace("\\x", "");
         if tok.len() % 2 == 1 && s.split_whitespace().count() > 1 {
             digits.push('0');
@@ -190,8 +241,23 @@ pub(crate) fn hexdump(bytes: &[u8]) -> String {
     for (i, chunk) in bytes.chunks(16).enumerate() {
         let hexs: Vec<String> = chunk.iter().map(|b| format!("{b:02x}")).collect();
         let (a, b) = hexs.split_at(hexs.len().min(8));
-        let ascii: String = chunk.iter().map(|b| if b.is_ascii_graphic() || *b == b' ' { *b as char } else { '.' }).collect();
-        out.push_str(&format!("{:08x}  {:<23}  {:<23}  |{}|\n", i * 16, a.join(" "), b.join(" "), ascii));
+        let ascii: String = chunk
+            .iter()
+            .map(|b| {
+                if b.is_ascii_graphic() || *b == b' ' {
+                    *b as char
+                } else {
+                    '.'
+                }
+            })
+            .collect();
+        out.push_str(&format!(
+            "{:08x}  {:<23}  {:<23}  |{}|\n",
+            i * 16,
+            a.join(" "),
+            b.join(" "),
+            ascii
+        ));
     }
     out
 }
@@ -213,7 +279,9 @@ fn hex_tool() -> Arc<dyn Tool> {
         if mode == "decode" {
             let bytes = parse_hex(p.text("text")).map_err(|e| ToolError::invalid("text", e))?;
             if p.str_or("output", "text") == "file" {
-                return Ok(ToolOutput::files(vec![ctx.write_output("decoded.bin", &bytes)?]));
+                return Ok(ToolOutput::files(vec![
+                    ctx.write_output("decoded.bin", &bytes)?
+                ]));
             }
             let mut out = ToolOutput::text(String::from_utf8_lossy(&bytes).into_owned());
             if std::str::from_utf8(&bytes).is_err() {
@@ -234,12 +302,22 @@ fn hex_tool() -> Arc<dyn Tool> {
             return Ok(out);
         }
         let up = p.bool("uppercase");
-        let f = |b: &u8| if up { format!("{b:02X}") } else { format!("{b:02x}") };
+        let f = |b: &u8| {
+            if up {
+                format!("{b:02X}")
+            } else {
+                format!("{b:02x}")
+            }
+        };
         let parts: Vec<String> = bytes.iter().map(f).collect();
         let out = match p.str_or("separator", "space") {
             "none" => parts.concat(),
             "colon" => parts.join(":"),
-            "comma" => parts.iter().map(|x| format!("0x{x}")).collect::<Vec<_>>().join(", "),
+            "comma" => parts
+                .iter()
+                .map(|x| format!("0x{x}"))
+                .collect::<Vec<_>>()
+                .join(", "),
             "escape" => parts.iter().map(|x| format!("\\x{x}")).collect(),
             _ => parts.join(" "),
         };
@@ -251,7 +329,11 @@ fn hex_tool() -> Arc<dyn Tool> {
 // Number base
 
 fn parse_big(s: &str, base: u32) -> Result<(BigInt, u32), String> {
-    let t: String = s.trim().chars().filter(|c| *c != '_' && *c != ' ' && *c != ',').collect();
+    let t: String = s
+        .trim()
+        .chars()
+        .filter(|c| *c != '_' && *c != ' ' && *c != ',')
+        .collect();
     let (neg, t) = match t.strip_prefix('-') {
         Some(r) => (true, r.to_string()),
         None => (false, t.trim_start_matches('+').to_string()),
@@ -269,7 +351,9 @@ fn parse_big(s: &str, base: u32) -> Result<(BigInt, u32), String> {
         } else if lower.chars().all(|c| c.is_ascii_hexdigit()) {
             (16, lower)
         } else {
-            return Err(format!("can't detect the base of '{s}'; choose one explicitly"));
+            return Err(format!(
+                "can't detect the base of '{s}'; choose one explicitly"
+            ));
         }
     } else {
         let stripped = match base {
@@ -283,7 +367,8 @@ fn parse_big(s: &str, base: u32) -> Result<(BigInt, u32), String> {
     if digits.is_empty() {
         return Err("no digits".into());
     }
-    let v = BigInt::parse_bytes(digits.as_bytes(), radix).ok_or_else(|| format!("'{s}' is not a valid base-{radix} number"))?;
+    let v = BigInt::parse_bytes(digits.as_bytes(), radix)
+        .ok_or_else(|| format!("'{s}' is not a valid base-{radix} number"))?;
     Ok((if neg { -v } else { v }, radix))
 }
 
@@ -293,16 +378,24 @@ fn twos_complement(v: &BigInt, bits: u32) -> Option<String> {
     if v < &(-half) || v >= &modulus {
         return None;
     }
-    let u = if v.is_negative() { &modulus + v } else { v.clone() };
+    let u = if v.is_negative() {
+        &modulus + v
+    } else {
+        v.clone()
+    };
     let s = u.to_str_radix(2);
-    Some(format!("{}{}", "0".repeat((bits as usize).saturating_sub(s.len())), s))
+    Some(format!(
+        "{}{}",
+        "0".repeat((bits as usize).saturating_sub(s.len())),
+        s
+    ))
 }
 
 fn group(s: &str, n: usize, sep: char) -> String {
     let chars: Vec<char> = s.chars().collect();
     let mut out = String::new();
     for (i, c) in chars.iter().enumerate() {
-        if i > 0 && (chars.len() - i) % n == 0 {
+        if i > 0 && (chars.len() - i).is_multiple_of(n) {
             out.push(sep);
         }
         out.push(*c);
@@ -325,7 +418,8 @@ fn number_base() -> Arc<dyn Tool> {
         if from == 1 {
             return Err(ToolError::invalid("from", "base must be 0 (auto) or 2–36"));
         }
-        let (v, radix) = parse_big(p.text("value"), from).map_err(|e| ToolError::invalid("value", e))?;
+        let (v, radix) =
+            parse_big(p.text("value"), from).map_err(|e| ToolError::invalid("value", e))?;
         let bits: u32 = p.str_or("bits", "32").parse().unwrap_or(32);
         let to = p.int_or("to", 36) as u32;
         let neg = v.is_negative();
@@ -349,14 +443,20 @@ fn number_base() -> Arc<dyn Tool> {
                 let hexw = (bits / 4) as usize;
                 let u = BigInt::parse_bytes(tc.as_bytes(), 2).unwrap_or_default();
                 let modulus = BigInt::from(1u8) << bits;
-                let signed = if tc.starts_with('1') { &u - &modulus } else { u.clone() };
+                let signed = if tc.starts_with('1') {
+                    &u - &modulus
+                } else {
+                    u.clone()
+                };
                 data[format!("twos_complement_{bits}bit")] = json!(group(&tc, 4, ' '));
-                data[format!("twos_complement_{bits}bit_hex")] = json!(format!("0x{:0>hexw$}", u.to_str_radix(16)));
+                data[format!("twos_complement_{bits}bit_hex")] =
+                    json!(format!("0x{:0>hexw$}", u.to_str_radix(16)));
                 data[format!("as_signed_{bits}bit")] = json!(signed.to_str_radix(10));
                 data[format!("as_unsigned_{bits}bit")] = json!(u.to_str_radix(10));
             }
             None => {
-                data[format!("twos_complement_{bits}bit")] = json!(format!("does not fit in {bits} bits"));
+                data[format!("twos_complement_{bits}bit")] =
+                    json!(format!("does not fit in {bits} bits"));
             }
         }
         Ok(ToolOutput::data(data))
@@ -368,12 +468,50 @@ fn number_base() -> Arc<dyn Tool> {
 
 fn binary_text() -> Arc<dyn Tool> {
     let spec = ToolSpec::new("dev.binary_text", "Text ↔ Binary", Category::Dev)
-        .describe("Convert text to its UTF-8 bytes written in binary, octal, decimal or hex — and back")
-        .keywords(&["binary", "text to binary", "binary to text", "ascii", "bytes", "01010", "octal", "decimal bytes"])
-        .param(ParamSpec::textarea("text").label("Text / numbers").required().primary())
-        .param(ParamSpec::choice("mode", &[("encode", "Text → numbers"), ("decode", "Numbers → text")]).default_str("encode"))
-        .param(ParamSpec::choice("format", &[("bin", "Binary"), ("oct", "Octal"), ("dec", "Decimal"), ("hex", "Hex")]).default_str("bin"))
-        .param(ParamSpec::text("separator").label("Separator").default_str(" ").show_if("mode", &["encode"]))
+        .describe(
+            "Convert text to its UTF-8 bytes written in binary, octal, decimal or hex — and back",
+        )
+        .keywords(&[
+            "binary",
+            "text to binary",
+            "binary to text",
+            "ascii",
+            "bytes",
+            "01010",
+            "octal",
+            "decimal bytes",
+        ])
+        .param(
+            ParamSpec::textarea("text")
+                .label("Text / numbers")
+                .required()
+                .primary(),
+        )
+        .param(
+            ParamSpec::choice(
+                "mode",
+                &[("encode", "Text → numbers"), ("decode", "Numbers → text")],
+            )
+            .default_str("encode"),
+        )
+        .param(
+            ParamSpec::choice(
+                "format",
+                &[
+                    ("bin", "Binary"),
+                    ("oct", "Octal"),
+                    ("dec", "Decimal"),
+                    ("hex", "Hex"),
+                ],
+            )
+            .default_str("bin"),
+        )
+        .param(
+            ParamSpec::text("separator")
+                .label("Separator")
+                .default_str(" ")
+                .show_if("mode", &["encode"]),
+        )
         .text_output("text/plain")
         .ui("live");
     sync_tool(spec, |_ctx, p| {
@@ -397,20 +535,32 @@ fn binary_text() -> Arc<dyn Tool> {
             "hex" => 16,
             _ => 2,
         };
-        let tokens: Vec<String> = if fmt == "bin" && !t.trim().contains(char::is_whitespace) && !t.contains(',') {
-            let digits: Vec<char> = t.trim().chars().collect();
-            if digits.len() % 8 != 0 {
-                return Err(ToolError::invalid("text", "binary without separators must be a multiple of 8 digits"));
-            }
-            digits.chunks(8).map(|c| c.iter().collect()).collect()
-        } else {
-            t.split(|c: char| c.is_whitespace() || c == ',').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect()
-        };
+        let tokens: Vec<String> =
+            if fmt == "bin" && !t.trim().contains(char::is_whitespace) && !t.contains(',') {
+                let digits: Vec<char> = t.trim().chars().collect();
+                if !digits.len().is_multiple_of(8) {
+                    return Err(ToolError::invalid(
+                        "text",
+                        "binary without separators must be a multiple of 8 digits",
+                    ));
+                }
+                digits.chunks(8).map(|c| c.iter().collect()).collect()
+            } else {
+                t.split(|c: char| c.is_whitespace() || c == ',')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .collect()
+            };
         let bytes: Vec<u8> = tokens
             .iter()
             .map(|tok| {
                 let tok = tok.trim_start_matches("0x").trim_start_matches("0b");
-                u8::from_str_radix(tok, radix).map_err(|_| ToolError::invalid("text", format!("'{tok}' is not a byte value in base {radix}")))
+                u8::from_str_radix(tok, radix).map_err(|_| {
+                    ToolError::invalid(
+                        "text",
+                        format!("'{tok}' is not a byte value in base {radix}"),
+                    )
+                })
             })
             .collect::<ToolResult<_>>()?;
         let mut out = ToolOutput::text(String::from_utf8_lossy(&bytes).into_owned());
@@ -433,52 +583,213 @@ mod tests {
     #[tokio::test]
     async fn base64() {
         let h = TestHarness::new(crate::tools());
-        assert_eq!(txt(&h, "dev.base64", json!({"text": "hello?>"})).await, "aGVsbG8/Pg==");
-        assert_eq!(txt(&h, "dev.base64", json!({"text": "hello?>", "url_safe": true, "no_padding": true})).await, "aGVsbG8_Pg");
-        assert_eq!(txt(&h, "dev.base64", json!({"text": "aGVsbG8_Pg", "mode": "decode"})).await, "hello?>");
-        assert_eq!(txt(&h, "dev.base64", json!({"text": "aGVs\nbG8/Pg==", "mode": "decode"})).await, "hello?>");
+        assert_eq!(
+            txt(&h, "dev.base64", json!({"text": "hello?>"})).await,
+            "aGVsbG8/Pg=="
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "dev.base64",
+                json!({"text": "hello?>", "url_safe": true, "no_padding": true})
+            )
+            .await,
+            "aGVsbG8_Pg"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "dev.base64",
+                json!({"text": "aGVsbG8_Pg", "mode": "decode"})
+            )
+            .await,
+            "hello?>"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "dev.base64",
+                json!({"text": "aGVs\nbG8/Pg==", "mode": "decode"})
+            )
+            .await,
+            "hello?>"
+        );
         let png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
         let f = h.write("x.png", png);
-        let enc = txt(&h, "dev.base64", json!({"file": f.to_str().unwrap(), "data_uri": true})).await;
+        let enc = txt(
+            &h,
+            "dev.base64",
+            json!({"file": f.to_str().unwrap(), "data_uri": true}),
+        )
+        .await;
         assert!(enc.starts_with("data:image/png;base64,"));
-        let out = h.run("dev.base64", json!({"text": enc, "mode": "decode"})).await.unwrap();
+        let out = h
+            .run("dev.base64", json!({"text": enc, "mode": "decode"}))
+            .await
+            .unwrap();
         assert!(out.artifacts[0].name.ends_with(".png"));
         assert_eq!(std::fs::read(&out.artifacts[0].path).unwrap(), png);
-        assert_eq!(h.run("dev.base64", json!({"text": "@@@", "mode": "decode"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.base64", json!({"text": "@@@", "mode": "decode"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
     async fn url_html_hex() {
         let h = TestHarness::new(crate::tools());
-        assert_eq!(txt(&h, "dev.url_encode", json!({"text": "a b&c/d"})).await, "a%20b%26c%2Fd");
-        assert_eq!(txt(&h, "dev.url_encode", json!({"text": "https://x.y/a b?q=1&r=ü", "scope": "full"})).await, "https://x.y/a%20b?q=1&r=%C3%BC");
-        assert_eq!(txt(&h, "dev.url_encode", json!({"text": "a+b%20c", "mode": "decode", "plus_spaces": true})).await, "a b c");
-        assert_eq!(h.run("dev.url_encode", json!({"text": "%E0%A4%A", "mode": "decode"})).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(txt(&h, "dev.html_entities", json!({"text": "<é>", "non_ascii": true})).await, "&lt;&#xE9;&gt;");
-        assert_eq!(txt(&h, "dev.html_entities", json!({"text": "&copy;&nbsp;&#169;", "mode": "decode"})).await, "©\u{a0}©");
-        assert_eq!(txt(&h, "dev.hex", json!({"text": "Hi!", "separator": "colon", "uppercase": true})).await, "48:69:21");
-        assert_eq!(txt(&h, "dev.hex", json!({"text": "0x48 0x69", "mode": "decode"})).await, "Hi");
-        assert_eq!(txt(&h, "dev.hex", json!({"text": "48:69", "mode": "decode"})).await, "Hi");
-        assert!(txt(&h, "dev.hex", json!({"text": "ABC", "mode": "dump"})).await.starts_with("00000000  41 42 43"));
-        assert_eq!(h.run("dev.hex", json!({"text": "zz", "mode": "decode"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            txt(&h, "dev.url_encode", json!({"text": "a b&c/d"})).await,
+            "a%20b%26c%2Fd"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "dev.url_encode",
+                json!({"text": "https://x.y/a b?q=1&r=ü", "scope": "full"})
+            )
+            .await,
+            "https://x.y/a%20b?q=1&r=%C3%BC"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "dev.url_encode",
+                json!({"text": "a+b%20c", "mode": "decode", "plus_spaces": true})
+            )
+            .await,
+            "a b c"
+        );
+        assert_eq!(
+            h.run(
+                "dev.url_encode",
+                json!({"text": "%E0%A4%A", "mode": "decode"})
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "dev.html_entities",
+                json!({"text": "<é>", "non_ascii": true})
+            )
+            .await,
+            "&lt;&#xE9;&gt;"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "dev.html_entities",
+                json!({"text": "&copy;&nbsp;&#169;", "mode": "decode"})
+            )
+            .await,
+            "©\u{a0}©"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "dev.hex",
+                json!({"text": "Hi!", "separator": "colon", "uppercase": true})
+            )
+            .await,
+            "48:69:21"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "dev.hex",
+                json!({"text": "0x48 0x69", "mode": "decode"})
+            )
+            .await,
+            "Hi"
+        );
+        assert_eq!(
+            txt(&h, "dev.hex", json!({"text": "48:69", "mode": "decode"})).await,
+            "Hi"
+        );
+        assert!(txt(&h, "dev.hex", json!({"text": "ABC", "mode": "dump"}))
+            .await
+            .starts_with("00000000  41 42 43"));
+        assert_eq!(
+            h.run("dev.hex", json!({"text": "zz", "mode": "decode"}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
     }
 
     #[tokio::test]
     async fn bases() {
         let h = TestHarness::new(crate::tools());
-        let out = h.run("dev.number_base", json!({"value": "0xff"})).await.unwrap();
+        let out = h
+            .run("dev.number_base", json!({"value": "0xff"}))
+            .await
+            .unwrap();
         assert_eq!(out.data["decimal"], "255");
         assert_eq!(out.data["binary"], "0b11111111");
-        let out = h.run("dev.number_base", json!({"value": "-1", "bits": "8"})).await.unwrap();
+        let out = h
+            .run("dev.number_base", json!({"value": "-1", "bits": "8"}))
+            .await
+            .unwrap();
         assert_eq!(out.data["twos_complement_8bit"], "1111 1111");
-        let out = h.run("dev.number_base", json!({"value": "123456789012345678901234567890", "from": 10})).await.unwrap();
+        let out = h
+            .run(
+                "dev.number_base",
+                json!({"value": "123456789012345678901234567890", "from": 10}),
+            )
+            .await
+            .unwrap();
         assert_eq!(out.data["hexadecimal"], "0x18ee90ff6c373e0ee4e3f0ad2");
-        let out = h.run("dev.number_base", json!({"value": "zz", "from": 36})).await.unwrap();
+        let out = h
+            .run("dev.number_base", json!({"value": "zz", "from": 36}))
+            .await
+            .unwrap();
         assert_eq!(out.data["decimal"], "1295");
-        assert_eq!(h.run("dev.number_base", json!({"value": "12x", "from": 10})).await.unwrap_err().code(), "invalid_input");
-        assert_eq!(txt(&h, "dev.binary_text", json!({"text": "Hi"})).await, "01001000 01101001");
-        assert_eq!(txt(&h, "dev.binary_text", json!({"text": "0100100001101001", "mode": "decode"})).await, "Hi");
-        assert_eq!(txt(&h, "dev.binary_text", json!({"text": "72 105", "mode": "decode", "format": "dec"})).await, "Hi");
-        assert_eq!(h.run("dev.binary_text", json!({"text": "300", "mode": "decode", "format": "dec"})).await.unwrap_err().code(), "invalid_input");
+        assert_eq!(
+            h.run("dev.number_base", json!({"value": "12x", "from": 10}))
+                .await
+                .unwrap_err()
+                .code(),
+            "invalid_input"
+        );
+        assert_eq!(
+            txt(&h, "dev.binary_text", json!({"text": "Hi"})).await,
+            "01001000 01101001"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "dev.binary_text",
+                json!({"text": "0100100001101001", "mode": "decode"})
+            )
+            .await,
+            "Hi"
+        );
+        assert_eq!(
+            txt(
+                &h,
+                "dev.binary_text",
+                json!({"text": "72 105", "mode": "decode", "format": "dec"})
+            )
+            .await,
+            "Hi"
+        );
+        assert_eq!(
+            h.run(
+                "dev.binary_text",
+                json!({"text": "300", "mode": "decode", "format": "dec"})
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            "invalid_input"
+        );
     }
 }
