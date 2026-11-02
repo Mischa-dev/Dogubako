@@ -1245,7 +1245,7 @@ pub(crate) fn parse_any(text: &str, from: &str) -> ToolResult<Value> {
                 crate::data::sniff_delimiter(text)
             };
             let t = crate::data::parse_csv(text, delim, true)?;
-            crate::data::rows_to_objects(&t, true)
+            crate::data::rows_to_objects(&t, true)?
         }
         "ndjson" => Value::Array(
             text.lines()

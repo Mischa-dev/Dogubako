@@ -281,6 +281,32 @@ async fn table_exports_and_sparse_json_are_bounded() {
     )
     .await;
 
+    // Repeating a column in a selection copies it into every row.
+    let csv = format!("a\n{}", "1\n".repeat(100_000));
+    let cols = vec!["a"; 100_000].join(",");
+    limited(
+        &h,
+        "data.columns",
+        json!({"text": csv, "header": "yes", "operation": "select", "columns": cols}),
+    )
+    .await;
+    limited(
+        &h,
+        "data.csv_filter_sort",
+        json!({"text": csv, "header": "yes", "columns": cols}),
+    )
+    .await;
+    // A long header repeated as a key in every object.
+    let csv = format!("{}\n{}", "k".repeat(100_000), "1\n".repeat(100_000));
+    for shape in ["objects", "ndjson"] {
+        limited(
+            &h,
+            "data.csv_to_json",
+            json!({"text": csv, "header": "yes", "shape": shape}),
+        )
+        .await;
+    }
+
     // Normal exports still work.
     let out = h
         .run(

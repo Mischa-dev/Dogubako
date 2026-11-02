@@ -282,8 +282,15 @@ pub fn write_csv_style(
     String::from_utf8(w.into_inner().ctx("writing CSV")?).ctx("CSV output")
 }
 
-pub fn rows_to_objects(t: &Table, infer: bool) -> Value {
-    Value::Array(
+/// One object per row, keyed by the headers. Every object repeats every
+/// header, so long headers over many rows are sized before building.
+pub fn rows_to_objects(t: &Table, infer: bool) -> ToolResult<Value> {
+    // Nominal per-entry overhead, as in `render_table`.
+    const ENTRY: u128 = 8;
+    let names: u128 = t.headers.iter().map(|h| h.len() as u128 + ENTRY).sum();
+    let cells: u128 = t.rows.iter().flatten().map(|c| c.len() as u128).sum();
+    crate::util::check_generated_size(cells + names * t.rows.len() as u128)?;
+    Ok(Value::Array(
         t.rows
             .iter()
             .map(|r| {
@@ -294,7 +301,7 @@ pub fn rows_to_objects(t: &Table, infer: bool) -> Value {
                 Value::Object(m)
             })
             .collect(),
-    )
+    ))
 }
 
 /// Flatten JSON records into columns using dotted keys.
@@ -892,14 +899,7 @@ fn csv_filter_sort() -> Arc<dyn Tool> {
         }
         if let Some(c) = p.opt_str("columns") {
             let idx = t.cols(c)?;
-            t = Table {
-                headers: idx.iter().map(|i| t.headers[*i].clone()).collect(),
-                rows: t
-                    .rows
-                    .iter()
-                    .map(|r| idx.iter().map(|i| r[*i].clone()).collect())
-                    .collect(),
-            };
+            t = project(&t, &idx)?;
         }
         let removed = before - t.rows.len();
         emit_table(
@@ -952,7 +952,7 @@ fn csv_to_json() -> Arc<dyn Tool> {
                 )
             }
             "ndjson" => {
-                let objs = rows_to_objects(&t, infer);
+                let objs = rows_to_objects(&t, infer)?;
                 (
                     objs.as_array()
                         .unwrap()
@@ -966,7 +966,7 @@ fn csv_to_json() -> Arc<dyn Tool> {
                 )
             }
             _ => {
-                let v = rows_to_objects(&t, infer);
+                let v = rows_to_objects(&t, infer)?;
                 (
                     if p.bool("pretty") {
                         serde_json::to_string_pretty(&v)?
@@ -1294,11 +1294,11 @@ fn columns() -> Arc<dyn Tool> {
             "drop" => {
                 let idx: HashSet<usize> = need_cols()?.into_iter().collect();
                 let keep: Vec<usize> = (0..t.headers.len()).filter(|i| !idx.contains(i)).collect();
-                t = project(&t, &keep);
+                t = project(&t, &keep)?;
             }
             "select" => {
                 let idx = need_cols()?;
-                t = project(&t, &idx);
+                t = project(&t, &idx)?;
             }
             "split" => {
                 let idx = need_cols()?;
@@ -1476,15 +1476,33 @@ fn columns() -> Arc<dyn Tool> {
     })
 }
 
-fn project(t: &Table, idx: &[usize]) -> Table {
-    Table {
+/// Copy the listed columns, in order. A column may be listed many times,
+/// so size the copy (bytes plus a per-cell overhead) before making it.
+fn project(t: &Table, idx: &[usize]) -> ToolResult<Table> {
+    let mut col_bytes = vec![0u128; t.headers.len()];
+    for r in &t.rows {
+        for (b, c) in col_bytes.iter_mut().zip(r) {
+            *b += c.len() as u128;
+        }
+    }
+    // A nominal 8 bytes per cell, as in `render_table`, so a full-size
+    // one-column input still fits while repeated columns do not.
+    let slot = 8u128;
+    let bytes: u128 = idx
+        .iter()
+        .map(|i| col_bytes[*i] + t.headers[*i].len() as u128)
+        .sum();
+    crate::util::check_generated_size(
+        bytes + slot * idx.len() as u128 * (t.rows.len() as u128 + 1),
+    )?;
+    Ok(Table {
         headers: idx.iter().map(|i| t.headers[*i].clone()).collect(),
         rows: t
             .rows
             .iter()
             .map(|r| idx.iter().map(|i| r[*i].clone()).collect())
             .collect(),
-    }
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1957,7 +1975,7 @@ fn clean() -> Arc<dyn Tool> {
             let keep: Vec<usize> = (0..t.headers.len())
                 .filter(|i| t.rows.iter().any(|r| !r[*i].trim().is_empty()))
                 .collect();
-            t = project(&t, &keep);
+            t = project(&t, &keep)?;
         }
         if ops.contains("headers") {
             t.headers = dedupe_headers(
@@ -2018,11 +2036,11 @@ pub fn render_table(t: &Table, to: &str, opts: &Params) -> ToolResult<(Vec<u8>, 
             "tsv",
         ),
         "json" => (
-            serde_json::to_string_pretty(&rows_to_objects(t, infer))?.into_bytes(),
+            serde_json::to_string_pretty(&rows_to_objects(t, infer)?)?.into_bytes(),
             "json",
         ),
         "ndjson" => (
-            (rows_to_objects(t, infer)
+            (rows_to_objects(t, infer)?
                 .as_array()
                 .unwrap()
                 .iter()
@@ -2034,7 +2052,7 @@ pub fn render_table(t: &Table, to: &str, opts: &Params) -> ToolResult<(Vec<u8>, 
             "ndjson",
         ),
         "yaml" => (
-            crate::dev::formatters::to_yaml(&rows_to_objects(t, infer))?.into_bytes(),
+            crate::dev::formatters::to_yaml(&rows_to_objects(t, infer)?)?.into_bytes(),
             "yaml",
         ),
         "markdown" => {
