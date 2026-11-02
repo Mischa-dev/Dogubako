@@ -1,7 +1,7 @@
 //! Spreadsheet reading via calamine.
 
 use crate::util::read_file;
-use calamine::{Data, Reader, Sheets};
+use calamine::{Data, DataType, Reader, Sheets};
 use dogubako_core::prelude::*;
 use std::io::Cursor;
 
@@ -59,10 +59,68 @@ pub fn cell_json(d: &Data) -> Value {
     }
 }
 
-/// All rows of a sheet as strings.
+/// Most cells a sheet's occupied rectangle may span once filled in.
+const MAX_SHEET_CELLS: u64 = 20_000_000;
+
+/// All rows of a sheet, from its first to its last non-empty cell.
+///
+/// calamine's `worksheet_range` fills the rectangle between the outermost
+/// cells before returning, so two cells at A1 and XFD1048576 would allocate
+/// 17 billion cells. For XLSX and XLSB the cells are streamed instead and the
+/// rectangle is checked before it is built. (XLS sheets are at most
+/// 65536 x 256, and calamine caps ODS ranges itself.)
 pub fn sheet_rows(book: &mut Book, name: &str) -> ToolResult<Vec<Vec<Data>>> {
-    let range = book
-        .worksheet_range(name)
-        .map_err(|e| ToolError::invalid("sheet", format!("cannot read sheet '{name}': {e}")))?;
-    Ok(range.rows().map(|r| r.to_vec()).collect())
+    let bad = |e: String| ToolError::invalid("sheet", format!("cannot read sheet '{name}': {e}"));
+    let mut cells: Vec<((u32, u32), Data)> = vec![];
+    match book {
+        Sheets::Xlsx(x) => {
+            let mut r = x
+                .worksheet_cells_reader(name)
+                .map_err(|e| bad(e.to_string()))?;
+            while let Some(c) = r.next_cell().map_err(|e| bad(e.to_string()))? {
+                if !c.get_value().is_empty() {
+                    cells.push((c.get_position(), Data::from(c.get_value().clone())));
+                }
+            }
+        }
+        Sheets::Xlsb(x) => {
+            let mut r = x
+                .worksheet_cells_reader(name)
+                .map_err(|e| bad(e.to_string()))?;
+            while let Some(c) = r.next_cell().map_err(|e| bad(e.to_string()))? {
+                if !c.get_value().is_empty() {
+                    cells.push((c.get_position(), Data::from(c.get_value().clone())));
+                }
+            }
+        }
+        _ => {
+            let range = book.worksheet_range(name).map_err(|e| bad(e.to_string()))?;
+            return Ok(range.rows().map(|r| r.to_vec()).collect());
+        }
+    }
+    let Some(((r0, c0), (r1, c1))) =
+        cells
+            .iter()
+            .fold(None::<((u32, u32), (u32, u32))>, |acc, ((r, c), _)| {
+                Some(match acc {
+                    None => ((*r, *c), (*r, *c)),
+                    Some(((a, b), (y, z))) => ((a.min(*r), b.min(*c)), (y.max(*r), z.max(*c))),
+                })
+            })
+    else {
+        return Ok(vec![]);
+    };
+    let (h, w) = ((r1 - r0) as u64 + 1, (c1 - c0) as u64 + 1);
+    if h * w > MAX_SHEET_CELLS {
+        return Err(ToolError::limit(format!(
+            "sheet '{name}' spans {h} rows x {w} columns ({} cells, max {MAX_SHEET_CELLS}); \
+             remove stray cells far from the data",
+            h * w
+        )));
+    }
+    let mut rows = vec![vec![Data::Empty; w as usize]; h as usize];
+    for ((r, c), v) in cells {
+        rows[(r - r0) as usize][(c - c0) as usize] = v;
+    }
+    Ok(rows)
 }
