@@ -179,7 +179,13 @@ fn json_tool() -> Arc<dyn Tool> {
         let mut out = match p.str("mode")? {
             "validate" => return Ok(ToolOutput::data(data)),
             "minify" => serde_json::to_string(&v)?,
-            _ => to_json_indent(&v, &indent_str(p)),
+            _ => {
+                // Indentation grows with depth: deeply nested small values
+                // can pretty-print to many times the input size.
+                let indent = indent_str(p);
+                crate::util::check_generated_size(crate::util::json_pretty_size(&v, indent.len()))?;
+                to_json_indent(&v, &indent)
+            }
         };
         if p.bool("ascii") {
             out = out

@@ -24,6 +24,32 @@ pub fn check_generated_size(bytes: u128) -> ToolResult<()> {
     Ok(())
 }
 
+/// Estimated size of `v` pretty-printed with `indent` bytes per level
+/// (string escapes aside). Cheap: string lengths are read, not scanned.
+pub fn json_pretty_size(v: &Value, indent: usize) -> u128 {
+    fn go(v: &Value, depth: u128, ind: u128) -> u128 {
+        let line = |d: u128| 2 + d * ind; // ",\n" plus indentation
+        match v {
+            Value::Null | Value::Bool(_) => 5,
+            Value::Number(_) => 24,
+            Value::String(s) => s.len() as u128 + 2,
+            Value::Array(a) => {
+                2 + line(depth)
+                    + a.iter()
+                        .map(|x| line(depth + 1) + go(x, depth + 1, ind))
+                        .sum::<u128>()
+            }
+            Value::Object(m) => {
+                2 + line(depth)
+                    + m.iter()
+                        .map(|(k, x)| line(depth + 1) + k.len() as u128 + 4 + go(x, depth + 1, ind))
+                        .sum::<u128>()
+            }
+        }
+    }
+    go(v, 0, indent as u128)
+}
+
 /// Running total for output assembled piece by piece.
 #[derive(Default)]
 pub struct OutputBudget(u128);

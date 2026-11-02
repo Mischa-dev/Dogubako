@@ -120,3 +120,39 @@ async fn ragged_tables_are_bounded() {
         out.data
     );
 }
+
+#[tokio::test]
+async fn json_results_are_bounded() {
+    let h = harness();
+    // A 4 MiB string under 100 single-child objects: `$..*` matches every
+    // ancestor, so the result would hold ~100 copies of it.
+    let mut doc = json!("y".repeat(4 << 20));
+    for _ in 0..100 {
+        doc = json!({ "a": doc });
+    }
+    let text = serde_json::to_string(&doc).unwrap();
+    limited(&h, "dev.jsonpath", json!({"query": "$..*", "text": text})).await;
+    // Small results are unchanged.
+    let out = h
+        .run(
+            "dev.jsonpath",
+            json!({"query": "$..b", "text": r#"{"a":{"b":1},"b":2}"#}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["count"], 2);
+
+    // Deep nesting of tiny values: pretty-printing indents every line by depth.
+    let deep = format!(
+        "{}{}{}",
+        "[".repeat(120),
+        "1,".repeat(2_000_000) + "1",
+        "]".repeat(120)
+    );
+    limited(
+        &h,
+        "dev.json",
+        json!({"text": deep, "mode": "format", "indent": "4"}),
+    )
+    .await;
+}
