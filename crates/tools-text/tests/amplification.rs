@@ -296,6 +296,15 @@ async fn table_exports_and_sparse_json_are_bounded() {
         json!({"text": csv, "header": "yes", "columns": cols}),
     )
     .await;
+    // Repeated comparison columns are compared once, not copied per repeat.
+    let out = h
+        .run(
+            "data.duplicates",
+            json!({"text": format!("a\n{}\n{}\n", "x".repeat(100_000), "x".repeat(100_000)), "header": "yes", "columns": cols}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["duplicate_rows_removed"], 1, "{}", out.data);
     // A long header repeated as a key in every object.
     let csv = format!("{}\n{}", "k".repeat(100_000), "1\n".repeat(100_000));
     for shape in ["objects", "ndjson"] {

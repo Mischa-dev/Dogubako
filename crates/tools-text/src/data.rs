@@ -1707,10 +1707,14 @@ fn duplicates() -> Arc<dyn Tool> {
         .output(OutputKind::Data);
     sync_tool(spec, |ctx, p| {
         let (t, name) = load_table(p)?;
-        let idx: Vec<usize> = match p.opt_str("columns") {
+        let mut idx: Vec<usize> = match p.opt_str("columns") {
             Some(c) => t.cols(c)?,
             None => (0..t.headers.len()).collect(),
         };
+        // A repeated column adds nothing to the comparison but would be
+        // copied into every key once per repeat.
+        let mut seen = HashSet::new();
+        idx.retain(|i| seen.insert(*i));
         let (ic, tr) = (p.bool("ignore_case"), p.bool("trim"));
         let key = |r: &Vec<String>| -> Vec<String> {
             idx.iter()
