@@ -75,10 +75,9 @@ the frame shows a "trailer is on its way" card.
 
 ## Release day
 
-* **Downloads**: on `download/`, point the platform cards at the release assets
-  and change the "Not released yet" labels. It's marked with a `PLACEHOLDER`
-  comment. Update the page's heading ("The alpha isn't out yet."), its meta
-  descriptions, the home page's alpha card and the status line in `llms.txt` too.
+* **Downloads**: done for 0.1.0-alpha.1. For the next release, update the macOS
+  card's DMG link on `download/` (or run `packaging/release/website_links.py
+  --release <tag>`), and the version in the page text and in `llms.txt`.
 * **Server image**: when a public image is published, name it in step 1 of the
   download page's server steps and in `agent-install.md` (both say there is no
   prebuilt image yet).

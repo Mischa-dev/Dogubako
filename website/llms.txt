@@ -2,7 +2,7 @@
 
 > Dogubako is a local-first, open-source toolbox (AGPL-3.0-or-later): 249 tools for images, video, audio, speech, PDFs, files, text, developer tasks, data, network, design and system information. One engine runs every tool, used from a desktop app, a self-hosted web server, an HTTP API, a CLI, or MCP for AI agents. Files are processed on the machine that runs it; network tools make the outbound requests they describe.
 
-Status: 0.1.0-alpha.1 is not released yet. The first alpha is a macOS app for Apple silicon (macOS 15 or later). There are no Windows or Linux desktop builds in the alpha, and no public prebuilt server image yet; a server is built from source with Docker Compose.
+Status: 0.1.0-alpha.1, the first alpha, is out (https://github.com/Mischa-dev/Dogubako/releases/tag/v0.1.0-alpha.1). It is a macOS app for Apple silicon (macOS 15 or later). There are no Windows or Linux desktop builds in the alpha, and no public prebuilt server image yet; a server is built from source with Docker Compose.
 
 ## For agents
 
