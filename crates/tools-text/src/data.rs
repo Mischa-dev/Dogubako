@@ -318,6 +318,20 @@ pub fn flatten_records_with(
     for it in items {
         let mut pairs = vec![];
         walk("", it, sep, arrays, &mut pairs);
+        // A literal key can equal a flattened path ({"a":{"b":1},"a.b":2});
+        // give later duplicates a unique suffix so no value is dropped.
+        let mut seen: HashSet<String> = HashSet::new();
+        for (k, _) in pairs.iter_mut() {
+            if !seen.insert(k.clone()) {
+                let base = k.clone();
+                let mut n = 2;
+                while seen.contains(&format!("{base}_{n}")) {
+                    n += 1;
+                }
+                *k = format!("{base}_{n}");
+                seen.insert(k.clone());
+            }
+        }
         for (k, _) in &pairs {
             if !idx.contains_key(k) {
                 idx.insert(k.clone(), cols.len());
@@ -1309,6 +1323,7 @@ fn columns() -> Arc<dyn Tool> {
                     None
                 };
                 let rep = p.text("replace");
+                let regex_mode = p.bool("regex");
                 for r in &mut t.rows {
                     for i in &idx {
                         let c = &r[*i];
@@ -1317,7 +1332,15 @@ fn columns() -> Arc<dyn Tool> {
                             "lower" => c.to_lowercase(),
                             "title" => crate::text::convert_case(c, "title")?,
                             "trim" => c.split_whitespace().collect::<Vec<_>>().join(" "),
-                            _ => re.as_ref().unwrap().replace_all(c, rep).into_owned(),
+                            _ if regex_mode => {
+                                re.as_ref().unwrap().replace_all(c, rep).into_owned()
+                            }
+                            // Literal mode: `$1` etc. in the replacement are text.
+                            _ => re
+                                .as_ref()
+                                .unwrap()
+                                .replace_all(c, regex::NoExpand(rep))
+                                .into_owned(),
                         };
                     }
                 }
@@ -2113,6 +2136,15 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.text.unwrap(), "{\"a\":1,\"a_2\":2,\"a_2_2\":3}\n");
+        // A literal key equal to a flattened path keeps both values.
+        let out = h
+            .run(
+                "data.json_to_csv",
+                json!({"text": "[{\"a\":{\"b\":1},\"a.b\":2}]"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.text.unwrap(), "a.b,a.b_2\n1,2\n");
         let out = h.run("data.json_to_csv", json!({"text": "[{\"id\":1,\"u\":{\"n\":\"x\"},\"tags\":[\"a\",\"b\"]},{\"id\":2,\"extra\":\"y,z\"}]", "arrays": "join"})).await.unwrap();
         assert_eq!(
             out.text.unwrap(),
@@ -2284,6 +2316,36 @@ mod tests {
                 .text
                 .unwrap(),
             "index,full,age\n1,Ann Lee,30\n"
+        );
+        // Literal replace keeps `$` in the replacement as text.
+        assert_eq!(
+            h.run(
+                "data.columns",
+                c(
+                    "replace",
+                    json!({"columns": "age", "find": "30", "replace": "$100"})
+                )
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap(),
+            "full,age\nAnn Lee,$100\n"
+        );
+        // Regex mode still expands capture groups.
+        assert_eq!(
+            h.run(
+                "data.columns",
+                c(
+                    "replace",
+                    json!({"columns": "age", "find": "(3)(0)", "replace": "$2$1", "regex": true})
+                )
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap(),
+            "full,age\nAnn Lee,03\n"
         );
         assert_eq!(
             h.run("data.columns", c("drop", json!({"columns": "zzz"})))
