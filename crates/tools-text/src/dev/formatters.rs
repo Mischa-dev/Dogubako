@@ -859,15 +859,17 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
     Ok(Value::Object(root))
 }
 
-pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
+pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> ToolResult<String> {
     // Parsers turn a literal CR (and CRLF) into LF everywhere, and literal
     // tabs and newlines into spaces inside attribute values, so those are
     // written as character references to survive a round trip.
-    fn esc(s: &str) -> String {
-        crate::escape::xml_escape(s).replace('\r', "&#13;")
+    fn esc(s: &str) -> ToolResult<String> {
+        crate::escape::xml_escape(s)
+            .map(|e| e.replace('\r', "&#13;"))
+            .map_err(|e| ToolError::invalid("text", format!("{e}: {s:?}")))
     }
-    fn esc_attr(s: &str) -> String {
-        esc(s).replace('\n', "&#10;").replace('\t', "&#9;")
+    fn esc_attr(s: &str) -> ToolResult<String> {
+        Ok(esc(s)?.replace('\n', "&#10;").replace('\t', "&#9;"))
     }
     fn valid_name(n: &str) -> String {
         let mut s: String = n
@@ -885,12 +887,12 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
         }
         s
     }
-    fn write(out: &mut String, name: &str, v: &Value, depth: usize) {
+    fn write(out: &mut String, name: &str, v: &Value, depth: usize) -> ToolResult<()> {
         let pad = "  ".repeat(depth);
         match v {
             Value::Array(a) => {
                 for item in a {
-                    write(out, name, item, depth);
+                    write(out, name, item, depth)?;
                 }
             }
             Value::Object(m) => {
@@ -900,7 +902,7 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
                     out.push_str(&format!(
                         " {}=\"{}\"",
                         valid_name(&k[1..]),
-                        esc_attr(&cell_string(val))
+                        esc_attr(&cell_string(val))?
                     ));
                 }
                 let children: Vec<_> = m
@@ -910,16 +912,16 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
                 let text = m.get("#text").map(cell_string);
                 if children.is_empty() && text.is_none() {
                     out.push_str("/>\n");
-                    return;
+                    return Ok(());
                 }
                 out.push('>');
                 if let Some(t) = &text {
-                    out.push_str(&esc(t));
+                    out.push_str(&esc(t)?);
                 }
                 if !children.is_empty() {
                     out.push('\n');
                     for (k, val) in children {
-                        write(out, k, val, depth + 1);
+                        write(out, k, val, depth + 1)?;
                     }
                     out.push_str(&pad);
                 }
@@ -928,24 +930,25 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
             Value::Null => out.push_str(&format!("{pad}<{}/>\n", valid_name(name))),
             other => {
                 let n = valid_name(name);
-                out.push_str(&format!("{pad}<{n}>{}</{n}>\n", esc(&cell_string(other))));
+                out.push_str(&format!("{pad}<{n}>{}</{n}>\n", esc(&cell_string(other))?));
             }
         }
+        Ok(())
     }
     let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     match v {
         Value::Object(m) if m.len() == 1 && !m.values().next().unwrap().is_array() => {
             let (k, val) = m.iter().next().unwrap();
-            write(&mut out, k, val, 0);
+            write(&mut out, k, val, 0)?;
         }
         Value::Array(_) => {
             out.push_str(&format!("<{root_name}>\n"));
-            write(&mut out, "item", v, 1);
+            write(&mut out, "item", v, 1)?;
             out.push_str(&format!("</{root_name}>\n"));
         }
-        _ => write(&mut out, root_name, v, 0),
+        _ => write(&mut out, root_name, v, 0)?,
     }
-    out
+    Ok(out)
 }
 
 pub(crate) fn query_to_json(q: &str) -> Value {
@@ -1089,7 +1092,7 @@ pub(crate) fn render_any(v: &Value, to: &str, root: &str) -> ToolResult<(String,
         "json_min" => (serde_json::to_string(v)?, "application/json"),
         "yaml" => (to_yaml(v)?, "application/yaml"),
         "toml" => (to_toml(v)?, "application/toml"),
-        "xml" => (json_to_xml(v, root), "application/xml"),
+        "xml" => (json_to_xml(v, root)?, "application/xml"),
         "csv" | "tsv" => {
             let rows = match v {
                 Value::Array(a) => a.clone(),
@@ -1480,6 +1483,17 @@ mod tests {
         let back = super::xml_to_json(&xml).unwrap();
         assert_eq!(back["r"]["@a"], "line1\nline2\tend\r");
         assert_eq!(back["r"]["#text"], "x\r\ny");
+        // Characters XML 1.0 cannot carry are an error, not unparseable XML.
+        for bad in [r#"{"r":"a\u0000b"}"#, r#"{"r":{"@a":"\u001b"}}"#] {
+            let e = h
+                .run(
+                    "dev.convert",
+                    json!({"text": bad, "from": "json", "to": "xml"}),
+                )
+                .await
+                .unwrap_err();
+            assert!(e.to_string().contains("XML 1.0"), "{bad}: {e}");
+        }
     }
 
     #[tokio::test]
