@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dogubako · 249 tools for your files, in one box</title>
+  <meta name="description" content="Dogubako (道具箱, “toolbox”) is a free, open-source, local-first toolbox: 249 tools for images, video, audio, PDFs, text and data, as a desktop app, a self-hosted web app, a CLI, an HTTP API and an MCP server.">
+  <meta name="theme-color" content="#f7f6f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151412" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Theme and capability flags before first paint. 3D only when WebGL works and motion is welcome.
+    (function () {
+      var d = document.documentElement;
+      d.classList.remove('no-js'); d.classList.add('js');
+      try { var t = localStorage.getItem('dgb-theme'); if (t === 'light' || t === 'dark') d.setAttribute('data-theme', t); } catch (e) {}
+      var q = location.search;
+      var calm = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var gl = false;
+      try { var c = document.createElement('canvas'); gl = !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); } catch (e) {}
+      if (/[?&]still\b/.test(q) && !/[?&]ui\b/.test(q)) d.classList.add('still-capture');
+      if (gl && (!calm || /[?&]still\b/.test(q)) && !/[?&]static\b/.test(q)) d.classList.add('has-3d');
+    })();
+  </script>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <canvas id="stage" class="stage" aria-hidden="true"></canvas>
+  <div class="float-layer" id="float-layer" aria-hidden="true"></div>
+  <div class="drop-veil" id="drop-veil" aria-hidden="true"><div class="drop-veil-card"><svg class="mark" viewBox="0 0 100 100"><rect x="10" y="24" width="80" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="8"/><line x1="10" y1="46" x2="90" y2="46" stroke="currentColor" stroke-width="8"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></svg><p>Drop it on the bench</p><span>It stays in this tab. Nothing is uploaded.</span></div></div>
+  <p class="sr-only" id="bench-live" aria-live="polite"></p>
+
+  <header class="site-header">
+    <div class="bar">
+      <a class="brand" href="#top" aria-label="Dogubako, back to top">
+        <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect x="10" y="24" width="80" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="8"/><line x1="10" y1="46" x2="90" y2="46" stroke="currentColor" stroke-width="8"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></svg>
+        <span>Dogubako</span>
+      </a>
+      <nav class="nav" aria-label="Sections">
+        <a href="#inside">Inside</a>
+        <a href="#ways">Ways in</a>
+        <a href="#local">Private</a>
+        <a href="#host">Self-host</a>
+        <a href="#download">Download</a>
+      </nav>
+      <div class="bar-end">
+        <button class="icon-btn" type="button" id="theme-toggle" aria-label="Switch to dark theme">
+          <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+          <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <a class="icon-btn" href="https://github.com/Mischa-dev/Dogubako" aria-label="Dogubako on GitHub">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="filled"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.4c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.7 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <a class="btn btn-ink btn-sm bar-cta" href="#download">Get the alpha</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ============================================================ hero: the bench -->
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <picture class="still still-light">
+        <source media="(max-width: 759px)" srcset="assets/still-phone-light.jpg">
+        <img src="assets/still-desk-light.jpg" alt="" width="1600" height="1000" decoding="async" loading="lazy">
+      </picture>
+      <picture class="still still-dark">
+        <source media="(max-width: 759px)" srcset="assets/still-phone-dark.jpg">
+        <img src="assets/still-desk-dark.jpg" alt="" width="1600" height="1000" decoding="async" loading="lazy">
+      </picture>
+      <p class="sr-only">Illustration: a black lacquered toolbox with a vermilion latch and twelve labelled drawers sits open on a pale wooden bench. In front of it lie a photo print of a desert sunset, a fan of PDF pages, a strip of film, an audio waveform card, a spreadsheet and a JSON note card.</p>
+
+      <div class="hero-copy">
+        <p class="eyebrow"><span lang="ja">道具箱</span><span class="dot" aria-hidden="true">·</span>dōgu-bako, “toolbox”</p>
+        <h1 id="hero-title">249 tools for your files, in&nbsp;one&nbsp;box.</h1>
+        <p class="lede"><span class="lede-long">Convert a photo, merge PDFs, trim a video, transcribe an interview, format some JSON. </span>Dogubako does the small file jobs you’d normally hand to a random website, on your own computer. Free and open source.</p>
+        <div class="cta">
+          <a class="btn btn-ink" href="#download">Get the alpha</a>
+          <a class="btn btn-glass" href="https://github.com/Mischa-dev/Dogubako">Source on GitHub</a>
+        </div>
+      </div>
+
+      <div class="bench-bar">
+        <div class="bench-row">
+          <div class="bench-chips" id="bench-chips" role="group" aria-label="Files on the bench"></div>
+          <label class="btn btn-paper btn-sm add-file">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
+            Add your own file
+            <input type="file" id="own-file" class="sr-only" multiple>
+          </label>
+        </div>
+        <p class="bench-note"><span class="pointer-only">Hover a file to see what Dogubako suggests, click to run it, or drop your own anywhere.</span><span class="touch-only">Tap a file for suggestions, tap again to run it.</span> Sample results are examples.<span class="note-long"> Your own photos, JSON, text and CSV really run in this tab, anything else gets a real SHA-256.</span> Nothing is uploaded.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================ inside: twelve drawers -->
+    <section class="inside" id="inside" aria-labelledby="inside-title">
+      <div class="inside-stage">
+        <figure class="still-figure">
+          <picture class="still still-light">
+            <img src="assets/still-drawer-light.jpg" alt="The toolbox with its Images drawer pulled out, the drawer's tools printed on little cards inside" width="1600" height="900" loading="lazy" decoding="async">
+          </picture>
+          <picture class="still still-dark">
+            <img src="assets/still-drawer-dark.jpg" alt="The toolbox with its Images drawer pulled out, the drawer's tools printed on little cards inside" width="1600" height="900" loading="lazy" decoding="async">
+          </picture>
+        </figure>
+
+        <header class="inside-intro">
+          <p class="eyebrow">What’s inside</p>
+          <h2 id="inside-title">Twelve drawers. 249&nbsp;tools.</h2>
+          <p>Every tool sits in a drawer by what it works on.<span class="only-3d"> Keep scrolling and they open one by one, or jump straight to a label.</span><span class="only-static"> Here they are, drawer by drawer.</span></p>
+        </header>
+
+        <div class="drawer-panels">
+          <article class="dpanel" id="drawer-image" aria-labelledby="dp-image">
+            <p class="dp-num mono">01 / 12</p>
+            <h3 id="dp-image">Images <span class="dp-count mono">30 tools</span></h3>
+            <p class="dp-desc">Convert HEIC, AVIF and WebP, batch resize and compress, crop, watermark, strip metadata, blur faces, OCR, remove backgrounds and upscale.</p>
+            <ul class="dp-tools"><li>Convert Images</li><li>Resize Images</li><li>Create Thumbnails</li><li>Compress Images</li><li>Image Info</li><li>Convert Color Space</li><li>Extract Animation Frames</li><li>Generate Icons</li><li>Favicon Generator</li><li>Crop Image</li><li>Rotate &amp; Flip</li><li>Adjust &amp; Filter</li><li>Watermark Images</li><li>Combine Images</li><li>Split Image into Tiles</li><li>Compare Images</li><li>Contact Sheet</li><li>Sprite Sheet</li><li>Redact Regions</li><li>Reduce Noise</li><li>View Image Metadata</li><li>Remove Image Metadata</li><li>SVG to PNG/JPEG/WebP</li><li>Optimize SVG</li><li>Detect Faces</li><li>Blur Faces</li><li>Extract Text (OCR)</li><li>Remove Background</li><li>AI Upscale</li><li>Dominant Colors</li></ul>
+          </article>
+          <article class="dpanel" id="drawer-video" aria-labelledby="dp-video">
+            <p class="dp-num mono">02 / 12</p>
+            <h3 id="dp-video">Video <span class="dp-count mono">27 tools</span></h3>
+            <p class="dp-desc">Convert and compress to a target size, trim, merge, crop, GIF to video and back, stabilize, pull frames, add or burn subtitles.</p>
+            <ul class="dp-tools"><li>Convert Video</li><li>Compress Video</li><li>Resize Video</li><li>Change Frame Rate</li><li>Trim Video</li><li>Cut / Split Video</li><li>Crop Video</li><li>Rotate / Flip Video</li><li>Merge Videos</li><li>Extract Audio from Video</li><li>Remove Audio</li><li>Replace Audio</li><li>Extract Frames</li><li>Video Thumbnail</li><li>Video to GIF</li><li>GIF to Video</li><li>Change Video Speed</li><li>Stabilize Video</li><li>Video Info</li><li>Video Preview Clip</li><li>Hardware Encoders</li><li>Watermark Video</li><li>Video Contact Sheet</li><li>Add Subtitles</li><li>Remove Subtitles</li><li>Burn In Subtitles</li><li>Extract Subtitles</li></ul>
+          </article>
+          <article class="dpanel" id="drawer-audio" aria-labelledby="dp-audio">
+            <p class="dp-num mono">03 / 12</p>
+            <h3 id="dp-audio">Audio <span class="dp-count mono">21 tools</span></h3>
+            <p class="dp-desc">Convert, normalize loudness, trim and split, remove silence, denoise, EQ, fades, waveforms, spectrograms, tags and cover art.</p>
+            <ul class="dp-tools"><li>Convert Audio</li><li>Compress Audio</li><li>Trim Audio</li><li>Split Audio</li><li>Merge Audio</li><li>Normalize Audio</li><li>Change Volume</li><li>Change Sample Rate</li><li>Audio Channels</li><li>Remove Silence</li><li>Detect Silence</li><li>Audio Waveform</li><li>Audio Spectrogram</li><li>Audio Info</li><li>Audio Tags</li><li>Reduce Noise</li><li>Change Audio Speed / Pitch</li><li>Equalizer</li><li>Fade In / Out</li><li>Reverse Audio</li><li>Extract Audio from Video</li></ul>
+          </article>
+          <article class="dpanel" id="drawer-speech" aria-labelledby="dp-speech">
+            <p class="dp-num mono">04 / 12</p>
+            <h3 id="dp-speech">Speech &amp; Voice <span class="dp-count mono">9 tools</span></h3>
+            <p class="dp-desc">Offline transcription to TXT, SRT, VTT or Markdown, language detection, speaker turns and text to speech, all on your machine.</p>
+            <ul class="dp-tools"><li>Convert Transcript / Subtitles</li><li>Shift Subtitle Timing</li><li>Transcribe Audio / Video</li><li>Detect Spoken Language</li><li>Generate Subtitles</li><li>Text to Speech</li><li>Voice Activity Detection</li><li>Extract Speech Segments</li><li>Split at Pauses</li></ul>
+          </article>
+          <article class="dpanel" id="drawer-pdf" aria-labelledby="dp-pdf">
+            <p class="dp-num mono">05 / 12</p>
+            <h3 id="dp-pdf">PDF &amp; Documents <span class="dp-count mono">27 tools</span></h3>
+            <p class="dp-desc">Merge, split, reorder, compress, make searchable with OCR, extract text and images, watermark, number pages, encrypt and fill forms.</p>
+            <ul class="dp-tools"><li>Merge PDFs</li><li>Split PDF</li><li>Extract Pages</li><li>Reorder Pages</li><li>Rotate Pages</li><li>Delete Pages</li><li>Repair PDF</li><li>Optimize for Web</li><li>Flatten Forms &amp; Annotations</li><li>Protect PDF</li><li>Remove PDF Password</li><li>Compress PDF</li><li>Extract Text</li><li>Extract Images</li><li>PDF to Images</li><li>PDF Info</li><li>Compare PDF Text</li><li>Images to PDF</li><li>OCR PDF</li><li>Watermark PDF</li><li>Add Page Numbers</li><li>Edit PDF Metadata</li><li>List Form Fields</li><li>Fill PDF Form</li><li>Convert Office Documents</li><li>Convert Markup Documents</li><li>Markdown to PDF</li></ul>
+          </article>
+          <article class="dpanel" id="drawer-files" aria-labelledby="dp-files">
+            <p class="dp-num mono">06 / 12</p>
+            <h3 id="dp-files">Files <span class="dp-count mono">23 tools</span></h3>
+            <p class="dp-desc">Checksums, archives with zip-bomb protection, duplicate and large-file finders, folder compare and batch rename with a preview.</p>
+            <ul class="dp-tools"><li>File Hash</li><li>Verify Checksums</li><li>Checksum Manifest</li><li>Detect File Type</li><li>Executable Info</li><li>Hex Viewer</li><li>MIME Type Lookup</li><li>Compare Files</li><li>Compare Folders</li><li>List Archive Contents</li><li>Extract Archive</li><li>Create Archive</li><li>Compress File</li><li>Decompress File</li><li>Folder Size</li><li>Find Large Files</li><li>Find Duplicate Files</li><li>Find Duplicates Among Files</li><li>Find Empty Files &amp; Folders</li><li>Remove Empty Files &amp; Folders</li><li>Search Files</li><li>File Manifest</li><li>Batch Rename</li></ul>
+          </article>
+          <article class="dpanel" id="drawer-text" aria-labelledby="dp-text">
+            <p class="dp-num mono">07 / 12</p>
+            <h3 id="dp-text">Text <span class="dp-count mono">27 tools</span></h3>
+            <p class="dp-desc">Case, counts, sort and dedupe, diff, regex replace, encodings, Markdown and HTML, and text out of Office, EPUB and PDF files.</p>
+            <ul class="dp-tools"><li>Change Case</li><li>Word &amp; Character Count</li><li>Sort Lines</li><li>Remove Duplicate Lines</li><li>Trim &amp; Remove Whitespace</li><li>Line Endings</li><li>Find &amp; Replace</li><li>Regex Replace</li><li>Compare Text (Diff)</li><li>Escape / Unescape</li><li>Convert Text Encoding</li><li>Markdown Preview</li><li>Markdown to HTML</li><li>HTML to Plain Text</li><li>HTML to Markdown</li><li>Clean Up Text</li><li>Slugify</li><li>Reverse Text</li><li>Lorem Ipsum Generator</li><li>Wrap Text</li><li>Extract Columns</li><li>Number Lines</li><li>Add Prefix / Suffix</li><li>Filter Lines</li><li>Unicode Inspector</li><li>Word Frequency</li><li>Extract Text from Document</li></ul>
+          </article>
+          <article class="dpanel" id="drawer-dev" aria-labelledby="dp-dev">
+            <p class="dp-num mono">08 / 12</p>
+            <h3 id="dp-dev">Developer <span class="dp-count mono">34 tools</span></h3>
+            <p class="dp-desc">JSON, YAML, TOML and XML, Base64 and hex, UUIDs, hashes, timestamps, regex, JSONPath and jq, JWTs, SQL, cron, QR and barcodes.</p>
+            <ul class="dp-tools"><li>QR Code Generator</li><li>QR Code Reader</li><li>Barcode Generator</li><li>Barcode Reader</li><li>JSON Formatter &amp; Validator</li><li>YAML Formatter &amp; Validator</li><li>TOML Formatter &amp; Validator</li><li>XML Formatter &amp; Validator</li><li>SQL Formatter</li><li>Convert Data Format</li><li>Base64 Encode / Decode</li><li>URL Encode / Decode</li><li>HTML Entities Encode / Decode</li><li>Hex Encode / Decode</li><li>Number Base Converter</li><li>Text ↔ Binary</li><li>Hash Generator</li><li>HMAC Generator &amp; Verifier</li><li>Password &amp; Random Generator</li><li>UUID Generator &amp; Decoder</li><li>JWT Decoder &amp; Verifier</li><li>Unix Timestamp Converter</li><li>Date Calculator &amp; Formatter</li><li>Time Zone Converter</li><li>Cron Expression Explainer</li><li>Regex Tester</li><li>JSONPath Query</li><li>jq Filter</li><li>JSON Schema Validator</li><li>JSON Diff</li><li>Color Converter</li><li>HTTP Message Parser</li><li>User-Agent Parser</li><li>String Inspector</li></ul>
+          </article>
+          <article class="dpanel" id="drawer-data" aria-labelledby="dp-data">
+            <p class="dp-num mono">09 / 12</p>
+            <h3 id="dp-data">Data <span class="dp-count mono">12 tools</span></h3>
+            <p class="dp-desc">View, filter, sort, clean and summarize CSV, open spreadsheets, convert JSON and CSV, validate schemas and export to SQL.</p>
+            <ul class="dp-tools"><li>CSV Viewer</li><li>Filter &amp; Sort CSV</li><li>CSV to JSON</li><li>JSON to CSV</li><li>Spreadsheet Viewer &amp; Export</li><li>Change CSV Delimiter</li><li>Transform Columns</li><li>Validate CSV / JSON Data</li><li>Find Duplicate Rows</li><li>Column Statistics</li><li>Clean CSV Data</li><li>Convert Table Data</li></ul>
+          </article>
+          <article class="dpanel" id="drawer-network" aria-labelledby="dp-network">
+            <p class="dp-num mono">10 / 12</p>
+            <h3 id="dp-network">Network &amp; Web <span class="dp-count mono">18 tools</span></h3>
+            <p class="dp-desc">DNS, WHOIS, HTTP header and security checks, TLS certificates, URL tools, subnet planning and connectivity tests.</p>
+            <ul class="dp-tools"><li>URL Parser</li><li>URL Normalizer</li><li>Query Parameter Editor</li><li>IP Address Info</li><li>CIDR Calculator</li><li>Subnet Planner (VLSM)</li><li>Certificate Decoder</li><li>Key Inspector</li><li>DNS Lookup</li><li>Reverse DNS</li><li>TLS / SSL Inspector</li><li>HTTP Headers &amp; Security Check</li><li>Favicon Fetcher</li><li>Connectivity Check</li><li>Port Checker</li><li>RDAP Lookup</li><li>WHOIS Lookup</li><li>Domain Inspector</li></ul>
+          </article>
+          <article class="dpanel" id="drawer-design" aria-labelledby="dp-design">
+            <p class="dp-num mono">11 / 12</p>
+            <h3 id="dp-design">Design <span class="dp-count mono">9 tools</span></h3>
+            <p class="dp-desc">Palettes and palette extraction, WCAG contrast, gradients, canvas resize, compositing and styled QR codes.</p>
+            <ul class="dp-tools"><li>Color Palette Generator</li><li>Extract Palette from Image</li><li>Contrast Checker</li><li>Gradient Generator</li><li>Aspect Ratio Calculator</li><li>Resize Canvas / Pad</li><li>Overlay Images</li><li>Bulk Image Dimensions</li><li>Styled QR Code</li></ul>
+          </article>
+          <article class="dpanel" id="drawer-system" aria-labelledby="dp-system">
+            <p class="dp-num mono">12 / 12</p>
+            <h3 id="dp-system">System <span class="dp-count mono">12 tools</span></h3>
+            <p class="dp-desc">An overview dashboard for CPU, memory, disks, battery health, hardware, processes and temperatures.</p>
+            <ul class="dp-tools"><li>System Overview</li><li>CPU Info</li><li>Memory Usage</li><li>Disks &amp; Storage</li><li>Hardware Info</li><li>Operating System</li><li>Network Interfaces</li><li>Top Processes</li><li>Uptime</li><li>Temperature Sensors</li><li>Environment Diagnostics</li><li>Battery Health</li></ul>
+          </article>
+        </div>
+
+        <nav class="drawer-rail" aria-label="Jump to a drawer">
+          <button type="button" aria-label="Images, 30 tools"><span class="rl-name">Images</span><span class="rl-n mono">30</span></button>
+          <button type="button" aria-label="Video, 27 tools"><span class="rl-name">Video</span><span class="rl-n mono">27</span></button>
+          <button type="button" aria-label="Audio, 21 tools"><span class="rl-name">Audio</span><span class="rl-n mono">21</span></button>
+          <button type="button" aria-label="Speech &amp; Voice, 9 tools"><span class="rl-name">Speech &amp; Voice</span><span class="rl-n mono">9</span></button>
+          <button type="button" aria-label="PDF &amp; Documents, 27 tools"><span class="rl-name">PDF &amp; Documents</span><span class="rl-n mono">27</span></button>
+          <button type="button" aria-label="Files, 23 tools"><span class="rl-name">Files</span><span class="rl-n mono">23</span></button>
+          <button type="button" aria-label="Text, 27 tools"><span class="rl-name">Text</span><span class="rl-n mono">27</span></button>
+          <button type="button" aria-label="Developer, 34 tools"><span class="rl-name">Developer</span><span class="rl-n mono">34</span></button>
+          <button type="button" aria-label="Data, 12 tools"><span class="rl-name">Data</span><span class="rl-n mono">12</span></button>
+          <button type="button" aria-label="Network &amp; Web, 18 tools"><span class="rl-name">Network &amp; Web</span><span class="rl-n mono">18</span></button>
+          <button type="button" aria-label="Design, 9 tools"><span class="rl-name">Design</span><span class="rl-n mono">9</span></button>
+          <button type="button" aria-label="System, 12 tools"><span class="rl-name">System</span><span class="rl-n mono">12</span></button>
+        </nav>
+
+        <div class="inside-outro">
+          <p class="outro-big">That’s all 249.</p>
+          <p>Each one also runs from a terminal, a script or an AI agent, from the same description.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="rest">
+      <!-- ============================================================ ways in -->
+      <section class="section ways" id="ways" aria-labelledby="ways-title">
+        <header class="section-head reveal">
+          <p class="eyebrow">Ways in</p>
+          <h2 id="ways-title">One tool, four ways in.</h2>
+          <p class="section-lede">Each tool is described once. The app’s form, the command, the HTTP call and the MCP call are generated from that description and run by the same engine, so they always agree. Pick a tool and compare.</p>
+        </header>
+        <div class="ways-pick reveal" id="ways-pick" role="group" aria-label="Tool">
+          <button type="button" data-tool="image.compress" aria-pressed="true">Compress Images</button>
+          <button type="button" data-tool="video.compress" aria-pressed="false">Compress Video</button>
+          <button type="button" data-tool="speech.transcribe" aria-pressed="false">Transcribe</button>
+          <button type="button" data-tool="pdf.merge" aria-pressed="false">Merge PDFs</button>
+          <button type="button" data-tool="dev.json" aria-pressed="false">Format JSON</button>
+          <button type="button" data-tool="files.hash" aria-pressed="false">File Hash</button>
+        </div>
+        <p class="way-spec mono reveal"><span class="soft">tool id</span> <span id="way-id">image.compress</span></p>
+        <div class="ways-grid">
+          <article class="way reveal" id="way-cli">
+            <header><h3>Command line</h3><a class="way-link" href="https://docs.dogubako.app/cli/overview/">CLI guide</a></header>
+            <div class="way-body"><pre class="code"><code><span class="p">$</span> dogubako image compress dune.jpg --quality 75 --format webp</code></pre></div>
+          </article>
+          <article class="way reveal" id="way-app">
+            <header><h3>Desktop and web app</h3><span class="way-sub mono">macOS · Windows · Linux · browser</span></header>
+            <div class="way-body"><div class="mock"><div class="m-title">Compress Images</div><div class="m-row"><span class="m-label">Images</span><span class="m-val"><span class="m-chip">dune.jpg</span></span></div><div class="m-row"><span class="m-label">Quality</span><span class="m-val"><span class="m-range" style="--v:0.75"><span></span></span><span class="m-num mono">75</span></span></div><div class="m-row"><span class="m-label">Output format</span><span class="m-val"><span class="m-select">WebP</span></span></div><div class="m-run"><span class="m-btn">Run</span></div></div></div>
+          </article>
+          <article class="way reveal" id="way-api">
+            <header><h3>HTTP API</h3><a class="way-link" href="https://docs.dogubako.app/reference/http-api/">API reference</a></header>
+            <div class="way-body"><pre class="code"><code><span class="p">PUT</span>  /api/v1/files/raw?name=dune.jpg  <span class="c"># → f_1</span>
+<span class="p">POST</span> /api/v1/tools/image.compress/run
+{
+  <span class="k">"params"</span>: {
+    <span class="k">"input"</span>: [<span class="s">"f_1"</span>],
+    <span class="k">"quality"</span>: 75,
+    <span class="k">"format"</span>: <span class="s">"webp"</span>
+  },
+  <span class="k">"wait_seconds"</span>: 60
+}</code></pre></div>
+          </article>
+          <article class="way reveal" id="way-mcp">
+            <header><h3>MCP, for AI agents</h3><a class="way-link" href="https://docs.dogubako.app/agents/overview/">MCP guide</a></header>
+            <div class="way-body"><pre class="code"><code><span class="c"># tools/call</span> <span class="p">dogubako_run_tool</span>
+{
+  <span class="k">"tool"</span>: <span class="s">"image.compress"</span>,
+  <span class="k">"arguments"</span>: {
+    <span class="k">"input"</span>: [<span class="s">"f_1"</span>],
+    <span class="k">"quality"</span>: 75,
+    <span class="k">"format"</span>: <span class="s">"webp"</span>
+  }
+}</code></pre></div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ============================================================ local-first -->
+      <section class="section local" id="local" aria-labelledby="local-title">
+        <div class="split">
+          <div class="reveal">
+            <p class="eyebrow">Local-first</p>
+            <h2 id="local-title">Your files stay on your bench.</h2>
+            <p class="section-lede">The desktop app needs no account and sends nothing anywhere. Host it yourself and your files only travel to a machine you own.</p>
+            <dl class="facts">
+              <div><dt>No shell</dt><dd>External programs run directly, with timeouts, resource limits and optional bubblewrap sandboxing.</dd></div>
+              <div><dt>Owner-checked files</dt><dd>Files are addressed by id and checked against their owner on every request. Archives are guarded against bombs and path tricks.</dd></div>
+              <div><dt>Guarded network tools</dt><dd>On a shared server, tools that fetch URLs refuse to reach into your private network by default, and every action goes to an audit log.</dd></div>
+              <div><dt>Open source</dt><dd>GNU AGPL v3.0 or later. No telemetry, no paywalls, and all of the code is there to read.</dd></div>
+            </dl>
+          </div>
+          <figure class="receipt reveal" aria-labelledby="receipt-cap">
+            <div class="receipt-paper">
+              <p class="r-head mono"><span>dogubako</span><span>this machine</span></p>
+              <ol class="r-lines mono">
+                <li><span>dune.jpg</span><span>Compress Images</span></li>
+                <li><span>lease.pdf + 2</span><span>Merge PDFs</span></li>
+                <li><span>talk.mov</span><span>Trim Video</span></li>
+                <li><span>interview.m4a</span><span>Transcribe, offline</span></li>
+                <li><span>orders.csv</span><span>Clean CSV Data</span></li>
+              </ol>
+              <dl class="r-total mono">
+                <div><dt>uploaded</dt><dd>0 files</dd></div>
+                <div><dt>account</dt><dd>none</dd></div>
+                <div><dt>telemetry</dt><dd>none</dd></div>
+              </dl>
+            </div>
+            <figcaption id="receipt-cap">What a morning of small jobs looks like from the network’s side: nothing.</figcaption>
+          </figure>
+        </div>
+        <p class="engines reveal"><span class="soft">Built on</span> FFmpeg · ImageMagick · libvips · ExifTool · qpdf · Poppler · Ghostscript · Tesseract · whisper.cpp · Piper · LibreOffice · Pandoc · 7-Zip <span class="soft">and native Rust for everything that doesn’t need them.</span></p>
+      </section>
+
+      <!-- ============================================================ self-host and agents -->
+      <section class="section host" id="host" aria-labelledby="host-title">
+        <div class="split">
+          <div class="reveal">
+            <p class="eyebrow">Self-hosting and agents</p>
+            <h2 id="host-title">Host it once. Give each agent its own key.</h2>
+            <p class="section-lede">Run Dogubako on a home server, a NAS or a VPS with the heavy engines installed once, and open it from any browser on your network, phones included. Then hand each AI agent a scoped token: an image bot may resize and blur, a media bot may transcode and transcribe. Neither can see the other’s files or touch your system tools.</p>
+            <ul class="keys" aria-label="Example agent keys">
+              <li class="key"><span class="key-hole" aria-hidden="true"></span><span class="key-name mono">media-bot</span><span class="key-scope mono">video.* · speech.*</span></li>
+              <li class="key"><span class="key-hole" aria-hidden="true"></span><span class="key-name mono">image-bot</span><span class="key-scope mono">image.resize · image.face_blur</span></li>
+            </ul>
+            <p class="links"><a class="link-arrow" href="https://docs.dogubako.app/self-hosting/overview/">Self-hosting guide</a> <a class="link-arrow" href="https://docs.dogubako.app/agents/overview/">Agents and MCP</a></p>
+          </div>
+          <div class="terminal reveal" aria-label="Terminal session: set up a server and an agent">
+            <div class="term-bar" aria-hidden="true"><span></span><span></span><span></span><b class="mono">server</b></div>
+<pre class="term-body"><code><span class="c"># on the server</span>
+<span class="p">$</span> docker compose up -d --build
+<span class="p">$</span> docker compose logs dogubako | grep "Setup token"
+
+<span class="c"># one account per agent, limited to its tools</span>
+<span class="p">$</span> dogubako users create media-bot --role agent \
+    --allow 'video.*' --allow 'speech.*'
+<span class="p">$</span> dogubako tokens create --user media-bot --name laptop
+
+<span class="c"># or, on your own machine, for a local agent</span>
+<span class="p">$</span> claude mcp add dogubako -- \
+    dogubako mcp serve --discovery compact</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ download -->
+      <section class="section download" id="download" aria-labelledby="download-title">
+        <header class="section-head reveal">
+          <p class="eyebrow">Download</p>
+          <h2 id="download-title">The alpha is on its way.</h2>
+          <p class="section-lede">Installers for macOS, Windows and Linux come with the first alpha release. Watch the releases page, or build it from source today.</p>
+        </header>
+        <div class="downloads reveal">
+          <!-- PLACEHOLDER: point these at the release assets once the alpha is published. -->
+          <a class="dl" href="https://github.com/Mischa-dev/Dogubako/releases"><span class="dl-os">macOS</span><span class="dl-sub mono">.dmg</span><span class="dl-state">Not released yet</span></a>
+          <a class="dl" href="https://github.com/Mischa-dev/Dogubako/releases"><span class="dl-os">Windows</span><span class="dl-sub mono">.msi · .exe</span><span class="dl-state">Not released yet</span></a>
+          <a class="dl" href="https://github.com/Mischa-dev/Dogubako/releases"><span class="dl-os">Linux</span><span class="dl-sub mono">AppImage · .deb · .rpm</span><span class="dl-state">Not released yet</span></a>
+        </div>
+        <div class="from-source reveal">
+<pre class="code"><code><span class="c"># build the desktop app</span>
+<span class="p">$</span> git clone https://github.com/Mischa-dev/Dogubako &amp;&amp; cd Dogubako
+<span class="p">$</span> (cd web &amp;&amp; npm ci &amp;&amp; npm run build)
+<span class="p">$</span> (cd apps/desktop/src-tauri &amp;&amp; cargo tauri build)
+
+<span class="c"># or just the CLI</span>
+<span class="p">$</span> cargo install --path crates/cli</code></pre>
+          <p>Optional engines unlock more tools. <code class="mono">dogubako deps</code> lists what’s missing and the command to install it on your system.</p>
+          <p><a class="btn btn-ink" href="https://github.com/Mischa-dev/Dogubako/releases">Watch releases on GitHub</a></p>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <div class="footer-inner">
+          <div class="footer-brand">
+            <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect x="10" y="24" width="80" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="8"/><line x1="10" y1="46" x2="90" y2="46" stroke="currentColor" stroke-width="8"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></svg>
+            <div><strong>Dogubako</strong><p>A local-first, open-source utility toolbox.</p></div>
+          </div>
+          <nav class="footer-cols" aria-label="Footer">
+            <div><h2 class="footer-h">Project</h2><a href="https://github.com/Mischa-dev/Dogubako">Source code</a><a href="https://github.com/Mischa-dev/Dogubako/releases">Releases</a><a href="https://github.com/Mischa-dev/Dogubako/issues">Report a problem</a></div>
+            <div><h2 class="footer-h">Docs</h2><a href="https://docs.dogubako.app">Documentation</a><a href="https://docs.dogubako.app/self-hosting/overview/">Self-hosting</a><a href="https://docs.dogubako.app/cli/overview/">CLI</a><a href="https://docs.dogubako.app/agents/overview/">MCP</a><a href="https://docs.dogubako.app/project/security/">Security</a></div>
+            <div><h2 class="footer-h">License</h2><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a><a href="https://docs.dogubako.app/project/licensing/">Third-party licenses</a></div>
+          </nav>
+        </div>
+        <p class="footer-fine mono">dogubako.app · the 3D bench is drawn live with three.js (MIT)</p>
+      </footer>
+    </div>
+  </main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
