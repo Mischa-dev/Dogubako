@@ -1,20 +1,24 @@
-/* Design tokens. One neutral ramp + one calm accent; brand vermilion lives only in the logo. */
+/* Design tokens — "Paper with frosted panels".
+   Warm paper ground, ink for actions, frosted glass only on floating surfaces.
+   Brand vermilion lives in the mark (the latch) and nowhere else. */
 :root {
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-sans: "Instrument Sans Variable", "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   --fs-xs: 11.5px;
   --fs-sm: 12.5px;
   --fs-md: 13.5px;
   --fs-base: 14px;
   --fs-lg: 15.5px;
-  --fs-xl: 19px;
-  --fs-2xl: 24px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+  --fs-display: 42px;
   --lh: 1.45;
 
-  --r-sm: 5px;
-  --r-md: 7px;
-  --r-lg: 10px;
+  --r-sm: 6px;
+  --r-md: 9px;
+  --r-lg: 14px;
+  --r-xl: 18px;
 
   --sp-1: 4px;
   --sp-2: 8px;
@@ -24,108 +28,155 @@
   --sp-6: 24px;
   --sp-8: 32px;
 
-  --sidebar-w: 248px;
-  --content-w: 980px;
-  --control-h: 32px;
-  --row-pad: 9px;
+  --sidebar-w: 280px;
+  --content-w: 1040px;
+  --control-h: 34px;
+  --row-pad: 10px;
+  --gutter: 12px;
 
   --ease: cubic-bezier(0.2, 0, 0, 1);
-  --dur: 140ms;
+  --dur: 160ms;
 
   /* light */
-  --bg: #f6f6f4;
-  --bg-sidebar: #efefec;
+  --bg: #f7f6f3;
+  --bg-sidebar: transparent;
   --surface: #ffffff;
-  --surface-2: #fafaf9;
-  --surface-sunken: #f2f2ef;
-  --hover: rgba(20, 22, 28, 0.045);
-  --active: rgba(20, 22, 28, 0.075);
-  --border: #e3e3df;
-  --border-strong: #cfcfca;
-  --divider: #ebebe7;
-  --text: #1b1d22;
-  --text-2: #50535b;
-  --text-3: #6c6f77;
-  --text-inverse: #ffffff;
+  --surface-2: #fbfaf8;
+  --surface-sunken: #f1efea;
+  --hover: rgba(22, 22, 22, 0.045);
+  --active: rgba(22, 22, 22, 0.075);
+  --border: #e4e1da;
+  --border-strong: #d2cec5;
+  --divider: #ece9e3;
+  --text: #161616;
+  --text-2: #4a4843;
+  --text-3: #6a6862;
+  --text-inverse: #f7f6f3;
 
-  --accent: #2f5fd0;
-  --accent-hover: #2853ba;
-  --accent-text: #2a56bf;
-  --accent-soft: #eaf0fc;
-  --accent-soft-2: #d9e4fa;
-  --focus: rgba(47, 95, 208, 0.45);
+  --accent: #161616;
+  --accent-hover: #000000;
+  --accent-text: #161616;
+  --accent-soft: rgba(22, 22, 22, 0.06);
+  --accent-soft-2: rgba(22, 22, 22, 0.12);
+  --focus: rgba(22, 22, 22, 0.45);
+  --brand: #e0533d;
 
   --success: #1f7a45;
-  --success-soft: #e6f4ec;
+  --success-soft: #e5f2ea;
   --warn: #9a5b00;
-  --warn-soft: #fbf1e0;
-  --warn-border: #efd7ab;
-  --danger: #c1352a;
-  --danger-soft: #fcebea;
-  --danger-border: #f2c7c3;
+  --warn-soft: #f8eedc;
+  --warn-border: #ead3a6;
+  --danger: #b8382b;
+  --danger-soft: #f9e7e4;
+  --danger-border: #efc6c0;
 
-  --ins-bg: #dff3e6;
+  --ins-bg: #dff1e5;
   --ins-text: #12572f;
-  --del-bg: #fbe3e1;
+  --del-bg: #f8e1de;
   --del-text: #8d1f17;
-  --mark: #fde9a6;
-  --mark-2: #cfe0ff;
+  --mark: #f6e3a6;
+  --mark-2: #dde6f5;
 
-  --shadow-pop: 0 1px 2px rgba(16, 18, 24, 0.06), 0 8px 28px rgba(16, 18, 24, 0.12);
-  --shadow-card: 0 1px 1px rgba(16, 18, 24, 0.03);
-  --checker-a: #f1f1ee;
-  --checker-b: #fafaf8;
-  --scrim: rgba(18, 19, 23, 0.32);
+  /* syntax (JSON tree, code) */
+  --syn-str: #7a5a1e;
+  --syn-num: #2f5f8a;
+  --syn-bool: #9a3b2b;
+
+  /* frosted glass — floating surfaces only */
+  --glass: rgba(255, 255, 255, 0.6);
+  --glass-strong: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.78);
+  --glass-edge: rgba(60, 45, 30, 0.08);
+  --glass-blur: blur(22px) saturate(1.4);
+
+  --segment-on: #ffffff;
+  --switch-thumb: #ffffff;
+  --switch-thumb-on: #f7f6f3;
+
+  --shadow-card: 0 0 0 1px rgba(60, 45, 30, 0.06), 0 10px 26px -20px rgba(60, 45, 30, 0.4);
+  --shadow-pop: 0 0 0 1px rgba(60, 45, 30, 0.08), 0 30px 70px -28px rgba(60, 45, 30, 0.45);
+  --shadow-float: 0 0 0 1px var(--glass-edge), 0 20px 44px -26px rgba(60, 45, 30, 0.38);
+  --shadow-object: 0 1px 2px rgba(40, 30, 20, 0.1), 0 20px 36px -16px rgba(40, 30, 20, 0.5);
+  --ambient-opacity: 0.3;
+  --checker-a: #efede8;
+  --checker-b: #f9f8f5;
+  --scrim: rgba(28, 24, 20, 0.28);
 }
 
 :root[data-theme='dark'] {
-  --bg: #151619;
-  --bg-sidebar: #111214;
-  --surface: #1c1d21;
-  --surface-2: #202126;
-  --surface-sunken: #18191c;
+  --bg: #151412;
+  --bg-sidebar: transparent;
+  --surface: #1f1e1b;
+  --surface-2: #23221f;
+  --surface-sunken: #1a1917;
   --hover: rgba(255, 255, 255, 0.05);
   --active: rgba(255, 255, 255, 0.085);
-  --border: #2c2e33;
-  --border-strong: #3c3e44;
-  --divider: #26282c;
-  --text: #e8e8ea;
-  --text-2: #b0b2b8;
-  --text-3: #8d9097;
-  --text-inverse: #ffffff;
+  --border: #2e2c28;
+  --border-strong: #3d3a35;
+  --divider: #282623;
+  --text: #edeae4;
+  --text-2: #c9c5bd;
+  --text-3: #a29e96;
+  --text-inverse: #151412;
 
-  --accent: #4a78e6;
-  --accent-hover: #5a86ee;
-  --accent-text: #8fb0ff;
-  --accent-soft: rgba(90, 134, 238, 0.14);
-  --accent-soft-2: rgba(90, 134, 238, 0.24);
-  --focus: rgba(122, 160, 255, 0.55);
+  --accent: #edeae4;
+  --accent-hover: #ffffff;
+  --accent-text: #edeae4;
+  --accent-soft: rgba(255, 255, 255, 0.08);
+  --accent-soft-2: rgba(255, 255, 255, 0.15);
+  --focus: rgba(237, 234, 228, 0.55);
 
-  --success: #5cc287;
-  --success-soft: rgba(92, 194, 135, 0.13);
-  --warn: #e3a64a;
-  --warn-soft: rgba(227, 166, 74, 0.11);
-  --warn-border: rgba(227, 166, 74, 0.28);
-  --danger: #f07a70;
-  --danger-soft: rgba(240, 122, 112, 0.12);
-  --danger-border: rgba(240, 122, 112, 0.3);
+  --success: #5fcb8e;
+  --success-soft: rgba(95, 203, 142, 0.13);
+  --warn: #e8b057;
+  --warn-soft: rgba(232, 176, 87, 0.12);
+  --warn-border: rgba(232, 176, 87, 0.3);
+  --danger: #f2857a;
+  --danger-soft: rgba(242, 133, 122, 0.12);
+  --danger-border: rgba(242, 133, 122, 0.3);
 
-  --ins-bg: rgba(92, 194, 135, 0.18);
-  --ins-text: #9ee2b8;
-  --del-bg: rgba(240, 122, 112, 0.18);
-  --del-text: #ffb3ab;
-  --mark: rgba(250, 204, 21, 0.3);
-  --mark-2: rgba(122, 160, 255, 0.3);
+  --ins-bg: rgba(95, 203, 142, 0.18);
+  --ins-text: #a3e3bd;
+  --del-bg: rgba(242, 133, 122, 0.18);
+  --del-text: #ffb8ae;
+  --mark: rgba(240, 196, 90, 0.3);
+  --mark-2: rgba(150, 175, 230, 0.28);
 
-  --shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.45);
-  --shadow-card: none;
-  --checker-a: #222327;
-  --checker-b: #1b1c20;
+  --syn-str: #e2bf86;
+  --syn-num: #9cc2ec;
+  --syn-bool: #f0a291;
+
+  --glass: rgba(42, 40, 37, 0.58);
+  --glass-strong: rgba(46, 44, 40, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-edge: rgba(0, 0, 0, 0.35);
+
+  --segment-on: #34322e;
+  --switch-thumb: #edeae4;
+  --switch-thumb-on: #151412;
+
+  --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 14px 30px -20px rgba(0, 0, 0, 0.8);
+  --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 30px 70px -24px rgba(0, 0, 0, 0.75);
+  --shadow-float: 0 0 0 1px var(--glass-border), 0 20px 44px -24px rgba(0, 0, 0, 0.7);
+  --shadow-object: 0 1px 2px rgba(0, 0, 0, 0.4), 0 22px 40px -16px rgba(0, 0, 0, 0.75);
+  --ambient-opacity: 0.24;
+  --checker-a: #23221f;
+  --checker-b: #1b1a18;
   --scrim: rgba(0, 0, 0, 0.5);
 }
 
 :root[data-density='compact'] {
-  --control-h: 29px;
+  --control-h: 30px;
   --row-pad: 6px;
   --fs-base: 13.5px;
 }
+
+/* Frosted glass costs GPU time; drop it where blur is unsupported or when the
+   person asks for less transparency, and fall back to solid panels. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --glass: var(--surface); --glass-strong: var(--surface); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass: var(--surface); --glass-strong: var(--surface); --glass-blur: none; }
+}
+:root[data-glass='off'] { --glass: var(--surface); --glass-strong: var(--surface); --glass-blur: none; }

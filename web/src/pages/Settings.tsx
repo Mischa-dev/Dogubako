@@ -299,7 +299,7 @@ function About() {
   return (
     <Section title="About">
       <div className="about">
-        <LogoMark size={44} />
+        <LogoMark size={44} tile />
         <div>
           <div className="about-name">Dogubako <span className="muted">道具箱</span></div>
           <div className="muted small">Version {status.version} · {isServer ? `server “${status.instance_name}”` : 'desktop'} · {visibleTools.length} tools</div>
