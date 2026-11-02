@@ -66,6 +66,7 @@ jobs:
           done
       # TEMPORARY diagnostic (to be removed): find which audio.denoise
       # variant intermittently crashes Homebrew FFmpeg 9 (exit 139).
+      # First run: afftdn 0/120 crashes, anlmdn segfaulted at once.
       - name: Denoise crash probe (macOS, temporary)
         if: runner.os == 'macOS'
         continue-on-error: true
@@ -73,23 +74,16 @@ jobs:
         run: |
           d=$(mktemp -d); cd "$d"
           ffmpeg -v error -y -f lavfi -i sine=f=440:d=3:sample_rate=44100 -ac 2 in.wav
-          V="afftdn_tn1_hp|aformat=sample_fmts=fltp,highpass=f=80,afftdn=nr=12:nf=-50:tn=1
-          afftdn_tn1|aformat=sample_fmts=fltp,afftdn=nr=12:nf=-50:tn=1
-          afftdn_tn0_hp|aformat=sample_fmts=fltp,highpass=f=80,afftdn=nr=12:nf=-50
-          anlmdn_light|aformat=sample_fmts=fltp,anlmdn=s=0.0001
-          anlmdn_hp|aformat=sample_fmts=fltp,highpass=f=80,anlmdn=s=0.001
-          highpass|aformat=sample_fmts=fltp,highpass=f=80"
-          echo "$V" | while IFS='|' read -r k af; do
-            k=$(echo "$k" | tr -d ' ')
-            for extra in "" "-threads 1 -filter_threads 1 -filter_complex_threads 1"; do
+          for extra in "" "-cpuflags 0"; do
+            for af in "aformat=sample_fmts=fltp,anlmdn=s=0.0001" "aformat=sample_fmts=fltp,highpass=f=80,anlmdn=s=0.001"; do
               fails=0; last=""
-              for i in $(seq 1 20); do
+              for i in $(seq 1 30); do
+                c=0
                 ffmpeg -hide_banner -nostdin -y -nostats -loglevel error $extra -progress pipe:1 \
-                  -i in.wav -vn -map 0:a:0 -map_metadata 0 -af "$af" -c:a pcm_s16le out.wav >/dev/null 2>err.txt
-                c=$?
+                  -i in.wav -vn -map 0:a:0 -map_metadata 0 -af "$af" -c:a pcm_s16le out.wav >/dev/null 2>err.txt || c=$?
                 if [ $c -ne 0 ]; then fails=$((fails+1)); last="exit=$c $(head -c 200 err.txt | tr '\n' ' ')"; fi
               done
-              echo "$k [${extra:-default threads}]: $fails/20 failed $last"
+              echo "$af [${extra:-default cpuflags}]: $fails/30 failed $last"
             done
           done
       - name: Build CLI

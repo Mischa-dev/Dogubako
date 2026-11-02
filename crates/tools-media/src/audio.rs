@@ -1762,7 +1762,8 @@ fn denoise() -> Arc<dyn Tool> {
             chain.push(format!("lowpass=f={lp}"));
         }
         let st = p.str("strength")?;
-        chain.push(match p.str("method")? {
+        let method = p.str("method")?;
+        chain.push(match method {
             "anlmdn" => format!(
                 "anlmdn=s={}",
                 match st {
@@ -1782,17 +1783,17 @@ fn denoise() -> Arc<dyn Tool> {
             ),
         });
         let af = chain.join(",");
-        // Single-threaded filtering: FFmpeg 9 intermittently crashes in the
-        // denoisers' per-channel threads (SIGSEGV after "Format change is not
-        // supported"); audio denoising is cheap enough without them.
-        af_batch_with(
-            &ctx,
-            &p,
-            "denoised",
-            "Denoising",
-            &["-filter_threads", "1"],
-            |_, _| Ok((af.clone(), None, json!({"filter": af}))),
-        )
+        // anlmdn segfaults intermittently in FFmpeg 9's optimized (SIMD)
+        // code paths, observed with Homebrew FFmpeg 9.0.2 on arm64 macOS;
+        // the portable C implementation is used instead.
+        let globals: &[&str] = if method == "anlmdn" {
+            &["-cpuflags", "0"]
+        } else {
+            &[]
+        };
+        af_batch_with(&ctx, &p, "denoised", "Denoising", globals, |_, _| {
+            Ok((af.clone(), None, json!({"filter": af})))
+        })
         .await
     })
 }
