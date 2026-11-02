@@ -1,0 +1,25 @@
+[package]
+name = "dogubako-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dogubako-core = { workspace = true }
+dogubako-tools-image = { workspace = true, optional = true }
+dogubako-tools-media = { workspace = true, optional = true }
+dogubako-tools-docs = { workspace = true, optional = true }
+dogubako-tools-files = { workspace = true, optional = true }
+dogubako-tools-text = { workspace = true, optional = true }
+dogubako-tools-net = { workspace = true, optional = true }
+dogubako-tools-system = { workspace = true, optional = true }
+
+[features]
+default = ["image", "media", "docs", "files", "text", "net", "system"]
+image = ["dep:dogubako-tools-image"]
+media = ["dep:dogubako-tools-media"]
+docs = ["dep:dogubako-tools-docs"]
+files = ["dep:dogubako-tools-files"]
+text = ["dep:dogubako-tools-text"]
+net = ["dep:dogubako-tools-net"]
+system = ["dep:dogubako-tools-system"]

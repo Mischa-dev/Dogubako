@@ -1,0 +1,42 @@
+# Dogubako — self-hosted. Start with:  docker compose up -d
+# First run: `docker compose logs dogubako` shows the one-time setup token.
+services:
+  dogubako:
+    build: .
+    image: dogubako:latest
+    container_name: dogubako
+    restart: unless-stopped
+    # Only reachable from this machine by default. For LAN access use
+    # "8420:8420"; for Tailscale see deploy/docker-compose.tailscale.yml.
+    ports:
+      - "127.0.0.1:8420:8420"
+    volumes:
+      - ./data:/data
+    environment:
+      DOGUBAKO_INSTANCE_NAME: "Dogubako"
+      # DOGUBAKO_PUBLIC_URL: "https://tools.example.ts.net"
+      # DOGUBAKO_SECURE_COOKIES: "true"        # when served over HTTPS
+      DOGUBAKO_MAX_UPLOAD_MB: "2048"
+      DOGUBAKO_USER_QUOTA_MB: "10240"
+      DOGUBAKO_FILE_RETENTION_HOURS: "24"
+      DOGUBAKO_MAX_CONCURRENT_JOBS: "4"
+      DOGUBAKO_PER_USER_CONCURRENCY: "2"
+      DOGUBAKO_EXEC_MEMORY_MB: "4096"
+      DOGUBAKO_MAX_JOB_SECONDS: "3600"
+      DOGUBAKO_MCP_ENABLED: "true"
+      # Host folders tools may read (mount them read-only below):
+      # DOGUBAKO_FS_ROOTS: "/media"
+    # volumes for FS_ROOTS, e.g.:  - /srv/media:/media:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=2g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8g
+          pids: 512

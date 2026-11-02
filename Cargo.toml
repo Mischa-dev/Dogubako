@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+exclude = ["apps/desktop/src-tauri"]
+default-members = ["crates/cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/mischa-dev/dogubako"
+rust-version = "1.95"
+
+[workspace.dependencies]
+dogubako-core = { path = "crates/core" }
+dogubako-tools-image = { path = "crates/tools-image" }
+dogubako-tools-media = { path = "crates/tools-media" }
+dogubako-tools-docs = { path = "crates/tools-docs" }
+dogubako-tools-files = { path = "crates/tools-files" }
+dogubako-tools-text = { path = "crates/tools-text" }
+dogubako-tools-net = { path = "crates/tools-net" }
+dogubako-tools-system = { path = "crates/tools-system" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true
+
+[profile.dev]
+debug = 1
+[profile.dev.package."*"]
+opt-level = 2
+debug = 0

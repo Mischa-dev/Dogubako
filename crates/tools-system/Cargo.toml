@@ -1,0 +1,20 @@
+[package]
+name = "dogubako-tools-system"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono = "0.4.45"
+dogubako-core = { workspace = true }
+iana-time-zone = "0.1.65"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+starship-battery = "0.12"
+sys-locale = "0.3.2"
+sysinfo = "0.40"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
+tempfile = "3"

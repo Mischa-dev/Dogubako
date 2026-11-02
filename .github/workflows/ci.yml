@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 0
+
+jobs:
+  web:
+    name: Web UI (test + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm test -- --run
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+  rust:
+    name: Rust (${{ matrix.os }})
+    needs: web
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Install processing engines (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg imagemagick libvips-tools libimage-exiftool-perl \
+            qpdf poppler-utils ghostscript tesseract-ocr tesseract-ocr-eng p7zip-full
+      - name: Install processing engines (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg qpdf poppler tesseract exiftool || true
+      - name: Engine versions
+        shell: bash
+        run: |
+          for c in "ffmpeg -version" "qpdf --version" "tesseract --version" "magick -version" "convert -version" "exiftool -ver"; do
+            echo "== $c"; $c 2>&1 | head -1 || true
+          done
+      - name: Build CLI
+        run: cargo build -p dogubako-cli --locked
+      - name: Test workspace
+        run: cargo test --workspace --locked --no-fail-fast
+      - name: Clippy
+        if: runner.os == 'Linux'
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: CLI smoke test
+        shell: bash
+        run: |
+          ./target/debug/dogubako tools list --json > /dev/null
+          echo '{"b":2,"a":1}' | ./target/debug/dogubako dev json
+          ./target/debug/dogubako deps
+
+  desktop:
+    name: Desktop app (Tauri) check
+    needs: web
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - name: Linux WebKit dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+      - run: cargo check
+        working-directory: apps/desktop/src-tauri
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: dogubako:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

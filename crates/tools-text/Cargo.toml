@@ -1,0 +1,67 @@
+[package]
+name = "dogubako-tools-text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ammonia = "4.2.4"
+base64 = "0.23.1"
+blake2 = "0.11.0"
+blake3 = "1.8.7"
+calamine = { version = "0.37.0", features = ["dates"] }
+chardetng = "1.0.0"
+chrono = "0.4.45"
+chrono-tz = "0.10.4"
+crc32fast = "1.5.4"
+croner = "4.0.2"
+csscolorparser = "0.9.0"
+csv = "1.4.0"
+dogubako-core = { workspace = true }
+encoding_rs = "0.8.44"
+fancy-regex = "0.20.0"
+heck = "0.5.0"
+hex = "0.4.3"
+hmac = "0.13.0"
+htmd = "0.5.6"
+html-escape = "0.3.0"
+html2text = "0.17.4"
+httparse = "1.10.1"
+jaq-core = "3.1.2"
+jaq-json = "2.0.3"
+jaq-std = "3.0.4"
+jsonschema = { version = "0.60.2", default-features = false }
+jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto", "use_pem"] }
+md-5 = "0.11.0"
+num-bigint = "0.5.1"
+num-traits = "0.2.19"
+percent-encoding = "2.3.2"
+pulldown-cmark = "0.13.6"
+quick-xml = "0.42.0"
+rand = "0.10.3"
+regex = "1.13.1"
+rust_xlsxwriter = "0.102.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_json_path = "0.7.2"
+serde_yaml_ng = "0.10.0"
+sha1 = "0.11.0"
+sha2 = "0.11.1"
+sha3 = "0.12.0"
+similar = "3.2.1"
+sqlformat = "0.5.0"
+textwrap = "0.16.4"
+tokio = { version = "1", features = ["full"] }
+toml = "1.1.8"
+unicode-general-category = "1.1.0"
+unicode-normalization = "0.1.26"
+unicode-segmentation = "1.13.3"
+unicode_names2 = "4.0.0"
+url = "2.5.8"
+uuid = { version = "1.29.0", features = ["v1", "v3", "v4", "v5", "v6", "v7"] }
+woothee = "0.13.0"
+zip = "9.2.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
+tempfile = "3"

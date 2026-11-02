@@ -1,0 +1,38 @@
+[package]
+name = "dogubako-tools-files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+blake3 = "1.8.7"
+brotli = "9.1.1"
+bzip2 = "0.6.1"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+crc32fast = "1.5.4"
+dogubako-core = { workspace = true }
+flate2 = "1.1.10"
+globset = "0.4.21"
+goblin = "0.10.7"
+hex = "0.4.3"
+infer = "0.22.0"
+liblzma = "0.4.9"
+md-5 = "0.11.0"
+mime_guess = "2.0.5"
+regex = "1.13.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.11.0"
+sha2 = "0.11.1"
+sha3 = "0.12.0"
+similar = "3.2.1"
+tar = "0.4.46"
+tokio = { version = "1", features = ["full"] }
+walkdir = "2.5.0"
+xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
+zip = { version = "9.2.1", default-features = false, features = ["deflate", "deflate64", "bzip2", "zstd", "lzma", "xz", "aes-crypto", "time"] }
+zstd = "0.14.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
+tempfile = "3"

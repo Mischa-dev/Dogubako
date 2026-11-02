@@ -1,0 +1,131 @@
+/* Design tokens. One neutral ramp + one calm accent; brand vermilion lives only in the logo. */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --fs-xs: 11.5px;
+  --fs-sm: 12.5px;
+  --fs-md: 13.5px;
+  --fs-base: 14px;
+  --fs-lg: 15.5px;
+  --fs-xl: 19px;
+  --fs-2xl: 24px;
+  --lh: 1.45;
+
+  --r-sm: 5px;
+  --r-md: 7px;
+  --r-lg: 10px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  --sidebar-w: 248px;
+  --content-w: 980px;
+  --control-h: 32px;
+  --row-pad: 9px;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur: 140ms;
+
+  /* light */
+  --bg: #f6f6f4;
+  --bg-sidebar: #efefec;
+  --surface: #ffffff;
+  --surface-2: #fafaf9;
+  --surface-sunken: #f2f2ef;
+  --hover: rgba(20, 22, 28, 0.045);
+  --active: rgba(20, 22, 28, 0.075);
+  --border: #e3e3df;
+  --border-strong: #cfcfca;
+  --divider: #ebebe7;
+  --text: #1b1d22;
+  --text-2: #50535b;
+  --text-3: #6c6f77;
+  --text-inverse: #ffffff;
+
+  --accent: #2f5fd0;
+  --accent-hover: #2853ba;
+  --accent-text: #2a56bf;
+  --accent-soft: #eaf0fc;
+  --accent-soft-2: #d9e4fa;
+  --focus: rgba(47, 95, 208, 0.45);
+
+  --success: #1f7a45;
+  --success-soft: #e6f4ec;
+  --warn: #9a5b00;
+  --warn-soft: #fbf1e0;
+  --warn-border: #efd7ab;
+  --danger: #c1352a;
+  --danger-soft: #fcebea;
+  --danger-border: #f2c7c3;
+
+  --ins-bg: #dff3e6;
+  --ins-text: #12572f;
+  --del-bg: #fbe3e1;
+  --del-text: #8d1f17;
+  --mark: #fde9a6;
+  --mark-2: #cfe0ff;
+
+  --shadow-pop: 0 1px 2px rgba(16, 18, 24, 0.06), 0 8px 28px rgba(16, 18, 24, 0.12);
+  --shadow-card: 0 1px 1px rgba(16, 18, 24, 0.03);
+  --checker-a: #f1f1ee;
+  --checker-b: #fafaf8;
+  --scrim: rgba(18, 19, 23, 0.32);
+}
+
+:root[data-theme='dark'] {
+  --bg: #151619;
+  --bg-sidebar: #111214;
+  --surface: #1c1d21;
+  --surface-2: #202126;
+  --surface-sunken: #18191c;
+  --hover: rgba(255, 255, 255, 0.05);
+  --active: rgba(255, 255, 255, 0.085);
+  --border: #2c2e33;
+  --border-strong: #3c3e44;
+  --divider: #26282c;
+  --text: #e8e8ea;
+  --text-2: #b0b2b8;
+  --text-3: #8d9097;
+  --text-inverse: #ffffff;
+
+  --accent: #4a78e6;
+  --accent-hover: #5a86ee;
+  --accent-text: #8fb0ff;
+  --accent-soft: rgba(90, 134, 238, 0.14);
+  --accent-soft-2: rgba(90, 134, 238, 0.24);
+  --focus: rgba(122, 160, 255, 0.55);
+
+  --success: #5cc287;
+  --success-soft: rgba(92, 194, 135, 0.13);
+  --warn: #e3a64a;
+  --warn-soft: rgba(227, 166, 74, 0.11);
+  --warn-border: rgba(227, 166, 74, 0.28);
+  --danger: #f07a70;
+  --danger-soft: rgba(240, 122, 112, 0.12);
+  --danger-border: rgba(240, 122, 112, 0.3);
+
+  --ins-bg: rgba(92, 194, 135, 0.18);
+  --ins-text: #9ee2b8;
+  --del-bg: rgba(240, 122, 112, 0.18);
+  --del-text: #ffb3ab;
+  --mark: rgba(250, 204, 21, 0.3);
+  --mark-2: rgba(122, 160, 255, 0.3);
+
+  --shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-card: none;
+  --checker-a: #222327;
+  --checker-b: #1b1c20;
+  --scrim: rgba(0, 0, 0, 0.5);
+}
+
+:root[data-density='compact'] {
+  --control-h: 29px;
+  --row-pad: 6px;
+  --fs-base: 13.5px;
+}

@@ -1,0 +1,24 @@
+# Example configuration file. Place at <data_dir>/dogubako.toml or pass --config.
+# Every key can also be set via DOGUBAKO_<UPPERCASE_KEY> environment variables.
+bind = "127.0.0.1:8420"
+data_dir = "./data"
+# public_url = "https://tools.example.ts.net"
+instance_name = "Dogubako"
+auth = "required"            # or "none" (loopback only)
+secure_cookies = false       # true behind HTTPS
+session_hours = 336
+max_upload_mb = 2048
+user_quota_mb = 10240
+file_retention_hours = 24
+job_retention_days = 14
+max_concurrent_jobs = 4
+per_user_concurrency = 2
+fs_roots = []                # e.g. ["/srv/media"] to allow folder tools
+allow_private_network = false # SSRF protection for network tools
+mcp_enabled = true
+mcp_discovery = "full"       # or "compact"
+allowed_origins = []
+sandbox = "none"             # or "bwrap" (Linux, needs bubblewrap + user namespaces)
+exec_memory_mb = 4096
+exec_cpu_secs = 3600
+max_job_seconds = 3600

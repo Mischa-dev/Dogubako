@@ -1,0 +1,24 @@
+# Expose Dogubako only on your tailnet via a Tailscale sidecar.
+#   TS_AUTHKEY=tskey-... docker compose -f docker-compose.yml -f deploy/docker-compose.tailscale.yml up -d
+# Then open https://dogubako.<your-tailnet>.ts.net (MagicDNS + `tailscale serve`).
+# Application-level authentication stays enabled: Tailscale is network access,
+# not authorization.
+services:
+  tailscale:
+    image: tailscale/tailscale:stable
+    hostname: dogubako
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ./data/tailscale:/var/lib/tailscale
+      - ./deploy/tailscale-serve.json:/config/serve.json:ro
+    cap_add: [NET_ADMIN, SYS_MODULE]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    restart: unless-stopped
+  dogubako:
+    network_mode: service:tailscale
+    ports: !reset []
+    environment:
+      DOGUBAKO_SECURE_COOKIES: "true"
