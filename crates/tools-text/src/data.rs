@@ -62,8 +62,19 @@ impl Table {
             .max()
             .unwrap_or(0)
             .max(self.headers.len());
+        // Generated names must not collide with existing headers
+        // (e.g. a header row `column2` with two-field records).
+        let mut used: HashSet<String> = self.headers.iter().cloned().collect();
         for i in self.headers.len()..w {
-            self.headers.push(format!("column{}", i + 1));
+            let base = format!("column{}", i + 1);
+            let mut name = base.clone();
+            let mut n = 2;
+            while used.contains(&name) {
+                name = format!("{base}_{n}");
+                n += 1;
+            }
+            used.insert(name.clone());
+            self.headers.push(name);
         }
         for r in &mut self.rows {
             r.resize(w, String::new());
@@ -426,7 +437,7 @@ pub fn load_table(p: &Params) -> ToolResult<(Table, String)> {
         }
         let text = decode_bytes(&read_file(f)?).0;
         if matches!(ext.as_str(), "json" | "ndjson" | "jsonl") {
-            return Ok((json_table(&text)?, f.name.clone()));
+            return Ok((json_table(&text, header_mode != "no")?, f.name.clone()));
         }
         return Ok((
             parse_text_table(&text, p, header_mode, ext == "tsv")?,
@@ -442,7 +453,7 @@ pub fn load_table(p: &Params) -> ToolResult<(Table, String)> {
     }
     let t = text.trim_start();
     if (t.starts_with('[') || t.starts_with('{')) && p.str_or("delimiter", "auto") == "auto" {
-        if let Ok(tab) = json_table(text) {
+        if let Ok(tab) = json_table(text, header_mode != "no") {
             return Ok((tab, "data.csv".into()));
         }
     }
@@ -483,7 +494,9 @@ fn table_from_cells(mut rows: Vec<Vec<String>>, header: bool) -> Table {
     t
 }
 
-pub fn json_table(text: &str) -> ToolResult<Table> {
+/// `header`: whether the first row of a JSON array-of-arrays holds the
+/// column names (arrays of objects always carry their own keys).
+pub fn json_table(text: &str, header: bool) -> ToolResult<Table> {
     let v: Value = match serde_json::from_str(text) {
         Ok(v) => v,
         Err(e) => {
@@ -515,7 +528,7 @@ pub fn json_table(text: &str) -> ToolResult<Table> {
             .iter()
             .map(|r| r.as_array().unwrap().iter().map(cell_string).collect())
             .collect();
-        return Ok(table_from_cells(rows, true));
+        return Ok(table_from_cells(rows, header));
     }
     let (headers, rows) = flatten_records(&items, ".");
     Ok(Table { headers, rows })
@@ -2230,6 +2243,24 @@ mod tests {
             out.text.unwrap(),
             "INSERT INTO \"t\" (\"a\", \"b\") VALUES (1, 'x''y');\n"
         );
+        // JSON arrays of rows honour header: no.
+        let out = h
+            .run(
+                "data.convert",
+                json!({"text": "[[1,2],[3,4]]", "to": "csv", "header": "no"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.text.unwrap(), "column1,column2\n1,2\n3,4\n");
+        // Padding columns never reuse an existing header name.
+        let out = h
+            .run(
+                "data.csv_to_json",
+                json!({"text": "column2\n1,2", "header": "yes", "shape": "ndjson"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.text.unwrap(), "{\"column2\":1,\"column2_2\":2}\n");
         let out = h
             .run(
                 "data.convert",
