@@ -1355,7 +1355,9 @@ fn columns() -> Arc<dyn Tool> {
                             "upper" => c.to_uppercase(),
                             "lower" => c.to_lowercase(),
                             "title" => crate::text::convert_case(c, "title")?,
-                            "trim" => c.split_whitespace().collect::<Vec<_>>().join(" "),
+                            // Leading/trailing only; collapsing inner whitespace
+                            // is data.clean's separate operation.
+                            "trim" => c.trim().to_string(),
                             _ if regex_mode => {
                                 re.as_ref().unwrap().replace_all(c, rep).into_owned()
                             }
@@ -2407,6 +2409,17 @@ mod tests {
                 .text
                 .unwrap(),
             "full,age\nANN LEE,30\n"
+        );
+        assert_eq!(
+            h.run(
+                "data.columns",
+                json!({"text": "name\n\"  Alice  Smith  \"", "operation": "trim", "columns": "name"})
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap(),
+            "name\nAlice  Smith\n"
         );
         assert_eq!(
             h.run(

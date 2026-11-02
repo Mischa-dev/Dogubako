@@ -150,13 +150,37 @@ fn json_tool() -> Arc<dyn Tool> {
 // YAML
 
 pub(crate) fn parse_yaml_docs(text: &str, param: &str) -> ToolResult<Vec<Value>> {
+    parse_yaml_native(text, param)?
+        .into_iter()
+        .map(|v| yaml_to_json(v).map_err(|m| ToolError::invalid(param, m)))
+        .collect()
+}
+
+/// YAML documents as YAML values (keys keep their types: `1` and `"1"` stay
+/// distinct), for formatting without a lossy trip through JSON.
+fn parse_yaml_native(text: &str, param: &str) -> ToolResult<Vec<serde_yaml_ng::Value>> {
     use serde::Deserialize;
-    let mut docs = vec![];
-    for de in serde_yaml_ng::Deserializer::from_str(text) {
-        let v = serde_yaml_ng::Value::deserialize(de).map_err(|e| yaml_err(e, param))?;
-        docs.push(yaml_to_json(v).map_err(|m| ToolError::invalid(param, m))?);
+    serde_yaml_ng::Deserializer::from_str(text)
+        .map(|de| serde_yaml_ng::Value::deserialize(de).map_err(|e| yaml_err(e, param)))
+        .collect()
+}
+
+/// Sort mapping keys recursively (by their YAML text).
+fn sort_yaml_keys(v: &mut serde_yaml_ng::Value) {
+    use serde_yaml_ng::Value as Y;
+    match v {
+        Y::Mapping(m) => {
+            let mut entries: Vec<(Y, Y)> = std::mem::take(m).into_iter().collect();
+            for (_, val) in entries.iter_mut() {
+                sort_yaml_keys(val);
+            }
+            entries.sort_by_cached_key(|(k, _)| serde_yaml_ng::to_string(k).unwrap_or_default());
+            *m = entries.into_iter().collect();
+        }
+        Y::Sequence(s) => s.iter_mut().for_each(sort_yaml_keys),
+        Y::Tagged(t) => sort_yaml_keys(&mut t.value),
+        _ => {}
     }
-    Ok(docs)
 }
 
 fn yaml_err(e: serde_yaml_ng::Error, param: &str) -> ToolError {
@@ -201,6 +225,12 @@ fn yaml_to_json(v: serde_yaml_ng::Value) -> Result<Value, String> {
                         .trim()
                         .to_string(),
                 };
+                // `1` and `"1"` are distinct YAML keys but the same JSON key.
+                if o.contains_key(&key) {
+                    return Err(format!(
+                        "YAML keys that differ only in type (e.g. 1 and \"1\") both become the JSON key \"{key}\""
+                    ));
+                }
                 o.insert(key, yaml_to_json(v)?);
             }
             Value::Object(o)
@@ -244,15 +274,20 @@ fn yaml_tool() -> Arc<dyn Tool> {
         .text_output("application/yaml")
         .ui("live");
     sync_tool(spec, |_ctx, p| {
-        let mut docs = parse_yaml_docs(p.text("text"), "text")?;
+        // Formatted as YAML values, never via JSON (which would merge keys
+        // like 1 and "1" and drop tags).
+        let mut docs = parse_yaml_native(p.text("text"), "text")?;
         if p.bool("sort_keys") {
-            docs.iter_mut().for_each(sort_keys);
+            docs.iter_mut().for_each(sort_yaml_keys);
         }
         let data = json!({"valid": true, "documents": docs.len()});
         if p.str("mode")? == "validate" {
             return Ok(ToolOutput::data(data));
         }
-        let parts: Vec<String> = docs.iter().map(to_yaml).collect::<ToolResult<_>>()?;
+        let parts: Vec<String> = docs
+            .iter()
+            .map(|d| serde_yaml_ng::to_string(d).ctx("serializing YAML"))
+            .collect::<ToolResult<_>>()?;
         Ok(ToolOutput::text_as(parts.join("---\n"), "application/yaml").with_data(data))
     })
 }
@@ -1061,6 +1096,25 @@ mod tests {
             .unwrap();
         assert_eq!(out.data["documents"], 2);
         assert!(out.text.unwrap().contains("---"));
+        // Keys that differ only in type survive formatting (and sorting)...
+        let both = "1: first\n\"1\": second\n";
+        for sort in [false, true] {
+            let out = h
+                .run("dev.yaml", json!({"text": both, "sort_keys": sort}))
+                .await
+                .unwrap();
+            let t = out.text.unwrap();
+            assert!(t.contains("first") && t.contains("second"), "{t}");
+        }
+        // ...and a conversion to JSON refuses rather than dropping one.
+        let err = h
+            .run(
+                "dev.convert",
+                json!({"text": both, "from": "yaml", "to": "json"}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "invalid_input");
         let err = h
             .run("dev.yaml", json!({"text": "a: [1, 2\nb: 3"}))
             .await
