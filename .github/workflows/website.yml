@@ -1,0 +1,119 @@
+name: Website
+
+# Builds the dogubako.app site into _site and, only when run by hand with
+# deploy ticked and the Cloudflare secrets present, publishes it to the
+# Cloudflare Pages project "dogubako-website". Pull requests only build.
+#
+# It publishes website/ (the design concepts in design/website-concepts/ are
+# never published). Inputs flip the links once things are live:
+#   docs_live docs.dogubako.app is deployed: point docs links there
+#   release   the published release tag: point downloads at its assets
+on:
+  pull_request:
+    paths: ["website/**", "deploy/website/**", "packaging/release/website_links.py", ".github/workflows/website.yml"]
+  workflow_dispatch:
+    inputs:
+      docs_live:
+        description: docs.dogubako.app is live
+        type: boolean
+        default: false
+      release:
+        description: Published release tag (e.g. v0.1.0-alpha.1), or empty
+        type: string
+        default: ""
+      deploy:
+        description: Publish to Cloudflare Pages (production)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    env:
+      DOCS_LIVE: ${{ inputs.docs_live && '1' || '' }}
+      RELEASE: ${{ inputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble _site
+        run: |
+          set -eu
+          if [ ! -d website ]; then
+            # Branches below the website PR (#3) have no site yet.
+            echo "::notice::No website/ folder on this branch; nothing to build."
+            echo "NO_SITE=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          # The trailer is copied only when its review manifest allows it
+          # (website/scripts/trailer.sh); otherwise the page shows its placeholder.
+          if [ -f website/scripts/trailer.sh ]; then
+            sh website/scripts/trailer.sh || echo "::warning::Trailer not copied; the page shows its placeholder."
+          fi
+          mkdir _site
+          cp -R website/. _site/
+          # Build scripts, notes and review material don't belong on the public site.
+          rm -rf _site/concepts _site/review _site/scripts _site/README.md _site/NOTES.md _site/.gitignore
+          cp deploy/website/_headers _site/_headers
+      - name: Point links at live docs and the release
+        if: env.NO_SITE != '1'
+        run: |
+          args=""
+          [ -n "$DOCS_LIVE" ] && args="$args --docs"
+          [ -n "$RELEASE" ] && args="$args --release $RELEASE"
+          if [ -n "$args" ]; then python3 -I packaging/release/website_links.py _site $args; fi
+          echo "### Still pointing at branches or saying prerelease" >> "$GITHUB_STEP_SUMMARY"
+          python3 -I packaging/release/website_links.py _site --check | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Check local references resolve
+        if: env.NO_SITE != '1'
+        run: |
+          python3 -I - <<'PY'
+          import re, sys
+          from pathlib import Path
+          root = Path("_site"); bad = []
+          for page in root.rglob("*.html"):
+              for ref in re.findall(r'(?:src|href)="([^"#?:]+)"', page.read_text(encoding="utf-8")):
+                  if ref.startswith(("/", "mailto")) or ref.startswith("trailer/"):
+                      continue
+                  if not (page.parent / ref).exists():
+                      bad.append(f"{page.relative_to(root)} -> {ref}")
+          print("\n".join(bad) or "all local references resolve")
+          sys.exit(1 if bad else 0)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: env.NO_SITE != '1'
+        with:
+          name: website
+          path: _site
+          retention-days: 14
+
+  deploy:
+    name: Deploy to Cloudflare Pages
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: website
+      url: https://dogubako.app
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check for Cloudflare credentials
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set."; exit 1
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          name: website
+          path: _site
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npx --yes wrangler@4 pages deploy _site --project-name dogubako-website --branch main --commit-dirty=true
