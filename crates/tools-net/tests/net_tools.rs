@@ -962,18 +962,7 @@ async fn tls_inspect_local() {
 #[tokio::test]
 async fn port_check_and_connectivity_local() {
     let open = spawn_http(Arc::new(|_| (200, vec![], b"ok".to_vec()))).await;
-    // Bind without listening: connections are refused, and holding the
-    // socket for the whole test stops a parallel test's server reusing it.
-    let closed_sock = tokio::net::TcpSocket::new_v4().unwrap();
-    closed_sock.bind("127.0.0.1:0".parse().unwrap()).unwrap();
-    let closed = closed_sock.local_addr().unwrap().port();
     let hns = harness();
-    // Windows retries refused SYNs for ~2 s before reporting "connection
-    // refused", so allow enough time to classify the port as closed.
-    let out = hns.run("network.port_check", json!({"host": "127.0.0.1", "preset": "custom", "ports": format!("{open},{closed}"), "timeout_ms": 4000})).await.unwrap();
-    assert_eq!(out.data["open_ports"], json!([open]));
-    let rows = out.data["table"]["rows"].as_array().unwrap();
-    assert!(rows.iter().any(|r| r[0] == closed && r[2] == "closed"));
     assert_eq!(
         hns.run(
             "network.port_check",
@@ -984,14 +973,38 @@ async fn port_check_and_connectivity_local() {
         .code(),
         "invalid_input"
     );
-
-    let out = hns.run("network.connectivity", json!({"targets": format!("127.0.0.1:{open}\nhttp://127.0.0.1:{open}/\n127.0.0.1:{closed}"), "attempts": 2})).await.unwrap();
-    let r = out.data["results"].as_array().unwrap();
-    assert_eq!(r[0]["ok"], true);
-    assert_eq!(r[0]["successes"], 2);
-    assert_eq!(r[1]["status"], 200);
-    assert_eq!(r[2]["ok"], false);
-    assert_eq!(out.data["reachable"], 2);
+    // A "closed" port comes from binding port 0 and dropping the listener.
+    // A test running in parallel can be handed the same port and open it,
+    // so retry with a fresh port when that happens. (Holding a bound,
+    // non-listening socket instead doesn't work: macOS drops SYNs to it
+    // rather than refusing them.)
+    for attempt in 1..=5 {
+        let closed = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        // Windows retries refused SYNs for ~2 s before reporting "connection
+        // refused", so allow enough time to classify the port as closed.
+        let out = hns.run("network.port_check", json!({"host": "127.0.0.1", "preset": "custom", "ports": format!("{open},{closed}"), "timeout_ms": 4000})).await.unwrap();
+        let conn = hns.run("network.connectivity", json!({"targets": format!("127.0.0.1:{open}\nhttp://127.0.0.1:{open}/\n127.0.0.1:{closed}"), "attempts": 2})).await.unwrap();
+        let reused =
+            out.data["open_ports"] != json!([open]) || conn.data["results"][2]["ok"] != false;
+        if reused && attempt < 5 {
+            continue;
+        }
+        assert_eq!(out.data["open_ports"], json!([open]));
+        let rows = out.data["table"]["rows"].as_array().unwrap();
+        assert!(rows.iter().any(|r| r[0] == closed && r[2] == "closed"));
+        let r = conn.data["results"].as_array().unwrap();
+        assert_eq!(r[0]["ok"], true);
+        assert_eq!(r[0]["successes"], 2);
+        assert_eq!(r[1]["status"], 200);
+        assert_eq!(r[2]["ok"], false);
+        assert_eq!(conn.data["reachable"], 2);
+        break;
+    }
     assert_eq!(
         hns.run("network.connectivity", json!({"targets": "example.com"}))
             .await
