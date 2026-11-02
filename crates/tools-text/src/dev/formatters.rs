@@ -775,6 +775,16 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
     // stack of (name, object, text)
     let mut stack: Vec<(String, serde_json::Map<String, Value>, String)> =
         vec![("#root".into(), serde_json::Map::new(), String::new())];
+    // xml:space="preserve" for each open element, inherited by its children
+    // unless they reset it with xml:space="default".
+    let mut preserve = vec![false];
+    fn preserves(obj: &serde_json::Map<String, Value>, inherited: bool) -> bool {
+        match obj.get("@xml:space").and_then(Value::as_str) {
+            Some("preserve") => true,
+            Some("default") => false,
+            _ => inherited,
+        }
+    }
     fn attrs(e: &quick_xml::events::BytesStart) -> ToolResult<serde_json::Map<String, Value>> {
         let mut m = serde_json::Map::new();
         for a in e.attributes() {
@@ -785,8 +795,12 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
         }
         Ok(m)
     }
-    fn finish(obj: serde_json::Map<String, Value>, text: String) -> Value {
-        let t = text.trim().to_string();
+    fn finish(obj: serde_json::Map<String, Value>, text: String, keep_ws: bool) -> Value {
+        let t = if keep_ws {
+            text
+        } else {
+            text.trim().to_string()
+        };
         if obj.is_empty() {
             if t.is_empty() {
                 Value::Null
@@ -821,16 +835,18 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
         match ev {
             Event::Start(e) => {
                 let n = e.name().as_ref().to_string();
-                stack.push((n, attrs(&e)?, String::new()));
+                let a = attrs(&e)?;
+                preserve.push(preserves(&a, *preserve.last().unwrap()));
+                stack.push((n, a, String::new()));
             }
             Event::Empty(e) => {
                 let n = e.name().as_ref().to_string();
-                let v = finish(attrs(&e)?, String::new());
+                let v = finish(attrs(&e)?, String::new(), false);
                 add(&mut stack.last_mut().unwrap().1, n, v);
             }
             Event::End(_) => {
                 let (n, obj, txt) = stack.pop().unwrap();
-                let v = finish(obj, txt);
+                let v = finish(obj, txt, preserve.pop().unwrap_or(false));
                 let parent = stack
                     .last_mut()
                     .ok_or_else(|| ToolError::invalid("text", "unbalanced XML"))?;
@@ -1529,6 +1545,16 @@ mod tests {
             );
             super::xml_to_json(&xml).unwrap();
         }
+        // xml:space="preserve" keeps text exactly, and children inherit it
+        // until xml:space="default" resets it.
+        let v = super::xml_to_json(
+            "<r xml:space=\"preserve\"><a>  x  </a><b> </b><c xml:space=\"default\"> y </c></r>",
+        )
+        .unwrap();
+        assert_eq!(v["r"]["a"], "  x  ");
+        assert_eq!(v["r"]["b"], " ");
+        assert_eq!(v["r"]["c"]["#text"], "y");
+        assert_eq!(super::xml_to_json("<r> z </r>").unwrap()["r"], "z");
     }
 
     #[tokio::test]
