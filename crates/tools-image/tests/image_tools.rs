@@ -113,6 +113,16 @@ async fn resize_modes() {
         .await
         .unwrap();
     assert_eq!(dims(&out), (80, 80));
+    // Extreme aspect change: must not build a huge intermediate before cropping.
+    let strip = save(&h, "strip.png", &pattern(10000, 1, false));
+    let out = h
+        .run(
+            "image.resize",
+            json!({"input": s(&strip), "width": 1, "height": 10000, "fit": "cover"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(dims(&out), (1, 10000));
     let out = h
         .run(
             "image.resize",
@@ -223,6 +233,16 @@ async fn crop_rotate_flip() {
         .unwrap();
     let (w, hh) = open(&out.artifacts[0].path).dimensions();
     assert!(w > 100 && hh > 100);
+    // A long strip at 45 degrees needs a ~70711x70711 canvas: rejected before allocating.
+    let strip = save(&h, "strip.png", &pattern(100_000, 1, false));
+    let err = h
+        .run(
+            "image.rotate_flip",
+            json!({"input": s(&strip), "angle": 45}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "limit_exceeded");
     let out = h
         .run(
             "image.rotate_flip",
@@ -346,6 +366,16 @@ async fn watermark_text_image_and_tiles() {
         "logo.png",
         &RgbaImage::from_pixel(50, 50, Rgba([255, 0, 255, 255])),
     );
+    // Huge text must hit the pixel limit instead of allocating gigabytes.
+    let big = save(&h, "wide.png", &pattern(1000, 10, false));
+    let err = h
+        .run(
+            "image.watermark",
+            json!({"input": [s(&big)], "text": "W".repeat(10000), "font_size": 50}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "limit_exceeded");
     let out = h.run("image.watermark", json!({"input": [s(&a)], "text": "Hello Ünïcode", "opacity": 1.0, "position": "center", "font_size": 10})).await.unwrap();
     let w = open(&out.artifacts[0].path).to_rgb8();
     let orig = image::open(&a).unwrap().to_rgb8();
@@ -355,6 +385,27 @@ async fn watermark_text_image_and_tiles() {
         .filter(|(x, y)| (x[0] as i32 - y[0] as i32).abs() > 30)
         .count();
     assert!(changed > 200, "text must be drawn ({changed})");
+    // A narrow logo scaled to a wide image: 10000 x 100000000 pixels.
+    let wide = save(&h, "wide10k.png", &pattern(10_000, 1, false));
+    let tall = save(&h, "tall10k.png", &pattern(1, 10_000, false));
+    let err = h
+        .run(
+            "image.watermark",
+            json!({"input": [s(&wide)], "kind": "image", "watermark": s(&tall), "scale": 100}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "limit_exceeded");
+    // Text that fits, but whose rotated layer would not.
+    let mid = save(&h, "mid.png", &pattern(1000, 10, false));
+    let err = h
+        .run(
+            "image.watermark",
+            json!({"input": [s(&mid)], "text": "W".repeat(4000), "font_size": 5, "rotation": 45}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "limit_exceeded");
     let out = h.run("image.watermark", json!({"input": [s(&a)], "kind": "image", "watermark": s(&logo), "opacity": 1.0, "position": "top-left", "margin": 0, "scale": 10})).await.unwrap();
     let w = open(&out.artifacts[0].path).to_rgb8();
     let p = w.get_pixel(5, 5);
@@ -412,6 +463,26 @@ async fn combine_split_sheets() {
         .unwrap_err();
     assert_eq!(err.code(), "invalid_input");
 
+    // match_size must not resize to a huge size before the limit check:
+    // 10000x1 next to 1x10000 would scale the first to 1e8 x 1e4.
+    let wide = save(&h, "wide.png", &pattern(10_000, 1, false));
+    let tall = save(&h, "tall.png", &pattern(1, 10_000, false));
+    for dir in ["horizontal", "vertical"] {
+        let (x, y) = if dir == "horizontal" {
+            (&wide, &tall)
+        } else {
+            (&tall, &wide)
+        };
+        let err = h
+            .run(
+                "image.combine",
+                json!({"input": [s(x), s(y)], "direction": dir, "match_size": true}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "limit_exceeded", "{dir}: {err}");
+    }
+
     let out = h
         .run(
             "image.split",
@@ -428,6 +499,26 @@ async fn combine_split_sheets() {
         .await
         .unwrap();
     assert_eq!(out.artifacts.len(), 6); // 3 x 2, edge tiles smaller
+                                        // Uneven grids keep the requested counts and cover every pixel once.
+    let sq = save(&h, "sq100.png", &pattern(100, 100, false));
+    let out = h
+        .run(
+            "image.split",
+            json!({"input": s(&sq), "rows": 30, "columns": 30}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.artifacts.len(), 900);
+    let regions = out.data["regions"].as_array().unwrap();
+    let area: u64 = regions
+        .iter()
+        .map(|r| r["width"].as_u64().unwrap() * r["height"].as_u64().unwrap())
+        .sum();
+    assert_eq!(area, 100 * 100);
+    assert!(regions.iter().all(|r| {
+        let (w, h) = (r["width"].as_u64().unwrap(), r["height"].as_u64().unwrap());
+        (3..=4).contains(&w) && (3..=4).contains(&h)
+    }));
 
     let out = h
         .run(

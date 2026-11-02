@@ -541,7 +541,24 @@ pub fn font() -> &'static FontArc {
 pub const FONT_BYTES: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
 
 /// Render (multi-line) text into a tightly sized transparent RGBA image.
-pub fn render_text(text: &str, px: f32, color: Rgba<u8>) -> RgbaImage {
+/// The raster size is checked against the pixel limit before allocating:
+/// long text at a large size can otherwise need gigabytes.
+pub fn render_text(
+    ctx: &ToolContext,
+    text: &str,
+    px: f32,
+    color: Rgba<u8>,
+) -> ToolResult<RgbaImage> {
+    render_text_max(text, px, color, ctx.limits().max_image_pixels)
+}
+
+/// [`render_text`] with an explicit pixel limit (for callers without a context).
+pub fn render_text_max(
+    text: &str,
+    px: f32,
+    color: Rgba<u8>,
+    max_pixels: u64,
+) -> ToolResult<RgbaImage> {
     let font = font();
     let scale = PxScale::from(px.max(1.0));
     let sf = font.as_scaled(scale);
@@ -568,8 +585,15 @@ pub fn render_text(text: &str, px: f32, color: Rgba<u8>) -> RgbaImage {
         }
         max_w = max_w.max(x);
     }
-    let w = (max_w.ceil() as u32 + 2).max(1);
-    let h = ((lines.len() as f32 * line_h).ceil() as u32 + 2).max(1);
+    let wf = f64::from(max_w).ceil() + 2.0;
+    let hf = (lines.len() as f64 * f64::from(line_h)).ceil() + 2.0;
+    // f64 -> u64 casts saturate, so check_pixels sees the true (huge) size.
+    if (wf as u64).saturating_mul(hf as u64) > max_pixels {
+        return Err(ToolError::limit(format!(
+            "rendered text of {wf}x{hf} pixels exceeds the limit of {max_pixels} pixels"
+        )));
+    }
+    let (w, h) = (wf as u32, hf as u32);
     let mut img = RgbaImage::from_pixel(w, h, Rgba([color[0], color[1], color[2], 0]));
     for g in glyphs {
         if let Some(o) = font.outline_glyph(g) {
@@ -585,7 +609,7 @@ pub fn render_text(text: &str, px: f32, color: Rgba<u8>) -> RgbaImage {
             });
         }
     }
-    img
+    Ok(img)
 }
 
 // ---------------------------------------------------------------------------

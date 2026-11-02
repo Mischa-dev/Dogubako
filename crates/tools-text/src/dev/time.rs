@@ -190,7 +190,7 @@ fn tz_param(name: &str, default: &str) -> ParamSpec {
 /// is scaled exactly like any other number. None when it isn't one.
 fn expand_exponent(t: &str) -> Option<String> {
     let (mant, exp) = t.split_once(['e', 'E'])?;
-    let exp: i32 = exp.parse().ok().filter(|e: &i32| e.abs() <= 64)?;
+    let exp: i32 = exp.parse().ok().filter(|e: &i32| (-64..=64).contains(e))?;
     let (sign, body) = match mant.strip_prefix(['-', '+']) {
         Some(r) => (&mant[..1], r),
         None => ("", mant),
@@ -819,6 +819,9 @@ mod tests {
             assert_eq!(dt.timestamp_nanos_opt().unwrap() as i128, want, "{src}");
         }
         assert!(super::parse_instant("1e999999", chrono_tz::UTC, "s", "value").is_err());
+        // i32::MIN exponent: abs() would wrap and pass a naive bound check.
+        assert!(super::expand_exponent("1e-2147483648").is_none());
+        assert!(super::parse_instant("1e-2147483648", chrono_tz::UTC, "s", "value").is_err());
         // Non-finite numbers are rejected rather than read as the epoch.
         for bad in ["NaN", "nan", "inf", "-infinity", "1e400"] {
             for unit in ["auto", "ms"] {

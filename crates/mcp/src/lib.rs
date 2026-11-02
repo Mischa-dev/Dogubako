@@ -29,6 +29,16 @@ pub const LATEST_VERSION: &str = "2025-11-25";
 const PAGE_SIZE: usize = 200;
 const MAX_INLINE_RESOURCE: u64 = 16 * 1024 * 1024;
 
+/// Read at most `max` bytes of `path`, so an oversized file is detected
+/// without loading it (and stays bounded if it grows meanwhile).
+pub async fn read_capped(path: impl AsRef<std::path::Path>, max: u64) -> std::io::Result<Vec<u8>> {
+    use tokio::io::AsyncReadExt;
+    let f = tokio::fs::File::open(path.as_ref()).await?;
+    let mut buf = Vec::new();
+    f.take(max).read_to_end(&mut buf).await?;
+    Ok(buf)
+}
+
 /// How tools are exposed in `tools/list`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiscoveryMode {
@@ -70,7 +80,10 @@ pub trait McpBackend: Send + Sync {
     async fn cancel_job(&self, job_id: &str) -> Result<JobView, ToolError>;
     async fn upload(&self, name: &str, bytes: Vec<u8>) -> Result<FileView, ToolError>;
     async fn list_files(&self) -> Result<Vec<FileView>, ToolError>;
-    async fn read_file(&self, file_id: &str) -> Result<(FileView, Vec<u8>), ToolError>;
+    /// A stored file's metadata and at most `max` bytes of its contents
+    /// (see [`read_capped`]); callers compare the length with `max` to
+    /// detect a file that is too large without loading all of it.
+    async fn read_file(&self, file_id: &str, max: u64) -> Result<(FileView, Vec<u8>), ToolError>;
     /// Maximum accepted upload size through MCP (bytes).
     fn max_upload(&self) -> u64 {
         DEFAULT_MAX_UPLOAD
@@ -629,15 +642,15 @@ impl McpServer {
             .ok_or((-32602, format!("unknown resource uri: {uri}")))?;
         let (f, bytes) = self
             .backend
-            .read_file(id)
+            .read_file(id, MAX_INLINE_RESOURCE + 1)
             .await
             .map_err(|e| (-32002, e.to_string()))?;
-        if bytes.len() as u64 > MAX_INLINE_RESOURCE {
+        if f.size > MAX_INLINE_RESOURCE || bytes.len() as u64 > MAX_INLINE_RESOURCE {
             return Err((
                 -32603,
                 format!(
                     "resource too large for inline transfer ({} bytes); download it from {}",
-                    bytes.len(),
+                    f.size.max(bytes.len() as u64),
                     f.url.clone().unwrap_or_default()
                 ),
             ));
@@ -767,7 +780,18 @@ pub fn job_result(job: &JobView) -> Value {
 
 #[cfg(test)]
 mod progress_tests {
-    use super::next_progress;
+    use super::{next_progress, read_capped};
+
+    #[tokio::test]
+    async fn read_capped_stops_at_the_limit() {
+        let dir = std::env::temp_dir().join(format!("dogubako-mcp-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("f.bin");
+        std::fs::write(&path, vec![7u8; 1000]).unwrap();
+        assert_eq!(read_capped(&path, 101).await.unwrap().len(), 101);
+        assert_eq!(read_capped(&path, 5000).await.unwrap().len(), 1000);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn progress_strictly_increases() {
