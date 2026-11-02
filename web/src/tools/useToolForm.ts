@@ -10,6 +10,7 @@ import { acceptMatches } from '../form/FileField';
 import type { Setter } from '../form/Field';
 import type { InputContext } from '../results/DataViews';
 import { useJob } from './useJob';
+import { setToolSubject } from './subject';
 
 export interface ToolForm {
   tool: ToolInfo;
@@ -154,6 +155,21 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null } = {}
     const text = textParam ? String(values[textParam.name] ?? '') : undefined;
     return { imageUrl, text };
   }, [tool, values, backend]);
+
+  // Tell the tool row what this tool is working on (its files, and what came out).
+  const firstFile = tool.params.find((p) => p.type === 'file');
+  const fileValue = firstFile ? values[firstFile.name] : undefined;
+  const result = job.job;
+  useEffect(() => {
+    const items = Array.isArray(fileValue) ? (fileValue as FileItem[]).filter((f) => f.status === 'ready' && f.ref) : [];
+    const arts = result?.status === 'succeeded' ? result.result?.artifacts ?? [] : [];
+    setToolSubject({
+      toolId: tool.id,
+      files: items.map((f) => ({ ref: f.ref!, name: f.name, size: f.size, mime: f.mime })),
+      results: arts.flatMap((a) => (a.id ?? a.path ? [{ ref: (a.id ?? a.path)!, name: a.name, size: a.size, mime: a.mime }] : [])),
+    });
+  }, [tool.id, fileValue, result]);
+  useEffect(() => () => setToolSubject(null), []);
 
   return { tool, values, setValue, setValues, errors, shownErrors, valid, job, run, reset, input };
 }

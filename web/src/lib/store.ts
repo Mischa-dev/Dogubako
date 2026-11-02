@@ -116,3 +116,10 @@ export function setDropped(files: PendingInput[]) {
 }
 let droppedMem: PendingInput[] = [];
 export const droppedNow = () => (droppedMem.length ? droppedMem : getDropped());
+
+/** Tool page layout: where the controls sit, how the preview shows, what the tool row lists. */
+export interface ToolLayout { controls: 'below' | 'left' | 'right'; preview: 'side' | 'result'; row: 'file' | 'pinned' }
+export const TOOL_LAYOUT_DEFAULT: ToolLayout = { controls: 'below', preview: 'side', row: 'file' };
+const isToolLayout = (v: any): v is ToolLayout =>
+  !!v && ['below', 'left', 'right'].includes(v.controls) && ['side', 'result'].includes(v.preview) && ['file', 'pinned'].includes(v.row);
+export const toolLayout = new Store<ToolLayout>('dgb.toolLayout', TOOL_LAYOUT_DEFAULT, isToolLayout);

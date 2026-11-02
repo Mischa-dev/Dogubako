@@ -70,6 +70,13 @@ export function Shell() {
     return () => window.removeEventListener('keydown', h);
   }, [drawer, palette, favs, toolMap, toggleSidebar]);
 
+  // The tool row's search button opens the palette.
+  useEffect(() => {
+    const h = () => openPalette();
+    window.addEventListener('dgb:search', h);
+    return () => window.removeEventListener('dgb:search', h);
+  }, [openPalette]);
+
   // Focus management on route change: move focus to the page heading and reset scroll.
   const first = useRef(true);
   useEffect(() => {

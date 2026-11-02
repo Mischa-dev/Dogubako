@@ -10,6 +10,7 @@ import './styles/base.css';
 import './styles/components.css';
 import './styles/layout.css';
 import './styles/tool.css';
+import './styles/toolpage.css';
 import './styles/home.css';
 import './styles/intent.css';
 
