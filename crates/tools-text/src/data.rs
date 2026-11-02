@@ -1121,6 +1121,19 @@ fn spreadsheet() -> Arc<dyn Tool> {
                 } else {
                     vec![]
                 };
+                if header {
+                    // Every object repeats its keys: size them before building.
+                    let mut prefix = vec![0u128];
+                    for h in &headers {
+                        prefix.push(prefix.last().unwrap() + h.len() as u128 + 8);
+                    }
+                    let keys = |n: usize| -> u128 {
+                        let named = n.min(headers.len());
+                        prefix[named] + (n - named) as u128 * 24
+                    };
+                    let total: u128 = rows.iter().map(|r| keys(r.len())).sum();
+                    crate::util::check_generated_size(total)?;
+                }
                 let v: Vec<Value> = rows
                     .iter()
                     .map(|r| {
@@ -2456,6 +2469,23 @@ mod tests {
         let j: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&out.artifacts[0].path).unwrap()).unwrap();
         assert_eq!(j[0]["age"], 30);
+        // A long header repeated as the key of every record is bounded.
+        let csv = format!("{}\n{}", "k".repeat(30_000), "1\n".repeat(100_000));
+        let out = h
+            .run("data.convert", json!({"text": csv, "to": "xlsx"}))
+            .await
+            .unwrap();
+        let wide = out.artifacts[0].path.clone();
+        assert_eq!(
+            h.run(
+                "data.spreadsheet",
+                json!({"file": wide.to_str().unwrap(), "action": "json"})
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            "limit_exceeded"
+        );
         assert_eq!(
             h.run(
                 "data.spreadsheet",
