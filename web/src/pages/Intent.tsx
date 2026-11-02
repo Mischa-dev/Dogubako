@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, ChevronDown, Pin } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronDown, Pin, Sparkles } from 'lucide-react';
+import { looksLikeRequest, useAssistant } from '../lib/assistant/useAssistant';
 import { useApp } from '../lib/app';
 import { href, navigate } from '../lib/router';
 import { benchKindClass, kindOf } from '../lib/bench';
@@ -42,6 +43,7 @@ export default function IntentPage() {
   const [active, setActive] = useState(0);
   const [all, setAll] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const assistant = useAssistant();
 
   const cands = useMemo(() => toolsForFiles(visibleTools, files), [visibleTools, files]);
   const ranked = useMemo(() => rankTools(cands, files, { pinned, recent: recent.map((r) => r.id) }), [cands, files, pinned, recent]);
@@ -51,6 +53,14 @@ export default function IntentPage() {
 
   useEffect(() => { setActive(0); }, [q]);
 
+  // Natural-language mode: "Do it" carries out the typed words on these files.
+  // A sentence puts it first; a word or two leaves the matching tools first.
+  const doOn = assistant.on && !!q.trim();
+  const doFirst = doOn && (looksLikeRequest(q) || list.length === 0);
+  const off = doFirst ? 1 : 0;
+  const doIndex = doFirst ? 0 : list.length;
+  const doIt = () => navigate(href.do(q.trim(), true));
+
   const choose = (t: ToolInfo) => {
     pendingInput.value = files;
     navigate(href.tool(t.id));
@@ -58,9 +68,11 @@ export default function IntentPage() {
 
   const onKey = (e: React.KeyboardEvent) => {
     const visible = all || q.trim() ? list : top;
-    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, visible.length - 1)); }
+    const count = visible.length + (doOn ? 1 : 0);
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, count - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
-    else if (e.key === 'Enter' && visible[active]) { e.preventDefault(); choose(visible[active]); }
+    else if (e.key === 'Enter' && doOn && ((e.metaKey || e.ctrlKey) || active === doIndex)) { e.preventDefault(); doIt(); }
+    else if (e.key === 'Enter' && visible[active - off]) { e.preventDefault(); choose(visible[active - off]); }
     else if (e.key === 'Escape') { e.preventDefault(); if (q) setQ(''); else history.back(); }
     else if (!q && /^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
       const t = top[Number(e.key) - 1];
@@ -85,7 +97,25 @@ export default function IntentPage() {
 
   const total = files.reduce((n, f) => n + (f.size || 0), 0);
   const label = files.length === 1 ? files[0].name : plural(files.length, 'file');
-  const row = (t: ToolInfo, i: number, n?: number) => (
+  const doRow = doOn && (
+    <li key="do-it">
+      <button
+        type="button"
+        className={cx('intent-option intent-do', doIndex === active && 'is-active')}
+        data-intent-i={doIndex}
+        onMouseEnter={() => setActive(doIndex)}
+        onClick={doIt}
+      >
+        <span className="intent-num intent-do-icon" aria-hidden><Sparkles size={13} /></span>
+        <span className="intent-option-text">
+          <span className="intent-option-name">Do it: “{q.trim()}”</span>
+          <span className="intent-option-hint">{assistant.missing ? `${assistant.missing} first` : `${assistant.label} picks the tools and runs them`}</span>
+        </span>
+        <ArrowRight size={15} className="intent-go" aria-hidden />
+      </button>
+    </li>
+  );
+  const row = (t: ToolInfo, idx: number, n?: number) => { const i = idx + off; return (
     <li key={t.id}>
       <button
         type="button"
@@ -102,7 +132,7 @@ export default function IntentPage() {
         <ArrowRight size={15} className="intent-go" aria-hidden />
       </button>
     </li>
-  );
+  ); };
 
   return (
     <div className="page page-intent">
@@ -127,7 +157,7 @@ export default function IntentPage() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={onKey}
-              placeholder="Type what you want, like “smaller” or “jpg”"
+              placeholder={assistant.on ? 'Say what you want, like “smaller and no location”' : 'Type what you want, like “smaller” or “jpg”'}
               aria-label="Say what should happen"
               aria-controls="intent-list"
               autoComplete="off"
@@ -136,15 +166,19 @@ export default function IntentPage() {
             {!q && top.length > 0 && <span className="intent-keys"><Kbd>1</Kbd>–<Kbd>{Math.min(top.length, 9)}</Kbd></span>}
           </div>
 
-          {list.length === 0 ? (
+          {list.length === 0 && doOn ? (
+            <ul id="intent-list" className="intent-list" role="list">{doRow}</ul>
+          ) : list.length === 0 ? (
             <p className="intent-none">
               {cands.length === 0 ? `No tool takes ${files.length === 1 ? 'this kind of file' : 'all of these files together'}.` : `Nothing matches “${q}”.`}{' '}
               <button type="button" className="link-sm" onClick={() => setQ('')}>{q ? 'Clear' : ''}</button>
             </p>
           ) : (
             <ul id="intent-list" className="intent-list" role="list">
+              {doFirst && doRow}
               {(q.trim() ? list : top).map((t, i) => row(t, i, !q.trim() && i < 9 ? i + 1 : undefined))}
               {!q.trim() && all && rest.map((t, i) => row(t, TOP + i))}
+              {doOn && !doFirst && doRow}
             </ul>
           )}
 

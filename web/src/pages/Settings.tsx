@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Settings as SettingsIcon, SlidersHorizontal, Package, Brain, Info, Sun, Moon, Monitor, RefreshCw, CircleCheck, CircleDashed,
-  Download, Trash2, ExternalLink, ChevronRight,
+  Download, Trash2, ExternalLink, ChevronRight, Sparkles,
 } from 'lucide-react';
+import { AssistantSettingsPanel } from '../components/ModelPicker';
 import type { DepInfo, ModelDownload, ModelInfo } from '../lib/types';
 import { useApp, notifyToolsChanged } from '../lib/app';
 import { asServer } from '../lib/backend';
@@ -16,6 +17,7 @@ import { LogoMark } from '../components/Logo';
 
 const SECTIONS = [
   { id: 'general', label: 'General', icon: SlidersHorizontal },
+  { id: 'assistant', label: 'Plain words', icon: Sparkles },
   { id: 'dependencies', label: 'Dependencies', icon: Package },
   { id: 'models', label: 'Models', icon: Brain },
   { id: 'about', label: 'About', icon: Info },
@@ -36,6 +38,7 @@ export default function SettingsPage({ section = 'general' }: { section?: string
         </nav>
         <div className="settings-body">
           {cur.id === 'general' && <General />}
+          {cur.id === 'assistant' && <Section title="Plain words" description="Say what you want done instead of picking a tool."><AssistantSettingsPanel /></Section>}
           {cur.id === 'dependencies' && <Dependencies />}
           {cur.id === 'models' && <Models />}
           {cur.id === 'about' && <About />}

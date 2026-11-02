@@ -1,6 +1,6 @@
 import type { Artifact, Category, DepInfo, JobView, Me, ModelDownload, ModelInfo, Status, ToolErrorView, ToolInfo } from '../types';
 import { readJson, writeJson } from '../storage';
-import type { Backend, FileRef, PickOptions, RunHandle, RunOptions } from './types';
+import { ApiError, type AssistantInfo, type AssistantTarget, type Backend, type FileRef, type PickOptions, type RunHandle, type RunOptions } from './types';
 
 type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -31,6 +31,12 @@ function errorOf(e: unknown): ToolErrorView {
     return { code: 'failed', message: e };
   }
   return { code: 'failed', message: e instanceof Error ? e.message : String(e) };
+}
+
+/** Relay errors arrive as `{kind, status, message}`. */
+function relayError(e: unknown): ApiError {
+  const o = (e && typeof e === 'object' ? e : { message: String(e) }) as { kind?: string; status?: number; message?: string };
+  return new ApiError(o.status ?? 0, `assistant_${o.kind ?? 'failed'}`, o.message ?? 'The model request failed');
 }
 
 export class TauriBackend implements Backend {
@@ -200,6 +206,27 @@ export class TauriBackend implements Backend {
     if (dest) await invoke('save_artifact', { src: a.path, dest });
   }
 
+  // ---------------------------------------------------------------- assistant
+  async assistantInfo(): Promise<AssistantInfo> {
+    return { enabled: true, server_provider: null, private_network: true };
+  }
+  async assistantChat(target: AssistantTarget, body: Record<string, unknown>, signal?: AbortSignal) {
+    // The relay call itself cannot be aborted; drop its answer when cancelled.
+    const call = invoke<any>('assistant_chat', { baseUrl: target.base_url ?? '', apiKey: target.api_key || null, body }).catch((e) => { throw relayError(e); });
+    if (!signal) return call;
+    return new Promise((resolve, reject) => {
+      const abort = () => reject(new DOMException('Cancelled', 'AbortError'));
+      if (signal.aborted) return abort();
+      signal.addEventListener('abort', abort, { once: true });
+      call.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+    });
+  }
+  async assistantModels(target: AssistantTarget) {
+    try {
+      return (await invoke<{ models: { id: string; owned_by?: string }[] }>('assistant_models', { baseUrl: target.base_url ?? '', apiKey: target.api_key || null })).models;
+    } catch (e) { throw relayError(e); }
+  }
+
   async revealArtifact(a: Artifact) {
     if (a.path) await invoke('reveal_path', { path: a.path });
   }
@@ -209,6 +236,11 @@ export class TauriBackend implements Backend {
     writeJson(HISTORY_KEY, readJson<JobView[]>(HISTORY_KEY, []).filter((j) => j.id !== id));
   }
   clearHistory() { writeJson(HISTORY_KEY, []); }
+
+  async discardRun(id: string) {
+    await invoke('discard_run_outputs', { runId: id });
+    await this.deleteJob(id);
+  }
 
   async deps() { return { dependencies: await invoke<DepInfo[]>('deps_status'), platform: this.info?.platform }; }
   async models() {

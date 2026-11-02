@@ -104,6 +104,8 @@ export function cycleTheme() {
 /** File(s) chosen elsewhere (Files page, drop screen, bench) to prefill the next tool's input. */
 export interface PendingInput { ref: string; name: string; size: number; mime: string }
 export const pendingInput = { value: null as PendingInput | PendingInput[] | null };
+/** Settings a plain-words request filled in for the next tool page (natural-language mode). */
+export const pendingParams = { value: null as { toolId: string; params: Record<string, unknown> } | null };
 
 /** Files dropped or picked and waiting on the drop screen. Session only, so a reload keeps them. */
 const DROPPED_KEY = 'dgb.dropped';

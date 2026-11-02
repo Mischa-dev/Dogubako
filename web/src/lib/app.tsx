@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { asServer, type Backend } from './backend';
 import type { Category, Me, Status, ToolInfo } from './types';
 import { makeDoc, type SearchDoc } from './search';
+import { clearAssistantKeys } from './assistant/settings';
 import { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS, CATEGORY_ORDER } from './icons';
 
 export interface AppState {
@@ -83,6 +84,7 @@ export function AppProvider(props: {
   const signOut = useCallback(async () => {
     const s = asServer(backend);
     if (s) await s.logout().catch(() => undefined);
+    clearAssistantKeys();
     props.onSignedOut();
   }, [backend, props.onSignedOut]);
 
