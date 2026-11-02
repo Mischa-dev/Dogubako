@@ -80,7 +80,9 @@ fn compare() -> Arc<dyn Tool> {
             if let (Ok(ta), Ok(tb)) = (String::from_utf8(ta), String::from_utf8(tb)) {
                 if !ta.contains('\0') && !tb.contains('\0') {
                     let diff = similar::TextDiff::from_lines(&ta, &tb);
-                    let mut chunks: Vec<Value> = vec![];
+                    // Built as owned strings (appending in place) and turned
+                    // into JSON once: re-cloning a chunk per line is quadratic.
+                    let mut chunks: Vec<(&'static str, String)> = vec![];
                     let (mut ins, mut del) = (0, 0);
                     for ch in diff.iter_all_changes() {
                         let tag = match ch.tag() {
@@ -95,18 +97,19 @@ fn compare() -> Arc<dyn Tool> {
                             }
                         };
                         match chunks.last_mut() {
-                            Some(last) if last["tag"] == tag => {
-                                let s =
-                                    last["text"].as_str().unwrap_or("").to_string() + ch.value();
-                                last["text"] = Value::String(s);
-                            }
-                            _ => chunks.push(json!({"tag": tag, "text": ch.value()})),
+                            Some((t, text)) if *t == tag => text.push_str(ch.value()),
+                            _ => chunks.push((tag, ch.value().to_string())),
                         }
                     }
                     data["lines_added"] = json!(ins);
                     data["lines_removed"] = json!(del);
                     data["similarity"] = json!((diff.ratio() * 1000.0).round() / 10.0);
-                    data["diff"] = Value::Array(chunks);
+                    data["diff"] = Value::Array(
+                        chunks
+                            .into_iter()
+                            .map(|(tag, text)| json!({"tag": tag, "text": text}))
+                            .collect(),
+                    );
                     text = diff
                         .unified_diff()
                         .context_radius(3)

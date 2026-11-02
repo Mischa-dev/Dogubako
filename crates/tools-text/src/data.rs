@@ -494,6 +494,16 @@ fn table_from_cells(mut rows: Vec<Vec<String>>, header: bool) -> Table {
     t
 }
 
+/// Whether a JSON number survives conversion to an f64 spreadsheet cell.
+fn xlsx_exact(n: &serde_json::Number) -> bool {
+    const MAX: u64 = 1 << 53;
+    match (n.as_i64(), n.as_u64()) {
+        (Some(i), _) => i.unsigned_abs() <= MAX,
+        (None, Some(u)) => u <= MAX,
+        _ => true, // floats are floats already
+    }
+}
+
 /// `header`: whether the first row of a JSON array-of-arrays holds the
 /// column names (arrays of objects always carry their own keys).
 pub fn json_table(text: &str, header: bool) -> ToolResult<Table> {
@@ -1985,7 +1995,9 @@ pub fn render_table(t: &Table, to: &str, opts: &Params) -> ToolResult<(Vec<u8>, 
                 for (c, v) in r.iter().enumerate() {
                     let row = (ri + 1) as u32;
                     match if infer { infer_value(v) } else { json!(v) } {
-                        Value::Number(n) if n.as_f64().is_some() => ws
+                        // Spreadsheet numbers are f64: integers beyond 2^53
+                        // would be rounded, so they are written as text.
+                        Value::Number(n) if n.as_f64().is_some() && xlsx_exact(&n) => ws
                             .write_number(row, c as u16, n.as_f64().unwrap())
                             .map(|_| ()),
                         Value::Bool(b) => ws.write_boolean(row, c as u16, b).map(|_| ()),
@@ -2212,6 +2224,23 @@ mod tests {
             .unwrap();
         assert_eq!(out.data["table"]["columns"], json!(["name", "age", "city"]));
         assert_eq!(out.data["table"]["rows"][0], json!(["Ann", "30", "Paris"]));
+        // Integers beyond f64 precision survive the XLSX round trip.
+        let out = h
+            .run(
+                "data.convert",
+                json!({"text": "id\n9007199254740993\n42", "to": "xlsx"}),
+            )
+            .await
+            .unwrap();
+        let big = out.artifacts[0].path.clone();
+        let out = h
+            .run("data.spreadsheet", json!({"file": big.to_str().unwrap()}))
+            .await
+            .unwrap();
+        assert_eq!(
+            out.data["table"]["rows"],
+            json!([["9007199254740993"], ["42"]])
+        );
         let out = h
             .run(
                 "data.spreadsheet",
