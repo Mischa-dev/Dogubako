@@ -113,10 +113,9 @@ pub fn xml_unescape(s: &str) -> Result<String, String> {
         out.push_str(&rest[..i]);
         let after = &rest[i + 1..];
         let end = after.find(';').filter(|e| *e <= 12).ok_or_else(|| {
-            format!(
-                "unterminated entity near '{}'",
-                &rest[i..rest.len().min(i + 12)]
-            )
+            // Preview by characters, not bytes (the input may be multibyte).
+            let preview: String = rest[i..].chars().take(12).collect();
+            format!("unterminated entity near '{preview}'")
         })?;
         let name = &after[..end];
         let ch = match name {
@@ -464,6 +463,8 @@ mod tests {
             "a,\"b\""
         );
         assert_eq!(xml_unescape(&xml_escape("<a & 'b'>")).unwrap(), "<a & 'b'>");
+        // Malformed multibyte input is an error, not a panic.
+        assert!(xml_unescape("&\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}").is_err());
         // Full-URL mode keeps URL syntax but encodes literal '%'.
         let full = url_encode("https://example.com/100% organic?q=a&b=c", true, false);
         assert_eq!(full, "https://example.com/100%25%20organic?q=a&b=c");
