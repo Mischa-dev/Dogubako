@@ -223,6 +223,14 @@ pub(crate) fn parse_instant(
         return Ok((Utc::now(), "now"));
     }
     if let Ok(n) = t.parse::<f64>() {
+        // "NaN" and "inf" parse as floats but are not timestamps (a NaN
+        // would otherwise cast to 0, the Unix epoch).
+        if !n.is_finite() {
+            return Err(ToolError::invalid(
+                param,
+                format!("'{t}' is not a valid timestamp"),
+            ));
+        }
         let unit = match unit {
             "auto" => {
                 let a = n.abs();
@@ -751,6 +759,16 @@ mod tests {
         );
         assert_eq!(super::parse_duration("P1M2DT3H").unwrap().0, 1);
         assert!(super::parse_duration("banana").is_err());
+        // Non-finite numbers are rejected rather than read as the epoch.
+        for bad in ["NaN", "nan", "inf", "-infinity", "1e400"] {
+            for unit in ["auto", "ms"] {
+                let e = super::parse_instant(bad, chrono_tz::UTC, unit, "value").unwrap_err();
+                assert!(
+                    e.to_string().contains("not a valid timestamp"),
+                    "{bad}: {e}"
+                );
+            }
+        }
         // Oversized amounts are errors, not panics, in every unit and syntax.
         for big in [
             "P999999999999999D",
