@@ -311,7 +311,8 @@ fn describe_instant(dt: DateTime<Utc>, tz: Tz) -> Value {
         "unix_microseconds": dt.timestamp_micros(),
         "unix_nanoseconds": dt.timestamp_nanos_opt().map(|n| json!(n.to_string())).unwrap_or(Value::Null),
         "iso8601_utc": dt.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
-        "rfc2822": dt.to_rfc2822(),
+        // RFC 2822 only covers years 0-9999; chrono panics outside them.
+        "rfc2822": if (0..=9999).contains(&dt.year()) { json!(dt.to_rfc2822()) } else { Value::Null },
         "local": local.format("%Y-%m-%d %H:%M:%S%.f").to_string(),
         "local_iso8601": local.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, false),
         "time_zone": tz.name(),
@@ -805,6 +806,24 @@ mod tests {
                 .code(),
             "invalid_input"
         );
+        // Years past 9999 are valid instants without an RFC 2822 form.
+        let out = h
+            .run(
+                "dev.timestamp",
+                json!({"value": "253402300800", "unit": "s"}),
+            )
+            .await
+            .unwrap();
+        assert!(out.data["rfc2822"].is_null());
+        assert!(out.data["iso8601_utc"].as_str().unwrap().contains("10000"));
+        let out = h
+            .run(
+                "dev.datetime",
+                json!({"operation": "add", "date": "9999-12-31", "duration": "1d"}),
+            )
+            .await
+            .unwrap();
+        assert!(out.text.unwrap().contains("10000"));
         // Seconds beyond i64 are an error, not a wrapped 1970 date.
         let e = h
             .run(
