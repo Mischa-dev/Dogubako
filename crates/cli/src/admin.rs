@@ -19,6 +19,7 @@ fn data_dir_arg() -> Arg {
         .env("DOGUBAKO_DATA_DIR")
         .default_value("./data")
         .help("Server data directory")
+        .global(true)
 }
 
 fn policy_args(c: Command) -> Command {

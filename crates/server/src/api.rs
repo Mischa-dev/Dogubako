@@ -409,7 +409,13 @@ async fn run_tool(
         &p,
         &id,
         r.params,
-        if r.ephemeral { "ephemeral" } else if p.via == "token" { "api" } else { "web" },
+        if r.ephemeral {
+            "ephemeral"
+        } else if p.via == "token" {
+            "api"
+        } else {
+            "web"
+        },
         s.cfg.user_quota_mb,
     )?;
     let wait = Duration::from_secs(r.wait_seconds.unwrap_or(30).min(600));
@@ -806,7 +812,8 @@ async fn file_content(
         .await
         .map_err(|_| ApiError::not_found("file content missing"))?;
     let len = file.metadata().await?.len();
-    let inline = matches!(q.inline.as_deref(), Some("1" | "true" | "yes")) && inline_safe(&f.view.mime);
+    let inline =
+        matches!(q.inline.as_deref(), Some("1" | "true" | "yes")) && inline_safe(&f.view.mime);
     // Text-like types are served as text/plain when inline to avoid script execution.
     let ctype = if inline
         && matches!(
