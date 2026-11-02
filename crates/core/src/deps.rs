@@ -107,24 +107,6 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         ),
     },
     DepSpec {
-        id: "vips",
-        name: "libvips",
-        purpose: "Fast, low-memory processing of very large images",
-        binaries: &["vips"],
-        unix_only_binaries: &[],
-        version_args: &["--version"],
-        version_regex: r"vips-(\S+)",
-        license: "LGPL-2.1+",
-        install: hints!(
-            Some("libvips-tools"),
-            Some("vips-tools"),
-            Some("libvips"),
-            Some("vips"),
-            None,
-            "https://www.libvips.org/install.html"
-        ),
-    },
-    DepSpec {
         id: "exiftool",
         name: "ExifTool",
         purpose: "Read and write metadata for images, video, audio and documents",
@@ -220,8 +202,9 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         purpose: "Offline speech recognition",
         binaries: &["whisper-cli", "whisper-cpp", "whisper.cpp"],
         unix_only_binaries: &[],
+        // whisper-cli prints no version; the app's own copy reports its pin.
         version_args: &["--help"],
-        version_regex: r"(usage)",
+        version_regex: r"whisper\.cpp v?(\d+\.\d+\.\d+)",
         license: "MIT",
         install: hints!(
             None,
@@ -434,7 +417,11 @@ impl DepRegistry {
     }
 
     pub fn all(&self) -> Vec<DepStatus> {
-        KNOWN_DEPS.iter().map(|d| self.status(d.id)).collect()
+        KNOWN_DEPS
+            .iter()
+            .filter(|d| applies_here(d))
+            .map(|d| self.status(d.id))
+            .collect()
     }
 
     pub fn path(&self, id: &str) -> Option<PathBuf> {
@@ -501,7 +488,17 @@ impl DepRegistry {
             };
         };
         let (path, managed) = self.find_binary(spec);
-        let version = path.as_ref().and_then(|p| probe_version(p, spec));
+        let version = path.as_ref().and_then(|p| {
+            probe_version(p, spec).or_else(|| match &managed {
+                // The app's own copy is the pinned version, even when the
+                // binary can't say so itself.
+                Lookup::Found { .. } => self
+                    .managed
+                    .pinned_version(spec.id)
+                    .map(|v| v.trim_start_matches('v').to_string()),
+                _ => None,
+            })
+        });
         let (source, downloadable, download_bytes, install_hint) = match managed {
             Lookup::Found { origin, .. } => (
                 Some(match origin {
@@ -553,6 +550,12 @@ impl DepRegistry {
             download_bytes,
         }
     }
+}
+
+/// Whether a dependency means anything on this platform (Bubblewrap is a
+/// Linux sandbox, so it isn't listed as missing elsewhere).
+fn applies_here(spec: &DepSpec) -> bool {
+    spec.id != "bwrap" || cfg!(target_os = "linux")
 }
 
 /// The app's own directories first, then PATH, then the platform's
@@ -722,6 +725,8 @@ mod managed_tests {
         let q = reg.status("qpdf");
         assert_eq!(q.source, Some("bundled"));
         assert_eq!(q.path, Some(bundled.join("bin").join(exe_name("qpdf"))));
+        // A binary that can't report its version shows the pinned one.
+        assert_eq!(q.version.as_deref(), Some("12"));
         let gs = reg.status("ghostscript");
         assert!(!gs.found, "managed engine must not come from the system");
         assert_eq!(gs.downloadable.as_deref(), Some("ghostscript"));
@@ -732,5 +737,16 @@ mod managed_tests {
         );
         // Unmanaged deps keep the old lookup.
         assert_eq!(reg.status("libreoffice").downloadable, None);
+    }
+
+    #[test]
+    fn lists_only_dependencies_for_this_platform() {
+        let reg = DepRegistry::new(vec![]);
+        let ids: Vec<String> = reg.all().into_iter().map(|d| d.id).collect();
+        assert_eq!(
+            ids.contains(&"bwrap".to_string()),
+            cfg!(target_os = "linux")
+        );
+        assert!(ids.contains(&"ffmpeg".to_string()));
     }
 }

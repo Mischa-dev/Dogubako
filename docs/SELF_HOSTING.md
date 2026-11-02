@@ -13,7 +13,7 @@ docker compose logs dogubako | grep "Setup token"
 
 Open <http://localhost:8420>, enter the setup token and create the owner account.
 
-The image includes FFmpeg, ImageMagick, libvips, ExifTool, qpdf, Poppler,
+The image includes FFmpeg, ImageMagick, ExifTool, qpdf, Poppler,
 Ghostscript, Tesseract (English), 7-Zip and bubblewrap. Options:
 
 * `docker build --build-arg WITH_WHISPER=1 .` also compiles whisper.cpp (offline speech recognition). Download a model afterwards in **Settings → Models** or `docker compose exec dogubako dogubako models download whisper-base` (with `DOGUBAKO_MODELS_DIR=/data/models`).

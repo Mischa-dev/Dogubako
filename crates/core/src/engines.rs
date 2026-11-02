@@ -189,6 +189,22 @@ impl ManagedEngines {
     }
 
     /// Find one of `names` for dependency `dep_id` in the app's own folders.
+    /// The pinned version of the managed engine that provides `dep_id`.
+    pub fn pinned_version(&self, dep_id: &str) -> Option<String> {
+        let m = self.manifest()?;
+        let provides = |deps: &[String]| deps.iter().any(|d| d == dep_id);
+        m.bundled
+            .iter()
+            .find(|e| provides(&e.deps))
+            .map(|e| e.version.clone())
+            .or_else(|| {
+                m.on_demand
+                    .iter()
+                    .find(|p| provides(&p.deps))
+                    .map(|p| p.version.clone())
+            })
+    }
+
     pub fn lookup(&self, dep_id: &str, names: &[&str]) -> Lookup {
         let Some(m) = self.manifest() else {
             return Lookup::Unmanaged;

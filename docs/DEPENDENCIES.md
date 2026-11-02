@@ -59,7 +59,6 @@ license terms and source availability.
 |---|---|---|
 | FFmpeg / FFprobe | LGPL-2.1+ or GPL-2.0+ (build-dependent) | Debian's build enables GPL components; combined distribution in the Docker image is under GPL-compatible terms with source available from Debian |
 | ImageMagick | ImageMagick License (Apache-2.0 style) | |
-| libvips | LGPL-2.1+ | |
 | ExifTool | Artistic / GPL-1.0+ | |
 | qpdf | Apache-2.0 | |
 | Poppler utils | GPL-2.0+ | |

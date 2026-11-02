@@ -60,7 +60,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cd web && npm test
 ```
 
-Integration tests use FFmpeg, ImageMagick, libvips, ExifTool, qpdf, Poppler,
+Integration tests use FFmpeg, ImageMagick, ExifTool, qpdf, Poppler,
 Ghostscript, Tesseract and 7-Zip when installed (CI installs them on Linux).
 Optional: `DOGUBAKO_TEST_MODELS=<dir>` with model files enables model-based tests.
 
