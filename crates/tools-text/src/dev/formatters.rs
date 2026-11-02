@@ -583,6 +583,8 @@ fn mixed_content_elements(text: &str) -> std::collections::HashSet<usize> {
         preserve: bool,
         child: bool,
         text: bool,
+        /// Any text at all, whitespace included.
+        any_text: bool,
     }
     let mut reader = quick_xml::Reader::from_str(text);
     let mut out = std::collections::HashSet::new();
@@ -608,6 +610,7 @@ fn mixed_content_elements(text: &str) -> std::collections::HashSet<usize> {
                     preserve,
                     child: false,
                     text: false,
+                    any_text: false,
                 });
                 next += 1;
             }
@@ -618,7 +621,9 @@ fn mixed_content_elements(text: &str) -> std::collections::HashSet<usize> {
             }
             Ok(Event::End(_)) => {
                 if let Some(o) = stack.pop() {
-                    if o.preserve || (o.child && o.text) {
+                    // Leaf text is data even when it is only whitespace
+                    // (<value> </value>); only element content is indentation.
+                    if o.preserve || (o.child && o.text) || (!o.child && o.any_text) {
                         out.insert(o.id);
                     }
                 }
@@ -626,6 +631,7 @@ fn mixed_content_elements(text: &str) -> std::collections::HashSet<usize> {
             Ok(Event::Text(t)) => {
                 if let Some(o) = stack.last_mut() {
                     let s: &str = t.as_ref();
+                    o.any_text = true;
                     if !s.trim().is_empty() || !s.contains(['\n', '\r']) {
                         o.text = true;
                     }
@@ -1316,6 +1322,19 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.text.unwrap(), "<a><b>x</b></a>");
+        // Whitespace-only text in a leaf element is data, kept in both modes.
+        for mode in ["format", "minify"] {
+            let out = h
+                .run(
+                    "dev.xml",
+                    json!({"text": "<r>\n  <value> </value>\n  <nl>\n</nl>\n  <e></e>\n</r>", "mode": mode}),
+                )
+                .await
+                .unwrap();
+            let t = out.text.unwrap();
+            assert!(t.contains("<value> </value>"), "{mode}: {t}");
+            assert!(t.contains("<nl>\n</nl>"), "{mode}: {t}");
+        }
         // Attribute errors (duplicates, unquoted values) are not well-formed,
         // on empty and start elements alike.
         for bad in [
