@@ -322,7 +322,13 @@ fn extract_segments() -> Arc<dyn Tool> {
                 .iter()
                 .map(|(a, b)| format!("between(t,{a:.3},{b:.3})"))
                 .collect();
-            let af = format!("aselect='{}',asetpts=N/SR/TB", expr.join("+"));
+            // Re-chunk into small frames first: aselect keeps or drops whole
+            // frames, and decoder frame sizes differ between FFmpeg builds
+            // (large PCM frames would let silence leak into the output).
+            let af = format!(
+                "asetnsamples=n=256:p=0,aselect='{}',asetpts=N/SR/TB",
+                expr.join("+")
+            );
             let out = out_path(&ctx, &f, "speech", &fmt);
             Ff::new()
                 .input(&f.path)
