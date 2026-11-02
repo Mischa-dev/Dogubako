@@ -1689,7 +1689,7 @@ dependencies = [
 
 [[package]]
 name = "dogubako-core"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -1718,7 +1718,7 @@ dependencies = [
 
 [[package]]
 name = "dogubako-desktop"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "dogubako-core",
  "dogubako-mcp",
@@ -1735,7 +1735,7 @@ dependencies = [
 
 [[package]]
 name = "dogubako-mcp"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -1748,7 +1748,7 @@ dependencies = [
 
 [[package]]
 name = "dogubako-tools"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "dogubako-core",
  "dogubako-tools-docs",
@@ -1762,7 +1762,7 @@ dependencies = [
 
 [[package]]
 name = "dogubako-tools-docs"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "dogubako-core",
  "image",
@@ -1776,7 +1776,7 @@ dependencies = [
 
 [[package]]
 name = "dogubako-tools-files"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "blake3",
  "brotli",
@@ -1809,7 +1809,7 @@ dependencies = [
 
 [[package]]
 name = "dogubako-tools-image"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "ab_glyph",
  "dogubako-core",
@@ -1832,7 +1832,7 @@ dependencies = [
 
 [[package]]
 name = "dogubako-tools-media"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "dogubako-core",
  "serde",
@@ -1844,7 +1844,7 @@ dependencies = [
 
 [[package]]
 name = "dogubako-tools-net"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -1872,7 +1872,7 @@ dependencies = [
 
 [[package]]
 name = "dogubako-tools-system"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "chrono",
  "dogubako-core",
@@ -1887,7 +1887,7 @@ dependencies = [
 
 [[package]]
 name = "dogubako-tools-text"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "ammonia",
  "base64 0.23.1",
