@@ -341,7 +341,7 @@ fn pptx_slide_order<R: Read + Seek>(
         |e: &quick_xml::events::BytesStart| -> std::collections::HashMap<String, String> {
             e.attributes()
                 .flatten()
-                .map(|a| (local(a.key.as_ref()), a.value.to_string()))
+                .map(|a| (local(a.key.as_ref()), attr_value(&a)))
                 .collect()
         };
     let mut targets = std::collections::HashMap::new();
@@ -428,7 +428,7 @@ fn epub<R: Read + Seek>(
                 let attrs: std::collections::HashMap<String, String> = e
                     .attributes()
                     .flatten()
-                    .map(|a| (local(a.key.as_ref()), a.value.to_string()))
+                    .map(|a| (local(a.key.as_ref()), attr_value(&a)))
                     .collect();
                 if n == "item" {
                     if let (Some(id), Some(href)) = (attrs.get("id"), attrs.get("href")) {
@@ -474,6 +474,15 @@ fn normalize_zip_path(p: &str) -> String {
     parts.join("/")
 }
 
+/// Attribute value with XML entities resolved (`chapter&amp;notes.xhtml` is
+/// the file `chapter&notes.xhtml`); the raw value if it cannot be unescaped.
+fn attr_value(a: &quick_xml::events::attributes::Attribute) -> String {
+    let raw = a.value.to_string();
+    quick_xml::escape::unescape(&raw)
+        .map(|v| v.into_owned())
+        .unwrap_or(raw)
+}
+
 fn attr_of(xml: &str, elem: &str, attr: &str) -> Option<String> {
     let mut reader = quick_xml::Reader::from_str(xml);
     loop {
@@ -483,7 +492,7 @@ fn attr_of(xml: &str, elem: &str, attr: &str) -> Option<String> {
                     .attributes()
                     .flatten()
                     .find(|a| local(a.key.as_ref()) == attr)
-                    .map(|a| a.value.to_string());
+                    .map(|a| attr_value(&a));
             }
             Ok(Event::Eof) | Err(_) => return None,
             _ => {}
@@ -833,6 +842,29 @@ mod tests {
             .text
             .unwrap();
         assert!(t.contains("Chapter") && t.contains("Once upon a time"));
+        // XML-escaped paths in container.xml and the manifest are unescaped.
+        let epub = make_zip(&[
+            (
+                "META-INF/container.xml",
+                r#"<container><rootfiles><rootfile full-path="A&amp;B/content.opf"/></rootfiles></container>"#,
+            ),
+            (
+                "A&B/content.opf",
+                r#"<package><manifest><item id="c1" href="chapter&amp;notes.xhtml"/></manifest><spine><itemref idref="c1"/></spine></package>"#,
+            ),
+            (
+                "A&B/chapter&notes.xhtml",
+                "<html><body><p>Escaped path chapter</p></body></html>",
+            ),
+        ]);
+        let f = h.write("g.epub", &epub);
+        let t = h
+            .run("text.extract", json!({"file": f.to_str().unwrap()}))
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        assert!(t.contains("Escaped path chapter"), "{t}");
         let f = h.write("e.rtf", br"{\rtf1\ansi\ansicpg1252{\fonttbl{\f0 Arial;}}\f0 Caf\'e9 \b bold\b0\par Line \u8364?2}");
         assert_eq!(
             h.run("text.extract", json!({"file": f.to_str().unwrap()}))
