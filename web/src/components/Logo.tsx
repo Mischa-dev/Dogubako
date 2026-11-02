@@ -1,0 +1,12 @@
+/** The Dogubako mark (shared with the desktop app icon). */
+export function LogoMark({ size = 22, title }: { size?: number; title?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 512 512" role={title ? 'img' : undefined} aria-hidden={title ? undefined : true} aria-label={title}>
+      <rect x="16" y="16" width="480" height="480" rx="112" fill="#1d2433" />
+      <path d="M196 150v-18a28 28 0 0 1 28-28h64a28 28 0 0 1 28 28v18" fill="none" stroke="#f4f1ea" strokeWidth="28" strokeLinecap="round" />
+      <rect x="104" y="150" width="304" height="236" rx="36" fill="#f4f1ea" />
+      <rect x="104" y="232" width="304" height="26" fill="#1d2433" />
+      <rect x="226" y="214" width="60" height="62" rx="14" fill="#e0533d" />
+    </svg>
+  );
+}
