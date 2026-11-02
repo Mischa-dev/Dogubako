@@ -1083,7 +1083,14 @@ fn port_check() -> Arc<dyn Tool> {
         .param(ParamSpec::text("host").label("Host").required().primary().placeholder("example.com"))
         .param(ParamSpec::choice("preset", &[("common", "Common service ports (25)"), ("custom", "Custom list")]).default_str("common"))
         .param(ParamSpec::text("ports").label("Ports").describe("e.g. 22,80,443,8000-8010 (max 50)").show_if("preset", &["custom"]))
-        .param(ParamSpec::integer("timeout_ms").label("Timeout per port (ms)").range(100.0, 5000.0).default_int(1500).advanced())
+        .param(
+            ParamSpec::integer("timeout_ms")
+                .label("Timeout per port (ms)")
+                .describe("Windows retries refused connections for about 2 s, so shorter timeouts there report closed ports as filtered")
+                .range(100.0, 5000.0)
+                .default_int(if cfg!(windows) { 3000 } else { 1500 })
+                .advanced(),
+        )
         .permission(Permission::Network)
         .progress()
         .timeout(120);
@@ -1095,7 +1102,9 @@ fn port_check() -> Arc<dyn Tool> {
         } else {
             COMMON_PORTS.iter().map(|(p, _)| *p).collect()
         };
-        let timeout = Duration::from_millis(p.int_or("timeout_ms", 1500) as u64);
+        let timeout = Duration::from_millis(
+            p.int_or("timeout_ms", if cfg!(windows) { 3000 } else { 1500 }) as u64,
+        );
         // Resolve once with the policy applied: private targets are refused
         // when the instance only allows public addresses.
         let addrs = resolve_checked(ctx.net_policy(), &host, 0).await?;

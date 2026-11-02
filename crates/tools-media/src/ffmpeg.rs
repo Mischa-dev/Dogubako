@@ -1645,7 +1645,10 @@ mod tests {
             Some(2997.0)
         );
         assert_eq!(ratio("0/0"), None);
+        #[cfg(unix)]
         assert_eq!(arg_path(Path::new("/a/b")), OsString::from("/a/b"));
+        #[cfg(windows)]
+        assert_eq!(arg_path(Path::new(r"C:\a\b")), OsString::from(r"C:\a\b"));
         assert!(Path::new(&arg_path(Path::new("-x.mp4"))).is_absolute());
     }
 

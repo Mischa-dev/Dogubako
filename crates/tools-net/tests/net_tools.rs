@@ -431,7 +431,8 @@ async fn key_inspect_keys() {
     assert_eq!(out.data["bits"], 256);
     assert_eq!(
         out.data["public_key_pem"].as_str().unwrap().trim(),
-        ed.public_key_pem().trim()
+        // rcgen emits CRLF line endings on Windows; the tool always uses LF.
+        ed.public_key_pem().replace("\r\n", "\n").trim()
     );
     assert_no_secret(&out, &ed.serialize_pem(), &ed.public_key_pem());
 
@@ -964,7 +965,9 @@ async fn port_check_and_connectivity_local() {
         .unwrap()
         .port();
     let hns = harness();
-    let out = hns.run("network.port_check", json!({"host": "127.0.0.1", "preset": "custom", "ports": format!("{open},{closed}"), "timeout_ms": 1000})).await.unwrap();
+    // Windows retries refused SYNs for ~2 s before reporting "connection
+    // refused", so allow enough time to classify the port as closed.
+    let out = hns.run("network.port_check", json!({"host": "127.0.0.1", "preset": "custom", "ports": format!("{open},{closed}"), "timeout_ms": 4000})).await.unwrap();
     assert_eq!(out.data["open_ports"], json!([open]));
     let rows = out.data["table"]["rows"].as_array().unwrap();
     assert!(rows.iter().any(|r| r[0] == closed && r[2] == "closed"));
