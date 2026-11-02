@@ -1267,8 +1267,7 @@ fn merge() -> Arc<dyn Tool> {
         let first = &files[0];
         let out = ctx.output_path(&suffixed(&first.name, "merged", Some(&fmt)).replace('%', "_"));
         let mut warnings = vec![];
-        let method;
-        if mode != "reencode" && compatible {
+        let method = if mode != "reencode" && compatible {
             let vc = probes[0].video_codec().and_then(VCodec::from_probe);
             if let Some(c) = vc {
                 if !video_ok_in(&fmt, c) {
@@ -1283,7 +1282,7 @@ fn merge() -> Arc<dyn Tool> {
             }
             let paths: Vec<PathBuf> = files.iter().map(|f| f.path.clone()).collect();
             concat_copy(&ctx, &paths, &out, Some(total), (0.0, 1.0)).await?;
-            method = "stream copy";
+            "stream copy"
         } else {
             let dims: Vec<(u32, u32)> = probes.iter().filter_map(|p| p.dims()).collect();
             let (w, h) = match p.str_or("resolution", "first") {
@@ -1352,8 +1351,8 @@ fn merge() -> Arc<dyn Tool> {
                 .span((0.0, 1.0), "Merging")
                 .run(&ctx)
                 .await?;
-            method = "re-encoded";
-        }
+            "re-encoded"
+        };
         let a = ctx.artifact(&out)?;
         let rows: Vec<Value> = files
             .iter()

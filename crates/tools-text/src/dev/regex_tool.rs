@@ -61,9 +61,9 @@ fn regex_tester() -> Arc<dyn Tool> {
         let fancy = p.str_or("engine", "standard") == "fancy";
         let mut matches: Vec<M> = vec![];
         let names: Vec<Option<String>>;
-        let replaced: Option<String>;
+
         let mut truncated = false;
-        if fancy {
+        let replaced: Option<String> = if fancy {
             let mut prefix = String::new();
             for (f, c) in [("i", 'i'), ("m", 'm'), ("s", 's'), ("x", 'x')] {
                 if flags.iter().any(|x| x == f) {
@@ -99,14 +99,14 @@ fn regex_tester() -> Arc<dyn Tool> {
                         .collect(),
                 });
             }
-            replaced = match p.opt_str("replacement") {
+            match p.opt_str("replacement") {
                 Some(r) => Some(
                     re.try_replacen(text, 0, r)
                         .map_err(|e| ToolError::invalid("pattern", e.to_string()))?
                         .into_owned(),
                 ),
                 None => None,
-            };
+            }
         } else {
             let re = crate::text::build_regex(pattern, &flags).map_err(|e| match e {
                 ToolError::InvalidInput { message, .. } if message.contains("look-around") || message.contains("backreferences") => {
@@ -132,10 +132,9 @@ fn regex_tester() -> Arc<dyn Tool> {
                         .collect(),
                 });
             }
-            replaced = p
-                .opt_str("replacement")
-                .map(|r| re.replace_all(text, r).into_owned());
-        }
+            p.opt_str("replacement")
+                .map(|r| re.replace_all(text, r).into_owned())
+        };
         let idx = Utf16Index::new(text);
         let group_names: Vec<Value> = names.iter().skip(1).map(|n| json!(n)).collect();
         let list: Vec<Value> = matches
