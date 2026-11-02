@@ -61,7 +61,11 @@ export default function Crop({ tool, jobId }: { tool: ToolInfo; jobId?: string |
   const lastRef = useRef<string>();
   useEffect(() => {
     if (!natural || !item?.ref || lastRef.current === item.ref) return;
+    const first = lastRef.current === undefined;
     lastRef.current = item.ref;
+    // "Open with same settings": the first file of a restored run keeps the
+    // restored crop (and mode) instead of the default inset rectangle.
+    if (first && jobId) return;
     const inset = Math.round(Math.min(natural.w, natural.h) * 0.08);
     setBox([{ x: inset, y: inset, width: natural.w - inset * 2, height: natural.h - inset * 2 }]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
