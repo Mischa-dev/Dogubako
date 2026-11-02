@@ -846,3 +846,31 @@ async fn scoped_tokens_never_carry_admin_rights() {
     .await;
     assert_eq!(r.status, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn enabling_auth_after_no_auth_offers_setup() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = |auth| ServerConfig {
+        data_dir: dir.path().to_path_buf(),
+        auth,
+        setup_token: Some("setup-secret".into()),
+        ..Default::default()
+    };
+    // First run without authentication creates the implicit `local` owner.
+    let s = AppState::build_with(cfg(AuthMode::None), Registry::new(), vec![]).unwrap();
+    assert!(!s.setup_required());
+    drop(s);
+    // Restarted with authentication on the same data dir: setup is offered.
+    let s = AppState::build_with(cfg(AuthMode::Required), Registry::new(), vec![]).unwrap();
+    assert!(s.setup_required());
+    let a = app(s);
+    let r = call(
+        &a,
+        Method::POST,
+        "/api/v1/setup",
+        &[],
+        Some(json!({"setup_token": "setup-secret", "username": "owner", "password": "a-strong-password"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+}

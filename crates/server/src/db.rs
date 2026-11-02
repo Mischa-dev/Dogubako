@@ -218,11 +218,14 @@ impl Db {
     }
 
     // ---- users
+    /// Accounts a person can sign in with: excludes agents and the implicit
+    /// `local` owner created while authentication was disabled (it has no
+    /// password), so enabling auth later still offers first-run setup.
     pub fn user_count(&self) -> i64 {
         self.c()
             .query_row(
-                "SELECT COUNT(*) FROM users WHERE role != 'agent'",
-                [],
+                "SELECT COUNT(*) FROM users WHERE role != 'agent' AND id != ?1",
+                [crate::auth::LOCAL_USER_ID],
                 |r| r.get(0),
             )
             .unwrap_or(0)

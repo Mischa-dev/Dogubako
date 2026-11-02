@@ -60,17 +60,20 @@ export function useFileAdder(param: ParamSpec & { type: 'file' }, onChange: Sett
       progress: 0,
       localUrl: f.type.startsWith('image/') ? URL.createObjectURL(f) : undefined,
     }));
-    const keys = new Set(items.map((i) => i.key));
+    // Results are matched to items by their position in this upload batch,
+    // not their current position: earlier items may be removed meanwhile.
+    const batchIndex = new Map(items.map((i, n) => [i.key, n]));
     onChange(param.name, (prev: unknown) => {
       const cur = (prev as FileItem[]) ?? [];
       if (!multiple) cur.forEach((i) => i.localUrl && URL.revokeObjectURL(i.localUrl));
       return multiple ? [...cur, ...items] : items;
     });
     const update = (fn: (i: FileItem, idx: number) => FileItem) =>
-      onChange(param.name, (prev: unknown) => {
-        let idx = -1;
-        return ((prev as FileItem[]) ?? []).map((i) => (keys.has(i.key) ? fn(i, ++idx) : i));
-      });
+      onChange(param.name, (prev: unknown) =>
+        ((prev as FileItem[]) ?? []).map((i) => {
+          const idx = batchIndex.get(i.key);
+          return idx === undefined ? i : fn(i, idx);
+        }));
     try {
       const refs = await backend.uploadFiles(list, (fr) => update((i) => ({ ...i, progress: fr })));
       update((i, idx) => (refs[idx] ? { ...i, ref: refs[idx].ref, size: refs[idx].size || i.size, mime: refs[idx].mime || i.mime, status: 'ready', progress: 1 } : i));
