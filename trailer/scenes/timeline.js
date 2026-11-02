@@ -132,7 +132,7 @@
     S1.latch.setAttribute('transform', `translate(0 ${ly.toFixed(2)})`);
     S1.latch.style.opacity = clamp(lp * 4);
 
-    const slide = ease(t, 2.1, 3.0, E.inOut);
+    const slide = ease(t, 1.95, 2.75, E.inOut);
     const ms = lerp(1, 0.72, slide);
     const markCx = lerp(960, 640, slide);
     const out = ease(t, 4.3, 5.1, E.in);
@@ -141,11 +141,11 @@
     S1.mark.style.filter = `drop-shadow(0 0 ${(28 * Math.exp(-Math.max(0, t - 1.6) * 2.5) * (t > 1.6 ? 1 : 0)).toFixed(1)}px rgba(224,83,61,.55))`;
     const wx = 790;
     s1Letters.forEach((c, i) => {
-      const p = ease(t, 2.35 + i * 0.045, 2.95 + i * 0.045, E.out5);
+      const p = ease(t, 2.6 + i * 0.045, 3.2 + i * 0.045, E.out5);
       put(c, { y: (1 - p) * 60, o: p, blur: (1 - p) * 10 });
     });
     put(S1.word, { x: wx, y: 470 - 92 - 6, o: v, s: 1 + out * 0.08 });
-    const kp = ease(t, 3.1, 3.8);
+    const kp = ease(t, 3.3, 3.95);
     put(S1.kanji, { x: wx + 8, y: 470 + 82 + (1 - kp) * 14, o: kp * v });
   }
 
@@ -172,7 +172,7 @@
       node,
       x: 120 + col * 290 + rnd() * 120 - 40,
       y: 300 + row * 120 + rnd() * 50 - (col % 2) * 30,
-      z: 0.72 + rnd() * 0.42,
+      z: 0.9 + rnd() * 0.32,
       r: (rnd() - 0.5) * 12,
       enter: 5.25 + rnd() * 1.6,
       leave: 7.55 + (5 - Math.abs(col - 2.5)) * 0.07 + row * 0.08 + rnd() * 0.12,
@@ -248,7 +248,7 @@
       const fall = prog(t, b.at, b.at + 0.34);
       const u = Math.max(0, t - b.at - 0.34);
       let y;
-      if (fall < 1) y = -760 * (1 - fall * fall);
+      if (fall < 1) y = -640 * (1 - fall * fall);
       else y = -26 * Math.exp(-u * 9) * Math.abs(Math.sin(u * 15));
       const squash = fall >= 1 ? Math.exp(-u * 18) * 0.06 : 0;
       const tilt = fall < 1 ? b.r * 3 : b.r + b.r * 2 * Math.exp(-u * 7) * Math.cos(u * 14);
@@ -259,14 +259,14 @@
       const lp = ease(t, b.at + 0.35, b.at + 0.85);
       b.node.querySelector('.label').style.opacity = lp;
       b.node.querySelector('.meta').style.opacity = lp;
-      put(b.node, { x: b.cx - 135 + drift, y: 580 + out * (i === 0 ? 0 : 30), o: v * (fall > 0 ? 1 : 0) });
+      put(b.node, { x: b.cx - 135 + drift, y: 560 + out * (i === 0 ? 0 : 30), o: v * (fall > 0 ? 1 : 0) });
     });
   }
 
   // ============================================================ 4–5. flow
   const S4 = {
     root: $('#s-flow'), cam: $('#flow-cam'), win: $('#flow-win'), home: $('#flow-home'), intent: $('#flow-intent'), tool: $('#flow-tool'), result: $('#flow-result'),
-    overlay: $('#flow-overlay'), card: $('#flow-dropcard'), photo: $('#flow-photo'), cursor: $('#flow-cursor'), ripple: $('#flow-ripple'), cap: $('#flow-cap'),
+    overlay: $('#flow-overlay'), card: $('#flow-dropcard'), photo: $('#flow-photo'), cursor: $('#flow-cursor'), ripple: $('#flow-ripple'), cap: $('#flow-cap'), ring: $('#flow-ring'),
   };
   const TYPE_AT = 18.45, TYPE_STEP = 0.105, TYPED = 'smaller';
   const intentFrames = [];
@@ -298,7 +298,7 @@
     return v;
   }
   function flow(t) {
-    const v = win(t, 14.8, 27.7, 0.6, 0.6);
+    const v = win(t, 14.8, 27.6, 0.6, 0.4);
     show(S4.root, v > 0);
     if (v <= 0) return;
     const row1 = B('intentRow1', [1050, 221]);
@@ -336,7 +336,7 @@
     put(S4.result, { o: resultOn });
 
     // drag-in photo and the drop overlay
-    const carry = path(t, [[15.5, 1700, -260], [16.95, 760, 470]]);
+    const carry = path(t, [[15.5, 1700, -260], [16.95, 720, 405]]);
     const dropped = prog(t, 16.95, 17.25);
     const over = ease(t, 16.15, 16.5) * (1 - ease(t, 16.95, 17.3));
     S4.overlay.style.opacity = over;
@@ -345,7 +345,7 @@
 
     // the cursor
     const cur = path(t, [
-      [15.5, 1700 + 60, -260 + 60], [16.95, 760 + 60, 470 + 60],
+      [15.5, 1700 + 60, -260 + 60], [16.95, 720 + 60, 405 + 60],
       [17.6, 880, 600], [18.2, intentInput[0] + 160, intentInput[1] + 70],
       [19.25, intentInput[0] + 160, intentInput[1] + 70], [19.85, row1[0] - 120, row1[1] + 4],
       [20.9, row1[0] - 120, row1[1] + 4], [21.65, run[0], run[1] + 2],
@@ -358,6 +358,11 @@
     const rp = rip(19.9) || rip(21.75);
     const rpos = t < 21 ? [row1[0] - 120, row1[1] + 4] : run;
     put(S4.ripple, { x: rpos[0], y: rpos[1], s: 0.3 + E.out(rp) * 1.1, o: rp > 0 ? (1 - rp) * 0.9 : 0 });
+
+    // a soft ring around the size change once we're close enough to read it
+    const hl = win(t, 25.9, 27.6, 0.45, 0.4, E.out);
+    put(S4.ring, { x: badge[0] - 120, y: badge[1] - 22, s: lerp(1.08, 1, hl), o: hl * v });
+    S4.ring.style.transformOrigin = '50% 50%';
 
     // captions
     let cv = 0;
@@ -372,17 +377,17 @@
   // ============================================================ 6. montage
   const S6 = { root: $('#s-montage') };
   const MONTAGE = [
-    { src: 'json-dark', title: 'Format JSON as you type', sub: 'Errors point at the exact spot.' },
-    { src: 'redact-dark', title: 'Redact what’s private', sub: 'Blur, pixelate or black out, by hand.' },
-    { src: 'palette-dark', title: 'Any tool, two keys away', sub: '⌘K or Ctrl K searches every tool and file.' },
-    { src: 'system-dark', title: 'Know your machine', sub: 'Battery health, disks, memory, heat.' },
+    { src: 'json-dark', title: 'Format JSON as you type', sub: 'Errors point at the exact spot.', zoom: 1.25, fx: 880, fy: 380 },
+    { src: 'redact-dark', title: 'Redact what’s private', sub: 'Blur, pixelate or black out, by hand.', zoom: 1.3, fx: 880, fy: 330 },
+    { src: 'palette-dark', title: 'Any tool, two keys away', sub: '⌘K or Ctrl K searches every tool and file.', zoom: 1.75, fx: 780, fy: 230 },
+    { src: 'system-dark', title: 'Know your machine', sub: 'Battery health, disks, memory, heat.', zoom: 1.3, fx: 900, fy: 330 },
   ];
   const M0 = 27.5, MSTEP = 1.875;
   const mItems = MONTAGE.map((m) => {
     const frame = el(`<div class="mframe"><img src="${CAP}${m.src}.png"></div>`);
     const cap = el(`<div class="abs mcap">${m.title}<small>${m.sub}</small></div>`);
     S6.root.append(frame, cap);
-    return { frame, cap };
+    return { frame, cap, img: frame.querySelector('img'), m };
   });
   function montage(t) {
     const v = win(t, M0 - 0.3, M0 + MONTAGE.length * MSTEP + 0.45, 0.5, 0.5);
@@ -400,6 +405,10 @@
       put(m.frame, { x, y, s: sc * lerp(1.04, 1, pin), persp: 2400, ry: lerp(-24, -7, pin) + exitK * 24, o: v * pin * (1 - exitK) * (last ? 1 - ease(t, b, b + 0.4) : 1) });
       m.frame.style.transformOrigin = '0 0';
       m.frame.style.zIndex = i;
+      // slow push-in on the part of the screen worth reading
+      const z = lerp(m.m.zoom * 0.94, m.m.zoom, E.sine(prog(t, a - 0.25, b + 0.3)));
+      m.img.style.transformOrigin = '0 0';
+      m.img.style.transform = `translate(${(720 - m.m.fx * z).toFixed(1)}px, ${(450 - m.m.fy * z).toFixed(1)}px) scale(${z.toFixed(4)})`;
       const cin = ease(t, a, a + 0.5, E.out5), cout = ease(t, b - 0.3, b, E.in);
       put(m.cap, { x: 110, y: 540 - m.cap.offsetHeight / 2 + (1 - cin) * 40 - cout * 30, o: v * cin * (1 - cout), blur: (1 - cin) * 8 + cout * 8 });
     });
@@ -452,7 +461,7 @@
     { ic: 'laptop', t: 'Desktop app', b: 'macOS, Windows and Linux.\nNo account. Works offline.', x: 90, y: 300 },
     { ic: 'server', t: 'Self-hosted web', b: 'One server for your house or team.\nPhones and laptops just open it.', x: 90, y: 640 },
     { ic: 'terminal', t: 'Command line', term: true, x: 1410, y: 300 },
-    { ic: 'braces', t: 'HTTP API', term: true, b: '<span class="p">POST</span> /api/v1/tools/image.convert/run', x: 1410, y: 640 },
+    { ic: 'braces', t: 'HTTP API', term: true, b: '<span class="p">POST</span> /api/v1/tools/\n     image.convert/run', x: 1410, y: 640 },
     { ic: 'bot', t: 'MCP, for AI agents', b: 'Each agent gets its own token,\nlimited to the tools you allow.', x: 750, y: 820 },
   ];
   const ifaces = IFACES.map((f, i) => {
@@ -559,18 +568,18 @@
   const S10 = { root: $('#s-theme'), cam: $('#theme-cam'), dark: $('#theme-dark-shot'), phone: $('#theme-phone'), cap: $('#theme-cap'), phoneImg: $('#theme-phone img') };
   S10.phoneImg.src = CAP + 'phone-home-dark.png';
   function themes(t) {
-    const v = win(t, 54.85, 60.25, 0.5, 0.6);
+    const v = win(t, 54.85, 60.0, 0.5, 0.45);
     show(S10.root, v > 0);
     if (v <= 0) return;
     const toggle = B('themeToggle', [223, 43]);
     const enter = ease(t, 54.85, 55.7, E.out5);
     const shift = ease(t, 57.6, 58.5, E.inOut);
     const s = lerp(0.8, 0.72, shift);
-    camera(S10.cam, s, 720, 450, lerp(960, 760, shift), 520 + (1 - enter) * 100, { o: v });
+    camera(S10.cam, s, 720, 450, lerp(960, 730, shift), 520 + (1 - enter) * 100, { o: v });
     const rp = ease(t, 56.35, 57.25, E.inOut);
     S10.dark.style.clipPath = `circle(${(rp * 1750).toFixed(1)}px at ${toggle[0]}px ${toggle[1]}px)`;
     const pp = ease(t, 57.7, 58.6, E.out5);
-    put(S10.phone, { x: 1380 + (1 - pp) * 500, y: 130 + (1 - pp) * 40, r: (1 - pp) * 6, o: v * pp });
+    put(S10.phone, { x: 1420 + (1 - pp) * 500, y: 130 + (1 - pp) * 40, r: (1 - pp) * 6, o: v * pp });
     let cv;
     if (t < 57.6) cv = caption(S10.cap, t, 55.5, 57.5, 'Light or dark <small>Sidebar or none. Pin what you use.</small>', t > 56.8);
     else cv = caption(S10.cap, t, 57.9, 60.1, 'Your desk, your server, your phone <small>The same app everywhere.</small>', true);
@@ -597,6 +606,9 @@
       const p = ease(t, 60.5 + i * 0.05, 61.2 + i * 0.05, E.out5);
       put(c, { y: (1 - p) * 70, o: p, blur: (1 - p) * 12 });
     });
+    const push = 1 + E.sine(prog(t, 60, 72)) * 0.04;
+    S11.root.style.transformOrigin = '50% 52%';
+    S11.root.style.transform = `scale(${push.toFixed(4)})`;
     put(S11.word, { x: 960 - S11.word.offsetWidth / 2, y: 430, o: v });
     const items = [[S11.tag, 61.3, 640], [S11.alpha, 61.9, 730], [S11.url, 62.4, 820], [S11.meta, 62.8, 890]];
     items.forEach(([n, at, y]) => {

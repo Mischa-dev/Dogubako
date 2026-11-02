@@ -64,10 +64,10 @@ body { font-family: 'Instrument Sans', system-ui, sans-serif; color: var(--ink);
 #slips-h1, #slips-h2 { z-index: 300; }
 
 /* ---------- 3. bench objects */
-#bench-shelf { left: 0; right: 0; top: 780px; height: 260px; background: linear-gradient(#efece6, #e8e4dc); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 -1px 0 #ddd8ce; }
+#bench-shelf { left: 0; right: 0; top: 760px; height: 260px; background: linear-gradient(#efece6, #e8e4dc); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 -1px 0 #ddd8ce; }
 .obj { width: 270px; }
 .obj .thing { transform-origin: 50% 100%; }
-.obj > .thing { scale: 1.14; }
+.obj > .thing { scale: 1.24; }
 .obj .thing { position: relative; width: 270px; height: 200px; display: flex; align-items: flex-end; justify-content: center; }
 .obj .label { margin-top: 26px; text-align: center; font-size: 22px; font-weight: 500; color: var(--ink); white-space: nowrap; }
 .obj .meta { margin-top: 4px; text-align: center; font-size: 17px; color: var(--ink-3); white-space: nowrap; }
@@ -98,9 +98,10 @@ body { font-family: 'Instrument Sans', system-ui, sans-serif; color: var(--ink);
 .win.dark { box-shadow: var(--pop-dark); background: var(--night); }
 .win img.shot { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; display: block; }
 .cursor { width: 40px; height: 40px; filter: drop-shadow(0 3px 4px rgba(0,0,0,.3)); }
+#flow-ring { width: 240px; height: 44px; border-radius: 12px; border: 2.5px solid #1f7a45; box-shadow: 0 0 0 6px rgba(31, 122, 69, .14); }
 .ripple { width: 80px; height: 80px; margin: -40px 0 0 -40px; border-radius: 50%; border: 3px solid rgba(22,22,22,.35); }
 .drop-overlay { position: absolute; inset: 0; background: rgba(28, 24, 20, .26); display: flex; align-items: center; justify-content: center; }
-.drop-card { width: 560px; height: 300px; border-radius: 24px; border: 2.5px dashed rgba(22, 22, 22, .35); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 34px; font-weight: 600; letter-spacing: -0.02em; }
+.drop-card { width: 580px; height: 380px; justify-content: flex-end !important; padding-bottom: 34px; border-radius: 24px; border: 2.5px dashed rgba(22, 22, 22, .35); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 34px; font-weight: 600; letter-spacing: -0.02em; }
 .drop-card small { font-size: 20px; font-weight: 400; color: var(--ink-3); letter-spacing: 0; }
 .caption { font-size: 34px; font-weight: 600; letter-spacing: -0.02em; padding: 20px 30px; border-radius: 18px; white-space: nowrap; }
 .caption small { display: block; font-size: 21px; font-weight: 400; letter-spacing: 0; opacity: .72; margin-top: 4px; }
@@ -108,7 +109,7 @@ body { font-family: 'Instrument Sans', system-ui, sans-serif; color: var(--ink);
 
 /* ---------- 6. montage */
 .mframe { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; border-radius: 16px; overflow: hidden; box-shadow: var(--pop-dark); }
-.mframe img { width: 1440px; height: 900px; display: block; }
+.mframe img { width: 1440px; height: 900px; display: block; will-change: transform; }
 .mcap { width: 500px; font-size: 64px; font-weight: 600; letter-spacing: -0.035em; line-height: 1.04; color: var(--night-text); }
 .mcap small { display: block; font-size: 26px; font-weight: 400; letter-spacing: -0.005em; color: var(--night-text-3); margin-top: 14px; }
 
@@ -146,6 +147,7 @@ body { font-family: 'Instrument Sans', system-ui, sans-serif; color: var(--ink);
 /* ---------- 10. themes + phone */
 .phone { width: 400px; height: 820px; border-radius: 62px; background: #1a1917; padding: 14px; box-shadow: 0 50px 90px -30px rgba(0, 0, 0, .6), 0 0 0 2px #2e2c28 inset; }
 .phone .screen { width: 372px; height: 792px; border-radius: 49px; overflow: hidden; background: var(--paper); position: relative; }
+.phone .screen { padding-top: 50px; background: #151412 !important; }
 .phone .screen img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
 .phone .island { position: absolute; left: 50%; top: 14px; width: 112px; height: 32px; margin-left: -56px; border-radius: 20px; background: #000; }
 
@@ -205,6 +207,7 @@ body { font-family: 'Instrument Sans', system-ui, sans-serif; color: var(--ink);
       </div>
       <div class="abs" id="flow-photo"><div class="photo"><img data-src="dune.jpg"></div></div>
       <div class="abs ripple" id="flow-ripple"></div>
+      <div class="abs" id="flow-ring"></div>
       <svg class="abs cursor" id="flow-cursor" viewBox="0 0 24 24"><path d="M5 2.5 L5 19 L9.3 15 L12.2 21.4 L15 20.2 L12.2 14 L18 14 Z" fill="#161616" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
     </div>
     <div class="abs caption glass" id="flow-cap"></div>

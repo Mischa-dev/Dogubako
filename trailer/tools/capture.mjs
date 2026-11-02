@@ -134,10 +134,12 @@ if (want('home-dark')) {
 }
 if (want('json-dark')) {
   await go(dpage, '#/tool/dev.json');
-  const sample = JSON.stringify({ order: 4182, customer: { name: 'Ada Park', email: 'ada@example.com' }, items: [{ sku: 'TENT-2P', qty: 1, price: 249.0 }, { sku: 'LAMP-USB', qty: 2, price: 18.5 }], paid: true, notes: null });
+  // messy but short lines, so the input box doesn't scroll sideways
+  const sample = '{"order":4182,"paid":true,\n"customer":{"name":"Ada Park",\n  "email":"ada@example.com"},\n"items":[{"sku":"TENT-2P","qty":1,"price":249.0},\n {"sku":"LAMP-USB","qty":2,"price":18.5}],\n"notes":null}';
   const box = dpage.locator('textarea').first();
   await box.click();
   await box.fill(sample);
+  await dpage.keyboard.press('Control+Home');
   await sleep(1200);
   await dpage.mouse.move(1430, 890);
   await shoot(dpage, 'json-dark');

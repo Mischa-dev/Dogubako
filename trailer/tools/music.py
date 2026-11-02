@@ -287,7 +287,7 @@ def build():
         bright = 0.6 if bar < DRUMS_IN or BREAK_START <= bar < BREAK_END else 1.0
         if bar >= FINAL:
             bright = 1.2
-        g = 0.42 if bar >= DRUMS_IN else 0.36
+        g = 0.42 if bar >= DRUMS_IN else 0.55
         wet.add(t_of(bar) - 0.05, pad(ch['pad'], dur, bright), g)
 
     # final chord, held and ringing out
@@ -317,11 +317,11 @@ def build():
     # bass with sidechain-ish shape built into note lengths
     for bar in range(DRUMS_IN, FINAL):
         if BREAK_START <= bar < BREAK_END:
-            dry.add(t_of(bar), bass(PROG[bar % 4]['root'], BAR), 0.42)
+            dry.add(t_of(bar), bass(PROG[bar % 4]['root'], BAR), 0.3)
             continue
         root = PROG[bar % 4]['root']
         for beat, d, dn in ((0, 0.55, 0), (0.75, 0.2, 0), (1.5, 0.45, 0), (2.5, 0.4, 0), (3.25, 0.3, 12 if bar % 2 else 7)):
-            dry.add(t_of(bar, beat), bass(root + dn, d * BEAT * 2), 0.5)
+            dry.add(t_of(bar, beat), bass(root + dn, d * BEAT * 2), 0.36)
 
     # drums
     for bar in range(DRUMS_IN, FINAL):
@@ -333,10 +333,10 @@ def build():
             continue
         for b in range(4):
             if b in (0, 2) or (b == 3 and bar % 4 == 3):
-                dry.add(t_of(bar, b + (0.5 if b == 3 else 0)), kick(), 0.85)
+                dry.add(t_of(bar, b + (0.5 if b == 3 else 0)), kick(), 0.62)
             if b in (1, 3):
                 wet.add(t_of(bar, b), clap(), 0.65, 0.05)
-            dry.add(t_of(bar, b + 0.5), hat(open_=(b == 3 and bar % 2 == 1)), 0.9, 0.25)
+            dry.add(t_of(bar, b + 0.5), hat(open_=(b == 3 and bar % 2 == 1)), 1.25, 0.25)
             dry.add(t_of(bar, b + 0.25), hat(), 0.35, -0.25)
             dry.add(t_of(bar, b + 0.75), hat(), 0.45, -0.25)
 
@@ -345,14 +345,14 @@ def build():
     wet.add(1.62, bell(81, 5), 0.55)
     wet.add(1.62, bell(74, 5), 0.35)
     fx.add(t_of(DRUMS_IN) - 2.5, riser(2.5), 0.9)
-    fx.add(t_of(DRUMS_IN), impact(), 0.55)
+    fx.add(t_of(DRUMS_IN), impact(), 0.42)
     for bar in (6, 9, 11, 16, 22):
         fx.add(t_of(bar) - 0.45, whoosh(0.9), 1.0)
     fx.add(t_of(14) - 2.5, riser(2.5), 1.0)       # into "249 tools"
-    fx.add(t_of(14), impact(), 0.7)
+    fx.add(t_of(14), impact(), 0.52)
     fx.add(t_of(BREAK_END) - 2.5, riser(2.5), 0.8)
     fx.add(t_of(FINAL) - 2.5, riser(2.5), 1.0)
-    fx.add(t_of(FINAL), impact(), 0.85)
+    fx.add(t_of(FINAL), impact(), 0.62)
     fx.add(t_of(FINAL) + 0.02, latch_click(), 0.7)
     wet.add(t_of(FINAL), bell(86, 6), 0.4)
     wet.add(t_of(FINAL), bell(81, 6), 0.35)
@@ -374,7 +374,8 @@ def build():
     mix = w * 0.85 + reverb(w, 3.2) * 0.42 + d + reverb(d, 1.2, 3000, 5) * 0.08 + f + reverb(f, 2.6, 4000, 9) * 0.35
 
     # gentle master: low cut, tilt, soft clip, fades
-    mix = np.vstack([highpass_fft(mix[0], 28), highpass_fft(mix[1], 28)])
+    mix = np.vstack([highpass_fft(mix[0], 32), highpass_fft(mix[1], 32)])
+    mix = mix - 0.35 * np.vstack([lowpass_fft(mix[0], 90), lowpass_fft(mix[1], 90)])
     mix /= np.max(np.abs(mix)) + 1e-9
     mix = np.tanh(mix * 1.6) / np.tanh(1.6)
     t = np.arange(N) / SR
