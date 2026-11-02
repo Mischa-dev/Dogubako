@@ -164,7 +164,10 @@ fn decode_char_refs(s: &str) -> String {
     while let Some(i) = rest.find('&') {
         out.push_str(&rest[..i]);
         let after = &rest[i + 1..];
-        let decoded = after.find(';').filter(|&e| e <= 10).and_then(|e| {
+        // Bounded search: a reference name is at most 10 bytes, so looking
+        // further would make text full of bare '&' quadratic.
+        let semi = after.bytes().take(11).position(|b| b == b';');
+        let decoded = semi.and_then(|e| {
             let name = &after[..e];
             let c = match name {
                 "amp" => Some('&'),
@@ -1171,6 +1174,12 @@ mod tests {
             "Use &amp;lt; and &amp;gt; literally &lt;b&gt; &#65;&#x42; &nbsp;x &bogus; a & b",
         );
         assert_eq!(t, "Use &lt; and &gt; literally <b> AB  x &bogus; a & b");
+        // Ten-byte names still decode; bare ampersands stay linear.
+        assert_eq!(decode_char_refs("&#x0001F600;"), "\u{1F600}");
+        let many = "&".repeat(400_000) + ";";
+        let start = std::time::Instant::now();
+        assert_eq!(decode_char_refs(&many), many);
+        assert!(start.elapsed() < std::time::Duration::from_secs(10));
     }
 
     const SRT: &str = "\u{feff}1\r\n00:00:01,000 --> 00:00:02,500\r\nHello <i>world</i>\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\nSecond line\r\nwith break\r\n\r\n";

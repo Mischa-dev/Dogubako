@@ -216,13 +216,15 @@ fn html_entities() -> Arc<dyn Tool> {
 
 fn parse_hex(s: &str) -> Result<Vec<u8>, String> {
     let mut digits = String::with_capacity(s.len());
+    // Computed once: rescanning per token would make decoding quadratic.
+    let several_words = s.split_whitespace().nth(1).is_some();
     for tok in s.split(|c: char| c.is_whitespace() || c == ',' || c == ':' || c == '-') {
         let tok = tok
             .trim_start_matches("0x")
             .trim_start_matches("0X")
             .trim_start_matches("\\x");
         let tok = tok.replace("\\x", "");
-        if tok.len() % 2 == 1 && s.split_whitespace().count() > 1 {
+        if tok.len() % 2 == 1 && several_words {
             digits.push('0');
         }
         digits.push_str(&tok);
@@ -537,7 +539,13 @@ fn binary_text() -> Arc<dyn Tool> {
         };
         let tokens: Vec<String> =
             if fmt == "bin" && !t.trim().contains(char::is_whitespace) && !t.contains(',') {
-                let digits: Vec<char> = t.trim().chars().collect();
+                let t = t.trim();
+                // A single run of bits may carry one 0b prefix ("b" is never a bit).
+                let t = t
+                    .strip_prefix("0b")
+                    .or_else(|| t.strip_prefix("0B"))
+                    .unwrap_or(t);
+                let digits: Vec<char> = t.chars().collect();
                 if !digits.len().is_multiple_of(8) {
                     return Err(ToolError::invalid(
                         "text",
@@ -584,6 +592,19 @@ mod tests {
 
     async fn txt(h: &TestHarness, id: &str, p: serde_json::Value) -> String {
         h.run(id, p).await.unwrap().text.unwrap()
+    }
+
+    #[test]
+    fn parse_hex_single_digit_tokens_are_linear() {
+        assert_eq!(super::parse_hex("a b ff").unwrap(), vec![0x0a, 0x0b, 0xff]);
+        assert_eq!(
+            super::parse_hex("abc").unwrap_err(),
+            "odd number of hex digits"
+        );
+        let big = "a ".repeat(200_000);
+        let start = std::time::Instant::now();
+        assert_eq!(super::parse_hex(&big).unwrap().len(), 200_000);
+        assert!(start.elapsed() < std::time::Duration::from_secs(10));
     }
 
     #[tokio::test]
@@ -809,6 +830,16 @@ mod tests {
             .await,
             "AB"
         );
+        // A prefixed run without separators is accepted too.
+        for (t, want) in [("0b01000001", "A"), ("0B0100000101000010", "AB")] {
+            let out = txt(
+                &h,
+                "dev.binary_text",
+                json!({"text": t, "mode": "decode", "format": "bin"}),
+            )
+            .await;
+            assert_eq!(out, want, "{t}");
+        }
         assert_eq!(
             h.run(
                 "dev.binary_text",

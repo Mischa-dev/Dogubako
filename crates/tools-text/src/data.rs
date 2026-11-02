@@ -51,8 +51,14 @@ impl Table {
             ),
         ))
     }
+    /// Resolve a comma-separated column list; an explicit list that names no
+    /// column (e.g. just ",") is an error rather than an empty selection.
     pub fn cols(&self, list: &str) -> ToolResult<Vec<usize>> {
-        split_list(list).iter().map(|c| self.col(c)).collect()
+        let names = split_list(list);
+        if names.is_empty() {
+            return Err(ToolError::invalid("columns", "select at least one column"));
+        }
+        names.iter().map(|c| self.col(c)).collect()
     }
     fn normalize(&mut self) {
         let w = self
@@ -176,7 +182,10 @@ pub fn parse_csv(text: &str, delim: u8, has_header: bool) -> ToolResult<Table> {
 fn dedupe_headers(h: Vec<String>) -> Vec<String> {
     // Every emitted name is tracked, so a generated suffix can never collide
     // with a header that already exists (e.g. `a,a,a_2`).
+    // The next suffix to try is remembered per base name (every lower one is
+    // already taken), so many identical headers stay linear.
     let mut used: HashSet<String> = HashSet::new();
+    let mut next: HashMap<String, usize> = HashMap::new();
     h.into_iter()
         .enumerate()
         .map(|(i, s)| {
@@ -186,10 +195,15 @@ fn dedupe_headers(h: Vec<String>) -> Vec<String> {
                 s.trim().to_string()
             };
             let mut name = base.clone();
-            let mut n = 2;
-            while used.contains(&name) {
-                name = format!("{base}_{n}");
-                n += 1;
+            if used.contains(&name) {
+                let n = next.entry(base.clone()).or_insert(2);
+                loop {
+                    name = format!("{base}_{n}");
+                    *n += 1;
+                    if !used.contains(&name) {
+                        break;
+                    }
+                }
             }
             used.insert(name.clone());
             name
@@ -2229,6 +2243,15 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.text.unwrap(), "{\"a\":1,\"a_2\":2,\"a_2_2\":3}\n");
+        assert_eq!(
+            super::dedupe_headers(["a", "a_3", "a", "a", "a", ""].map(String::from).to_vec()),
+            ["a", "a_3", "a_2", "a_4", "a_5", "column6"]
+        );
+        // Many identical headers are normalized in linear time.
+        let start = std::time::Instant::now();
+        let many = super::dedupe_headers(vec!["x".to_string(); 50_000]);
+        assert_eq!(many[49_999], "x_50000");
+        assert!(start.elapsed() < std::time::Duration::from_secs(10));
         // A literal key equal to a flattened path keeps both values.
         let out = h
             .run(
@@ -2511,6 +2534,27 @@ mod tests {
                 .await
                 .unwrap_err()
                 .code(),
+            "invalid_input"
+        );
+        // A selector naming no column is rejected (split/merge used to panic).
+        for op in ["split", "merge", "drop"] {
+            assert_eq!(
+                h.run("data.columns", c(op, json!({"columns": " , "})))
+                    .await
+                    .unwrap_err()
+                    .code(),
+                "invalid_input",
+                "{op}"
+            );
+        }
+        assert_eq!(
+            h.run(
+                "data.duplicates",
+                json!({"text": "a\n1\n2\n", "columns": ","})
+            )
+            .await
+            .unwrap_err()
+            .code(),
             "invalid_input"
         );
     }
