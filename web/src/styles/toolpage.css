@@ -80,6 +80,9 @@
 .stage-fig { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .stage-frame { position: relative; height: clamp(220px, 42vh, 440px); display: grid; place-items: center; overflow: hidden; border-radius: 6px; background: var(--surface-sunken); }
 .stage-frame.is-empty { background: transparent; border: 1px dashed var(--border-strong); }
+/* Documents, sheets and text: a drawing says enough, so keep the frame short and the result close. */
+.stage.is-compact .stage-frame { height: 168px; }
+.stage.is-compact .stage-thing .bo-thing { transform: scale(.8); }
 .stage-img, .stage-video { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; box-shadow: var(--shadow-object); }
 .stage-thing .bo-thing, .stage-audio .bo-thing { height: auto; transform: scale(1.25); }
 .stage-audio { display: flex; flex-direction: column; align-items: center; gap: 28px; }
@@ -123,6 +126,7 @@
   .place-left:not(.has-stage) .tool-output, .place-right:not(.has-stage) .tool-output { grid-row: 1; position: sticky; top: 16px; }
   .place-left:not(.has-stage) .tool-output:empty, .place-right:not(.has-stage) .tool-output:empty { display: block; }
   .place-left.has-stage .stage-frame, .place-right.has-stage .stage-frame { height: clamp(240px, 48vh, 520px); }
+  .place-left.has-stage .stage.is-compact .stage-frame, .place-right.has-stage .stage.is-compact .stage-frame { height: 200px; }
 }
 /* live tools with nothing to preview: type on the left, see it on the right */
 @media (min-width: 1180px) {

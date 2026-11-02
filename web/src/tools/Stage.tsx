@@ -24,6 +24,9 @@ function Media({ name, mime, url, controls }: { name: string; mime: string; url:
   return <span className="stage-thing"><span className="bo-thing"><FileThing kind={kind} name={name} url={url} /></span></span>;
 }
 
+/** Pictures, video and sound are worth a big frame; a drawn document is not, so data tools stay compact. */
+const isMedia = (mime: string, name: string) => ['image', 'video', 'audio'].includes(kindOf(mime, name));
+
 function delta(before: number, after: number) {
   if (!before || !after || before === after) return '';
   const pct = Math.round(((after - before) / before) * 100);
@@ -62,7 +65,7 @@ export const Stage = memo(function Stage({ files, job, running, live, mode }: {
   const failed = job && (job.status === 'failed' || job.status === 'cancelled');
 
   return (
-    <div className={cx('stage', mode === 'side' ? 'is-side' : 'is-single')}>
+    <div className={cx('stage', mode === 'side' ? 'is-side' : 'is-single', !isMedia(first.mime, first.name) && (!out || !isMedia(out.mime, out.name)) && 'is-compact')}>
       {showOriginal && (
         <figure className="stage-fig">
           <div className="stage-frame"><Media name={first.name} mime={first.mime} url={origUrl} controls /></div>
