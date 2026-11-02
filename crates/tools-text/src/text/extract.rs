@@ -611,6 +611,13 @@ pub(crate) fn rtf_to_text(rtf: &str) -> String {
                 if !n.is_ascii_alphabetic() {
                     // control symbol
                     i += 1;
+                    // A control symbol (e.g. \{, \}, \\, \~) can be the ANSI
+                    // fallback of a preceding \uN: it counts as one skipped
+                    // character (\* only marks a destination).
+                    if pending_skip > 0 && n != '*' {
+                        pending_skip -= 1;
+                        continue;
+                    }
                     if skip {
                         continue;
                     }
@@ -879,6 +886,8 @@ mod tests {
             super::rtf_to_text(r"{\rtf1\ansi\uc1 \u-10179?\u-8704? ok}"),
             "\u{1F600} ok\n"
         );
+        // An escaped literal used as the \uN fallback is skipped, not doubled.
+        assert_eq!(super::rtf_to_text(r"{\rtf1\ansi\uc1 \u123\{X}"), "{X\n");
         // A lone surrogate becomes U+FFFD instead of disappearing.
         assert_eq!(
             super::rtf_to_text(r"{\rtf1\ansi\uc1 \u-10179?x}"),
