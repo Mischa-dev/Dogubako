@@ -528,6 +528,10 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
                     return Err(err(&reader, "text outside of the root element".into()));
                 }
             }
+            // CDATA and character/entity references are character data too.
+            Event::CData(_) | Event::GeneralRef(_) if depth == 0 => {
+                return Err(err(&reader, "text outside of the root element".into()));
+            }
             Event::Eof => break,
             _ => {}
         }
@@ -1334,6 +1338,16 @@ mod tests {
             let t = out.text.unwrap();
             assert!(t.contains("<value> </value>"), "{mode}: {t}");
             assert!(t.contains("<nl>\n</nl>"), "{mode}: {t}");
+        }
+        // Character data outside the root is rejected in every form.
+        for bad in [
+            "<r/><![CDATA[extra]]>",
+            "<![CDATA[x]]><r/>",
+            "<r/>&amp;",
+            "<r/>x",
+        ] {
+            let e = h.run("dev.xml", json!({"text": bad})).await.unwrap_err();
+            assert!(e.to_string().contains("outside of the root"), "{bad}: {e}");
         }
         // Attribute errors (duplicates, unquoted values) are not well-formed,
         // on empty and start elements alike.
