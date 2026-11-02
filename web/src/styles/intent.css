@@ -7,7 +7,7 @@
 .intent-files { position: relative; display: grid; place-items: end center; min-height: 300px; width: 100%; }
 .intent-thing { grid-area: 1 / 1; display: flex; justify-content: center; transform-origin: 50% 100%; }
 .intent-thing .bo-thing { height: auto; transform: scale(1.45); transform-origin: 50% 100%; }
-.intent-thing.bo-image .bo-thing { transform: none; }
+.intent-thing.is-image .bo-thing { transform: none; }
 .intent-thing .bo-photo { max-width: min(380px, 100%); max-height: 300px; }
 /* Several files: fan them out like a small stack in a hand. */
 .intent-files.is-many .intent-thing { transform: translateX(calc((var(--i) - (var(--n) - 1) / 2) * 30px)) rotate(calc((var(--i) - (var(--n) - 1) / 2) * 4deg)); }

@@ -16,6 +16,13 @@ export interface BenchItem {
   at: number;
 }
 
+/**
+ * Modifier class for an element that holds a drawn file of this kind. Kept out of the
+ * `bo-` namespace, which the drawings themselves use (`.bo-sheet` is a page, `.bo-text`
+ * a code sheet), so a spreadsheet or text file never picks up a drawing's layout.
+ */
+export const benchKindClass = (kind: BenchKind) => `is-${kind}`;
+
 const ext = (name: string) => (name.split('.').pop() ?? '').toLowerCase();
 
 export function kindOf(mime: string, name: string): BenchKind {

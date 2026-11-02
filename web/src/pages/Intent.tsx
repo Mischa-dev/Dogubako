@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, ChevronDown, Pin } from 'lucide-react';
 import { useApp } from '../lib/app';
 import { href, navigate } from '../lib/router';
-import { kindOf } from '../lib/bench';
+import { benchKindClass, kindOf } from '../lib/bench';
 import { matchIntent, rankTools, shortHint, toolsForFiles } from '../lib/intent';
 import { droppedNow, favorites, pendingInput, recents, setDropped, useStore, type PendingInput } from '../lib/store';
 import { formatBytes, plural } from '../lib/format';
@@ -23,7 +23,7 @@ function FilePreview({ files }: { files: PendingInput[] }) {
         try { url = backend.fileUrl(f); } catch { /* preview is optional */ }
         const kind = kindOf(f.mime, f.name);
         return (
-          <span key={f.ref} className={`intent-thing bo-${kind}`} style={{ '--i': i, '--n': shown.length } as React.CSSProperties}>
+          <span key={f.ref} className={`intent-thing ${benchKindClass(kind)}`} style={{ '--i': i, '--n': shown.length } as React.CSSProperties}>
             <span className="bo-thing"><FileThing kind={kind} name={f.name} url={url} /></span>
           </span>
         );
