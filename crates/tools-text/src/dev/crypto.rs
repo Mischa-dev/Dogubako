@@ -290,10 +290,18 @@ fn random() -> Arc<dyn Tool> {
                 all.sort();
                 all.dedup();
                 let enforce = len >= sets.len();
+                // Rejection sampling keeps the distribution uniform over valid
+                // passwords, but a short password over a huge alphabet can
+                // almost never contain every set: refuse those up front.
+                if enforce && accept_probability(&sets, &all, len) < 1e-4 {
+                    return Err(ToolError::invalid(
+                        "length",
+                        "too short to include every chosen character set with this alphabet; use a longer password, fewer sets or fewer custom symbols",
+                    ));
+                }
                 let gen = |rng: &mut ThreadRng| -> String {
                     loop {
                         let pw: Vec<char> = (0..len).map(|_| *all.choose(rng).unwrap()).collect();
-                        // Rejection sampling keeps the distribution uniform over valid passwords.
                         if !enforce || sets.iter().all(|s| pw.iter().any(|c| s.contains(c))) {
                             return pw.into_iter().collect();
                         }
@@ -674,6 +682,37 @@ fn jwt() -> Arc<dyn Tool> {
     })
 }
 
+/// Probability that `len` uniform draws from `all` hit every set, by
+/// inclusion-exclusion over the (at most four) sets.
+fn accept_probability(sets: &[Vec<char>], all: &[char], len: usize) -> f64 {
+    let members: Vec<std::collections::HashSet<char>> =
+        sets.iter().map(|s| s.iter().copied().collect()).collect();
+    // Which sets each alphabet character belongs to, as a bit mask.
+    let bits: Vec<u32> = all
+        .iter()
+        .map(|c| {
+            members
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| m.contains(c))
+                .fold(0, |b, (i, _)| b | (1 << i))
+        })
+        .collect();
+    let n = all.len() as f64;
+    let mut p = 0.0;
+    for mask in 0u32..(1 << sets.len()) {
+        // Draws that avoid every set in `mask`.
+        let avoid = bits.iter().filter(|b| *b & mask == 0).count() as f64;
+        let term = (avoid / n).powi(len.min(i32::MAX as usize) as i32);
+        p += if mask.count_ones() % 2 == 0 {
+            term
+        } else {
+            -term
+        };
+    }
+    p
+}
+
 #[cfg(test)]
 mod tests {
     use dogubako_core::testing::TestHarness;
@@ -800,6 +839,22 @@ mod tests {
             .unwrap();
         assert_eq!(out.text.unwrap().split(' ').count(), 5);
         assert!(out.data["wordlist"].as_str().unwrap().contains("EFF"));
+        // A short password that can almost never cover every set is refused
+        // instead of looping.
+        let symbols: String = (0..20_000u32)
+            .filter_map(|i| char::from_u32(0x10000 + i))
+            .collect();
+        let r = h
+            .run(
+                "dev.random",
+                json!({"length": 4, "charset": ["lower", "upper", "digits", "symbols"], "symbols": symbols}),
+            )
+            .await;
+        assert!(r.is_err(), "{r:?}");
+        assert!(
+            (super::accept_probability(&[vec!['a'], vec!['b']], &['a', 'b'], 2) - 0.5).abs()
+                < 1e-12
+        );
         // Integers beyond i64 must be rejected, not saturated.
         let big = h
             .run(
