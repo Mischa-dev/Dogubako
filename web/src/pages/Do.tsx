@@ -49,13 +49,13 @@ function fullValue(v: unknown, names: Map<string, string>): string {
 }
 
 /** Finished requests are kept for this tab, so coming Back doesn't run them again. */
-interface Saved { turns: Turn[]; history: ChatMessage[]; undone?: boolean; partial?: boolean }
+interface Saved { turns: Turn[]; history: ChatMessage[]; files?: AgentFile[]; undone?: boolean; partial?: boolean }
 const savedKey = (k: string) => `dgb.do.${k}`;
 function loadSaved(k: string): Saved | null {
   if (!k) return null;
   try {
     const v = JSON.parse(sessionStorage.getItem(savedKey(k)) ?? 'null');
-    return v && Array.isArray(v.turns) && Array.isArray(v.history) ? v : null;
+    return v && Array.isArray(v.turns) && Array.isArray(v.history) && (v.files === undefined || Array.isArray(v.files)) ? v : null;
   } catch { return null; }
 }
 function save(k: string, v: Saved) {
@@ -113,8 +113,9 @@ export default function DoPage({ request, withFiles, runKey = '' }: { request: s
   const app = useApp();
   const { backend, toolMap, visibleTools, docs } = app;
   const assistant = useAssistant();
-  const [files] = useState<AgentFile[]>(() => (withFiles ? droppedNow() : []));
   const [saved] = useState(() => loadSaved(runKey));
+  // A request returned to with Back keeps its own files, not whatever was dropped since.
+  const [files] = useState<AgentFile[]>(() => saved?.files ?? (withFiles ? droppedNow() : []));
   // A request interrupted by leaving the page shows as stopped, not stuck.
   const [turns, setTurns] = useState<Turn[]>(() => (saved?.turns ?? []).map((t) => (t.done ? t : { ...t, done: true, error: 'Stopped.' })));
   const [thinking, setThinking] = useState(false);
@@ -124,13 +125,15 @@ export default function DoPage({ request, withFiles, runKey = '' }: { request: s
   const history = useRef<ChatMessage[]>(saved?.history ?? []);
   const abort = useRef<AbortController | null>(null);
   const answers = useRef(new Map<string, (ok: boolean) => void>());
-  const started = useRef(!!saved);
+  // Restored with its steps (or undone): don't run it again.
+  const started = useRef(!!saved && (saved.turns.length > 0 || !!saved.undone));
   // Kept for this tab only when History is on, with passwords and keys masked.
   useEffect(() => {
-    if (!prefs.get().history) return;
+    // With History off only the input files are kept, so Back reruns the request on the same files.
+    if (!prefs.get().history) { save(runKey, { turns: [], history: [], files }); return; }
     const turnsSafe = turns.map((t) => ({ ...t, steps: redactForStorage(t.steps, [], toolMap).steps }));
-    save(runKey, { turns: turnsSafe, history: redactForStorage([], history.current, toolMap).history });
-  }, [runKey, turns, toolMap]);
+    save(runKey, { turns: turnsSafe, history: redactForStorage([], history.current, toolMap).history, files });
+  }, [runKey, turns, toolMap, files]);
 
   const names = useMemo(() => {
     const m = new Map<string, string>(files.map((f) => [f.ref, f.name]));
