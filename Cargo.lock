@@ -1664,7 +1664,6 @@ name = "dogubako-tools-media"
 version = "0.1.0"
 dependencies = [
  "dogubako-core",
- "regex",
  "serde",
  "serde_json",
  "tempfile",
