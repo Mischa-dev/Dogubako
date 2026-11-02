@@ -1,36 +1,44 @@
 # dogubako.app
 
 The project website. The documentation is a separate Astro site at
-docs.dogubako.app, in `site/`.
+docs.dogubako.app, in `site/`. The design concepts this site was picked from
+(and the first static draft) are kept in `design/website-concepts/`.
 
-This is a single static page with no build step, no framework and no
-third-party requests. Fonts are self-hosted (SIL OFL, see `fonts/`), and the
-colours and type mirror `web/src/styles/tokens.css` so the site and the app look
-like one thing.
+Static pages with no build step, no framework and no third-party requests.
+Fonts are self-hosted (SIL OFL, in `assets/fonts/`), and the colours and type
+mirror `web/src/styles/tokens.css` so the site and the app look like one thing.
+Every page follows the system's light or dark mode and has a toggle (stored in
+`localStorage` as `dgb-theme`). Pages use relative links, so the site also works
+from a sub-folder.
+
+## Pages
+
+| Path | What it is |
+|---|---|
+| `index.html` | Home: the tilted app window that flattens and plays as you scroll, the trailer, "each tool shows its work", four ways in, a tool finder, privacy, and the alpha card |
+| `tools/` | All tools, searchable, by category, with links to each tool in the docs |
+| `self-hosting/` | Running one server for a household or team |
+| `agents/` | MCP, the HTTP API and the CLI for AI agents and scripts |
+| `download/` | Release status, "Use the app" and "Host it on a server", and the copy-prompt for an AI agent |
+| `agent-install.md` | Step-by-step server install written for AI agents (the download page's prompt points here) |
+| `llms.txt` | The short index for language models |
+
+## Files
 
 | File | What it is |
 |---|---|
-| `index.html` | The page |
-| `styles.css` | Styles, light and dark (follows the system, with a toggle) |
-| `main.js` | Theme toggle, the working bench, the tool cabinet, the four-ways switcher and the screenshot tour |
-| `screenshots/`, `og.png` | WebP copies of `docs/screenshots` and the 1200×630 link preview, made by `scripts/screenshots.py` |
-| `scripts/` | Screenshot capture, sample files and the WebP conversion |
+| `assets/css/site.css` | Shared: tokens, type, buttons, nav, footer, sections, reveals |
+| `assets/css/home.css`, `app.css` | Home only; `app.css` draws the app window in the demo |
+| `assets/css/pages.css` | The four sub-pages |
+| `assets/js/site.js` | Shared: theme toggle, phone menu, reveals |
+| `assets/js/timeline.js` | The small animation engine every demo uses (`render(t)`, pauses offscreen and with reduced motion) |
+| `assets/js/demo.js`, `home.js`, `bento.js`, `finder.js` | The home page's demo, sections, tool tiles and finder |
+| `assets/js/pages/*.js` | The sub-pages' demos, the tools search and the copy buttons |
+| `assets/js/tools-data.js` | Every tool's id, name, description and keywords (generated, see below) |
+| `assets/img/`, `og.png`, `favicon.svg`, `apple-touch-icon.png` | Images and icons |
+| `screenshots/` | WebP copies of `docs/screenshots`, made by `scripts/screenshots.py` |
+| `scripts/` | Tool list generators, screenshot capture, the trailer copy |
 | `CNAME` | The domain, for GitHub Pages |
-
-## What's interactive
-
-* **The bench** (hero). Drop or choose a file and it's drawn on the bench with
-  the app's suggestions. Tools in `RUN` in `main.js` really run in the tab
-  (compress, convert or clean a photo, format JSON, count or sort text, view a
-  CSV, hash, detect the type, hex view) and put their result on the bench.
-  Nothing is uploaded. The rest show the CLI command instead.
-* **The cabinet** (`#tools`). One `<details>` drawer per category, listing every
-  tool by name, with a search box. The lists come from the tool registry; if
-  tools are added or renamed, update them in `index.html`.
-* **One tool, four ways in** (`#everywhere`). `WAYS` in `main.js` describes six
-  tools once, and the app form, CLI, HTTP and MCP views are generated from it.
-  The HTML holds a pre-rendered copy of the first tool for visitors without JS;
-  if you change `WAYS['image.compress']`, copy the rendered markup back in.
 
 ## Preview
 
@@ -38,6 +46,42 @@ like one thing.
 python3 -m http.server --directory website 8000
 # open http://localhost:8000
 ```
+
+## When tools change
+
+`assets/js/tools-data.js` feeds the home finder and the tools page search, and
+the tools page also has a pre-rendered list for visitors without JavaScript.
+Regenerate both from the real catalog:
+
+```sh
+dogubako tools list --json > /tmp/tools.json     # or the docs site's public/tools.json
+node website/scripts/tools-data.mjs /tmp/tools.json
+node website/scripts/build-tools-page.mjs
+```
+
+Tool links go to the tool's heading on its docs category page
+(`https://docs.dogubako.app/tools/<category>/#<heading>`), so they follow the
+docs' heading slugs.
+
+## Trailer
+
+The trailer lives once in `trailer/dist` (about 24 MB), so it isn't committed
+here. `scripts/trailer.sh` copies the video and poster into `website/trailer/`
+(git-ignored), and only if `trailer/dist/review-status.json` says the cut is
+reviewed and its checksums match. The home page checks for
+`trailer/dogubako-alpha-trailer.mp4` with a HEAD request: if it's there, the
+player takes the trailer frame and the hero shows "Watch the trailer"; if not,
+the frame shows a "trailer is on its way" card.
+
+## Release day
+
+* **Downloads**: on `download/`, point the platform cards at the release assets
+  and change the "Not released yet" labels. It's marked with a `PLACEHOLDER`
+  comment. Update the page's heading ("The alpha isn't out yet."), its meta
+  descriptions, the home page's alpha card and the status line in `llms.txt` too.
+* **Server image**: when a public image is published, name it in step 1 of the
+  download page's server steps and in `agent-install.md` (both say there is no
+  prebuilt image yet).
 
 ## Refresh the screenshots
 
@@ -57,27 +101,10 @@ Use a fresh `--data-dir` each time so the bench and history look the same.
 The scripts need Pillow (`pip install pillow`) and Playwright with Chromium
 (`NODE_PATH=$(npm root -g)` if Playwright is installed globally).
 
-## Trailer
-
-The trailer lives once in `trailer/dist` (about 24 MB), so it isn't committed
-here. Copy it next to the page before previewing or deploying:
-
-```sh
-website/scripts/trailer.sh      # copies the video and poster into website/trailer/ (git-ignored)
-```
-
-If the video isn't there, the page shows a "trailer is on its way" card
-instead of a broken player.
-
-## Placeholders
-
-* **Downloads**: the three platform cards link to GitHub Releases. Point them at
-  the installer assets once the alpha is published, and drop the
-  "Coming with the alpha" labels. It's marked with a `PLACEHOLDER` comment in
-  `index.html`.
-
 ## Deploying
 
-Any static host works: run `website/scripts/trailer.sh`, then serve the `website/` folder as the web root. For GitHub
-Pages, publish `website/` (for example with `actions/upload-pages-artifact` and
-`actions/deploy-pages`) and keep `CNAME` so the domain stays `dogubako.app`.
+Any static host works: run `website/scripts/trailer.sh`, then serve the
+`website/` folder as the web root. For GitHub Pages, publish `website/` (for
+example with `actions/upload-pages-artifact` and `actions/deploy-pages`) and
+keep `CNAME` so the domain stays `dogubako.app`. `scripts/` and this README
+don't need to be published.

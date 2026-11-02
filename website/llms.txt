@@ -1,0 +1,41 @@
+# Dogubako
+
+> Dogubako is a local-first, open-source toolbox (AGPL-3.0-or-later): 249 tools for images, video, audio, speech, PDFs, files, text, developer tasks, data, network, design and system information. One engine runs every tool, used from a desktop app, a self-hosted web server, an HTTP API, a CLI, or MCP for AI agents. Files are processed on the machine that runs it; network tools make the outbound requests they describe.
+
+Status: 0.1.0-alpha.1 is not released yet. The first alpha is a macOS app for Apple silicon (macOS 15 or later). There are no Windows or Linux desktop builds in the alpha, and no public prebuilt server image yet; a server is built from source with Docker Compose.
+
+## For agents
+
+- [Install Dogubako on a server](https://dogubako.app/agent-install.md): step-by-step instructions for an AI coding agent: Docker Compose build, setup token, Tailscale, an agent account and token, connecting over MCP, and what to ask the person first.
+- [Every tool as JSON](https://docs.dogubako.app/tools.json): the machine-readable catalog, every tool with its id, category, description and options.
+- [Connecting a remote agent](https://docs.dogubako.app/agents/remote/): MCP over HTTP with a bearer token.
+- [Local agents](https://docs.dogubako.app/agents/local/): MCP over stdio with `dogubako mcp serve`.
+- [MCP reference](https://docs.dogubako.app/reference/mcp/): meta-tools (`dogubako_search_tools`, `dogubako_describe_tool`, `dogubako_run_tool`, …), discovery modes, results.
+- [HTTP API reference](https://docs.dogubako.app/reference/http-api/): REST endpoints; the server also serves `/api/v1/openapi.json`.
+- [CLI reference](https://docs.dogubako.app/reference/cli/): `dogubako <category> <tool>`, server, users and tokens commands.
+- [Permissions and policies](https://docs.dogubako.app/reference/permissions-and-policies/): allow and deny patterns, capabilities, agent accounts.
+
+## Site
+
+- [Home](https://dogubako.app/): what Dogubako is.
+- [All tools](https://dogubako.app/tools/): the 249 tools with ids and CLI commands.
+- [Self-hosting](https://dogubako.app/self-hosting/): one server for a household or team, accounts, quotas, audit log.
+- [Agents](https://dogubako.app/agents/): MCP, scoped agent accounts and tokens, HTTP API and CLI.
+- [Download](https://dogubako.app/download/): release status, building from source, hosting on a server.
+
+## Docs
+
+- [Documentation](https://docs.dogubako.app/)
+- [Self-hosting with Docker](https://docs.dogubako.app/self-hosting/docker/)
+- [Networking](https://docs.dogubako.app/self-hosting/networking/)
+- [Accounts and agents](https://docs.dogubako.app/self-hosting/accounts-and-agents/)
+- [Configuration](https://docs.dogubako.app/self-hosting/configuration/)
+- [Security](https://docs.dogubako.app/project/security/)
+- [Troubleshooting](https://docs.dogubako.app/project/troubleshooting/)
+
+## Optional
+
+- [Source code](https://github.com/Mischa-dev/Dogubako)
+- [Releases](https://github.com/Mischa-dev/Dogubako/releases)
+- [Building from source](https://docs.dogubako.app/develop/building/)
+- [Licensing](https://docs.dogubako.app/project/licensing/)

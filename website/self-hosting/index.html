@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Self-hosting Dogubako on your own server</title>
+<meta name="description" content="Run Dogubako on a home server, NAS or VPS with Docker. One install for the household or team, used from any browser, with accounts, quotas, an audit log and scoped tokens for agents.">
+<link rel="canonical" href="https://dogubako.app/self-hosting/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Dogubako">
+<meta property="og:title" content="Self-hosting Dogubako">
+<meta property="og:description" content="Run Dogubako on a home server, NAS or VPS with Docker. One install for the household or team, used from any browser, with accounts, quotas, an audit log and scoped tokens for agents.">
+<meta property="og:url" content="https://dogubako.app/self-hosting/">
+<meta property="og:image" content="https://dogubako.app/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f7f6f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151412" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preload" href="../assets/fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/dm-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script>try{var t=localStorage.getItem('dgb-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="../assets/css/site.css">
+<link rel="stylesheet" href="../assets/css/pages.css">
+</head>
+<body class="pg pg-self-hosting">
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- Icons (Lucide, ISC) and the logo mark. -->
+<svg class="sprite" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="logo" viewBox="0 0 100 100"><rect x="10" y="24" width="80" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="8"/><line x1="10" y1="46" x2="90" y2="46" stroke="currentColor" stroke-width="8"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></symbol><symbol id="github" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M12 .5a11.5 11.5 0 0 0-3.64 22.4c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.7 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></symbol><symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol><symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol><symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol><symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol><symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol><symbol id="i-play" viewBox="0 0 24 24"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></symbol><symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol><symbol id="i-clapperboard" viewBox="0 0 24 24"><path d="m12.296 3.464 3.02 3.956"/><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m6.18 5.276 3.1 3.899"/></symbol><symbol id="i-audio-lines" viewBox="0 0 24 24"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></symbol><symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></symbol><symbol id="i-file-text" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol><symbol id="i-folder-archive" viewBox="0 0 24 24"><circle cx="15" cy="19" r="2"/><path d="M20.9 19.8A2 2 0 0 0 22 18V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h5.1"/><path d="M15 11v-1"/><path d="M15 17v-2"/></symbol><symbol id="i-type" viewBox="0 0 24 24"><path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/></symbol><symbol id="i-code-xml" viewBox="0 0 24 24"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></symbol><symbol id="i-sheet" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/><line x1="9" x2="9" y1="9" y2="21"/><line x1="15" x2="15" y1="9" y2="21"/></symbol><symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol><symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></symbol><symbol id="i-cpu" viewBox="0 0 24 24"><path d="M12 20v2"/><path d="M12 2v2"/><path d="M17 20v2"/><path d="M17 2v2"/><path d="M2 12h2"/><path d="M2 17h2"/><path d="M2 7h2"/><path d="M20 12h2"/><path d="M20 17h2"/><path d="M20 7h2"/><path d="M7 20v2"/><path d="M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol><symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></symbol><symbol id="i-smartphone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></symbol><symbol id="i-laptop" viewBox="0 0 24 24"><path d="M18 5a2 2 0 0 1 2 2v8.526a2 2 0 0 0 .212.897l1.068 2.127a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45l1.068-2.127A2 2 0 0 0 4 15.526V7a2 2 0 0 1 2-2z"/><path d="M20.054 15.987H3.946"/></symbol><symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></symbol><symbol id="i-key-round" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></symbol><symbol id="i-shield-check" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></symbol><symbol id="i-file-up" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M12 12v6"/><path d="m15 15-3-3-3 3"/></symbol><symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol><symbol id="i-terminal" viewBox="0 0 24 24"><path d="M12 19h8"/><path d="m4 17 6-6-6-6"/></symbol><symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></symbol><symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol><symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-circle-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-sliders-horizontal" viewBox="0 0 24 24"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></symbol><symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></symbol><symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol><symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></symbol>
+</svg>
+
+<header class="nav" id="nav">
+  <div class="nav-in">
+    <a class="brand" href="../" aria-label="Dogubako home"><svg class="mark" aria-hidden="true"><use href="#logo"/></svg><span>Dogubako</span></a>
+    <nav class="nav-links" id="navLinks" aria-label="Main">
+      <a href="../tools/">Tools</a>
+      <a href="../self-hosting/" aria-current="page">Self-hosting</a>
+      <a href="../agents/">Agents</a>
+      <a href="https://docs.dogubako.app">Docs</a>
+      <a class="nav-only-phone" href="https://github.com/Mischa-dev/Dogubako">GitHub</a>
+    </nav>
+    <div class="nav-acts">
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch to dark theme"><svg class="i i-moon" aria-hidden="true"><use href="#i-moon"/></svg><svg class="i i-sun" aria-hidden="true"><use href="#i-sun"/></svg></button>
+      <a class="icon-btn nav-gh" href="https://github.com/Mischa-dev/Dogubako" aria-label="Dogubako on GitHub"><svg class="i i-fill" aria-hidden="true"><use href="#github"/></svg></a>
+      <a class="btn btn-ink btn-sm nav-dl" href="../download/"><span class="nav-dl-long">Download alpha release</span><span class="nav-dl-short">Download</span></a>
+      <button class="icon-btn nav-menu" id="navMenu" type="button" aria-expanded="false" aria-controls="navLinks" aria-label="Menu"><svg class="i nm-open" aria-hidden="true"><use href="#i-menu"/></svg><svg class="i nm-close" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<!-- ============================================================ HERO -->
+<section class="pg-hero" aria-labelledby="pg-title">
+  <div class="wrap pg-hero-in">
+    <div class="pg-hero-copy">
+      <h1 id="pg-title" class="pg-title">Install it once. Use it from every browser.</h1>
+      <p class="lede">Put Dogubako on a home server, a NAS or a VPS. The people you share it with sign in from a laptop or a phone, over your LAN or Tailscale, and every job runs on that one machine, with the engines already installed.</p>
+      <div class="cta-row">
+        <a class="btn btn-ink" href="#setup">Set it up</a>
+        <a class="btn btn-line" href="https://docs.dogubako.app/self-hosting/overview/">Self-hosting docs <svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a>
+      </div>
+      <p class="pg-meta">Docker Compose on Linux. <a class="link" href="#agent">Or have your agent set it up</a></p>
+    </div>
+
+    <figure class="show" id="shShow">
+      <div class="show-stage sh-stage" aria-hidden="true">
+        <div class="term sh-term" id="shTerm">
+          <div class="term-bar"><span class="term-dots"><i></i><i></i><i></i></span><span class="term-title">alex@nas: ~/Dogubako</span></div>
+          <div class="term-body" id="shTermBody">
+            <div class="t-l"><span class="t-ps">$</span> <span id="shC1">docker compose up -d --build</span><span class="t-caret" id="shK1"></span></div>
+            <div class="t-l t-o" id="shO1a"><span class="t-dim">[+] Building</span> <span class="t-bar"><i id="shBar"></i></span> <span class="t-ok" id="shBuilt">FINISHED</span></div>
+            <div class="t-l t-o" id="shO1b"><span class="t-dim">[+] Running 2/2</span></div>
+            <div class="t-l t-o" id="shO1c"> <span class="t-ok">✔</span> Network dogubako_default  <span class="t-dim">Created</span></div>
+            <div class="t-l t-o" id="shO1d"> <span class="t-ok">✔</span> Container dogubako        <span class="t-dim">Started</span></div>
+            <div class="t-l t-gap" id="shL2"><span class="t-ps">$</span> <span id="shC2">tailscale serve --bg 8420</span><span class="t-caret" id="shK2"></span></div>
+            <div class="t-l t-o" id="shO2a"><span class="t-dim">Available within your tailnet:</span></div>
+            <div class="t-l t-o" id="shO2b">https://tools.example.ts.net/</div>
+            <div class="t-l t-o" id="shO2c"><span class="t-dim">|-- proxy http://127.0.0.1:8420</span></div>
+            <div class="t-l t-gap" id="shL3"><span class="t-ps">$</span> <span id="shC3">docker compose logs dogubako | grep "Setup token"</span><span class="t-caret" id="shK3"></span></div>
+            <div class="t-l t-o" id="shO3"><span class="t-dim">dogubako  |   │</span> Setup token: <mark class="t-tok" id="shTok">4f1c9a0e7d2b6c85e3a1f09b72d4c6e8</mark></div>
+          </div>
+        </div>
+
+        <div class="ph sh-phone" id="shPhone">
+          <div class="ph-screen">
+            <div class="ph-url"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg><span>tools.example.ts.net</span></div>
+            <div class="ph-view">
+              <div class="ph-setup" id="shSetup">
+                <div class="ph-brand"><svg class="mark" aria-hidden="true"><use href="#logo"/></svg>Dogubako</div>
+                <div class="ph-h">Set up this instance</div>
+                <div class="ph-sub">Create the owner account for <b>Dogubako</b>.</div>
+                <div class="ph-l">Setup token</div>
+                <div class="ph-in ph-in-mono"><svg class="i" aria-hidden="true"><use href="#i-key-round"/></svg><span id="shFTok"></span><span class="ph-caret" id="shFTokK"></span></div>
+                <div class="ph-l">Owner username</div>
+                <div class="ph-in"><span id="shFUser"></span><span class="ph-caret" id="shFUserK"></span></div>
+                <div class="ph-l">Password</div>
+                <div class="ph-in"><span id="shFPass"></span><span class="ph-caret" id="shFPassK"></span></div>
+                <div class="ph-btn" id="shFBtn">Create owner account <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg><span class="ph-tap" id="shTap"></span></div>
+              </div>
+              <div class="ph-home" id="shHome">
+                <div class="ph-top"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg><span class="ph-brand"><svg class="mark" aria-hidden="true"><use href="#logo"/></svg>Dogubako</span><svg class="i" aria-hidden="true"><use href="#i-search"/></svg></div>
+                <div class="ph-big">Drop a file, or say what you need</div>
+                <div class="ph-sec">All tools</div>
+                <div class="ph-cats">
+                  <span><svg class="i"><use href="#i-image"/></svg>Images</span><span><svg class="i"><use href="#i-clapperboard"/></svg>Video</span>
+                  <span><svg class="i"><use href="#i-audio-lines"/></svg>Audio</span><span><svg class="i"><use href="#i-mic"/></svg>Speech</span>
+                  <span><svg class="i"><use href="#i-file-text"/></svg>PDF</span><span><svg class="i"><use href="#i-folder-archive"/></svg>Files</span>
+                  <span><svg class="i"><use href="#i-type"/></svg>Text</span><span><svg class="i"><use href="#i-code-xml"/></svg>Developer</span>
+                  <span><svg class="i"><use href="#i-sheet"/></svg>Data</span><span><svg class="i"><use href="#i-globe"/></svg>Network</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption class="show-ui">
+        <p class="sr-only">An animation of a first install: docker compose up builds and starts the server, tailscale serve puts it on a private tailnet with HTTPS, the server log shows a one-time setup token, and a phone opens the address, enters the token and creates the owner account.</p>
+        <div class="show-bar">
+          <button class="show-play" type="button" aria-pressed="false" aria-label="Pause the animation"><svg class="i i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="i i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+          <ol class="show-pips" aria-label="Steps"></ol>
+        </div>
+        <p class="show-cap" aria-hidden="true"></p>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============================================================ WHO IT'S FOR -->
+<section class="sec" aria-labelledby="who-title">
+  <div class="wrap">
+    <header class="sec-head pg-split-head">
+      <h2 id="who-title" class="h2">For the machine that’s always on.</h2>
+      <p class="sec-lede">A home server in a cupboard, a NAS, a small VPS or the spare desktop at the office. One install serves the whole household or team. Laptops, phones and tablets use it from a browser, and agents and scripts use it with their own tokens. Video, OCR and speech run on the server, so nobody installs FFmpeg on their phone.</p>
+    </header>
+
+    <figure class="net-fig rv">
+      <div class="net" id="net" role="img" aria-label="Five clients send jobs to one Dogubako server: a laptop compresses a PDF, a phone converts a HEIC photo, a tablet merges PDFs, an agent transcribes a recording over MCP and a nightly script compresses a video over the HTTP API. The server runs each job with its engine and sends the file back.">
+        <ol class="net-rows">
+          <li class="net-row" style="--d:0s"><span class="net-dev"><svg class="i"><use href="#i-laptop"/></svg><span><b>Laptop</b><span>browser, on the LAN</span></span></span><span class="net-track"><span class="net-pk net-out">pdf.compress</span><span class="net-pk net-back">lease-small.pdf</span><svg class="net-end mark"><use href="#logo"/></svg></span></li>
+          <li class="net-row" style="--d:2s"><span class="net-dev"><svg class="i"><use href="#i-smartphone"/></svg><span><b>Phone</b><span>browser, over Tailscale</span></span></span><span class="net-track"><span class="net-pk net-out">image.convert</span><span class="net-pk net-back">IMG_2041.jpg</span><svg class="net-end mark"><use href="#logo"/></svg></span></li>
+          <li class="net-row" style="--d:4s"><span class="net-dev"><svg class="i"><use href="#i-monitor"/></svg><span><b>Office desktop</b><span>browser, on the LAN</span></span></span><span class="net-track"><span class="net-pk net-out">pdf.merge</span><span class="net-pk net-back">contract.pdf</span><svg class="net-end mark"><use href="#logo"/></svg></span></li>
+          <li class="net-row" style="--d:6s"><span class="net-dev"><svg class="i"><use href="#i-bot"/></svg><span><b>media-bot</b><span>MCP, its own token</span></span></span><span class="net-track"><span class="net-pk net-out">speech.transcribe</span><span class="net-pk net-back">interview.srt</span><svg class="net-end mark"><use href="#logo"/></svg></span></li>
+          <li class="net-row" style="--d:8s"><span class="net-dev"><svg class="i"><use href="#i-terminal"/></svg><span><b>Nightly script</b><span>HTTP API, its own token</span></span></span><span class="net-track"><span class="net-pk net-out">video.compress</span><span class="net-pk net-back">talk-small.mp4</span><svg class="net-end mark"><use href="#logo"/></svg></span></li>
+        </ol>
+        <div class="net-srv">
+          <div class="net-srv-top"><svg class="mark"><use href="#logo"/></svg><span><b>Your server</b><span class="mono">dogubako · 127.0.0.1:8420</span></span></div>
+          <ul class="net-eng">
+            <li style="--d:0s">Ghostscript</li>
+            <li style="--d:2s">ImageMagick</li>
+            <li style="--d:4s">qpdf</li>
+            <li style="--d:6s">whisper.cpp</li>
+            <li style="--d:8s">FFmpeg</li>
+            <li>Poppler</li>
+            <li>Tesseract</li>
+            <li>ExifTool</li>
+            <li>Pandoc</li>
+            <li>7-Zip</li>
+            <li>Piper</li>
+            <li>native Rust</li>
+          </ul>
+        </div>
+      </div>
+      <figcaption class="net-cap">
+        <button class="show-play net-play" type="button" aria-pressed="false" aria-label="Pause the animation"><svg class="i i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="i i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+        <span>Every job runs on the server. Results come back to whoever asked, and only they can open them.</span>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============================================================ WHAT YOU GET -->
+<section class="sec" aria-labelledby="get-title">
+  <div class="wrap sh-get">
+    <div class="sh-get-side">
+      <h2 id="get-title" class="h2">What the server adds.</h2>
+      <p class="sec-lede">The same tools as the desktop app, plus what a machine shared by several people needs.</p>
+      <div class="audit rv" id="audit">
+        <div class="audit-head"><span><b>Audit log</b><span class="mono">Admin → Audit log</span></span><button class="show-play audit-play" type="button" aria-pressed="false" aria-label="Pause the audit log animation"><svg class="i i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="i i-play" aria-hidden="true"><use href="#i-play"/></svg></button></div>
+        <ol class="audit-log" id="auditLog" aria-label="Example audit log entries">
+          <li><span class="au-who">alex</span><span class="au-act mono">login</span><span class="au-tgt mono"></span><span class="au-st ok">ok</span></li>
+          <li><span class="au-who">alex</span><span class="au-act mono">user.create</span><span class="au-tgt mono">media-bot (agent)</span><span class="au-st ok">ok</span></li>
+          <li><span class="au-who">alex</span><span class="au-act mono">token.create</span><span class="au-tgt mono">for media-bot</span><span class="au-st ok">ok</span></li>
+          <li><span class="au-who">media-bot</span><span class="au-act mono">tool.run</span><span class="au-tgt mono">speech.transcribe</span><span class="au-st ok">succeeded</span><span class="au-det mono">mcp</span></li>
+          <li><span class="au-who">media-bot</span><span class="au-act mono">tool.denied</span><span class="au-tgt mono">pdf.merge</span><span class="au-st no">denied</span><span class="au-det mono">mcp</span></li>
+          <li><span class="au-who">sam</span><span class="au-act mono">tool.run</span><span class="au-tgt mono">network.http_headers</span><span class="au-st no">failed</span><span class="au-det mono">web: 'router.lan' resolves only to non-public addresses; blocked by network policy</span></li>
+          <li><span class="au-who">jun</span><span class="au-act mono">login</span><span class="au-tgt mono"></span><span class="au-st no">denied</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <dl class="feats">
+      <div class="feat rv"><dt>Engines, installed once</dt><dd>The image builds with FFmpeg, ImageMagick, Ghostscript, Poppler, qpdf, Tesseract, ExifTool, Pandoc, 7-Zip, whisper.cpp and Piper, at pinned versions. LibreOffice is one line in <code>.env</code> away. Nobody installs anything on their own device.</dd></div>
+      <div class="feat rv"><dt>Accounts and roles</dt><dd>Owner, admin, user and agent. Signing in is always required, also on a LAN or a tailnet. Passwords are hashed with Argon2id, and sessions live in <code>HttpOnly</code>, <code>SameSite=Strict</code> cookies.</dd></div>
+      <div class="feat rv"><dt>Quotas and limits</dt><dd>Every account has a storage quota (10&nbsp;GB by default) and a limit on jobs at once (2 by default). Uploads and results are deleted after 24 hours unless you change it, and every job has a time limit.</dd></div>
+      <div class="feat rv"><dt>Files only their owner can open</dt><dd>Files are addressed by random ids, never by paths on the server, and every lookup checks who owns them. Ask for someone else’s file and you get a 404.</dd></div>
+      <div class="feat rv"><dt>URL tools stay off your network</dt><dd>DNS, HTTP and TLS tools refuse loopback, private and link-local addresses, Tailscale’s <code>100.64.0.0/10</code> included, so the server can’t be used to probe your home network. Redirects are checked too.</dd></div>
+      <div class="feat rv"><dt>An audit log</dt><dd>Sign-ins, setup, token and policy changes, uploads, every tool run and every refused call, with who did it and how it arrived.</dd></div>
+      <div class="feat rv"><dt>A locked-down container</dt><dd>Read-only root filesystem, all Linux capabilities dropped, <code>no-new-privileges</code>, and CPU, memory and process limits. External programs get exact arguments, never a shell, with timeouts and memory caps.</dd></div>
+      <div class="feat rv"><dt>Bubblewrap, on native installs</dt><dd>Running without Docker on Linux, set <code class="nw">DOGUBAKO_SANDBOX=bwrap</code> and each external program runs with no network, a private <code>/tmp</code> and only its own job’s files in view.</dd></div>
+      <div class="feat rv"><dt>A key for each agent</dt><dd>Agent accounts start with no tools at all. Allow <code class="nw">video.*</code> for one and <code class="nw">image.*</code> for another, give each a token, and connect them over MCP or the HTTP API. <a class="link" href="../agents/">Agents and automation</a></dd></div>
+      <div class="feat rv"><dt>Plain words, with a shared model</dt><dd>People can type what they want done instead of picking a tool. It’s off until each person turns it on in Settings → Plain words. Set <code>DOGUBAKO_ASSISTANT_BASE_URL</code>, <code>_MODEL</code> and <code>_API_KEY</code> in <code>.env</code> to offer one model to everyone, or run one beside it with <code>docker compose --profile local-model up -d</code>. The key stays on the server, and runs still go through the same permissions, quotas and audit log. The request, file names and tool results go to that model; the files themselves don’t. <a class="link" href="https://docs.dogubako.app/app/plain-words/">How plain words works</a></dd></div>
+    </dl>
+  </div>
+</section>
+
+<!-- ============================================================ SET IT UP -->
+<section class="sec" id="setup" aria-labelledby="setup-title">
+  <div class="wrap">
+    <header class="sec-head">
+      <h2 id="setup-title" class="h2">Set it up</h2>
+      <p class="sec-lede">You need a Linux machine with Docker and Docker Compose, a few gigabytes of disk for the image and your files, and spare CPU if you’ll transcode video or transcribe speech.</p>
+    </header>
+
+    <ol class="steps">
+      <li class="step rv">
+        <div class="step-txt">
+          <h3 class="h3">Get the code and start it</h3>
+          <p>The server runs as user 10001 inside the container, so give it the <code>data</code> folder first. The first build compiles Dogubako and installs every engine at a pinned version, so it takes a while. The image is about 1.5&nbsp;GB, plus about 500&nbsp;MB with LibreOffice. A prebuilt image for linux/amd64 is planned for the alpha release; until it’s published, compose builds it from source.</p>
+        </div>
+        <div class="cmd">
+<pre class="code"><code><span class="c-p">$</span> git clone https://github.com/Mischa-dev/Dogubako
+<span class="c-p">$</span> cd Dogubako
+<span class="c-dim"># optional: LibreOffice, a shared model</span>
+<span class="c-p">$</span> cp .env.example .env
+<span class="c-p">$</span> mkdir -p data &amp;&amp; sudo chown 10001 data
+<span class="c-p">$</span> docker compose up -d --build</code></pre>
+          <button class="copy-btn" type="button" data-copy="git clone https://github.com/Mischa-dev/Dogubako&#10;cd Dogubako&#10;mkdir -p data &amp;&amp; sudo chown 10001 data&#10;docker compose up -d --build"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button>
+        </div>
+      </li>
+      <li class="step rv">
+        <div class="step-txt">
+          <h3 class="h3">Keep it private, reach it anyway</h3>
+          <p>The compose file only listens on <code>127.0.0.1</code>, so nothing outside the machine can reach it yet. Tailscale is the easy way in: your own devices get HTTPS and no port is opened to the internet. Then set <code>DOGUBAKO_PUBLIC_URL</code> to that address and <code>DOGUBAKO_SECURE_COOKIES</code> to <code>"true"</code>; both lines are in <code>docker-compose.yml</code>, commented out.</p>
+          <p>For a LAN, change the port mapping to <code>"8420:8420"</code>, ideally behind a reverse proxy with HTTPS. Don’t publish port 8420 to the open internet.</p>
+        </div>
+        <div class="cmd">
+<pre class="code"><code><span class="c-dim"># Tailscale on the host</span>
+<span class="c-p">$</span> tailscale serve --bg 8420
+
+<span class="c-dim"># or as a sidecar container</span>
+<span class="c-p">$</span> TS_AUTHKEY=tskey-auth-… docker compose \
+    -f docker-compose.yml -f deploy/docker-compose.tailscale.yml up -d</code></pre>
+          <button class="copy-btn" type="button" data-copy="tailscale serve --bg 8420"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button>
+        </div>
+      </li>
+      <li class="step rv">
+        <div class="step-txt">
+          <h3 class="h3">Create the owner account</h3>
+          <p>On first start the server prints a one-time setup token; a restart before the owner exists prints a new one. Open the server’s address, enter the newest token, and choose the owner’s username and a password of at least 10 characters.</p>
+        </div>
+        <div class="cmd">
+<pre class="code"><code><span class="c-p">$</span> docker compose logs dogubako | grep "Setup token" | tail -n 1</code></pre>
+          <button class="copy-btn" type="button" data-copy="docker compose logs dogubako | grep &quot;Setup token&quot; | tail -n 1"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button>
+        </div>
+      </li>
+      <li class="step rv">
+        <div class="step-txt">
+          <h3 class="h3">Add people and agents</h3>
+          <p>In <b>Admin → Users &amp; agents</b>, or from the host. People get every tool by default; agents get only what you list. A token is shown once, so store it right away.</p>
+        </div>
+        <div class="cmd">
+<pre class="code"><code><span class="c-p">$</span> docker compose exec dogubako dogubako users create sam --role user
+<span class="c-p">$</span> docker compose exec dogubako dogubako users create media-bot \
+    --role agent --allow 'video.*' --allow 'speech.*'
+<span class="c-p">$</span> docker compose exec dogubako dogubako tokens create \
+    --user media-bot --name laptop-agent
+<span class="c-dim">dgb_…</span></code></pre>
+          <button class="copy-btn" type="button" data-copy="docker compose exec dogubako dogubako users create media-bot --role agent --allow 'video.*' --allow 'speech.*'&#10;docker compose exec dogubako dogubako tokens create --user media-bot --name laptop-agent"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button>
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================================================ AGENT INSTALL -->
+<section class="sec" id="agent" aria-labelledby="agent-title">
+  <div class="wrap">
+    <div class="prompt-card rv">
+      <div class="prompt-copy">
+        <h2 id="agent-title" class="h2 h2-sm">Or have your agent set it up.</h2>
+        <p class="sec-lede">If a coding agent such as Claude Code runs on that machine, give it this prompt. It points to a page written for agents: every step above, how to connect itself over MCP, and what it has to ask you first.</p>
+        <p class="prompt-more"><a class="link" href="../agent-install.md">Read agent-install.md <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></a></p>
+      </div>
+      <div class="prompt-box">
+        <p class="prompt-label" id="promptLabel">Prompt</p>
+        <p class="prompt-text" id="agentPrompt">Install Dogubako on this server and connect it to me over MCP. Follow the instructions at https://dogubako.app/agent-install.md and ask me before any step that opens ports or changes the firewall.</p>
+        <textarea class="prompt-fallback" id="agentPromptFallback" readonly hidden aria-labelledby="promptLabel" rows="4"></textarea>
+        <button class="btn btn-ink copy-btn copy-btn-lg" type="button" data-copy-from="#agentPrompt" data-fallback="#agentPromptFallback"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy prompt for your AI agent</span></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ DOCS -->
+<section class="sec" aria-labelledby="docs-title">
+  <div class="wrap">
+    <h2 id="docs-title" class="h3 docs-h">The how-to lives in the docs</h2>
+    <ul class="doc-links">
+      <li><a href="https://docs.dogubako.app/self-hosting/docker/"><b>Docker</b><span>The compose file, build options, folders</span><svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a></li>
+      <li><a href="https://docs.dogubako.app/self-hosting/networking/"><b>Networking</b><span>LAN, Tailscale, reverse proxies, HTTPS</span><svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a></li>
+      <li><a href="https://docs.dogubako.app/self-hosting/accounts-and-agents/"><b>Accounts and agents</b><span>Roles, policies, tokens, the audit log</span><svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a></li>
+      <li><a href="https://docs.dogubako.app/self-hosting/configuration/"><b>Configuration</b><span>Every setting and environment variable</span><svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ END -->
+<section class="pg-end" aria-label="More">
+  <div class="wrap pg-end-in">
+    <a class="end-card" href="../"><svg class="i" aria-hidden="true"><use href="#i-arrow-left"/></svg><span><b>Home</b><span>What Dogubako is, and the app in motion</span></span></a>
+    <a class="end-card end-card-r" href="../download/"><span><b>Download</b><span>Alpha status, the Mac app, building from source</span></span><svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="foot-brand"><a class="brand" href="../"><svg class="mark" aria-hidden="true"><use href="#logo"/></svg><span>Dogubako</span></a><p>A local-first, open-source toolbox.</p></div>
+    <nav class="foot-cols" aria-label="Footer">
+      <div><h2 class="foot-h">Product</h2><a href="../tools/">Tools</a><a href="../download/">Download</a><a href="../self-hosting/">Self-hosting</a><a href="../agents/">Agents</a></div>
+      <div><h2 class="foot-h">Docs</h2><a href="https://docs.dogubako.app/">Documentation</a><a href="https://docs.dogubako.app/cli/overview/">CLI</a><a href="https://docs.dogubako.app/reference/http-api/">HTTP API</a><a href="https://docs.dogubako.app/agents/overview/">MCP</a><a href="https://docs.dogubako.app/project/security/">Security</a></div>
+      <div><h2 class="foot-h">Project</h2><a href="https://github.com/Mischa-dev/Dogubako">Source code</a><a href="https://github.com/Mischa-dev/Dogubako/releases">Releases</a><a href="https://github.com/Mischa-dev/Dogubako/issues">Report a problem</a></div>
+      <div><h2 class="foot-h">License</h2><a href="https://github.com/Mischa-dev/Dogubako/blob/main/LICENSE">AGPL-3.0-or-later</a><a href="https://docs.dogubako.app/project/licensing/">Third-party licenses</a></div>
+    </nav>
+  </div>
+  <div class="wrap foot-base mono"><span>dogubako.app</span><span>Set in Instrument Sans and DM Mono (SIL OFL). Icons from Lucide (ISC).</span></div>
+</footer>
+
+<script src="../assets/js/site.js" defer></script>
+<script src="../assets/js/timeline.js" defer></script>
+<script src="../assets/js/pages/pages.js" defer></script>
+<script src="../assets/js/pages/self-hosting.js" defer></script>
+</body>
+</html>
