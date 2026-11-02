@@ -25,6 +25,9 @@ function PageFallback() {
   return <div className="page-loading" aria-busy="true"><Spinner size={18} /></div>;
 }
 
+/** A dialog or popover other than the Tools menu is open (Customize, Layout, a confirm). */
+export const otherDialogOpen = () => !!document.querySelector('[role="dialog"]:not(.tools-menu), [role="alertdialog"]');
+
 export function Shell() {
   const route = useRoute();
   const { isServer, isAdmin, toolMap } = useApp();
@@ -57,7 +60,7 @@ export function Shell() {
         e.preventDefault();
         setQuery('');
         setPalette(true);
-      } else if (e.key.toLowerCase() === 't' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && !palette) {
+      } else if (e.key.toLowerCase() === 't' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && !palette && !otherDialogOpen()) {
         e.preventDefault();
         setToolsOpen((o) => !o);
       } else if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[1-9]$/.test(e.code)) {

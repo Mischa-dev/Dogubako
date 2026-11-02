@@ -38,7 +38,7 @@
 }
 .run-bar-main { display: flex; align-items: center; gap: 8px; }
 .run-bar-main .btn-primary { min-width: 92px; }
-.run-hint { display: inline-flex; opacity: .8; }
+.run-hint { display: inline-flex; }
 .run-reset { margin-left: 4px; }
 .run-bar-status { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 200px; }
 .run-progress { flex: 1; max-width: 260px; }
