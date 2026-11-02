@@ -408,7 +408,17 @@ fn coerce(p: &ParamSpec, v: Value, fs_policy: &FsPolicy) -> ToolResult<Value> {
             let i = match &v {
                 Value::Number(n) => n
                     .as_i64()
-                    .or_else(|| n.as_f64().filter(|f| f.fract() == 0.0).map(|f| f as i64)),
+                    // Whole floats are accepted only inside the i64 range
+                    // (-2^63 <= f < 2^63); `as` would silently saturate.
+                    .or_else(|| {
+                        n.as_f64()
+                            .filter(|f| {
+                                f.fract() == 0.0
+                                    && *f >= -9_223_372_036_854_775_808.0
+                                    && *f < 9_223_372_036_854_775_808.0
+                            })
+                            .map(|f| f as i64)
+                    }),
                 Value::String(s) => s.trim().parse::<i64>().ok(),
                 _ => None,
             }
@@ -452,7 +462,8 @@ fn coerce(p: &ParamSpec, v: Value, fs_policy: &FsPolicy) -> ToolResult<Value> {
             let check = |s: &str| -> ToolResult<String> {
                 options
                     .iter()
-                    .find(|o| o.value.eq_ignore_ascii_case(s))
+                    .find(|o| o.value == s)
+                    .or_else(|| options.iter().find(|o| o.value.eq_ignore_ascii_case(s)))
                     .map(|o| o.value.clone())
                     .ok_or_else(|| {
                         let allowed: Vec<&str> = options.iter().map(|o| o.value.as_str()).collect();

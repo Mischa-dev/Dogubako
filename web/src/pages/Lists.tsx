@@ -73,7 +73,7 @@ export function FavoritesPage() {
     <div className="page">
       <PageHeader icon={Pin} title="Pinned tools" subtitle="Pinned tools appear in the sidebar and in the Tools menu. Alt + 1 to 9 opens the first nine." />
       {tools.length ? (
-        <ToolList tools={tools} favorites={favs} label="Favorite tools" showCategory categoryLabel={categoryLabel} />
+        <ToolList tools={tools} favorites={favs} label="Pinned tools" showCategory categoryLabel={categoryLabel} />
       ) : (
         <EmptyState icon={Pin} title="Nothing pinned yet">Pin a tool from the Tools menu, any list or a tool page.</EmptyState>
       )}

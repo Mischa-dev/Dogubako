@@ -34,6 +34,42 @@ export function verbLabel(name: string, kind: BenchKind | null): string {
 const MAX_TABS = 6;
 const MAX_PINNED_TABS = 5;
 
+/**
+ * Which tools the row offers. With a file: the tools that take it. A tool that
+ * takes no file (a generator, a converter of typed text) has no file to follow,
+ * so in the default "tools for the file" mode it shows its neighbours from the
+ * same category, pinned ones first, instead of unrelated pinned tools.
+ * In "pinned tools" mode, or for a file tool still waiting for its file, the
+ * row shows pinned tools (or the category when nothing is pinned).
+ * The current tool is always in the row.
+ */
+export function rowTabs({ tool, files, row, visibleTools, toolMap, pinned, recent }: {
+  tool: ToolInfo;
+  files: PendingInput[];
+  row: ToolLayout['row'];
+  visibleTools: ToolInfo[];
+  toolMap: Map<string, ToolInfo>;
+  pinned: string[];
+  recent: string[];
+}): ToolInfo[] {
+  const byFile = files.length > 0 && row === 'file';
+  const sameCategory = () => visibleTools.filter((t) => t.category === tool.category);
+  let list: ToolInfo[];
+  if (byFile) {
+    list = rankTools(toolsForFiles(visibleTools, files), files, { pinned, recent }).filter((t) => t.availability.available);
+  } else if (row === 'file' && !tool.params.some((p) => p.type === 'file')) {
+    const rank = (t: ToolInfo) => (pinned.includes(t.id) ? 0 : 1);
+    list = sameCategory().map((t, i) => [t, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([t]) => t);
+  } else {
+    list = pinned.map((id) => toolMap.get(id)).filter((t): t is ToolInfo => !!t);
+    if (!list.length) list = sameCategory();
+  }
+  const max = byFile ? MAX_TABS : MAX_PINNED_TABS;
+  const top = list.slice(0, max);
+  if (!top.some((t) => t.id === tool.id)) top.splice(Math.min(top.length, max - 1), 1, tool);
+  return top;
+}
+
 /** Open the command palette (owned by the shell). */
 export const openSearch = () => window.dispatchEvent(new CustomEvent('dgb:search'));
 
@@ -52,19 +88,12 @@ export function ToolTopRow({ tool }: { tool: ToolInfo }) {
   const results = subject?.results ?? [];
   const kind = files.length ? kindOf(files[0].mime, files[0].name) : null;
 
-  const tabs = useMemo(() => {
-    let list: ToolInfo[];
-    if (files.length && layout.row === 'file') {
-      list = rankTools(toolsForFiles(visibleTools, files), files, { pinned, recent: recent.map((r) => r.id) }).filter((t) => t.availability.available);
-    } else {
-      list = pinned.map((id) => toolMap.get(id)).filter((t): t is ToolInfo => !!t);
-      if (!list.length) list = visibleTools.filter((t) => t.category === tool.category);
-    }
-    const max = files.length && layout.row === 'file' ? MAX_TABS : MAX_PINNED_TABS;
-    const top = list.slice(0, max);
-    if (!top.some((t) => t.id === tool.id)) top.splice(Math.min(top.length, max - 1), 1, tool);
-    return top;
-  }, [files, layout.row, visibleTools, pinned, recent, toolMap, tool]);
+  const tabs = useMemo(
+    () => rowTabs({ tool, files, row: layout.row, visibleTools, toolMap, pinned, recent: recent.map((r) => r.id) }),
+    [files, layout.row, visibleTools, pinned, recent, toolMap, tool],
+  );
+  const takesFiles = tool.params.some((p) => p.type === 'file');
+  const rowLabel = files.length ? 'Other tools for this file' : layout.row === 'file' && !takesFiles ? 'Related tools' : 'Pinned tools';
 
   const handOff = (): PendingInput[] => (uses === 'result' && results.length ? results : files);
   const go = (t: ToolInfo) => (e: React.MouseEvent) => {
@@ -84,8 +113,15 @@ export function ToolTopRow({ tool }: { tool: ToolInfo }) {
     const el = tabsRef.current;
     if (!el) return;
     const check = () => setOverflow(el.scrollWidth > el.clientWidth + 1 && el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-    check();
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(check) : null;
+    // Keep the current tool's tab in view when the row is too long to show it all:
+    // scroll only as far as needed to clear the fade, and redo it when the row resizes.
+    const reveal = () => {
+      const on = el.querySelector<HTMLElement>('.tool-tab.is-on');
+      el.scrollLeft = on ? Math.max(0, on.offsetLeft + on.offsetWidth - el.clientWidth + 36) : 0;
+      check();
+    };
+    reveal();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(reveal) : null;
     ro?.observe(el);
     el.addEventListener('scroll', check, { passive: true });
     return () => { ro?.disconnect(); el.removeEventListener('scroll', check); };
@@ -118,7 +154,7 @@ export function ToolTopRow({ tool }: { tool: ToolInfo }) {
         </a>
       )}
 
-      <nav ref={tabsRef} className={cx('tool-tabs glass', overflow && 'is-overflow')} aria-label={files.length ? 'Other tools for this file' : 'Pinned tools'}>
+      <nav ref={tabsRef} className={cx('tool-tabs glass', overflow && 'is-overflow')} aria-label={rowLabel}>
         {tabs.map((t) => (
           <a
             key={t.id}

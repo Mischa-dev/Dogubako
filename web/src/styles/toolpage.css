@@ -15,7 +15,7 @@
 .tool-subject-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-subject-more { flex: none; font: 500 11.5px/1 var(--font-mono); color: var(--text-3); }
 
-.tool-tabs { display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 13px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tool-tabs { position: relative; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 13px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .tool-tabs::-webkit-scrollbar { display: none; }
 .tool-tabs.is-overflow { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); }
 .tool-tab { flex: none; height: 30px; display: inline-flex; align-items: center; padding: 0 12px; border: 0; border-radius: 9px; background: none; color: var(--text-2); font: inherit; font-size: 13.5px; white-space: nowrap; text-decoration: none !important; cursor: pointer; transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
@@ -90,6 +90,12 @@
 .stage-cap-meta { font: 400 12px/1.5 var(--font-mono); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stage-delta { font-weight: 500; }
 .stage-delta.is-down { color: var(--success); }
+
+/* visual editors (crop, redact): the editable image is the stage */
+.editor-stage .editor-panel { gap: 10px; }
+.editor-stage .box-editor { border: 0; border-radius: 6px; padding: 14px; }
+.editor-stage .box-media { max-height: clamp(240px, 56vh, 620px); box-shadow: var(--shadow-object); }
+.editor-stage .editor-foot, .editor-stage .crop-fields { font-size: 13px; }
 
 /* controls below the stage: settings flow into columns */
 @media (min-width: 1000px) {

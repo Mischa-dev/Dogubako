@@ -31,8 +31,17 @@ pub const FULL_URL: &AsciiSet = &COMPONENT
 // '%' stays encoded (as in encodeURI): "100% organic" -> "100%25%20organic",
 // so the output always decodes back to the input.
 
+/// With spaces written as '+', a literal '+' must be escaped or it would
+/// decode as a space.
+const FULL_URL_PLUS_SPACES: &AsciiSet = &FULL_URL.add(b'+');
+
 pub fn url_encode(s: &str, full: bool, space_plus: bool) -> String {
-    let enc = utf8_percent_encode(s, if full { FULL_URL } else { COMPONENT }).to_string();
+    let set = match (full, space_plus) {
+        (true, true) => FULL_URL_PLUS_SPACES,
+        (true, false) => FULL_URL,
+        (false, _) => COMPONENT,
+    };
+    let enc = utf8_percent_encode(s, set).to_string();
     if space_plus {
         enc.replace("%20", "+")
     } else {
@@ -88,7 +97,10 @@ pub fn html_unescape(s: &str) -> String {
     html_escape::decode_html_entities(s).into_owned()
 }
 
-pub fn xml_escape(s: &str) -> String {
+/// Escapes text for XML 1.0. Characters XML 1.0 cannot carry at all (C0
+/// controls other than tab, LF and CR, and U+FFFE/U+FFFF) are an error:
+/// even as character references they make the document unparseable.
+pub fn xml_escape(s: &str) -> Result<String, String> {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
@@ -97,13 +109,18 @@ pub fn xml_escape(s: &str) -> String {
             '>' => out.push_str("&gt;"),
             '"' => out.push_str("&quot;"),
             '\'' => out.push_str("&apos;"),
-            c if (c as u32) < 0x20 && !matches!(c, '\n' | '\r' | '\t') => {
-                out.push_str(&format!("&#x{:X};", c as u32))
+            c if ((c as u32) < 0x20 && !matches!(c, '\n' | '\r' | '\t'))
+                || matches!(c, '\u{FFFE}' | '\u{FFFF}') =>
+            {
+                return Err(format!(
+                    "U+{:04X} cannot be represented in XML 1.0",
+                    c as u32
+                ))
             }
             c => out.push(c),
         }
     }
-    out
+    Ok(out)
 }
 
 pub fn xml_unescape(s: &str) -> Result<String, String> {
@@ -462,9 +479,21 @@ mod tests {
             csv_unescape(&csv_escape("a,\"b\"", ',')).unwrap(),
             "a,\"b\""
         );
-        assert_eq!(xml_unescape(&xml_escape("<a & 'b'>")).unwrap(), "<a & 'b'>");
+        assert_eq!(
+            xml_unescape(&xml_escape("<a & 'b'>\t\n").unwrap()).unwrap(),
+            "<a & 'b'>\t\n"
+        );
+        for bad in ["a\u{0}b", "\u{1b}", "\u{FFFE}"] {
+            assert!(xml_escape(bad).unwrap_err().contains("XML 1.0"), "{bad:?}");
+        }
         // Malformed multibyte input is an error, not a panic.
         assert!(xml_unescape("&\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}").is_err());
+        // Form-style spaces escape literal '+' so the output decodes back.
+        let src = "https://example.com/search?q=C++ guide";
+        let enc = url_encode(src, true, true);
+        assert_eq!(enc, "https://example.com/search?q=C%2B%2B+guide");
+        assert_eq!(url_decode(&enc, true).unwrap(), src);
+        assert_eq!(url_encode("a+b c", true, false), "a+b%20c");
         // Full-URL mode keeps URL syntax but encodes literal '%'.
         let full = url_encode("https://example.com/100% organic?q=a&b=c", true, false);
         assert_eq!(full, "https://example.com/100%25%20organic?q=a&b=c");

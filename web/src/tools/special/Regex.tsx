@@ -7,6 +7,7 @@ import { useToolForm } from '../useToolForm';
 import { useLiveRun, useToolShortcuts } from '../GenericTool';
 import { DataTable, KeyValue } from '../../results/DataViews';
 import { ErrorView } from '../../results/ErrorView';
+import { Warnings } from '../../results/Warnings';
 import { CopyButton, Spinner, cx } from '../../components/ui';
 
 /** Regex tester: highlights matches live under the test-text editor. */
@@ -70,6 +71,7 @@ export default function Regex({ tool, jobId }: { tool: ToolInfo; jobId?: string 
       </div>
       <div className="tool-output">
         {job?.status === 'failed' && <ErrorView error={job.error ?? { code: 'failed' }} />}
+        {job?.status === 'succeeded' && <Warnings warnings={job.result?.warnings} />}
         {data && typeof data.replaced === 'string' && (
           <div className="output-block">
             <div className="output-head"><span className="output-title">Replacement preview</span><CopyButton text={data.replaced} /></div>

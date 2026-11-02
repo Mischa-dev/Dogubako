@@ -44,7 +44,7 @@ pub(crate) fn parse_json(text: &str, param: &str) -> ToolResult<Value> {
 /// f64, so a literal such as 18446744073709551617 or
 /// 0.10000000000000000001 would come back changed. Reject those instead of
 /// silently altering data. `text` must already be valid JSON.
-fn check_json_numbers(text: &str) -> Result<(), String> {
+pub(crate) fn check_json_numbers(text: &str) -> Result<(), String> {
     let b = text.as_bytes();
     let mut i = 0;
     while i < b.len() {
@@ -470,6 +470,85 @@ fn toml_tool() -> Arc<dyn Tool> {
 // ---------------------------------------------------------------------------
 // XML
 
+/// Only XML's own whitespace (space, tab, CR, LF) is insignificant; other
+/// Unicode spaces such as U+00A0 are character data.
+fn xml_blank(s: &str) -> bool {
+    s.chars().all(|c| matches!(c, ' ' | '\t' | '\r' | '\n'))
+}
+
+/// Entities a document may reference: the predefined ones, character
+/// references to legal XML characters, and general entities declared in the
+/// internal DTD subset. `None` means anything goes (an external DTD or
+/// parameter entities may declare names we cannot see).
+struct EntityRules {
+    declared: Option<std::collections::HashSet<String>>,
+}
+
+impl EntityRules {
+    fn new() -> Self {
+        EntityRules {
+            declared: Some(Default::default()),
+        }
+    }
+
+    fn read_doctype(&mut self, dt: &str) {
+        let (head, subset) = dt.split_once('[').unwrap_or((dt, ""));
+        if head.contains("SYSTEM") || head.contains("PUBLIC") || subset.contains('%') {
+            self.declared = None;
+            return;
+        }
+        let Some(set) = &mut self.declared else {
+            return;
+        };
+        let mut rest = subset;
+        while let Some(i) = rest.find("<!ENTITY") {
+            rest = &rest[i + 8..];
+            if let Some(name) = rest.split_whitespace().next() {
+                set.insert(name.to_string());
+            }
+        }
+    }
+
+    fn check(&self, name: &str) -> Result<(), String> {
+        if let Some(num) = name.strip_prefix('#') {
+            let code = match num.strip_prefix(['x', 'X']) {
+                Some(h) => u32::from_str_radix(h, 16).ok(),
+                None => num.parse::<u32>().ok(),
+            };
+            let legal = code.and_then(char::from_u32).is_some_and(|c| {
+                matches!(c, '\t' | '\n' | '\r')
+                    || (c >= ' ' && !matches!(c, '\u{FFFE}' | '\u{FFFF}'))
+            });
+            return if legal {
+                Ok(())
+            } else {
+                Err(format!("invalid character reference &{name};"))
+            };
+        }
+        if matches!(name, "lt" | "gt" | "amp" | "quot" | "apos")
+            || self.declared.as_ref().is_none_or(|d| d.contains(name))
+        {
+            Ok(())
+        } else {
+            Err(format!("reference to undeclared entity &{name};"))
+        }
+    }
+
+    /// Checks every `&...;` in a raw attribute value.
+    fn check_raw(&self, raw: &str) -> Result<(), String> {
+        let mut rest = raw;
+        while let Some(i) = rest.find('&') {
+            rest = &rest[i + 1..];
+            let Some(j) = rest.find(';') else {
+                return Err("unterminated reference in attribute value".into());
+            };
+            self.check(&rest[..j])?;
+            rest = &rest[j + 1..];
+        }
+        Ok(())
+    }
+}
+
 /// Re-serialize XML. `indent` None = minify. Never resolves external entities
 /// (quick-xml does not process DTDs).
 pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResult<(String, usize)> {
@@ -491,11 +570,28 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
         let (l, c) = line_col(text, reader.buffer_position() as usize);
         ToolError::invalid("text", format!("{e} (line {l}, column {c})"))
     };
+    let mut entities = EntityRules::new();
     loop {
         let ev = reader
             .read_event()
             .map_err(|e| err(&reader, e.to_string()))?;
         match &ev {
+            Event::DocType(d) => entities.read_doctype(d),
+            Event::GeneralRef(r) if depth > 0 => {
+                entities.check(r).map_err(|e| err(&reader, e))?;
+            }
+            Event::Start(e) | Event::Empty(e)
+                if e.attributes()
+                    .flatten()
+                    .any(|a| entities.check_raw(&a.value).is_err()) =>
+            {
+                let bad = e
+                    .attributes()
+                    .flatten()
+                    .find_map(|a| entities.check_raw(&a.value).err())
+                    .unwrap();
+                return Err(err(&reader, bad));
+            }
             Event::Start(e) | Event::Empty(e) if e.attributes().any(|a| a.is_err()) => {
                 // The event reader does not validate attributes itself
                 // (duplicates, missing quotes); report the first error.
@@ -521,12 +617,16 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
             }
             Event::End(_) => depth = depth.saturating_sub(1),
             Event::Text(t) => {
-                if t.trim().is_empty() && sub.is_none() {
+                if xml_blank(t) && sub.is_none() {
                     continue;
                 }
                 if depth == 0 {
                     return Err(err(&reader, "text outside of the root element".into()));
                 }
+            }
+            // CDATA and character/entity references are character data too.
+            Event::CData(_) | Event::GeneralRef(_) if depth == 0 => {
+                return Err(err(&reader, "text outside of the root element".into()));
             }
             Event::Eof => break,
             _ => {}
@@ -583,6 +683,8 @@ fn mixed_content_elements(text: &str) -> std::collections::HashSet<usize> {
         preserve: bool,
         child: bool,
         text: bool,
+        /// Any text at all, whitespace included.
+        any_text: bool,
     }
     let mut reader = quick_xml::Reader::from_str(text);
     let mut out = std::collections::HashSet::new();
@@ -608,6 +710,7 @@ fn mixed_content_elements(text: &str) -> std::collections::HashSet<usize> {
                     preserve,
                     child: false,
                     text: false,
+                    any_text: false,
                 });
                 next += 1;
             }
@@ -618,7 +721,9 @@ fn mixed_content_elements(text: &str) -> std::collections::HashSet<usize> {
             }
             Ok(Event::End(_)) => {
                 if let Some(o) = stack.pop() {
-                    if o.preserve || (o.child && o.text) {
+                    // Leaf text is data even when it is only whitespace
+                    // (<value> </value>); only element content is indentation.
+                    if o.preserve || (o.child && o.text) || (!o.child && o.any_text) {
                         out.insert(o.id);
                     }
                 }
@@ -626,7 +731,8 @@ fn mixed_content_elements(text: &str) -> std::collections::HashSet<usize> {
             Ok(Event::Text(t)) => {
                 if let Some(o) = stack.last_mut() {
                     let s: &str = t.as_ref();
-                    if !s.trim().is_empty() || !s.contains(['\n', '\r']) {
+                    o.any_text = true;
+                    if !xml_blank(s) || !s.contains(['\n', '\r']) {
                         o.text = true;
                     }
                 }
@@ -742,26 +848,55 @@ fn sql_format() -> Arc<dyn Tool> {
 
 /// XML → JSON using the common convention: attributes as "@name", text as
 /// "#text", repeated children become arrays.
+/// Resolves the predefined XML entities and character references. Anything
+/// else (such as an entity declared in the document's DTD) is an error: the
+/// DTD is never read, so substituting text for it would silently lose data.
+fn unescape_or_reject(raw: &str) -> ToolResult<String> {
+    quick_xml::escape::unescape(raw)
+        .map(|c| c.into_owned())
+        .map_err(|e| {
+            ToolError::invalid(
+                "text",
+                format!(
+                    "{e}; only the predefined XML entities (&amp; &lt; &gt; &quot; &apos;) \
+                     and character references like &#169; can be converted"
+                ),
+            )
+        })
+}
+
 pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
     let mut reader = quick_xml::Reader::from_str(text);
     reader.config_mut().check_end_names = true;
     // stack of (name, object, text)
     let mut stack: Vec<(String, serde_json::Map<String, Value>, String)> =
         vec![("#root".into(), serde_json::Map::new(), String::new())];
+    // xml:space="preserve" for each open element, inherited by its children
+    // unless they reset it with xml:space="default".
+    let mut preserve = vec![false];
+    fn preserves(obj: &serde_json::Map<String, Value>, inherited: bool) -> bool {
+        match obj.get("@xml:space").and_then(Value::as_str) {
+            Some("preserve") => true,
+            Some("default") => false,
+            _ => inherited,
+        }
+    }
     fn attrs(e: &quick_xml::events::BytesStart) -> ToolResult<serde_json::Map<String, Value>> {
         let mut m = serde_json::Map::new();
         for a in e.attributes() {
             let a = a.map_err(|e| ToolError::invalid("text", format!("bad attribute: {e}")))?;
             let k = a.key.as_ref().to_string();
-            let v = quick_xml::escape::unescape(&a.value)
-                .map(|c| c.into_owned())
-                .unwrap_or_else(|_| a.value.to_string());
+            let v = unescape_or_reject(&a.value)?;
             m.insert(format!("@{k}"), Value::String(v));
         }
         Ok(m)
     }
-    fn finish(obj: serde_json::Map<String, Value>, text: String) -> Value {
-        let t = text.trim().to_string();
+    fn finish(obj: serde_json::Map<String, Value>, text: String, keep_ws: bool) -> Value {
+        let t = if keep_ws {
+            text
+        } else {
+            text.trim().to_string()
+        };
         if obj.is_empty() {
             if t.is_empty() {
                 Value::Null
@@ -796,16 +931,18 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
         match ev {
             Event::Start(e) => {
                 let n = e.name().as_ref().to_string();
-                stack.push((n, attrs(&e)?, String::new()));
+                let a = attrs(&e)?;
+                preserve.push(preserves(&a, *preserve.last().unwrap()));
+                stack.push((n, a, String::new()));
             }
             Event::Empty(e) => {
                 let n = e.name().as_ref().to_string();
-                let v = finish(attrs(&e)?, String::new());
+                let v = finish(attrs(&e)?, String::new(), false);
                 add(&mut stack.last_mut().unwrap().1, n, v);
             }
             Event::End(_) => {
                 let (n, obj, txt) = stack.pop().unwrap();
-                let v = finish(obj, txt);
+                let v = finish(obj, txt, preserve.pop().unwrap_or(false));
                 let parent = stack
                     .last_mut()
                     .ok_or_else(|| ToolError::invalid("text", "unbalanced XML"))?;
@@ -814,9 +951,7 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
             Event::Text(t) => stack.last_mut().unwrap().2.push_str(&t),
             Event::CData(t) => stack.last_mut().unwrap().2.push_str(&t),
             Event::GeneralRef(g) => {
-                let s = quick_xml::escape::unescape(&format!("&{};", &*g))
-                    .map(|c| c.into_owned())
-                    .unwrap_or_default();
+                let s = unescape_or_reject(&format!("&{};", &*g))?;
                 stack.last_mut().unwrap().2.push_str(&s);
             }
             Event::Eof => break,
@@ -836,43 +971,67 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
     Ok(Value::Object(root))
 }
 
-pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
-    fn esc(s: &str) -> String {
+pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> ToolResult<String> {
+    // Parsers turn a literal CR (and CRLF) into LF everywhere, and literal
+    // tabs and newlines into spaces inside attribute values, so those are
+    // written as character references to survive a round trip.
+    fn esc(s: &str) -> ToolResult<String> {
         crate::escape::xml_escape(s)
+            .map(|e| e.replace('\r', "&#13;"))
+            .map_err(|e| ToolError::invalid("text", format!("{e}: {s:?}")))
+    }
+    fn esc_attr(s: &str) -> ToolResult<String> {
+        Ok(esc(s)?.replace('\n', "&#10;").replace('\t', "&#9;"))
+    }
+    // XML 1.0 (fifth edition) NameStartChar and NameChar.
+    fn name_start(c: char) -> bool {
+        matches!(c,
+            ':' | 'A'..='Z' | '_' | 'a'..='z'
+            | '\u{C0}'..='\u{D6}' | '\u{D8}'..='\u{F6}' | '\u{F8}'..='\u{2FF}'
+            | '\u{370}'..='\u{37D}' | '\u{37F}'..='\u{1FFF}' | '\u{200C}'..='\u{200D}'
+            | '\u{2070}'..='\u{218F}' | '\u{2C00}'..='\u{2FEF}' | '\u{3001}'..='\u{D7FF}'
+            | '\u{F900}'..='\u{FDCF}' | '\u{FDF0}'..='\u{FFFD}' | '\u{10000}'..='\u{EFFFF}')
+    }
+    fn name_char(c: char) -> bool {
+        name_start(c)
+            || matches!(c,
+                '-' | '.' | '0'..='9' | '\u{B7}' | '\u{300}'..='\u{36F}' | '\u{203F}'..='\u{2040}')
     }
     fn valid_name(n: &str) -> String {
         let mut s: String = n
             .chars()
-            .map(|c| {
-                if c.is_alphanumeric() || "_-.:".contains(c) {
-                    c
-                } else {
-                    '_'
-                }
-            })
+            .map(|c| if name_char(c) { c } else { '_' })
             .collect();
-        if s.is_empty() || !(s.chars().next().unwrap().is_alphabetic() || s.starts_with('_')) {
+        // A leading colon would read as an empty namespace prefix.
+        if !s.chars().next().is_some_and(|c| name_start(c) && c != ':') {
             s = format!("_{s}");
         }
         s
     }
-    fn write(out: &mut String, name: &str, v: &Value, depth: usize) {
+    fn write(out: &mut String, name: &str, v: &Value, depth: usize) -> ToolResult<()> {
         let pad = "  ".repeat(depth);
         match v {
             Value::Array(a) => {
                 for item in a {
-                    write(out, name, item, depth);
+                    write(out, name, item, depth)?;
                 }
             }
             Value::Object(m) => {
                 let n = valid_name(name);
                 out.push_str(&format!("{pad}<{n}"));
+                let mut seen = std::collections::HashMap::new();
                 for (k, val) in m.iter().filter(|(k, _)| k.starts_with('@')) {
-                    out.push_str(&format!(
-                        " {}=\"{}\"",
-                        valid_name(&k[1..]),
-                        esc(&cell_string(val))
-                    ));
+                    let an = valid_name(&k[1..]);
+                    if let Some(prev) = seen.insert(an.clone(), k) {
+                        return Err(ToolError::invalid(
+                            "text",
+                            format!(
+                                "attributes {prev:?} and {k:?} on <{n}> would both be \
+                                 written as {an:?}; rename one of them"
+                            ),
+                        ));
+                    }
+                    out.push_str(&format!(" {an}=\"{}\"", esc_attr(&cell_string(val))?));
                 }
                 let children: Vec<_> = m
                     .iter()
@@ -881,16 +1040,29 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
                 let text = m.get("#text").map(cell_string);
                 if children.is_empty() && text.is_none() {
                     out.push_str("/>\n");
-                    return;
+                    return Ok(());
                 }
                 out.push('>');
                 if let Some(t) = &text {
-                    out.push_str(&esc(t));
+                    out.push_str(&esc(t)?);
                 }
                 if !children.is_empty() {
+                    let mut seen = std::collections::HashMap::new();
+                    for (k, _) in &children {
+                        let cn = valid_name(k);
+                        if let Some(prev) = seen.insert(cn.clone(), *k) {
+                            return Err(ToolError::invalid(
+                                "text",
+                                format!(
+                                    "keys {prev:?} and {k:?} in <{n}> would both be \
+                                     written as <{cn}>; rename one of them"
+                                ),
+                            ));
+                        }
+                    }
                     out.push('\n');
                     for (k, val) in children {
-                        write(out, k, val, depth + 1);
+                        write(out, k, val, depth + 1)?;
                     }
                     out.push_str(&pad);
                 }
@@ -899,24 +1071,26 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> String {
             Value::Null => out.push_str(&format!("{pad}<{}/>\n", valid_name(name))),
             other => {
                 let n = valid_name(name);
-                out.push_str(&format!("{pad}<{n}>{}</{n}>\n", esc(&cell_string(other))));
+                out.push_str(&format!("{pad}<{n}>{}</{n}>\n", esc(&cell_string(other))?));
             }
         }
+        Ok(())
     }
     let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     match v {
         Value::Object(m) if m.len() == 1 && !m.values().next().unwrap().is_array() => {
             let (k, val) = m.iter().next().unwrap();
-            write(&mut out, k, val, 0);
+            write(&mut out, k, val, 0)?;
         }
         Value::Array(_) => {
-            out.push_str(&format!("<{root_name}>\n"));
-            write(&mut out, "item", v, 1);
-            out.push_str(&format!("</{root_name}>\n"));
+            let root = valid_name(root_name);
+            out.push_str(&format!("<{root}>\n"));
+            write(&mut out, "item", v, 1)?;
+            out.push_str(&format!("</{root}>\n"));
         }
-        _ => write(&mut out, root_name, v, 0),
+        _ => write(&mut out, root_name, v, 0)?,
     }
-    out
+    Ok(out)
 }
 
 pub(crate) fn query_to_json(q: &str) -> Value {
@@ -1060,7 +1234,7 @@ pub(crate) fn render_any(v: &Value, to: &str, root: &str) -> ToolResult<(String,
         "json_min" => (serde_json::to_string(v)?, "application/json"),
         "yaml" => (to_yaml(v)?, "application/yaml"),
         "toml" => (to_toml(v)?, "application/toml"),
-        "xml" => (json_to_xml(v, root), "application/xml"),
+        "xml" => (json_to_xml(v, root)?, "application/xml"),
         "csv" | "tsv" => {
             let rows = match v {
                 Value::Array(a) => a.clone(),
@@ -1316,6 +1490,41 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.text.unwrap(), "<a><b>x</b></a>");
+        // Whitespace-only text in a leaf element is data, kept in both modes.
+        for mode in ["format", "minify"] {
+            let out = h
+                .run(
+                    "dev.xml",
+                    json!({"text": "<r>\n  <value> </value>\n  <nl>\n</nl>\n  <e></e>\n</r>", "mode": mode}),
+                )
+                .await
+                .unwrap();
+            let t = out.text.unwrap();
+            assert!(t.contains("<value> </value>"), "{mode}: {t}");
+            assert!(t.contains("<nl>\n</nl>"), "{mode}: {t}");
+            // A non-breaking space between elements is content, not indentation.
+            let out = h
+                .run(
+                    "dev.xml",
+                    json!({"text": "<r>\n  <a/>\u{a0}<b/>\n</r>", "mode": mode}),
+                )
+                .await
+                .unwrap();
+            assert!(out.text.unwrap().contains('\u{a0}'), "{mode}");
+        }
+        // Character data outside the root is rejected in every form,
+        // including Unicode spaces that are not XML whitespace.
+        for bad in [
+            "\u{a0}<r/>",
+            "<r/>\u{2003}",
+            "<r/><![CDATA[extra]]>",
+            "<![CDATA[x]]><r/>",
+            "<r/>&amp;",
+            "<r/>x",
+        ] {
+            let e = h.run("dev.xml", json!({"text": bad})).await.unwrap_err();
+            assert!(e.to_string().contains("outside of the root"), "{bad}: {e}");
+        }
         // Attribute errors (duplicates, unquoted values) are not well-formed,
         // on empty and start elements alike.
         for bad in [
@@ -1384,6 +1593,147 @@ mod tests {
             .text
             .unwrap();
         assert!(out.contains("&x;") && !out.contains("root:"));
+        // References must name a predefined or declared entity, or a legal
+        // character; documents with an external DTD are not second-guessed.
+        for bad in [
+            "<r>&missing;</r>",
+            "<r a=\"&missing;\"/>",
+            "<r>&#0;</r>",
+            "<r>&#xFFFE;</r>",
+            "<!DOCTYPE r [<!ENTITY a \"1\">]><r>&b;</r>",
+        ] {
+            let e = h.run("dev.xml", json!({"text": bad})).await.unwrap_err();
+            assert_eq!(e.code(), "invalid_input", "{bad}");
+        }
+        for good in [
+            "<r>&lt;&amp;&#65;&#x42;</r>",
+            "<r a=\"&quot;&#10;\"/>",
+            "<!DOCTYPE r [<!ENTITY a \"1\">]><r>&a;</r>",
+            "<!DOCTYPE r SYSTEM \"r.dtd\"><r>&ext;</r>",
+        ] {
+            h.run("dev.xml", json!({"text": good}))
+                .await
+                .unwrap_or_else(|e| panic!("{good}: {e}"));
+        }
+        // Converting to JSON never drops an entity it cannot resolve, in text
+        // or in attributes; predefined and character references still work.
+        for bad in [
+            "<!DOCTYPE r [<!ENTITY company \"ACME\">]><r>Hello &company;!</r>",
+            "<!DOCTYPE r [<!ENTITY company \"ACME\">]><r a=\"&company;\"/>",
+        ] {
+            let e = h
+                .run(
+                    "dev.convert",
+                    json!({"text": bad, "from": "xml", "to": "json"}),
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(e.code(), "invalid_input", "{bad}");
+            assert!(e.to_string().contains("company"), "{bad}: {e}");
+        }
+        let out = h
+            .run(
+                "dev.convert",
+                json!({"text": "<r a=\"&lt;&#65;\">x &amp; &#x42;</r>", "from": "xml", "to": "json"}),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["r"]["@a"], "<A");
+        assert_eq!(v["r"]["#text"], "x & B");
+        // Whitespace in attributes and CRs in text survive JSON -> XML -> JSON.
+        let src = json!({"r": {"@a": "line1\nline2\tend\r", "#text": "x\r\ny"}});
+        let xml = h
+            .run(
+                "dev.convert",
+                json!({"text": src.to_string(), "from": "json", "to": "xml"}),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        assert!(xml.contains("line1&#10;line2&#9;end&#13;"), "{xml}");
+        assert!(xml.contains("x&#13;\ny"), "{xml}");
+        let back = super::xml_to_json(&xml).unwrap();
+        assert_eq!(back["r"]["@a"], "line1\nline2\tend\r");
+        assert_eq!(back["r"]["#text"], "x\r\ny");
+        // Characters XML 1.0 cannot carry are an error, not unparseable XML.
+        for bad in [r#"{"r":"a\u0000b"}"#, r#"{"r":{"@a":"\u001b"}}"#] {
+            let e = h
+                .run(
+                    "dev.convert",
+                    json!({"text": bad, "from": "json", "to": "xml"}),
+                )
+                .await
+                .unwrap_err();
+            assert!(e.to_string().contains("XML 1.0"), "{bad}: {e}");
+        }
+        // Attribute keys that sanitize to the same name are rejected rather
+        // than written as duplicate attributes.
+        let e = h
+            .run(
+                "dev.convert",
+                json!({"text": r#"{"r":{"@a!":"first","@a?":"second"}}"#, "from": "json", "to": "xml"}),
+            )
+            .await
+            .unwrap_err();
+        assert!(e.to_string().contains("a_"), "{e}");
+        // The root name is cleaned up for every input shape, arrays included.
+        for text in ["[1]", "1", "{}"] {
+            let xml = h
+                .run(
+                    "dev.convert",
+                    json!({"text": text, "from": "json", "to": "xml", "root": "my items"}),
+                )
+                .await
+                .unwrap()
+                .text
+                .unwrap();
+            assert!(
+                xml.contains("<my_items") && !xml.contains("my items"),
+                "{text}: {xml}"
+            );
+            super::xml_to_json(&xml).unwrap();
+        }
+        // xml:space="preserve" keeps text exactly, and children inherit it
+        // until xml:space="default" resets it.
+        let v = super::xml_to_json(
+            "<r xml:space=\"preserve\"><a>  x  </a><b> </b><c xml:space=\"default\"> y </c></r>",
+        )
+        .unwrap();
+        assert_eq!(v["r"]["a"], "  x  ");
+        assert_eq!(v["r"]["b"], " ");
+        assert_eq!(v["r"]["c"]["#text"], "y");
+        assert_eq!(super::xml_to_json("<r> z </r>").unwrap()["r"], "z");
+        // Names follow XML's character ranges, not Unicode alphanumerics,
+        // and keys that clean up to the same element name are rejected.
+        let xml = h
+            .run(
+                "dev.convert",
+                json!({"text": r#"{"r":{"x²":"v","@a²":"w","1st":"y","é·b":"z"}}"#, "from": "json", "to": "xml"}),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        assert!(
+            xml.contains("<x_>v</x_>")
+                && xml.contains("a_=\"w\"")
+                && xml.contains("<_1st>")
+                && xml.contains("<é·b>"),
+            "{xml}"
+        );
+        super::xml_to_json(&xml).unwrap();
+        let e = h
+            .run(
+                "dev.convert",
+                json!({"text": r#"{"r":{"a!":1,"a?":2}}"#, "from": "json", "to": "xml"}),
+            )
+            .await
+            .unwrap_err();
+        assert!(e.to_string().contains("<a_>"), "{e}");
     }
 
     #[tokio::test]

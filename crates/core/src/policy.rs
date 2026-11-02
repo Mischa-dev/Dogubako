@@ -321,15 +321,21 @@ pub fn sanitize_filename(name: &str) -> String {
     {
         s = format!("_{s}");
     }
-    if s.len() > 200 {
+    // Filesystems limit names in bytes (255 on most), so cut by UTF-8 bytes
+    // and keep a short extension inside the budget.
+    const MAX_BYTES: usize = 200;
+    if s.len() > MAX_BYTES {
         let ext = Path::new(&s)
             .extension()
-            .map(|e| e.to_string_lossy().to_string());
-        let mut cut: String = s.chars().take(180).collect();
-        if let Some(e) = ext {
-            cut = format!("{cut}.{e}");
+            .map(|e| e.to_string_lossy().to_string())
+            .filter(|e| !e.is_empty() && e.len() <= 16);
+        let suffix = ext.map(|e| format!(".{e}")).unwrap_or_default();
+        let stem = &s[..s.len() - suffix.len()];
+        let mut end = MAX_BYTES - suffix.len();
+        while !stem.is_char_boundary(end) {
+            end -= 1;
         }
-        s = cut;
+        s = format!("{}{suffix}", &stem[..end]);
     }
     s
 }
@@ -358,6 +364,16 @@ mod tests {
         for public in ["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111"] {
             assert!(is_public_ip(public.parse().unwrap()), "{public}");
         }
+    }
+
+    #[test]
+    fn long_multibyte_names_fit_byte_budget() {
+        let name = format!("{}-faces-blurred.png", "猫".repeat(80));
+        let out = sanitize_filename(&name);
+        assert!(out.len() <= 200, "{} bytes", out.len());
+        assert!(out.ends_with(".png") && out.starts_with("猫"), "{out}");
+        let long_ext = format!("{}.{}", "a".repeat(10), "b".repeat(300));
+        assert!(sanitize_filename(&long_ext).len() <= 200);
     }
 
     #[test]

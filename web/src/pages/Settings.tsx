@@ -93,8 +93,8 @@ function General() {
       </Section>
       <Section title="Data on this device">
         <div className="settings-card">
-          <Row label="Favorites" desc={`${favs.length} starred tool${favs.length === 1 ? '' : 's'}.`}>
-            <Button size="sm" variant="secondary" disabled={!favs.length} onClick={async () => { if (await confirm({ title: 'Clear favorites?', confirm: 'Clear', danger: true })) favorites.set([]); }}>Clear</Button>
+          <Row label="Pinned tools" desc={`${favs.length} pinned tool${favs.length === 1 ? '' : 's'}.`}>
+            <Button size="sm" variant="secondary" disabled={!favs.length} onClick={async () => { if (await confirm({ title: 'Unpin all tools?', confirm: 'Clear', danger: true })) favorites.set([]); }}>Clear</Button>
           </Row>
           <Row label="Recently used" desc={`${recs.length} tool${recs.length === 1 ? '' : 's'}.`}>
             <Button size="sm" variant="secondary" disabled={!recs.length} onClick={() => recents.set([])}>Clear</Button>

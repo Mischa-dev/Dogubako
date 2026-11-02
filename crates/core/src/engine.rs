@@ -243,9 +243,13 @@ impl Engine {
         let cancel = req.cancel.clone();
         let blocking = ctx.inner.blocking.clone();
         let mut fut = Box::pin(tool.run(ctx, params));
+        // Cancellation is checked first, so a run cancelled before it
+        // started never does its work (even a tool that finishes on its
+        // first poll).
         let interrupted = tokio::select! {
-            r = &mut fut => Ok(r),
+            biased;
             _ = cancel.cancelled() => Err(ToolError::Cancelled),
+            r = &mut fut => Ok(r),
             _ = tokio::time::sleep(timeout) => Err(ToolError::Timeout { seconds: timeout.as_secs() }),
         };
         let result = match interrupted {
@@ -371,6 +375,32 @@ mod tests {
                 },
             ),
         ]
+    }
+
+    #[tokio::test]
+    async fn run_cancelled_before_start_does_not_run() {
+        let h = TestHarness::new(tools());
+        let resolver = crate::params::LocalFileResolver::unrestricted();
+        let cancel = tokio_util::sync::CancellationToken::new();
+        cancel.cancel();
+        for _ in 0..20 {
+            let r = h
+                .engine
+                .run(crate::engine::RunRequest {
+                    tool_id: "network.fake",
+                    params: Default::default(),
+                    resolver: &resolver,
+                    out_dir: h.path("o"),
+                    permissions: crate::policy::PermissionSet::all(),
+                    authorize: None,
+                    progress: None,
+                    cancel: cancel.clone(),
+                    timeout: None,
+                    fs: None,
+                })
+                .await;
+            assert_eq!(r.unwrap_err().code(), "cancelled");
+        }
     }
 
     #[tokio::test]
