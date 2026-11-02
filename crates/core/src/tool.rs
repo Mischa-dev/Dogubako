@@ -149,6 +149,10 @@ pub(crate) struct CtxInner {
     pub permissions: PermissionSet,
     pub input_paths: Vec<PathBuf>,
     pub used_names: Mutex<HashSet<String>>,
+    /// Blocking workers started through [`ToolContext::blocking`]. They
+    /// cannot be aborted, so the engine waits for them after interrupting a
+    /// tool (async work and child processes stop when the run is dropped).
+    pub blocking: tokio_util::task::TaskTracker,
 }
 
 /// Per-run execution context. Cheap to clone.
@@ -343,7 +347,9 @@ impl ToolContext {
         T: Send + 'static,
         F: FnOnce() -> ToolResult<T> + Send + 'static,
     {
-        tokio::task::spawn_blocking(f)
+        self.inner
+            .blocking
+            .spawn_blocking(f)
             .await
             .map_err(|e| ToolError::failed(format!("worker panicked: {e}")))?
     }
@@ -392,6 +398,7 @@ impl ContextBuilder {
                 permissions: self.permissions,
                 input_paths: self.input_paths,
                 used_names: Mutex::new(HashSet::new()),
+                blocking: tokio_util::task::TaskTracker::new(),
             }),
         }
     }

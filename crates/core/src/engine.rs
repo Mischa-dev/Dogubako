@@ -236,7 +236,8 @@ impl Engine {
             timeout = timeout.min(t);
         }
         let cancel = req.cancel.clone();
-        let mut fut = std::pin::pin!(tool.run(ctx, params));
+        let blocking = ctx.inner.blocking.clone();
+        let mut fut = Box::pin(tool.run(ctx, params));
         let interrupted = tokio::select! {
             r = &mut fut => Ok(r),
             _ = cancel.cancelled() => Err(ToolError::Cancelled),
@@ -245,12 +246,14 @@ impl Engine {
         let result = match interrupted {
             Ok(r) => r,
             Err(e) => {
-                // Signal the tool, then wait until it has actually stopped:
-                // blocking workers cannot be aborted, and child processes are
-                // killed by the cancellation. Until then its scratch directory
-                // and the caller's concurrency slot stay in use.
+                // Signal the tool and drop its future (this stops async work
+                // and kills child processes), then wait for blocking workers,
+                // which cannot be aborted. Until they finish, the scratch
+                // directory and the caller's concurrency slot stay in use.
                 cancel.cancel();
-                let _ = fut.await;
+                drop(fut);
+                blocking.close();
+                blocking.wait().await;
                 Err(e)
             }
         };
@@ -293,6 +296,15 @@ mod tests {
 
     fn tools() -> Vec<Arc<dyn Tool>> {
         vec![
+            async_tool(
+                ToolSpec::new("dev.slow_async", "Slow async", Category::Dev)
+                    .describe("async work that never checks cancellation")
+                    .timeout(1),
+                |_c, _p| async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                    Ok(ToolOutput::text("never"))
+                },
+            ),
             sync_tool(
                 ToolSpec::new("dev.stubborn", "Stubborn", Category::Dev)
                     .describe("blocking work that ignores cancellation")
@@ -361,6 +373,15 @@ mod tests {
         let h = TestHarness::new(tools());
         let t = std::time::Instant::now();
         let e = h.run("dev.slow", json!({})).await.unwrap_err();
+        assert_eq!(e.code(), "timeout");
+        assert!(t.elapsed().as_secs() < 5);
+    }
+
+    #[tokio::test]
+    async fn interrupted_async_work_is_dropped() {
+        let h = TestHarness::new(tools());
+        let t = std::time::Instant::now();
+        let e = h.run("dev.slow_async", json!({})).await.unwrap_err();
         assert_eq!(e.code(), "timeout");
         assert!(t.elapsed().as_secs() < 5);
     }
