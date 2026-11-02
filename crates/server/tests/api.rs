@@ -425,6 +425,10 @@ async fn files_isolated_between_principals() {
     let url = art["url"].as_str().unwrap();
     let d = call(&t.app, Method::GET, url, &[("authorization", &ba)], None).await;
     assert_eq!(d.raw, b"top secret");
+    assert!(d.headers[header::CONTENT_DISPOSITION].to_str().unwrap().starts_with("attachment"));
+    let d = call(&t.app, Method::GET, &format!("{url}?inline=1"), &[("authorization", &ba)], None).await;
+    assert!(d.headers[header::CONTENT_DISPOSITION].to_str().unwrap().starts_with("inline"));
+    assert!(d.headers["content-security-policy"].to_str().unwrap().contains("sandbox"));
 
     // B cannot read A's file, its artifacts, or use it as tool input
     assert_eq!(
@@ -518,6 +522,11 @@ async fn validation_errors_and_cancellation() {
     )
     .await;
     assert_eq!(r.body["error"]["code"], "invalid_input");
+    // Ephemeral (live) runs execute but stay out of job history
+    let r = call(&t.app, Method::POST, "/api/v1/tools/text.upper/run", &[], Some(json!({"params": {"text": "live"}, "ephemeral": true}))).await;
+    assert_eq!(r.body["result"]["text"], "LIVE");
+    let jobs = call(&t.app, Method::GET, "/api/v1/jobs", &[], None).await;
+    assert!(jobs.body["jobs"].as_array().unwrap().iter().all(|j| j["params"]["text"] != "live"));
     // Unknown tool
     let r = call(
         &t.app,

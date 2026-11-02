@@ -90,7 +90,7 @@ export class TauriBackend implements Backend {
         unlisten();
       }
       job = { ...job, params: job.params ?? params, created_at: job.created_at ?? created };
-      this.recordHistory(job);
+      if (!opts?.ephemeral) this.recordHistory(job);
       return job;
     })();
     return { done, cancel: async () => { await invoke('cancel_run', { runId }).catch(() => undefined); } };

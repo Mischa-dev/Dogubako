@@ -24,6 +24,7 @@ export function useJob(backend: Backend) {
     setState((s) => ({ job: opts.supersede ? s.job : null, running: true, startedAt }));
     const h = backend.run(toolId, params, {
       wait: opts.wait,
+      ephemeral: opts.supersede,
       onUpdate: (j) => {
         if (my !== seq.current) return;
         if (opts.supersede && j.status !== 'succeeded' && j.status !== 'failed') return; // keep last result visible while live-updating

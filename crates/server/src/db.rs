@@ -531,7 +531,7 @@ impl Db {
 
     pub fn jobs(&self, owner: Option<&str>, limit: i64) -> Vec<JobView> {
         let c = self.c();
-        let mut st = c.prepare("SELECT * FROM jobs WHERE (?1 IS NULL OR owner_id = ?1) ORDER BY created_at DESC LIMIT ?2").unwrap();
+        let mut st = c.prepare("SELECT * FROM jobs WHERE (?1 IS NULL OR owner_id = ?1) AND via != 'ephemeral' ORDER BY created_at DESC LIMIT ?2").unwrap();
         st.query_map(params![owner, limit], job_from_row)
             .map(|it| it.flatten().collect())
             .unwrap_or_default()

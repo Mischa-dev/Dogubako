@@ -42,7 +42,7 @@ describe('HttpBackend', () => {
     const final = await h.done;
     expect(final.result?.text).toBe('HI');
     expect(calls[0].url).toBe('/api/v1/tools/text.case/run');
-    expect(JSON.parse(calls[0].init.body as string)).toEqual({ params: { text: 'hi' }, wait_seconds: 10 });
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ params: { text: 'hi' }, wait_seconds: 10, ephemeral: false });
     expect((calls[0].init.headers as Record<string, string>)['X-CSRF-Token']).toBe('tok');
     expect(updates).toEqual(['succeeded']);
     expect(FakeEventSource.last).toBeNull();

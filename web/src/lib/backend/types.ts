@@ -20,6 +20,8 @@ export interface RunOptions {
   onUpdate?: (job: JobView) => void;
   /** Seconds the server may hold the initial request (fast/live tools). Default 0 (stream progress). */
   wait?: number;
+  /** Live / auto-refresh runs: not kept in history. */
+  ephemeral?: boolean;
 }
 
 export interface PickOptions {

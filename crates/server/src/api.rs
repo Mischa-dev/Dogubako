@@ -383,6 +383,9 @@ struct RunReq {
     params: Map<String, Value>,
     /// Seconds to wait for completion before returning (default 30, max 600).
     wait_seconds: Option<u64>,
+    /// Live/auto-refresh runs: still executed, authorized and audited, but hidden from job history.
+    #[serde(default)]
+    ephemeral: bool,
 }
 
 fn job_out(s: &AppState, mut j: JobView) -> Value {
@@ -406,7 +409,7 @@ async fn run_tool(
         &p,
         &id,
         r.params,
-        if p.via == "token" { "api" } else { "web" },
+        if r.ephemeral { "ephemeral" } else if p.via == "token" { "api" } else { "web" },
         s.cfg.user_quota_mb,
     )?;
     let wait = Duration::from_secs(r.wait_seconds.unwrap_or(30).min(600));
@@ -767,8 +770,9 @@ async fn delete_file(
 
 #[derive(Deserialize)]
 struct ContentQuery {
+    /// `1`/`true` → inline preview for safe types.
     #[serde(default)]
-    inline: bool,
+    inline: Option<String>,
 }
 
 /// MIME types safe to render inline in the browser (no active content).
@@ -802,7 +806,7 @@ async fn file_content(
         .await
         .map_err(|_| ApiError::not_found("file content missing"))?;
     let len = file.metadata().await?.len();
-    let inline = q.inline && inline_safe(&f.view.mime);
+    let inline = matches!(q.inline.as_deref(), Some("1" | "true" | "yes")) && inline_safe(&f.view.mime);
     // Text-like types are served as text/plain when inline to avoid script execution.
     let ctype = if inline
         && matches!(
@@ -823,7 +827,16 @@ async fn file_content(
         .header(header::CONTENT_TYPE, ctype)
         .header(header::CONTENT_DISPOSITION, disp)
         .header("x-content-type-options", "nosniff")
-        .header("content-security-policy", "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox")
+        .header(
+            "content-security-policy",
+            // The browser's PDF viewer cannot run in a sandboxed document;
+            // everything else is fully sandboxed.
+            if inline && f.view.mime == "application/pdf" {
+                "default-src 'none'; object-src 'self'; plugin-types application/pdf"
+            } else {
+                "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox"
+            },
+        )
         .header(header::ACCEPT_RANGES, "bytes")
         .header(header::CACHE_CONTROL, "private, max-age=3600");
     // Simple single-range support for media seeking.
