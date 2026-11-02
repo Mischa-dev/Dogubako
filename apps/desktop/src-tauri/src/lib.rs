@@ -73,8 +73,9 @@ async fn run_tool(app: AppHandle, state: State<'_, Desktop>, run_id: String, too
     if !valid_run_id(&run_id) {
         return Err("invalid run id".into());
     }
-    let cancel = CancellationToken::new();
-    state.runs.lock().unwrap().insert(run_id.clone(), cancel.clone());
+    // cancel_run may have arrived first (both commands are async IPC): reuse
+    // its already-cancelled token instead of replacing it.
+    let cancel = state.runs.lock().unwrap().entry(run_id.clone()).or_default().clone();
     let out_dir = state.output_dir.join(&run_id);
     let rid = run_id.clone();
     let app2 = app.clone();
@@ -144,8 +145,10 @@ async fn run_tool(app: AppHandle, state: State<'_, Desktop>, run_id: String, too
 
 #[tauri::command]
 fn cancel_run(state: State<'_, Desktop>, run_id: String) {
-    if let Some(c) = state.runs.lock().unwrap().get(&run_id) {
-        c.cancel();
+    // The web app only cancels runs it has started, so a missing entry means
+    // run_tool has not registered yet: leave a cancelled token for it.
+    if valid_run_id(&run_id) {
+        state.runs.lock().unwrap().entry(run_id).or_default().cancel();
     }
 }
 

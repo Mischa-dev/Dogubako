@@ -79,6 +79,18 @@ export class TauriBackend implements Backend {
     const runId = `r_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     const created = Math.floor(Date.now() / 1000);
     const base: JobView = { id: runId, tool_id: toolId, status: 'running', created_at: created, params };
+    // A cancel that arrives while the listener is still being set up must
+    // stop the run from starting; once run_tool is invoked the backend
+    // honours cancel_run even if it lands before the run registers.
+    let cancelled = false;
+    let started = false;
+    let finished = false;
+    const cancelledJob = (): JobView => ({
+      ...base,
+      status: 'cancelled',
+      error: { code: 'cancelled', message: 'cancelled' },
+      finished_at: Math.floor(Date.now() / 1000),
+    });
     const done = (async () => {
       opts.onUpdate?.(base);
       const { listen } = await import('@tauri-apps/api/event');
@@ -87,19 +99,32 @@ export class TauriBackend implements Backend {
         opts.onUpdate?.({ ...base, progress: e.payload.progress, message: e.payload.message });
       });
       let job: JobView;
-      try {
-        job = await invoke<JobView>('run_tool', { runId, toolId, params });
-      } catch (e) {
-        const err = errorOf(e);
-        job = { ...base, status: err.code === 'cancelled' ? 'cancelled' : 'failed', error: err, finished_at: Math.floor(Date.now() / 1000) };
-      } finally {
+      if (cancelled) {
         unlisten();
+        job = cancelledJob();
+      } else {
+        started = true;
+        try {
+          job = await invoke<JobView>('run_tool', { runId, toolId, params });
+        } catch (e) {
+          const err = errorOf(e);
+          job = { ...base, status: err.code === 'cancelled' ? 'cancelled' : 'failed', error: err, finished_at: Math.floor(Date.now() / 1000) };
+        } finally {
+          finished = true;
+          unlisten();
+        }
       }
       job = { ...job, params: job.params ?? params, created_at: job.created_at ?? created };
       if (!opts?.ephemeral) await this.recordHistory(job);
       return job;
     })();
-    return { done, cancel: async () => { await invoke('cancel_run', { runId }).catch(() => undefined); } };
+    return {
+      done,
+      cancel: async () => {
+        cancelled = true;
+        if (started && !finished) await invoke('cancel_run', { runId }).catch(() => undefined);
+      },
+    };
   }
 
   private async recordHistory(job: JobView) {
