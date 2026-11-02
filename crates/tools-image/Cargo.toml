@@ -5,10 +5,23 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+ab_glyph = "0.2.32"
 dogubako-core = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff", "ico", "tga", "pnm", "qoi", "avif", "rayon"] }
+imageproc = { version = "0.27.0", default-features = false }
+img-parts = "0.4.1"
+kamadak-exif = "0.6.1"
+oxipng = { version = "10.2.1", default-features = false, features = ["parallel"] }
+qrcode = { version = "0.14.1", default-features = false }
+quick-xml = "0.42.0"
+resvg = "0.49.0"
+rqrr = "0.11.0"
+rustface = "0.1.7"
+rxing = { version = "0.9.3", default-features = false, features = ["encoding_rs", "decoders", "encoders", "full_barcode_format_support", "multi_barcode_readers"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
+webp = "0.3.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }
