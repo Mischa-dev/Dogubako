@@ -610,7 +610,7 @@ mod tests {
             .unwrap();
         let curl = out.data["curl"].as_str().unwrap();
         assert!(
-            curl.starts_with("curl --globoff --path-as-is -I 'https://example.com/a/../b'"),
+            curl.starts_with("curl --globoff --path-as-is -I https://example.com/a/../b"),
             "{curl}"
         );
         let out = h
