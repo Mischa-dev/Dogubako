@@ -86,6 +86,31 @@ mod tests {
                 "{}",
                 spec.id
             );
+            // Every show_if must reference an existing parameter, and a
+            // boolean condition must test a boolean parameter (the web form
+            // compares values loosely, so `""` never equals `false`).
+            for p in &spec.params {
+                let Some(cond) = &p.show_if else { continue };
+                let target = spec
+                    .params
+                    .iter()
+                    .find(|q| q.name == cond.param)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "{}.{}: show_if on unknown '{}'",
+                            spec.id, p.name, cond.param
+                        )
+                    });
+                if cond.values.iter().any(|v| v.is_boolean()) {
+                    assert!(
+                        matches!(target.kind, dogubako_core::spec::ParamKind::Boolean),
+                        "{}.{}: boolean show_if on non-boolean '{}'",
+                        spec.id,
+                        p.name,
+                        cond.param
+                    );
+                }
+            }
         }
     }
 }

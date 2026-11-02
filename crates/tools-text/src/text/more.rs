@@ -140,7 +140,9 @@ fn encoding() -> Arc<dyn Tool> {
         .param({
             let mut opts = vec![("auto", "Auto-detect")];
             opts.extend(ENCODINGS.iter().filter(|e| !e.0.starts_with("utf-8-") ).copied());
-            ParamSpec::choice("from", &opts).label("Source encoding").default_str("auto").show_if_bool("text", false)
+            // Always visible: a text field never equals `false`, so a show_if on
+            // it hid the selector for uploads. Ignored for pasted text.
+            ParamSpec::choice("from", &opts).label("Source encoding").default_str("auto").describe("Encoding of the uploaded file (pasted text is already Unicode)")
         })
         .param(ParamSpec::choice("to", ENCODINGS).label("Target encoding").default_str("utf-8"))
         .param(
