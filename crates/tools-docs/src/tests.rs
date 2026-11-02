@@ -395,6 +395,31 @@ async fn compress_linearize_repair_flatten() {
 }
 
 #[tokio::test]
+async fn compress_grayscale_keeps_the_conversion() {
+    let h = harness();
+    if !h.available("pdf.compress") {
+        return;
+    }
+    let a = h.path("a.pdf");
+    make_pdf(&a, 2, Some("GRAY ME"));
+    // Lossless + grayscale: the Ghostscript rewrite may be larger than the
+    // qpdf-only or original file, but it is the only one that is grayscale.
+    let out = h
+        .run(
+            "pdf.compress",
+            json!({"input": [s(&a)], "preset": "lossless", "grayscale": true}),
+        )
+        .await
+        .unwrap();
+    let method = out.data["table"]["rows"][0][4]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(method.starts_with("ghostscript"), "method was {method}");
+    assert_eq!(pages(&out.artifacts[0].path), 2);
+}
+
+#[tokio::test]
 async fn text_images_info() {
     let h = harness();
     if !h.available("pdf.extract_text") {
