@@ -3,6 +3,7 @@
 use super::formatters::{parse_any, parse_json};
 use crate::util::*;
 use dogubako_core::prelude::*;
+use std::collections::HashMap;
 
 pub fn tools() -> Vec<Arc<dyn Tool>> {
     vec![jsonpath(), jq(), json_schema_validate(), diff_json()]
@@ -285,6 +286,41 @@ fn ptr_escape(k: &str) -> String {
     k.replace('~', "~0").replace('/', "~1")
 }
 
+/// Canonical text of a value for order-insensitive matching: object keys
+/// sorted and array elements sorted, recursively.
+fn unordered_key(v: &Value) -> String {
+    let mut s = String::new();
+    write_unordered_key(v, &mut s);
+    s
+}
+
+fn write_unordered_key(v: &Value, out: &mut String) {
+    match v {
+        Value::Object(m) => {
+            let mut entries: Vec<(&String, &Value)> = m.iter().collect();
+            entries.sort_by(|a, b| a.0.cmp(b.0));
+            out.push('{');
+            for (i, (k, v)) in entries.into_iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                out.push_str(&serde_json::to_string(k).unwrap_or_default());
+                out.push(':');
+                write_unordered_key(v, out);
+            }
+            out.push('}');
+        }
+        Value::Array(a) => {
+            let mut items: Vec<String> = a.iter().map(unordered_key).collect();
+            items.sort_unstable();
+            out.push('[');
+            out.push_str(&items.join(","));
+            out.push(']');
+        }
+        v => out.push_str(&serde_json::to_string(v).unwrap_or_default()),
+    }
+}
+
 fn diff_values(
     path: &str,
     a: &Value,
@@ -324,17 +360,24 @@ fn diff_values(
             }
         }
         (Value::Array(x), Value::Array(y)) => {
-            // Order-insensitive multiset comparison.
-            let mut remaining: Vec<&Value> = y.iter().collect();
+            // Order-insensitive multiset comparison keyed by a canonical form
+            // in which nested arrays are unordered too: linear, not quadratic.
+            let keys_y: Vec<String> = y.iter().map(unordered_key).collect();
+            let mut left: HashMap<&str, usize> = HashMap::new();
+            for k in &keys_y {
+                *left.entry(k.as_str()).or_default() += 1;
+            }
             for va in x {
-                if let Some(pos) = remaining.iter().position(|vb| *vb == va) {
-                    remaining.remove(pos);
-                } else {
-                    out.push((format!("{path}/-"), "removed", va.clone(), Value::Null));
+                match left.get_mut(unordered_key(va).as_str()) {
+                    Some(n) if *n > 0 => *n -= 1,
+                    _ => out.push((format!("{path}/-"), "removed", va.clone(), Value::Null)),
                 }
             }
-            for vb in remaining {
-                out.push((format!("{path}/-"), "added", Value::Null, vb.clone()));
+            for (vb, k) in y.iter().zip(&keys_y) {
+                if let Some(n) = left.get_mut(k.as_str()).filter(|n| **n > 0) {
+                    *n -= 1;
+                    out.push((format!("{path}/-"), "added", Value::Null, vb.clone()));
+                }
             }
         }
         _ if a == b => {}
@@ -523,6 +566,40 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.data["identical"], true);
+        // Nested arrays inside unordered array elements are unordered too.
+        let out = h
+            .run(
+                "dev.diff_json",
+                json!({"original": "[{\"items\":[1,2],\"k\":1}]", "changed": "[{\"k\":1,\"items\":[2,1]}]", "ignore_array_order": true}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.data["identical"], true);
+        // Duplicates are counted; large reversed arrays compare quickly.
+        let out = h
+            .run(
+                "dev.diff_json",
+                json!({"original": "[1,1,2]", "changed": "[2,1,3]", "ignore_array_order": true}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.data["removed"], 1);
+        assert_eq!(out.data["added"], 1);
+        assert_eq!(out.data["table"]["rows"][0][2], "1");
+        assert_eq!(out.data["table"]["rows"][1][3], "3");
+        let n = 200_000;
+        let fwd: Vec<u32> = (0..n).collect();
+        let rev: Vec<u32> = (0..n).rev().collect();
+        let start = std::time::Instant::now();
+        let out = h
+            .run(
+                "dev.diff_json",
+                json!({"original": serde_json::to_string(&fwd).unwrap(), "changed": serde_json::to_string(&rev).unwrap(), "ignore_array_order": true}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.data["identical"], true);
+        assert!(start.elapsed() < std::time::Duration::from_secs(20));
         let out = h
             .run(
                 "dev.diff_json",
