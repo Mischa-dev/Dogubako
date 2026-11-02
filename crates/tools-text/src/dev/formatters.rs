@@ -752,6 +752,23 @@ fn sql_format() -> Arc<dyn Tool> {
 
 /// XML → JSON using the common convention: attributes as "@name", text as
 /// "#text", repeated children become arrays.
+/// Resolves the predefined XML entities and character references. Anything
+/// else (such as an entity declared in the document's DTD) is an error: the
+/// DTD is never read, so substituting text for it would silently lose data.
+fn unescape_or_reject(raw: &str) -> ToolResult<String> {
+    quick_xml::escape::unescape(raw)
+        .map(|c| c.into_owned())
+        .map_err(|e| {
+            ToolError::invalid(
+                "text",
+                format!(
+                    "{e}; only the predefined XML entities (&amp; &lt; &gt; &quot; &apos;) \
+                     and character references like &#169; can be converted"
+                ),
+            )
+        })
+}
+
 pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
     let mut reader = quick_xml::Reader::from_str(text);
     reader.config_mut().check_end_names = true;
@@ -763,9 +780,7 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
         for a in e.attributes() {
             let a = a.map_err(|e| ToolError::invalid("text", format!("bad attribute: {e}")))?;
             let k = a.key.as_ref().to_string();
-            let v = quick_xml::escape::unescape(&a.value)
-                .map(|c| c.into_owned())
-                .unwrap_or_else(|_| a.value.to_string());
+            let v = unescape_or_reject(&a.value)?;
             m.insert(format!("@{k}"), Value::String(v));
         }
         Ok(m)
@@ -824,9 +839,7 @@ pub(crate) fn xml_to_json(text: &str) -> ToolResult<Value> {
             Event::Text(t) => stack.last_mut().unwrap().2.push_str(&t),
             Event::CData(t) => stack.last_mut().unwrap().2.push_str(&t),
             Event::GeneralRef(g) => {
-                let s = quick_xml::escape::unescape(&format!("&{};", &*g))
-                    .map(|c| c.into_owned())
-                    .unwrap_or_default();
+                let s = unescape_or_reject(&format!("&{};", &*g))?;
                 stack.last_mut().unwrap().2.push_str(&s);
             }
             Event::Eof => break,
@@ -1417,6 +1430,34 @@ mod tests {
             .text
             .unwrap();
         assert!(out.contains("&x;") && !out.contains("root:"));
+        // Converting to JSON never drops an entity it cannot resolve, in text
+        // or in attributes; predefined and character references still work.
+        for bad in [
+            "<!DOCTYPE r [<!ENTITY company \"ACME\">]><r>Hello &company;!</r>",
+            "<!DOCTYPE r [<!ENTITY company \"ACME\">]><r a=\"&company;\"/>",
+        ] {
+            let e = h
+                .run(
+                    "dev.convert",
+                    json!({"text": bad, "from": "xml", "to": "json"}),
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(e.code(), "invalid_input", "{bad}");
+            assert!(e.to_string().contains("company"), "{bad}: {e}");
+        }
+        let out = h
+            .run(
+                "dev.convert",
+                json!({"text": "<r a=\"&lt;&#65;\">x &amp; &#x42;</r>", "from": "xml", "to": "json"}),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["r"]["@a"], "<A");
+        assert_eq!(v["r"]["#text"], "x & B");
     }
 
     #[tokio::test]
