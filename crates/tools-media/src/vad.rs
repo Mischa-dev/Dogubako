@@ -318,25 +318,57 @@ fn extract_segments() -> Arc<dyn Tool> {
         let stem = f.stem().replace('%', "_");
         let data = json!({"segments": segs.iter().map(|(a, b)| json!({"start": a, "end": b})).collect::<Vec<_>>(), "count": segs.len(), "speech_seconds": round_ms(speech), "table": seg_table(&segs)});
         if p.str("mode")? == "concat" {
-            let expr: Vec<String> = segs
-                .iter()
-                .map(|(a, b)| format!("between(t,{a:.3},{b:.3})"))
-                .collect();
-            // Re-chunk into small frames first: aselect keeps or drops whole
-            // frames, and decoder frame sizes differ between FFmpeg builds
-            // (large PCM frames would let silence leak into the output).
-            let af = format!(
-                "asetnsamples=n=256:p=0,aselect='{}',asetpts=N/SR/TB",
-                expr.join("+")
-            );
+            // Cut each segment losslessly (sample-accurate seeking in PCM),
+            // then join with the concat demuxer. This avoids relying on
+            // `aselect`, whose frame-based behaviour differs between FFmpeg
+            // versions and could let silence through.
+            if segs.len() > 5000 {
+                return Err(ToolError::limit(
+                    "more than 5000 segments; increase the minimum silence",
+                ));
+            }
+            let dir = ctx.temp_dir("concat")?;
+            let mut list = String::new();
+            for (k, (a, b)) in segs.iter().enumerate() {
+                ctx.check_cancelled()?;
+                let seg = dir.join(format!("seg-{:05}.wav", k + 1));
+                Ff::new()
+                    .args(["-ss", &secs(*a)])
+                    .input(&f.path)
+                    .args([
+                        "-t",
+                        &secs(b - a),
+                        "-map",
+                        "0:a:0",
+                        "-vn",
+                        "-sn",
+                        "-c:a",
+                        "pcm_s16le",
+                    ])
+                    .out(&seg)
+                    .no_progress()
+                    .run(&ctx)
+                    .await?;
+                list.push_str(&format!(
+                    "file '{}'\n",
+                    seg.file_name().unwrap().to_string_lossy()
+                ));
+                ctx.progress(
+                    0.5 + 0.4 * (k + 1) as f32 / segs.len() as f32,
+                    format!("Segment {}/{}", k + 1, segs.len()),
+                );
+            }
+            let list_path = dir.join("list.txt");
+            std::fs::write(&list_path, list)?;
             let out = out_path(&ctx, &f, "speech", &fmt);
             Ff::new()
-                .input(&f.path)
-                .args(["-map", "0:a:0", "-vn", "-sn", "-af", &af])
+                .args(["-f", "concat", "-safe", "0"])
+                .input(&list_path)
+                .args(["-map", "0:a:0"])
                 .args(audio_args_for_ext(&fmt, Some(&pr)))
                 .out(&out)
                 .duration(Some(speech))
-                .span((0.5, 1.0), "Joining speech")
+                .span((0.9, 1.0), "Joining speech")
                 .run(&ctx)
                 .await?;
             return Ok(ToolOutput::files(vec![ctx.artifact(&out)?]).with_data(data));

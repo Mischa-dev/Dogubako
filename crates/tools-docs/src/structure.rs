@@ -49,9 +49,13 @@ fn map_qpdf_err(param: &str) -> impl Fn(ToolError) -> ToolError + '_ {
             exit_code,
         } => {
             let low = stderr.to_ascii_lowercase();
+            let option_error = low.contains("unrecognized")
+                || low.contains("unknown argument")
+                || low.contains("unknown option")
+                || low.contains("--help");
             if low.contains("invalid password") {
                 ToolError::invalid(param, "the password is incorrect")
-            } else if low.contains("password") {
+            } else if low.contains("password") && !option_error {
                 ToolError::invalid(
                     param,
                     "the PDF is password protected; remove the password with pdf.unlock first",
@@ -647,27 +651,36 @@ fn unlock() -> Arc<dyn Tool> {
         let pw = p.str("password")?.to_string();
         check_password("password", &pw)?;
         let files = p.files("input");
-        let pwfile = ctx.temp_path("password.txt");
-        write_private(&pwfile, pw.as_bytes())?;
         let mut arts = vec![];
         let mut warnings = vec![];
         for (i, f) in files.iter().enumerate() {
             ctx.check_cancelled()?;
             progress_files(&ctx, i, files.len(), &f.name);
             let out = ctx.output_path(&pdf_name(f, "unlocked"));
-            let res = qpdf(&ctx)?
-                .arg(format!("--password-file={}", pwfile.display()))
-                .arg("--decrypt")
-                .arg(arg_path(&f.path))
-                .arg(&out)
+            // The password goes through a private qpdf job-JSON file, never argv
+            // (`--job-json-file` is supported by every current qpdf build,
+            // unlike `--password-file`).
+            let job = serde_json::json!({
+                "inputFile": f.path.to_string_lossy(),
+                "outputFile": out.to_string_lossy(),
+                "password": pw,
+                "decrypt": "",
+                "warningExit0": "",
+            });
+            let pwfile = ctx.temp_path(&format!("decrypt-{i}.json"));
+            write_private(&pwfile, job.to_string().as_bytes())?;
+            let res = ctx
+                .command("qpdf")?
+                .arg(format!("--job-json-file={}", pwfile.display()))
                 .run()
-                .await
+                .await;
+            let _ = std::fs::remove_file(&pwfile);
+            let res = res
                 .map_err(map_qpdf_err("password"))
                 .map_err(|e| prefix_err(e, &f.name))?;
             warnings.extend(qpdf_warnings(&res));
             arts.push(ctx.artifact(&out)?);
         }
-        let _ = std::fs::remove_file(&pwfile);
         let mut o = ToolOutput::files(arts);
         o.warnings = warnings;
         Ok(o)
