@@ -288,26 +288,35 @@ fn docx<R: Read + Seek>(z: &mut zip::ZipArchive<R>, mut budget: u64) -> ToolResu
 fn pptx<R: Read + Seek>(z: &mut zip::ZipArchive<R>, mut budget: u64) -> ToolResult<String> {
     // Presentation order comes from ppt/presentation.xml (sldIdLst) resolved
     // through its relationships; slideN.xml names are part ids, not positions.
-    let mut slides: Vec<(u32, String)> = pptx_slide_order(z, &mut budget)?
+    let ordered = pptx_slide_order(z, &mut budget)?;
+    let mut by_name: Vec<(u32, String)> = z
+        .file_names()
+        .filter_map(|n| n.ok())
+        .filter_map(|n| {
+            let num = n
+                .strip_prefix("ppt/slides/slide")?
+                .strip_suffix(".xml")?
+                .parse::<u32>()
+                .ok()?;
+            Some((num, n.to_string()))
+        })
+        .collect();
+    by_name.sort();
+    // Slides in presentation order first, then any slide part the order did
+    // not resolve (so no slide's text is silently dropped).
+    let listed: std::collections::HashSet<&str> = ordered.iter().map(|s| s.as_str()).collect();
+    let rest: Vec<String> = by_name
         .into_iter()
+        .map(|(_, n)| n)
+        .filter(|n| !listed.contains(n.as_str()))
+        .collect();
+    let slides: Vec<(u32, String)> = ordered
+        .iter()
+        .cloned()
+        .chain(rest)
         .enumerate()
         .map(|(i, p)| (i as u32 + 1, p))
         .collect();
-    if slides.is_empty() {
-        slides = z
-            .file_names()
-            .filter_map(|n| n.ok())
-            .filter_map(|n| {
-                let num = n
-                    .strip_prefix("ppt/slides/slide")?
-                    .strip_suffix(".xml")?
-                    .parse::<u32>()
-                    .ok()?;
-                Some((num, n.to_string()))
-            })
-            .collect();
-        slides.sort();
-    }
     let rules = XmlRules {
         para: &["p"],
         brk: &["br"],
@@ -365,8 +374,14 @@ fn pptx_slide_order<R: Read + Seek>(
     loop {
         match reader.read_event() {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) if local(e.name().as_ref()) == "sldId" => {
-                // `r:id` (namespaced); local() strips the prefix.
-                if let Some(t) = attrs_of(&e).get("id").and_then(|id| targets.get(id)) {
+                // The relationship id is the prefixed `r:id`; the element also
+                // has an unprefixed numeric `id`, so match the qualified name.
+                let rel = e
+                    .attributes()
+                    .flatten()
+                    .find(|a| a.key.prefix().is_some() && local(a.key.as_ref()) == "id")
+                    .map(|a| attr_value(&a));
+                if let Some(t) = rel.as_ref().and_then(|id| targets.get(id)) {
                     let path = if let Some(abs) = t.strip_prefix('/') {
                         abs.to_string()
                     } else {
@@ -833,6 +848,43 @@ mod tests {
             .unwrap();
         assert!(t.find("Two").unwrap() < t.find("One").unwrap(), "{t}");
         assert!(t.starts_with("--- Slide 1 ---\nTwo"), "{t}");
+        // Attribute order does not matter (r:id before id), and a slide part
+        // missing from the list is still extracted after the listed ones.
+        let mixed = make_zip(&[
+            (
+                "ppt/presentation.xml",
+                r#"<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId9" id="256"/><p:sldId id="257" r:id="rId8"/></p:sldIdLst></p:presentation>"#,
+            ),
+            (
+                "ppt/_rels/presentation.xml.rels",
+                r#"<Relationships><Relationship Id="rId8" Target="slides/slide1.xml"/><Relationship Id="rId9" Target="slides/slide2.xml"/></Relationships>"#,
+            ),
+            (
+                "ppt/slides/slide1.xml",
+                r#"<p:sld xmlns:a="a" xmlns:p="p"><a:p><a:r><a:t>One</a:t></a:r></a:p></p:sld>"#,
+            ),
+            (
+                "ppt/slides/slide2.xml",
+                r#"<p:sld xmlns:a="a" xmlns:p="p"><a:p><a:r><a:t>Two</a:t></a:r></a:p></p:sld>"#,
+            ),
+            (
+                "ppt/slides/slide3.xml",
+                r#"<p:sld xmlns:a="a" xmlns:p="p"><a:p><a:r><a:t>Three</a:t></a:r></a:p></p:sld>"#,
+            ),
+        ]);
+        let f = h.write("e.pptx", &mixed);
+        let t = h
+            .run("text.extract", json!({"file": f.to_str().unwrap()}))
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        let (two, one, three) = (
+            t.find("Two").unwrap(),
+            t.find("One").unwrap(),
+            t.find("Three").unwrap(),
+        );
+        assert!(two < one && one < three, "{t}");
         let epub = make_zip(&[
             (
                 "META-INF/container.xml",
