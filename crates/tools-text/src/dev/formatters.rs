@@ -470,6 +470,79 @@ fn toml_tool() -> Arc<dyn Tool> {
 // ---------------------------------------------------------------------------
 // XML
 
+/// Entities a document may reference: the predefined ones, character
+/// references to legal XML characters, and general entities declared in the
+/// internal DTD subset. `None` means anything goes (an external DTD or
+/// parameter entities may declare names we cannot see).
+struct EntityRules {
+    declared: Option<std::collections::HashSet<String>>,
+}
+
+impl EntityRules {
+    fn new() -> Self {
+        EntityRules {
+            declared: Some(Default::default()),
+        }
+    }
+
+    fn read_doctype(&mut self, dt: &str) {
+        let (head, subset) = dt.split_once('[').unwrap_or((dt, ""));
+        if head.contains("SYSTEM") || head.contains("PUBLIC") || subset.contains('%') {
+            self.declared = None;
+            return;
+        }
+        let Some(set) = &mut self.declared else {
+            return;
+        };
+        let mut rest = subset;
+        while let Some(i) = rest.find("<!ENTITY") {
+            rest = &rest[i + 8..];
+            if let Some(name) = rest.split_whitespace().next() {
+                set.insert(name.to_string());
+            }
+        }
+    }
+
+    fn check(&self, name: &str) -> Result<(), String> {
+        if let Some(num) = name.strip_prefix('#') {
+            let code = match num.strip_prefix(['x', 'X']) {
+                Some(h) => u32::from_str_radix(h, 16).ok(),
+                None => num.parse::<u32>().ok(),
+            };
+            let legal = code.and_then(char::from_u32).is_some_and(|c| {
+                matches!(c, '\t' | '\n' | '\r')
+                    || (c >= ' ' && !matches!(c, '\u{FFFE}' | '\u{FFFF}'))
+            });
+            return if legal {
+                Ok(())
+            } else {
+                Err(format!("invalid character reference &{name};"))
+            };
+        }
+        if matches!(name, "lt" | "gt" | "amp" | "quot" | "apos")
+            || self.declared.as_ref().is_none_or(|d| d.contains(name))
+        {
+            Ok(())
+        } else {
+            Err(format!("reference to undeclared entity &{name};"))
+        }
+    }
+
+    /// Checks every `&...;` in a raw attribute value.
+    fn check_raw(&self, raw: &str) -> Result<(), String> {
+        let mut rest = raw;
+        while let Some(i) = rest.find('&') {
+            rest = &rest[i + 1..];
+            let Some(j) = rest.find(';') else {
+                return Err("unterminated reference in attribute value".into());
+            };
+            self.check(&rest[..j])?;
+            rest = &rest[j + 1..];
+        }
+        Ok(())
+    }
+}
+
 /// Re-serialize XML. `indent` None = minify. Never resolves external entities
 /// (quick-xml does not process DTDs).
 pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResult<(String, usize)> {
@@ -491,11 +564,28 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
         let (l, c) = line_col(text, reader.buffer_position() as usize);
         ToolError::invalid("text", format!("{e} (line {l}, column {c})"))
     };
+    let mut entities = EntityRules::new();
     loop {
         let ev = reader
             .read_event()
             .map_err(|e| err(&reader, e.to_string()))?;
         match &ev {
+            Event::DocType(d) => entities.read_doctype(d),
+            Event::GeneralRef(r) if depth > 0 => {
+                entities.check(r).map_err(|e| err(&reader, e))?;
+            }
+            Event::Start(e) | Event::Empty(e)
+                if e.attributes()
+                    .flatten()
+                    .any(|a| entities.check_raw(&a.value).is_err()) =>
+            {
+                let bad = e
+                    .attributes()
+                    .flatten()
+                    .find_map(|a| entities.check_raw(&a.value).err())
+                    .unwrap();
+                return Err(err(&reader, bad));
+            }
             Event::Start(e) | Event::Empty(e) if e.attributes().any(|a| a.is_err()) => {
                 // The event reader does not validate attributes itself
                 // (duplicates, missing quotes); report the first error.
@@ -1485,6 +1575,28 @@ mod tests {
             .text
             .unwrap();
         assert!(out.contains("&x;") && !out.contains("root:"));
+        // References must name a predefined or declared entity, or a legal
+        // character; documents with an external DTD are not second-guessed.
+        for bad in [
+            "<r>&missing;</r>",
+            "<r a=\"&missing;\"/>",
+            "<r>&#0;</r>",
+            "<r>&#xFFFE;</r>",
+            "<!DOCTYPE r [<!ENTITY a \"1\">]><r>&b;</r>",
+        ] {
+            let e = h.run("dev.xml", json!({"text": bad})).await.unwrap_err();
+            assert_eq!(e.code(), "invalid_input", "{bad}");
+        }
+        for good in [
+            "<r>&lt;&amp;&#65;&#x42;</r>",
+            "<r a=\"&quot;&#10;\"/>",
+            "<!DOCTYPE r [<!ENTITY a \"1\">]><r>&a;</r>",
+            "<!DOCTYPE r SYSTEM \"r.dtd\"><r>&ext;</r>",
+        ] {
+            h.run("dev.xml", json!({"text": good}))
+                .await
+                .unwrap_or_else(|e| panic!("{good}: {e}"));
+        }
         // Converting to JSON never drops an entity it cannot resolve, in text
         // or in attributes; predefined and character references still work.
         for bad in [
