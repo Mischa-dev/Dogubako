@@ -155,6 +155,25 @@ async fn json_results_are_bounded() {
         .unwrap();
     assert_eq!(out.data["count"], 2);
 
+    // A diff of a long key over many differing items repeats the key.
+    let key = "k".repeat(100_000);
+    let a = format!("{{\"{key}\":[{}0]}}", "0,".repeat(100_000));
+    let b = format!("{{\"{key}\":[{}1]}}", "1,".repeat(100_000));
+    limited(
+        &h,
+        "dev.diff_json",
+        json!({"original": a, "changed": b, "format": "json"}),
+    )
+    .await;
+    let out = h
+        .run(
+            "dev.diff_json",
+            json!({"original": r#"{"a":[1,2]}"#, "changed": r#"{"a":[1,3]}"#, "format": "json"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["changed"], 1);
+
     // A long key over many array items: every location repeats the key.
     let text = format!(
         "{{\"{}\":[{}0]}}",

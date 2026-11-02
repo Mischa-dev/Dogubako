@@ -413,24 +413,40 @@ fn diff_values(
     b: &Value,
     array_by_index: bool,
     out: &mut Vec<(String, &'static str, Value, Value)>,
-) {
+    budget: &mut OutputBudget,
+) -> ToolResult<()> {
+    // Every difference keeps its full pointer, so a long key over many
+    // differing items multiplies: charge each one as it is recorded.
+    fn push(
+        out: &mut Vec<(String, &'static str, Value, Value)>,
+        budget: &mut OutputBudget,
+        e: (String, &'static str, Value, Value),
+    ) -> ToolResult<()> {
+        budget.add(e.0.len() + 32)?;
+        out.push(e);
+        Ok(())
+    }
     match (a, b) {
         (Value::Object(x), Value::Object(y)) => {
             for (k, va) in x {
                 let p = format!("{path}/{}", ptr_escape(k));
                 match y.get(k) {
-                    Some(vb) => diff_values(&p, va, vb, array_by_index, out),
-                    None => out.push((p, "removed", va.clone(), Value::Null)),
+                    Some(vb) => diff_values(&p, va, vb, array_by_index, out, budget)?,
+                    None => push(out, budget, (p, "removed", va.clone(), Value::Null))?,
                 }
             }
             for (k, vb) in y {
                 if !x.contains_key(k) {
-                    out.push((
-                        format!("{path}/{}", ptr_escape(k)),
-                        "added",
-                        Value::Null,
-                        vb.clone(),
-                    ));
+                    push(
+                        out,
+                        budget,
+                        (
+                            format!("{path}/{}", ptr_escape(k)),
+                            "added",
+                            Value::Null,
+                            vb.clone(),
+                        ),
+                    )?;
                 }
             }
         }
@@ -438,9 +454,9 @@ fn diff_values(
             for i in 0..x.len().max(y.len()) {
                 let p = format!("{path}/{i}");
                 match (x.get(i), y.get(i)) {
-                    (Some(va), Some(vb)) => diff_values(&p, va, vb, array_by_index, out),
-                    (Some(va), None) => out.push((p, "removed", va.clone(), Value::Null)),
-                    (None, Some(vb)) => out.push((p, "added", Value::Null, vb.clone())),
+                    (Some(va), Some(vb)) => diff_values(&p, va, vb, array_by_index, out, budget)?,
+                    (Some(va), None) => push(out, budget, (p, "removed", va.clone(), Value::Null))?,
+                    (None, Some(vb)) => push(out, budget, (p, "added", Value::Null, vb.clone()))?,
                     _ => {}
                 }
             }
@@ -456,28 +472,41 @@ fn diff_values(
             for va in x {
                 match left.get_mut(unordered_key(va).as_str()) {
                     Some(n) if *n > 0 => *n -= 1,
-                    _ => out.push((format!("{path}/-"), "removed", va.clone(), Value::Null)),
+                    _ => push(
+                        out,
+                        budget,
+                        (format!("{path}/-"), "removed", va.clone(), Value::Null),
+                    )?,
                 }
             }
             for (vb, k) in y.iter().zip(&keys_y) {
                 if let Some(n) = left.get_mut(k.as_str()).filter(|n| **n > 0) {
                     *n -= 1;
-                    out.push((format!("{path}/-"), "added", Value::Null, vb.clone()));
+                    push(
+                        out,
+                        budget,
+                        (format!("{path}/-"), "added", Value::Null, vb.clone()),
+                    )?;
                 }
             }
         }
         _ if a == b => {}
-        _ => out.push((
-            if path.is_empty() {
-                "/".into()
-            } else {
-                path.to_string()
-            },
-            "changed",
-            a.clone(),
-            b.clone(),
-        )),
+        _ => push(
+            out,
+            budget,
+            (
+                if path.is_empty() {
+                    "/".into()
+                } else {
+                    path.to_string()
+                },
+                "changed",
+                a.clone(),
+                b.clone(),
+            ),
+        )?,
     }
+    Ok(())
 }
 
 fn diff_json() -> Arc<dyn Tool> {
@@ -508,7 +537,14 @@ fn diff_json() -> Arc<dyn Tool> {
         let a = parse("original")?;
         let b = parse("changed")?;
         let mut diffs = vec![];
-        diff_values("", &a, &b, !p.bool("ignore_array_order"), &mut diffs);
+        diff_values(
+            "",
+            &a,
+            &b,
+            !p.bool("ignore_array_order"),
+            &mut diffs,
+            &mut OutputBudget::default(),
+        )?;
         let count = |k: &str| diffs.iter().filter(|d| d.1 == k).count();
         let (added, removed, changed) = (count("added"), count("removed"), count("changed"));
         let show = |v: &Value| {
