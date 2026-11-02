@@ -1,11 +1,13 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
-import { Menu as MenuIcon, Search } from 'lucide-react';
+import { ChevronDown, History, Menu as MenuIcon, PanelLeftOpen, Search } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { CommandPalette } from './components/CommandPalette';
-import { useRoute } from './lib/router';
+import { ToolsMenu } from './components/ToolsMenu';
+import { href, navigate, useRoute } from './lib/router';
+import { favorites as favStore, sidebarCollapsed, useStore } from './lib/store';
 import { useApp } from './lib/app';
 import { LogoMark } from './components/Logo';
-import { Spinner, cx } from './components/ui';
+import { Kbd, Spinner, cx, modKey } from './components/ui';
 import { HomePage } from './pages/Home';
 import { CategoryPage, FavoritesPage, RecentPage } from './pages/Lists';
 import { NotFound } from './pages/NotFound';
@@ -23,13 +25,19 @@ function PageFallback() {
 
 export function Shell() {
   const route = useRoute();
-  const { isServer, isAdmin } = useApp();
+  const { isServer, isAdmin, toolMap } = useApp();
   const [palette, setPalette] = useState(false);
+  const [query, setQuery] = useState('');
   const [drawer, setDrawer] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const hidden = useStore(sidebarCollapsed);
+  const favs = useStore(favStore);
   const main = useRef<HTMLElement>(null);
 
-  const openPalette = useCallback(() => { setDrawer(false); setPalette(true); }, []);
+  const openPalette = useCallback((q?: string) => { setDrawer(false); setToolsOpen(false); setQuery(typeof q === 'string' ? q : ''); setPalette(true); }, []);
   const closePalette = useCallback(() => setPalette(false), []);
+  const closeTools = useCallback(() => setToolsOpen(false), []);
+  const toggleSidebar = useCallback(() => sidebarCollapsed.set(!sidebarCollapsed.get()), []);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -37,17 +45,28 @@ export function Shell() {
       const typing = !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
+        setQuery('');
         setPalette((p) => !p);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault();
+        toggleSidebar();
       } else if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
+        setQuery('');
         setPalette(true);
+      } else if (e.key.toLowerCase() === 't' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && !palette) {
+        e.preventDefault();
+        setToolsOpen((o) => !o);
+      } else if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[1-9]$/.test(e.code)) {
+        const id = favs[Number(e.code.slice(5)) - 1];
+        if (id && toolMap.has(id)) { e.preventDefault(); navigate(href.tool(id)); }
       } else if (e.key === 'Escape' && drawer) {
         setDrawer(false);
       }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [drawer]);
+  }, [drawer, palette, favs, toolMap, toggleSidebar]);
 
   // Focus management on route change: move focus to the page heading and reset scroll.
   const first = useRef(true);
@@ -79,23 +98,33 @@ export function Shell() {
   }
 
   return (
-    <div className={cx('app', drawer && 'drawer-open')}>
+    <div className={cx('app', drawer && 'drawer-open', hidden && 'sidebar-hidden')}>
       <a href="#main" className="skip-link" onClick={(e) => { e.preventDefault(); main.current?.focus(); }}>Skip to content</a>
       <header className="topbar">
         <button className="icon-btn" onClick={() => setDrawer(true)} aria-label="Open navigation" aria-expanded={drawer}>
           <MenuIcon size={18} aria-hidden />
         </button>
         <a href="#/" className="brand brand-sm"><LogoMark size={22} /><span className="brand-name">Dogubako</span></a>
-        <button className="icon-btn" onClick={openPalette} aria-label="Search tools"><Search size={18} aria-hidden /></button>
+        <button className="icon-btn" onClick={() => openPalette()} aria-label="Search tools"><Search size={18} aria-hidden /></button>
       </header>
       <div className="sidebar-wrap">
-        <Sidebar onSearch={openPalette} onNavigate={() => setDrawer(false)} />
+        <Sidebar onSearch={() => openPalette()} onNavigate={() => setDrawer(false)} onHide={toggleSidebar} />
       </div>
+      {hidden && (
+        <div className="mini-bar glass" role="toolbar" aria-label="Navigation">
+          <button className="icon-btn" onClick={toggleSidebar} aria-label="Show sidebar" title={`Show sidebar (${modKey} \\)`}><PanelLeftOpen size={16} aria-hidden /></button>
+          <a href="#/" className="brand brand-sm" aria-label="Dogubako home"><LogoMark size={17} /><span className="brand-name">Dogubako</span></a>
+          <button className={cx('mini-btn', toolsOpen && 'is-on')} onClick={() => setToolsOpen((o) => !o)} aria-expanded={toolsOpen} aria-haspopup="dialog" aria-keyshortcuts="T">Tools <ChevronDown size={13} aria-hidden /></button>
+          <button className="mini-btn" onClick={() => openPalette()} aria-keyshortcuts="Control+K Meta+K">Search <Kbd>{modKey} K</Kbd></button>
+          <a className="mini-btn" href={href.history}><History size={14} aria-hidden />History</a>
+        </div>
+      )}
       {drawer && <div className="scrim" onClick={() => setDrawer(false)} aria-hidden />}
       <main className="main" id="main" ref={main} tabIndex={-1}>
         <Suspense fallback={<PageFallback />}>{page}</Suspense>
       </main>
-      <CommandPalette open={palette} onClose={closePalette} />
+      <CommandPalette open={palette} onClose={closePalette} initialQuery={query} />
+      <ToolsMenu open={toolsOpen} onClose={closeTools} anchor={hidden ? { left: 16, top: 70 } : undefined} />
     </div>
   );
 }

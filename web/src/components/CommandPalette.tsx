@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Clock, CornerDownLeft, Folder, History, House, Moon, Search, Settings, Shield, Star, Sun, Package, KeyRound, type LucideIcon,
+  Clock, CornerDownLeft, Folder, History, House, Moon, Search, Settings, Shield, Pin, Sun, Package, KeyRound, type LucideIcon,
 } from 'lucide-react';
 import { useApp } from '../lib/app';
 import { navigate, href } from '../lib/router';
@@ -25,7 +25,7 @@ interface Item {
   tool?: ToolInfo;
 }
 
-export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boolean; onClose: () => void; initialQuery?: string }) {
   const { docs, toolMap, categories, isServer, isAdmin, categoryLabel } = useApp();
   const favs = useStore(favStore);
   const recs = useStore(recStore);
@@ -38,12 +38,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   useLayoutEffect(() => {
     if (open) {
       prevFocus.current = document.activeElement;
-      setQ('');
+      setQ(initialQuery);
       setActive(0);
       input.current?.focus();
     } else {
       (prevFocus.current as HTMLElement | null)?.focus?.();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const actions = useMemo<Item[]>(() => {
@@ -54,7 +55,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       { key: 'a:history', kind: 'action', label: 'Open run history', icon: History, run: () => navigate(href.history) },
       { key: 'a:settings', kind: 'action', label: 'Open settings', icon: Settings, run: () => navigate(href.settings()) },
       { key: 'a:deps', kind: 'action', label: 'Dependencies', sub: 'Settings', icon: Package, run: () => navigate(href.settings('dependencies')) },
-      { key: 'a:favs', kind: 'action', label: 'Favorites', icon: Star, run: () => navigate(href.favorites) },
+      { key: 'a:favs', kind: 'action', label: 'Pinned tools', icon: Pin, run: () => navigate(href.favorites) },
       { key: 'a:recent', kind: 'action', label: 'Recently used', icon: Clock, run: () => navigate(href.recent) },
     ];
     if (isServer) {
@@ -84,7 +85,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       }
       for (const id of favs) {
         const t = toolMap.get(id);
-        if (t && !seen.has(id) && t.permitted !== false) { out.push(toolItem(t, [], 'Favorites')); seen.add(id); }
+        if (t && !seen.has(id) && t.permitted !== false) { out.push(toolItem(t, [], 'Pinned')); seen.add(id); }
         if (out.length >= 12) break;
       }
       return [...out, ...actions];

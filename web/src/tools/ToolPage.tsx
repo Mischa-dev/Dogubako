@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Star, Cpu, Server, Globe, Brain, Plug, TriangleAlert, Package, ShieldAlert, LayoutPanelLeft, ListChecks,
+  Pin, Cpu, Server, Globe, Brain, Plug, TriangleAlert, Package, ShieldAlert, LayoutPanelLeft, ListChecks,
 } from 'lucide-react';
 import type { ToolInfo } from '../lib/types';
 import { useApp } from '../lib/app';
@@ -91,11 +91,11 @@ function ToolHeader({ tool }: { tool: ToolInfo }) {
           type="button"
           className={cx('star-btn star-lg', fav && 'is-on')}
           aria-pressed={fav}
-          aria-label={fav ? 'Remove from favorites' : 'Add to favorites'}
-          title={fav ? 'Remove from favorites' : 'Add to favorites'}
+          aria-label={fav ? `Unpin ${tool.name}` : `Pin ${tool.name}`}
+          title={fav ? 'Unpin' : 'Pin to the sidebar'}
           onClick={() => toggleFavorite(tool.id)}
         >
-          <Star size={17} aria-hidden fill={fav ? 'currentColor' : 'none'} />
+          <Pin size={17} aria-hidden fill={fav ? 'currentColor' : 'none'} />
         </button>
       </div>
       <p className="page-sub">{tool.description}</p>

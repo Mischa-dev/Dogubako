@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Star, TriangleAlert, Lock } from 'lucide-react';
+import { Pin, TriangleAlert, Lock } from 'lucide-react';
 import type { ToolInfo } from '../lib/types';
 import { href } from '../lib/router';
 import { categoryIcon } from '../lib/icons';
@@ -48,11 +48,11 @@ export const ToolRow = memo(function ToolRow({ tool, favorite, ranges, showCateg
         type="button"
         className={cx('star-btn', favorite && 'is-on')}
         aria-pressed={favorite}
-        aria-label={favorite ? `Remove ${tool.name} from favorites` : `Add ${tool.name} to favorites`}
-        title={favorite ? 'Remove from favorites' : 'Add to favorites'}
+        aria-label={favorite ? `Unpin ${tool.name}` : `Pin ${tool.name}`}
+        title={favorite ? 'Unpin' : 'Pin to the sidebar'}
         onClick={() => toggleFavorite(tool.id)}
       >
-        <Star size={15} aria-hidden fill={favorite ? 'currentColor' : 'none'} />
+        <Pin size={15} aria-hidden fill={favorite ? 'currentColor' : 'none'} />
       </button>
     </li>
   );
