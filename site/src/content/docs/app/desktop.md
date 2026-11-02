@@ -51,34 +51,19 @@ For each engine, Dogubako looks in this order:
 
 1. the path in `DOGUBAKO_<ID>_PATH`, for example `DOGUBAKO_FFMPEG_PATH`;
 2. the `bin/` folder above;
-3. your `PATH`.
+3. your `PATH`;
+4. on macOS, the usual Homebrew and MacPorts folders: `/opt/homebrew/bin`,
+   `/usr/local/bin` and `/opt/local/bin`.
+
+The last step matters because apps opened from the Dock or Finder get a
+minimal `PATH` that leaves those folders out. Engines installed with `brew` or
+`port` are found anyway, with no extra setup.
 
 **Settings → Dependencies** shows what was found, the version, and the
-install command for your system.
+install command for your system. If you install an engine while Dogubako is
+open, click refresh there.
 
 ![Settings → Dependencies, listing each engine with its status and install command](../../../assets/screenshots/settings-dependencies-dark.png)
-
-:::caution[macOS and Homebrew]
-Apps opened from the Dock or Finder on macOS get a minimal `PATH` that does
-not include Homebrew (`/opt/homebrew/bin` or `/usr/local/bin`). If
-Dependencies says an engine is missing even though `brew` installed it, link
-it into Dogubako's `bin` folder:
-
-```sh
-BIN="$HOME/Library/Application Support/Dogubako/bin"
-BREW="$(brew --prefix)/bin"
-mkdir -p "$BIN"
-for p in ffmpeg ffprobe magick vips exiftool qpdf gs tesseract whisper-cli pandoc 7zz "$BREW"/pdf*; do
-  p="$(basename "$p")"
-  [ -x "$BREW/$p" ] && ln -sf "$BREW/$p" "$BIN/$p"
-done
-```
-
-Link all of Poppler's `pdf*` programs, as the loop does: Dogubako looks for
-them next to `pdftoppm`.
-
-Then restart Dogubako.
-:::
 
 ## Drag and drop
 

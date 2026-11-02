@@ -12,8 +12,9 @@ The tool's engine wasn't found. The notice on the tool page (and
   the app or server.
 - If it's installed but still not found, point Dogubako at it with
   `DOGUBAKO_<ID>_PATH`, for example `DOGUBAKO_FFMPEG_PATH=/opt/ffmpeg/bin/ffmpeg`.
-- **macOS desktop app with Homebrew:** apps opened from the Dock don't see
-  Homebrew's folder. Link the programs into Dogubako's `bin` folder; see
+- **Installed somewhere unusual:** Dogubako checks your `PATH`, its own `bin`
+  folder and, on macOS, the Homebrew and MacPorts folders. Anywhere else, set
+  `DOGUBAKO_<ID>_PATH` or link the program into the `bin` folder; see
   [Desktop app](/app/desktop/#how-it-finds-engines).
 - **Docker:** the image includes the common engines. For OCR languages,
   document converters or speech recognition, rebuild with
