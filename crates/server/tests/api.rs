@@ -749,6 +749,28 @@ async fn mcp_endpoint() {
     )
     .await;
     assert_eq!(r.body["result"]["contents"][0]["text"], "hello");
+    // Files over the inline limit are refused without being read into memory.
+    let big = upload(
+        &t,
+        &[("authorization", &bearer)],
+        "big.txt",
+        &vec![b'x'; (16 << 20) + 1],
+    )
+    .await;
+    let big_id = big["id"].as_str().unwrap();
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &hs,
+        Some(json!({"jsonrpc": "2.0", "id": 81, "method": "resources/read", "params": {"uri": format!("dogubako://files/{big_id}")}})),
+    )
+    .await;
+    assert_eq!(r.body["error"]["code"], -32603, "{:?}", r.body);
+    assert!(r.body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("too large"));
     // Search meta-tool respects permissions
     let r = call(&t.app, Method::POST, "/mcp", &hs, Some(json!({"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "dogubako_search_tools", "arguments": {"query": "secret"}}}))).await;
     assert_eq!(r.body["result"]["structuredContent"]["total"], 0);

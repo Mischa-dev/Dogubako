@@ -301,7 +301,7 @@ impl McpBackend for LocalBackend {
             .collect())
     }
 
-    async fn read_file(&self, file_id: &str) -> Result<(FileView, Vec<u8>), ToolError> {
+    async fn read_file(&self, file_id: &str, max: u64) -> Result<(FileView, Vec<u8>), ToolError> {
         let (v, p) = self
             .files
             .lock()
@@ -309,7 +309,10 @@ impl McpBackend for LocalBackend {
             .get(file_id)
             .cloned()
             .ok_or_else(|| ToolError::NotFound { id: file_id.into() })?;
-        Ok((v, std::fs::read(p)?))
+        if v.size > max {
+            return Ok((v, Vec::new()));
+        }
+        Ok((v, dogubako_mcp::read_capped(&p, max).await?))
     }
 }
 
