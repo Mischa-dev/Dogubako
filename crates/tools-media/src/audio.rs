@@ -1731,7 +1731,10 @@ fn denoise() -> Arc<dyn Tool> {
         .param(ParamSpec::number("lowpass").label("Low-pass (Hz, 0 = off)").range(0.0, 24000.0).default_num(0.0).advanced())
         .param(ParamSpec::number("noise_floor").label("Noise floor (dB)").range(-80.0, -20.0).default_num(-50.0).show_if("method", &["afftdn"]).advanced());
     async_tool(spec, |ctx, p| async move {
-        let mut chain = vec![];
+        // Pin one float format for the whole chain: newer FFmpeg builds can
+        // crash ("Format change is not supported") when the auto-inserted
+        // resampler has to switch formats between these filters.
+        let mut chain = vec!["aformat=sample_fmts=fltp".to_string()];
         let hp = p.num_or("highpass", 0.0);
         if hp > 0.0 {
             chain.push(format!("highpass=f={hp}"));
