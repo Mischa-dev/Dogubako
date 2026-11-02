@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dogubako: 249 tools for your files, in one box</title>
+  <meta name="description" content="Dogubako (道具箱) is a free, open-source, local-first toolbox: 249 tools for images, video, audio, speech, PDFs, files, text, developers, data, networks, design and system info. Desktop app, self-hosted web app, CLI, HTTP API and MCP server.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f7f6f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151412" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/site.css">
+  <script>
+    // Theme and motion before first paint, so nothing flashes.
+    (function () {
+      var d = document.documentElement;
+      d.classList.remove('no-js'); d.classList.add('js');
+      try { var t = localStorage.getItem('dgb-otb-theme'); if (t === 'light' || t === 'dark') d.dataset.theme = t; } catch (e) {}
+      if (!d.dataset.theme) d.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('rm');
+    })();
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <!-- ================================================================ nav -->
+  <header class="nav" id="nav">
+    <a class="brand" href="#top" aria-label="Dogubako, back to top">
+      <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect x="10" y="24" width="80" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="8"/><line x1="10" y1="46" x2="90" y2="46" stroke="currentColor" stroke-width="8"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></svg>
+      <span>Dogubako</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#tour">Tour</a>
+      <a href="#ways">Ways in</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#tools">Tools</a>
+      <a href="#agents">Self-host</a>
+      <a href="https://docs.dogubako.app">Docs</a>
+    </nav>
+    <div class="nav-end">
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="Use dark theme">
+        <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <a class="icon-btn" href="https://github.com/Mischa-dev/Dogubako" aria-label="Dogubako on GitHub">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="filled"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.4c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.7 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+      </a>
+      <a class="btn btn-ink btn-sm" href="#download">Get the alpha</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ================================================================ hero: the box -->
+    <section class="scene hero" id="top" data-scene="hero" aria-labelledby="hero-title">
+      <div class="sticky">
+        <div class="stage hero-stage" aria-hidden="true">
+          <div class="stage-dim"></div>
+          <div class="stage-vig"></div>
+          <div class="stage-pool"></div>
+          <div class="stage-shaft"></div>
+          <div class="v3d"><div class="world"></div></div>
+          <canvas class="dust"></canvas>
+          <div class="stage-flash"><div class="flash-face dr-front"><span class="dn">Images</span><span class="dc">30</span><i class="dp"></i></div></div>
+        </div>
+
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="kanji" lang="ja">道具箱</span><span class="dot" aria-hidden="true">·</span><span>dōgu-bako, “toolbox”</span></p>
+          <h1 id="hero-title">249 tools for your files, in one box.</h1>
+          <p class="lede">Dogubako replaces the single-purpose websites you use to convert an image, shrink a PDF or format some JSON. It runs on your computer, or on a server you host, so your files stay with you. Free and open source.</p>
+          <p class="cta-row">
+            <a class="btn btn-ink" href="#download">Get the alpha</a>
+            <a class="btn btn-ghost" href="https://github.com/Mischa-dev/Dogubako">Source on GitHub</a>
+          </p>
+        </div>
+
+        <div class="caps hero-caps">
+          <div class="cap" data-range="0.115 0.215"><p class="cap-h">Open it.</p><p>Free and open source, under the AGPL. No account to make, and no telemetry.</p></div>
+          <div class="cap" data-range="0.335 0.455"><p class="cap-h">249 tools inside.</p><p>Convert, compress, merge, trim, transcribe, format, hash. Each one runs on your own computer.</p></div>
+          <div class="cap" data-range="0.475 0.62"><p class="cap-h">Twelve drawers.</p><p>Images, video, audio, speech, PDFs, files, text, developer, data, network, design and system.</p></div>
+          <div class="cap" data-range="0.66 0.84"><p class="cap-h">Every one labelled.</p><p>Press <kbd>Ctrl K</kbd> to find any tool by name, or skip the searching and drop a file on the window.</p></div>
+        </div>
+
+        <p class="scroll-cue" aria-hidden="true"><span>Scroll to open the box</span><i></i></p>
+      </div>
+    </section>
+
+    <!-- ================================================================ scene 1: the product in motion -->
+    <section class="scene app-scene" data-scene="app" aria-labelledby="tour-title">
+      <span class="anchor" id="tour"></span>
+      <div class="sticky">
+        <div class="caps side-caps">
+          <div class="cap cap-intro" data-range="0.06 0.17"><p class="kicker">One job, start to finish</p><h2 id="tour-title" class="cap-title">Drop a file. Get it back.</h2><p>A 4.2 MB photo that needs to be smaller, done in the app without uploading it anywhere.</p></div>
+          <div class="cap" data-range="0.19 0.34"><h3 class="cap-h">It lands on your bench.</h3><p>Drag a file onto the window, or pick it from the big input on the home screen. Dogubako draws it as what it is: a photo as a print, a PDF as a stack of pages.</p></div>
+          <div class="cap" data-range="0.36 0.62"><h3 class="cap-h">It asks what should happen.</h3><p>The likeliest tools for that file come up numbered 1 to 4. Type “smaller” and Compress Images moves to the top.</p></div>
+          <div class="cap" data-range="0.64 0.78"><h3 class="cap-h">Press Run.</h3><p>Settings sit beside the preview, and the work happens on your own computer. <kbd>Ctrl Enter</kbd> runs it too.</p></div>
+          <div class="cap" data-range="0.8 2"><h3 class="cap-h">4.2 MB in, 1.1 MB out.</h3><p>The original and the result side by side, with the size change, so you can check it still looks right before you keep it.</p></div>
+        </div>
+
+        <div class="stage app-stage" aria-hidden="true">
+          <div class="app-fit">
+            <div class="win">
+              <div class="win-bar"><span class="win-dots"><i></i><i></i><i></i></span><span class="win-title">Dogubako</span></div>
+              <div class="win-body">
+                <aside class="ws">
+                  <div class="ws-brand"><svg class="mark" viewBox="0 0 100 100"><rect x="10" y="24" width="80" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="8"/><line x1="10" y1="46" x2="90" y2="46" stroke="currentColor" stroke-width="8"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></svg>Dogubako</div>
+                  <div class="ws-search">Search tools<span class="kbd">Ctrl K</span></div>
+                  <div class="ws-label"><span>All tools</span><span>249</span></div>
+                  <ul class="ws-cats">
+                    <li class="is-on"><span>Images</span><span>30</span></li><li><span>Video</span><span>27</span></li><li><span>Audio</span><span>21</span></li><li><span>Speech &amp; Voice</span><span>9</span></li><li><span>PDF &amp; Documents</span><span>27</span></li><li><span>Files</span><span>23</span></li><li><span>Text</span><span>27</span></li><li><span>Developer</span><span>34</span></li><li><span>Data</span><span>12</span></li><li><span>Network &amp; Web</span><span>18</span></li><li><span>Design</span><span>9</span></li><li><span>System</span><span>12</span></li>
+                  </ul>
+                </aside>
+                <div class="wm">
+                  <!-- home -->
+                  <div class="v v-home">
+                    <p class="vh-count">249 tools on this machine</p>
+                    <div class="vh-input"><span class="vh-ph">Drop a file, or say what you need</span><span class="vh-btn">Choose files</span></div>
+                    <p class="vh-bench">On your bench</p>
+                    <div class="vh-shelf">
+                      <div class="vh-item"><div class="slot slot-bench"></div><span class="vh-cap vh-cap-photo"><b>dune.jpg</b><i>4.2 MB · just now</i></span></div>
+                      <div class="vh-obj"><span class="bo-stack"><span class="bo-sheet bo-sheet-3"></span><span class="bo-sheet bo-sheet-2"></span><span class="bo-sheet bo-page"><span class="bo-line bo-title"></span><span class="bo-line bo-w40"></span><span class="bo-line"></span><span class="bo-line bo-w90"></span><span class="bo-line"></span><span class="bo-line bo-w60"></span><span class="bo-line"></span></span></span><span class="vh-cap"><b>lease-signed.pdf</b><i>Merge PDFs · 2.1 MB</i></span></div>
+                      <div class="vh-obj vh-obj-wave"><span class="bo-wave"></span><span class="vh-cap"><b>interview.m4a</b><i>Transcribe · 34 MB</i></span></div>
+                    </div>
+                  </div>
+                  <!-- what should happen to it -->
+                  <div class="v v-intent">
+                    <div class="vi-fig"><div class="slot slot-intent"></div><p class="vi-name"><b>dune.jpg</b><i>4.2 MB</i></p></div>
+                    <div class="vi-col">
+                      <p class="vi-title">What should happen to it?</p>
+                      <div class="vi-input"><span class="vi-typed"></span><span class="vi-caret"></span><span class="vi-ph">Type what you want, like “smaller” or “jpg”</span></div>
+                      <ol class="vi-opts">
+                        <li data-o="convert"><span class="vi-n">1</span><span class="vi-t"><b>Convert Images</b><i>PNG, JPEG, WebP, AVIF, HEIC and more</i></span></li>
+                        <li data-o="compress"><span class="vi-n">2</span><span class="vi-t"><b>Compress Images</b><i>Smaller files, same look</i></span></li>
+                        <li data-o="redact"><span class="vi-n">3</span><span class="vi-t"><b>Redact Regions</b><i>Blur, pixelate or black out parts of it</i></span></li>
+                        <li data-o="meta"><span class="vi-n">4</span><span class="vi-t"><b>Remove Image Metadata</b><i>Strip EXIF, GPS location and comments</i></span></li>
+                      </ol>
+                    </div>
+                  </div>
+                  <!-- the tool -->
+                  <div class="v v-tool">
+                    <div class="vt-bar"><span class="vt-file"><span class="vt-thumb"></span>dune.jpg</span><span class="vt-tabs"><span>Convert</span><span class="is-on">Compress</span><span>Redact Regions</span><span>Resize</span><span>Remove Metadata</span></span></div>
+                    <div class="vt-grid">
+                      <div class="vt-cmp">
+                        <div class="slot slot-tool"></div>
+                        <div class="vt-labels"><span class="vt-l"><b>Original</b><i>JPG · 4.2 MB</i></span><span class="vt-r"><b>Result</b><i><span class="vt-size">4.2 MB</span> <span class="vt-delta">−74%</span></i></span></div>
+                      </div>
+                      <div class="vt-card">
+                        <p class="vt-title">Compress Images</p>
+                        <p class="vt-desc">Smaller files, same look. Re-encodes JPEG, WebP and AVIF, and optimizes PNG losslessly.</p>
+                        <div class="vt-run"><span class="vt-btn"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>Run</span><span class="kbd">Ctrl ↵</span></div>
+                        <div class="vt-field"><span>Quality</span><span class="vt-range"><i></i></span><span class="vt-num">75</span></div>
+                        <div class="vt-field"><span>Format</span><span class="vt-select">WebP</span></div>
+                        <div class="vt-progress"><i></i></div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- the dragged photo, drawn as a print -->
+                  <div class="photo">
+                    <div class="photo-shadow"></div>
+                    <div class="photo-img photo-orig"></div>
+                    <div class="photo-img photo-result"></div>
+                    <div class="photo-wipe"><i></i></div>
+                  </div>
+                  <div class="drop-veil"><div class="drop-card"><span class="drop-tray"><span class="drop-sheet"></span></span><b>Drop to open</b><i>Nothing is uploaded</i></div></div>
+                  <svg class="cursor" viewBox="0 0 24 24"><path d="M5 3l13 7.5-6 1.4-3.2 5.6z"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ scene 2: four ways in -->
+    <section class="scene ways-scene" id="ways" data-scene="ways" aria-labelledby="ways-title">
+      <div class="sticky">
+        <div class="caps side-caps">
+          <div class="cap cap-intro" data-range="-1 0.14"><p class="kicker">The same job, four ways</p><h2 id="ways-title" class="cap-title">One tool, four ways in.</h2><p>The Compress Images you just watched is also a command, an HTTP endpoint and a tool your AI agent can call.</p></div>
+          <div class="cap" data-range="0.16 0.36"><h3 class="cap-h">On the command line.</h3><p><code>dogubako &lt;category&gt; &lt;tool&gt;</code>, with the same options as the form. Pipes work too.</p></div>
+          <div class="cap" data-range="0.38 0.58"><h3 class="cap-h">Over HTTP.</h3><p>Upload a file once, get an id back, and run any tool against it from your own scripts and services.</p></div>
+          <div class="cap" data-range="0.6 0.78"><h3 class="cap-h">From an AI agent.</h3><p>In compact mode the MCP server lists a handful of meta-tools instead of all 249. The agent searches for the right one, then runs it.</p></div>
+          <div class="cap" data-range="0.8 2"><h3 class="cap-h">Described once.</h3><p>Each tool is described once. The form, the command, the HTTP call and the MCP call are generated from that description and run by the same engine, so they always agree.</p></div>
+        </div>
+
+        <div class="stage ways-stage" aria-hidden="true">
+          <div class="ways-fit">
+            <div class="layers">
+              <div class="layer layer-spec">
+                <p class="lh"><span class="lh-tag">Description</span><span class="lh-id">image.compress</span></p>
+                <dl class="spec">
+                  <div><dt>name</dt><dd>Compress Images</dd></div>
+                  <div><dt>category</dt><dd>Images</dd></div>
+                  <div><dt>input</dt><dd>images, one or many</dd></div>
+                  <div><dt>params</dt><dd>quality · format · max dimension</dd></div>
+                </dl>
+              </div>
+              <div class="layer layer-app">
+                <p class="lh"><span class="lh-tag">App</span><span class="lh-id">form</span></p>
+                <div class="lf">
+                  <p class="lf-title">Compress Images <span class="lf-run">Run</span></p>
+                  <div class="lf-row"><span>Images</span><span class="lf-chip"><span class="vt-thumb"></span>dune.jpg</span></div>
+                  <div class="lf-row"><span>Quality</span><span class="lf-range"><i></i></span><span class="lf-num">75</span></div>
+                </div>
+              </div>
+              <div class="layer layer-cli">
+                <p class="lh"><span class="lh-tag">CLI</span><span class="lh-id">terminal</span></p>
+                <pre class="code"><code><span class="p">$ </span><span class="type" data-text="dogubako image compress dune.jpg --quality 75 -o dune-small.jpg"></span><span class="caret"></span></code></pre>
+              </div>
+              <div class="layer layer-http">
+                <p class="lh"><span class="lh-tag">HTTP API</span><span class="lh-id">/api/v1</span></p>
+                <pre class="code"><code><span class="type" data-text='PUT  /api/v1/files/raw?name=dune.jpg
+# → f_…
+POST /api/v1/tools/image.compress/run
+{"params": {"input": ["f_…"], "quality": 75},
+ "wait_seconds": 60}'></span><span class="caret"></span></code></pre>
+              </div>
+              <div class="layer layer-mcp">
+                <p class="lh"><span class="lh-tag">MCP</span><span class="lh-id">tools/call</span></p>
+                <pre class="code"><code><span class="type" data-text='dogubako_run_tool
+{"tool": "image.compress",
+ "arguments": {"input": ["f_…"], "quality": 75}}'></span><span class="caret"></span></code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ scene 3: nothing leaves -->
+    <section class="scene priv-scene" id="privacy" data-scene="priv" aria-labelledby="priv-title">
+      <div class="sticky">
+        <div class="caps side-caps">
+          <div class="cap cap-intro" data-range="-1 0.2"><p class="kicker">Local-first</p><h2 id="priv-title" class="cap-title">Nothing leaves your machine.</h2><p>Most converters start with an upload. Dogubako doesn’t have one.</p></div>
+          <div class="cap" data-range="0.22 0.56"><h3 class="cap-h">Not even to be converted.</h3><p>The work happens where the file already is. No upload, no queue, and no server of ours in the loop.</p></div>
+          <div class="cap" data-range="0.58 2"><h3 class="cap-h">It stays in the box.</h3><p>The desktop app needs no account and sends nothing anywhere. Host it yourself and your files only travel to a machine you own.</p></div>
+        </div>
+        <div class="stage priv-stage" aria-hidden="true">
+          <div class="priv-fit">
+            <div class="pv">
+              <div class="pv-zone"><span class="pv-zlabel">your machine</span></div>
+              <div class="pv-seal"></div>
+              <div class="pv-floor"></div>
+              <div class="pv-wall"></div>
+              <div class="pv-net"><i class="pv-dash"></i></div>
+              <div class="pv-cloud">
+                <svg viewBox="0 0 200 120"><path d="M52 98h104a30 30 0 0 0 2-60 40 40 0 0 0-76-10 28 28 0 0 0-30 70z"/></svg>
+                <span class="pv-clabel">the internet</span>
+                <span class="pv-zero"><b>0 B</b> uploaded</span>
+              </div>
+              <div class="pv-box">
+                <svg viewBox="0 0 100 100" class="pv-body"><path d="M10 46 V72 a10 10 0 0 0 10 10 H80 a10 10 0 0 0 10-10 V46" fill="none" stroke="currentColor" stroke-width="8"/><line x1="10" y1="46" x2="90" y2="46" stroke="currentColor" stroke-width="8"/></svg>
+                <svg viewBox="0 0 100 100" class="pv-lid"><path d="M10 46 V34 a10 10 0 0 1 10-10 H80 a10 10 0 0 1 10 10 V46" fill="none" stroke="currentColor" stroke-width="8"/><rect class="pv-latch" x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></svg>
+              </div>
+              <div class="pv-file"><div class="pv-print"></div></div>
+              <div class="pv-stop"><span>stays here</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ privacy facts -->
+    <section class="section facts" aria-labelledby="facts-title">
+      <div class="wrap">
+        <h2 id="facts-title" class="sec-title">What “local” means here.</h2>
+        <dl class="spec-sheet">
+          <div><dt>Account</dt><dd>None for the desktop app. A shared server has accounts, and every file is checked against its owner on every request.</dd></div>
+          <div><dt>Telemetry</dt><dd>None. No analytics, no crash reporter, no usage pings.</dd></div>
+          <div><dt>Shell</dt><dd>Never used. External programs run directly, with timeouts, resource limits and optional bubblewrap sandboxing.</dd></div>
+          <div><dt>Archives</dt><dd>Guarded against zip bombs and path tricks before anything is written.</dd></div>
+          <div><dt>Network tools</dt><dd>On a shared server, tools that fetch URLs refuse to reach into your private network by default, and every action goes to an audit log.</dd></div>
+          <div><dt>License</dt><dd>GNU AGPL v3.0 or later. The code is all there to read.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- ================================================================ all 249 -->
+    <section class="section tools" id="tools" aria-labelledby="tools-title">
+      <div class="wrap">
+        <div class="tools-head">
+          <div>
+            <p class="kicker">Tip it out</p>
+            <h2 id="tools-title" class="sec-title">All 249 tools, out of the drawers.</h2>
+            <p class="sec-lede">Built on FFmpeg, libvips, ImageMagick, ExifTool, qpdf, Poppler, Ghostscript, Tesseract, whisper.cpp, Piper, LibreOffice, Pandoc and 7-Zip, with native Rust code for everything that doesn’t need them.</p>
+          </div>
+          <div class="find">
+            <label class="find-box" for="find">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <span class="sr-only">Find a tool</span>
+              <input type="search" id="find" placeholder="Find a tool: subtitles, merge, qr…" autocomplete="off" spellcheck="false">
+            </label>
+            <p class="find-status" id="find-status" aria-live="polite"></p>
+            <p class="pour-count" id="pour-count" aria-hidden="true"></p>
+          </div>
+        </div>
+        <div class="drawers" id="drawers">
+          <article class="dcard" data-cat="image"><h3 class="dc-face"><span class="dc-name">Images</span><span class="dc-count"><span class="dc-n">30</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>Convert Images</li><li>Resize Images</li><li>Create Thumbnails</li><li>Compress Images</li><li>Image Info</li><li>Convert Color Space</li><li>Extract Animation Frames</li><li>Generate Icons</li><li>Favicon Generator</li><li>Crop Image</li><li>Rotate &amp; Flip</li><li>Adjust &amp; Filter</li><li>Watermark Images</li><li>Combine Images</li><li>Split Image into Tiles</li><li>Compare Images</li><li>Contact Sheet</li><li>Sprite Sheet</li><li>Redact Regions</li><li>Reduce Noise</li><li>View Image Metadata</li><li>Remove Image Metadata</li><li>SVG to PNG/JPEG/WebP</li><li>Optimize SVG</li><li>Detect Faces</li><li>Blur Faces</li><li>Extract Text (OCR)</li><li>Remove Background</li><li>AI Upscale</li><li>Dominant Colors</li></ul></article>
+          <article class="dcard" data-cat="video"><h3 class="dc-face"><span class="dc-name">Video</span><span class="dc-count"><span class="dc-n">27</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>Convert Video</li><li>Compress Video</li><li>Resize Video</li><li>Change Frame Rate</li><li>Trim Video</li><li>Cut / Split Video</li><li>Crop Video</li><li>Rotate / Flip Video</li><li>Merge Videos</li><li>Extract Audio from Video</li><li>Remove Audio</li><li>Replace Audio</li><li>Extract Frames</li><li>Video Thumbnail</li><li>Video to GIF</li><li>GIF to Video</li><li>Change Video Speed</li><li>Stabilize Video</li><li>Video Info</li><li>Video Preview Clip</li><li>Hardware Encoders</li><li>Watermark Video</li><li>Video Contact Sheet</li><li>Add Subtitles</li><li>Remove Subtitles</li><li>Burn In Subtitles</li><li>Extract Subtitles</li></ul></article>
+          <article class="dcard" data-cat="audio"><h3 class="dc-face"><span class="dc-name">Audio</span><span class="dc-count"><span class="dc-n">21</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>Convert Audio</li><li>Compress Audio</li><li>Trim Audio</li><li>Split Audio</li><li>Merge Audio</li><li>Normalize Audio</li><li>Change Volume</li><li>Change Sample Rate</li><li>Audio Channels</li><li>Remove Silence</li><li>Detect Silence</li><li>Audio Waveform</li><li>Audio Spectrogram</li><li>Audio Info</li><li>Audio Tags</li><li>Reduce Noise</li><li>Change Audio Speed / Pitch</li><li>Equalizer</li><li>Fade In / Out</li><li>Reverse Audio</li><li>Extract Audio from Video</li></ul></article>
+          <article class="dcard" data-cat="speech"><h3 class="dc-face"><span class="dc-name">Speech &amp; Voice</span><span class="dc-count"><span class="dc-n">9</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>Convert Transcript / Subtitles</li><li>Shift Subtitle Timing</li><li>Transcribe Audio / Video</li><li>Detect Spoken Language</li><li>Generate Subtitles</li><li>Text to Speech</li><li>Voice Activity Detection</li><li>Extract Speech Segments</li><li>Split at Pauses</li></ul></article>
+          <article class="dcard" data-cat="pdf"><h3 class="dc-face"><span class="dc-name">PDF &amp; Documents</span><span class="dc-count"><span class="dc-n">27</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>Merge PDFs</li><li>Split PDF</li><li>Extract Pages</li><li>Reorder Pages</li><li>Rotate Pages</li><li>Delete Pages</li><li>Repair PDF</li><li>Optimize for Web</li><li>Flatten Forms &amp; Annotations</li><li>Protect PDF</li><li>Remove PDF Password</li><li>Compress PDF</li><li>Extract Text</li><li>Extract Images</li><li>PDF to Images</li><li>PDF Info</li><li>Compare PDF Text</li><li>Images to PDF</li><li>OCR PDF</li><li>Watermark PDF</li><li>Add Page Numbers</li><li>Edit PDF Metadata</li><li>List Form Fields</li><li>Fill PDF Form</li><li>Convert Office Documents</li><li>Convert Markup Documents</li><li>Markdown to PDF</li></ul></article>
+          <article class="dcard" data-cat="files"><h3 class="dc-face"><span class="dc-name">Files</span><span class="dc-count"><span class="dc-n">23</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>File Hash</li><li>Verify Checksums</li><li>Checksum Manifest</li><li>Detect File Type</li><li>Executable Info</li><li>Hex Viewer</li><li>MIME Type Lookup</li><li>Compare Files</li><li>Compare Folders</li><li>List Archive Contents</li><li>Extract Archive</li><li>Create Archive</li><li>Compress File</li><li>Decompress File</li><li>Folder Size</li><li>Find Large Files</li><li>Find Duplicate Files</li><li>Find Duplicates Among Files</li><li>Find Empty Files &amp; Folders</li><li>Remove Empty Files &amp; Folders</li><li>Search Files</li><li>File Manifest</li><li>Batch Rename</li></ul></article>
+          <article class="dcard" data-cat="text"><h3 class="dc-face"><span class="dc-name">Text</span><span class="dc-count"><span class="dc-n">27</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>Change Case</li><li>Word &amp; Character Count</li><li>Sort Lines</li><li>Remove Duplicate Lines</li><li>Trim &amp; Remove Whitespace</li><li>Line Endings</li><li>Find &amp; Replace</li><li>Regex Replace</li><li>Compare Text (Diff)</li><li>Escape / Unescape</li><li>Convert Text Encoding</li><li>Markdown Preview</li><li>Markdown to HTML</li><li>HTML to Plain Text</li><li>HTML to Markdown</li><li>Clean Up Text</li><li>Slugify</li><li>Reverse Text</li><li>Lorem Ipsum Generator</li><li>Wrap Text</li><li>Extract Columns</li><li>Number Lines</li><li>Add Prefix / Suffix</li><li>Filter Lines</li><li>Unicode Inspector</li><li>Word Frequency</li><li>Extract Text from Document</li></ul></article>
+          <article class="dcard" data-cat="dev"><h3 class="dc-face"><span class="dc-name">Developer</span><span class="dc-count"><span class="dc-n">34</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>QR Code Generator</li><li>QR Code Reader</li><li>Barcode Generator</li><li>Barcode Reader</li><li>JSON Formatter &amp; Validator</li><li>YAML Formatter &amp; Validator</li><li>TOML Formatter &amp; Validator</li><li>XML Formatter &amp; Validator</li><li>SQL Formatter</li><li>Convert Data Format</li><li>Base64 Encode / Decode</li><li>URL Encode / Decode</li><li>HTML Entities Encode / Decode</li><li>Hex Encode / Decode</li><li>Number Base Converter</li><li>Text ↔ Binary</li><li>Hash Generator</li><li>HMAC Generator &amp; Verifier</li><li>Password &amp; Random Generator</li><li>UUID Generator &amp; Decoder</li><li>JWT Decoder &amp; Verifier</li><li>Unix Timestamp Converter</li><li>Date Calculator &amp; Formatter</li><li>Time Zone Converter</li><li>Cron Expression Explainer</li><li>Regex Tester</li><li>JSONPath Query</li><li>jq Filter</li><li>JSON Schema Validator</li><li>JSON Diff</li><li>Color Converter</li><li>HTTP Message Parser</li><li>User-Agent Parser</li><li>String Inspector</li></ul></article>
+          <article class="dcard" data-cat="data"><h3 class="dc-face"><span class="dc-name">Data</span><span class="dc-count"><span class="dc-n">12</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>CSV Viewer</li><li>Filter &amp; Sort CSV</li><li>CSV to JSON</li><li>JSON to CSV</li><li>Spreadsheet Viewer &amp; Export</li><li>Change CSV Delimiter</li><li>Transform Columns</li><li>Validate CSV / JSON Data</li><li>Find Duplicate Rows</li><li>Column Statistics</li><li>Clean CSV Data</li><li>Convert Table Data</li></ul></article>
+          <article class="dcard" data-cat="network"><h3 class="dc-face"><span class="dc-name">Network &amp; Web</span><span class="dc-count"><span class="dc-n">18</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>URL Parser</li><li>URL Normalizer</li><li>Query Parameter Editor</li><li>IP Address Info</li><li>CIDR Calculator</li><li>Subnet Planner (VLSM)</li><li>Certificate Decoder</li><li>Key Inspector</li><li>DNS Lookup</li><li>Reverse DNS</li><li>TLS / SSL Inspector</li><li>HTTP Headers &amp; Security Check</li><li>Favicon Fetcher</li><li>Connectivity Check</li><li>Port Checker</li><li>RDAP Lookup</li><li>WHOIS Lookup</li><li>Domain Inspector</li></ul></article>
+          <article class="dcard" data-cat="design"><h3 class="dc-face"><span class="dc-name">Design</span><span class="dc-count"><span class="dc-n">9</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>Color Palette Generator</li><li>Extract Palette from Image</li><li>Contrast Checker</li><li>Gradient Generator</li><li>Aspect Ratio Calculator</li><li>Resize Canvas / Pad</li><li>Overlay Images</li><li>Bulk Image Dimensions</li><li>Styled QR Code</li></ul></article>
+          <article class="dcard" data-cat="system"><h3 class="dc-face"><span class="dc-name">System</span><span class="dc-count"><span class="dc-n">12</span><span class="sr-only"> tools</span></span><i class="dc-pull" aria-hidden="true"></i></h3><ul class="dc-list"><li>System Overview</li><li>CPU Info</li><li>Memory Usage</li><li>Disks &amp; Storage</li><li>Hardware Info</li><li>Operating System</li><li>Network Interfaces</li><li>Top Processes</li><li>Uptime</li><li>Temperature Sensors</li><li>Environment Diagnostics</li><li>Battery Health</li></ul></article>
+        </div>
+        <p class="tools-foot"><a class="link-arrow" href="https://docs.dogubako.app/reference/capabilities/">What each tool does, and what it needs</a></p>
+      </div>
+    </section>
+
+    <!-- ================================================================ self-host + agents -->
+    <section class="section agents" id="agents" aria-labelledby="agents-title">
+      <div class="wrap agents-grid">
+        <div class="agents-copy">
+          <p class="kicker">Self-hosting and agents</p>
+          <h2 id="agents-title" class="sec-title">Host it once. Give each agent its own key.</h2>
+          <p class="sec-lede">Run Dogubako on a home server, a NAS or a VPS with the heavy engines installed once, then open it from any browser on your network, phones included. Each agent gets a scoped token, and a token only opens the drawers it was given.</p>
+          <div class="keys" role="group" aria-label="Pick a token to see what it can open">
+            <button type="button" class="key" data-allow="image" aria-pressed="true"><b>image-bot</b><code>image.* except image.ocr</code></button>
+            <button type="button" class="key" data-allow="video audio speech" aria-pressed="false"><b>media-bot</b><code>video.* · audio.* · speech.*</code></button>
+            <button type="button" class="key" data-allow="all" aria-pressed="false"><b>owner</b><code>every tool</code></button>
+          </div>
+          <p class="key-status" id="key-status" aria-live="polite">image-bot can open 1 of 12 drawers: Images, without OCR.</p>
+        </div>
+        <div class="agents-visual">
+          <div class="tansu" id="tansu" aria-hidden="true"></div>
+<pre class="code code-block" tabindex="0" aria-label="Self-hosting commands"><code><span class="c"># on the server</span>
+<span class="p">$</span> docker compose up -d --build
+<span class="p">$</span> docker compose logs dogubako | grep "Setup token"
+
+<span class="c"># one account per agent, limited to its tools</span>
+<span class="p">$</span> dogubako users create media-bot --role agent \
+    --allow 'video.*' --allow 'speech.*' --allow 'audio.*'
+<span class="p">$</span> dogubako tokens create --user media-bot --name laptop
+
+<span class="c"># or run it locally for Claude Code</span>
+<span class="p">$</span> claude mcp add dogubako -- \
+    dogubako mcp serve --discovery compact</code></pre>
+          <p class="agents-links"><a class="link-arrow" href="https://docs.dogubako.app/self-hosting/overview/">Self-hosting guide</a><a class="link-arrow" href="https://docs.dogubako.app/agents/overview/">MCP and agents</a></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ download -->
+    <section class="section download" id="download" aria-labelledby="download-title">
+      <div class="wrap">
+        <p class="kicker">Alpha status</p>
+        <h2 id="download-title" class="sec-title">Not out of the box yet.</h2>
+        <p class="sec-lede">Installers for macOS, Windows and Linux arrive with the first alpha release. Watch the releases page to hear when it lands, or build it from source today.</p>
+        <div class="dl-row">
+          <!-- Point these at the release assets once the alpha is published. -->
+          <a class="dl" href="https://github.com/Mischa-dev/Dogubako/releases"><span class="dl-os">macOS</span><span class="dl-fmt">.dmg</span><span class="dl-state"><i></i>Not released yet</span></a>
+          <a class="dl" href="https://github.com/Mischa-dev/Dogubako/releases"><span class="dl-os">Windows</span><span class="dl-fmt">.msi · .exe</span><span class="dl-state"><i></i>Not released yet</span></a>
+          <a class="dl" href="https://github.com/Mischa-dev/Dogubako/releases"><span class="dl-os">Linux</span><span class="dl-fmt">AppImage · .deb · .rpm</span><span class="dl-state"><i></i>Not released yet</span></a>
+        </div>
+        <div class="dl-more">
+          <!-- Trailer slot. When trailer/dogubako-alpha-trailer.mp4 ships next to this page,
+               add data-src="trailer/dogubako-alpha-trailer.mp4" to .trailer and main.js swaps in a player. -->
+          <figure class="trailer" id="trailer">
+            <div class="trailer-ph">
+              <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect x="10" y="24" width="80" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="8"/><line x1="10" y1="46" x2="90" y2="46" stroke="currentColor" stroke-width="8"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></svg>
+              <p><b>The trailer comes with the alpha.</b> A short film of Dogubako, from dropping a file to getting it back. It will play right here.</p>
+            </div>
+          </figure>
+<pre class="code code-block src" tabindex="0" aria-label="Build from source"><code><span class="c"># build the desktop app</span>
+<span class="p">$</span> git clone https://github.com/Mischa-dev/Dogubako
+<span class="p">$</span> cd Dogubako/web &amp;&amp; npm ci &amp;&amp; npm run build
+<span class="p">$</span> cd ../apps/desktop/src-tauri &amp;&amp; cargo tauri build
+
+<span class="c"># or just the CLI</span>
+<span class="p">$</span> cargo install --path crates/cli
+<span class="p">$</span> dogubako deps   <span class="c"># what's missing, and how to install it</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ closing: back in the box -->
+    <section class="scene close-scene" data-scene="close" aria-labelledby="close-title">
+      <div class="sticky">
+        <div class="stage close-stage" aria-hidden="true">
+          <div class="stage-dim"></div>
+          <div class="v3d"><div class="world"></div></div>
+        </div>
+        <div class="close-copy">
+          <h2 id="close-title" class="close-h">Everything back in the box.</h2>
+          <p>Free, open source, and yours to keep. 249 tools, on your own machine.</p>
+          <p class="cta-row"><a class="btn btn-ink" href="https://github.com/Mischa-dev/Dogubako/releases">Watch for the alpha</a><a class="btn btn-ghost" href="https://docs.dogubako.app">Read the docs</a></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================================================================ footer -->
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><rect x="10" y="24" width="80" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="8"/><line x1="10" y1="46" x2="90" y2="46" stroke="currentColor" stroke-width="8"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></svg>
+        <div><p class="fb-name">Dogubako <span lang="ja">道具箱</span></p><p>A local-first, open-source utility toolbox.</p></div>
+      </div>
+      <nav class="footer-cols" aria-label="Footer">
+        <div><h2 class="footer-h">Project</h2><a href="https://github.com/Mischa-dev/Dogubako">Source code</a><a href="https://github.com/Mischa-dev/Dogubako/releases">Releases</a><a href="https://github.com/Mischa-dev/Dogubako/issues">Report a problem</a></div>
+        <div><h2 class="footer-h">Docs</h2><a href="https://docs.dogubako.app">Documentation</a><a href="https://docs.dogubako.app/self-hosting/overview/">Self-hosting</a><a href="https://docs.dogubako.app/cli/overview/">CLI</a><a href="https://docs.dogubako.app/agents/overview/">MCP</a><a href="https://docs.dogubako.app/project/security/">Security</a></div>
+        <div><h2 class="footer-h">License</h2><a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a><a href="https://docs.dogubako.app/project/licensing/">Third-party licenses</a></div>
+      </nav>
+    </div>
+    <p class="wrap footer-fine">Fonts: Instrument Sans and DM Mono, SIL Open Font License.</p>
+  </footer>
+
+  <script src="assets/js/main.js" defer></script>
+</body>
+</html>
