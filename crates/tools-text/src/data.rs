@@ -1213,12 +1213,17 @@ fn columns() -> Arc<dyn Tool> {
                 let m = p
                     .opt_str("mapping")
                     .ok_or_else(|| ToolError::invalid("mapping", "give renames like old=new"))?;
+                // Resolve every source against the original headers first, so
+                // chained renames (a=b,b=a) swap instead of renaming twice.
+                let mut renames = vec![];
                 for pair in split_list(m) {
                     let (a, b) = pair.split_once('=').ok_or_else(|| {
                         ToolError::invalid("mapping", format!("'{pair}' should look like old=new"))
                     })?;
-                    let i = t.col(a)?;
-                    t.headers[i] = b.trim().to_string();
+                    renames.push((t.col(a)?, b.trim().to_string()));
+                }
+                for (i, name) in renames {
+                    t.headers[i] = name;
                 }
             }
             "drop" => {
@@ -2402,6 +2407,17 @@ mod tests {
                 .text
                 .unwrap(),
             "full,age\nANN LEE,30\n"
+        );
+        assert_eq!(
+            h.run(
+                "data.columns",
+                c("rename", json!({"mapping": "full=age,age=full"}))
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap(),
+            "age,full\nAnn Lee,30\n"
         );
         assert_eq!(
             h.run("data.columns", c("index", json!({})))
