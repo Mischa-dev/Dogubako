@@ -296,7 +296,50 @@ fn yaml_tool() -> Arc<dyn Tool> {
 // TOML
 
 pub(crate) fn parse_toml(text: &str, param: &str) -> ToolResult<Value> {
-    let t: toml::Table = toml::from_str(text).map_err(|e| {
+    toml_to_json(toml::Value::Table(parse_toml_native(text, param)?), "")
+        .map_err(|m| ToolError::invalid(param, m))
+}
+
+/// TOML -> JSON for conversions: datetimes become strings; non-finite floats
+/// (nan, inf), which JSON cannot represent, are rejected with their path.
+fn toml_to_json(v: toml::Value, path: &str) -> Result<Value, String> {
+    use toml::Value as T;
+    Ok(match v {
+        T::String(s) => Value::String(s),
+        T::Integer(i) => json!(i),
+        T::Float(f) => serde_json::Number::from_f64(f)
+            .map(Value::Number)
+            .ok_or_else(|| {
+                format!(
+                    "'{}' is {f}, which JSON cannot represent",
+                    if path.is_empty() { "value" } else { path }
+                )
+            })?,
+        T::Boolean(b) => Value::Bool(b),
+        T::Datetime(d) => Value::String(d.to_string()),
+        T::Array(a) => Value::Array(
+            a.into_iter()
+                .enumerate()
+                .map(|(i, x)| toml_to_json(x, &format!("{path}[{i}]")))
+                .collect::<Result<_, _>>()?,
+        ),
+        T::Table(t) => Value::Object(
+            t.into_iter()
+                .map(|(k, x)| {
+                    let p = if path.is_empty() {
+                        k.clone()
+                    } else {
+                        format!("{path}.{k}")
+                    };
+                    toml_to_json(x, &p).map(|j| (k, j))
+                })
+                .collect::<Result<_, _>>()?,
+        ),
+    })
+}
+
+fn parse_toml_native(text: &str, param: &str) -> ToolResult<toml::Table> {
+    toml::from_str(text).map_err(|e| {
         let loc = e.span().map(|s| line_col(text, s.start));
         match loc {
             Some((l, c)) => {
@@ -304,8 +347,7 @@ pub(crate) fn parse_toml(text: &str, param: &str) -> ToolResult<Value> {
             }
             None => ToolError::invalid(param, e.message().to_string()),
         }
-    })?;
-    serde_json::to_value(t).ctx("converting TOML")
+    })
 }
 
 pub(crate) fn to_toml(v: &Value) -> ToolResult<String> {
@@ -362,13 +404,15 @@ fn toml_tool() -> Arc<dyn Tool> {
         .text_output("application/toml")
         .ui("live");
     sync_tool(spec, |_ctx, p| {
-        let v = parse_toml(p.text("text"), "text")?;
-        let data =
-            json!({"valid": true, "top_level_keys": v.as_object().map(|m| m.len()).unwrap_or(0)});
+        // Formatted as TOML values, never via JSON (nan/inf and datetimes
+        // have no JSON equivalent).
+        let t = parse_toml_native(p.text("text"), "text")?;
+        let data = json!({"valid": true, "top_level_keys": t.len()});
         if p.str("mode")? == "validate" {
             return Ok(ToolOutput::data(data));
         }
-        Ok(ToolOutput::text_as(to_toml(&v)?, "application/toml").with_data(data))
+        let out = toml::to_string_pretty(&t).ctx("serializing TOML")?;
+        Ok(ToolOutput::text_as(out, "application/toml").with_data(data))
     })
 }
 
@@ -1133,6 +1177,35 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.to_string().contains("line 1"), "{err}");
+        // TOML-only values survive formatting...
+        let native = "x = nan\ny = +inf\nwhen = 1979-05-27T07:32:00Z\n";
+        let t = h
+            .run("dev.toml", json!({"text": native}))
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        assert!(
+            t.contains("nan") && t.contains("inf") && t.contains("1979-05-27T07:32:00Z"),
+            "{t}"
+        );
+        // ...datetimes convert to JSON strings, and nan is rejected, not nulled.
+        let out = h
+            .run(
+                "dev.convert",
+                json!({"text": "when = 1979-05-27T07:32:00Z", "from": "toml", "to": "json"}),
+            )
+            .await
+            .unwrap();
+        assert!(out.text.unwrap().contains("\"1979-05-27T07:32:00Z\""));
+        let err = h
+            .run(
+                "dev.convert",
+                json!({"text": "[a]\nx = nan", "from": "toml", "to": "json"}),
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("a.x"), "{err}");
         let out = h
             .run(
                 "dev.xml",
