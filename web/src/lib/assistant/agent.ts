@@ -39,7 +39,7 @@ export type ChatMessage =
   | { role: 'assistant'; content: string | null; tool_calls?: ToolCall[] }
   | { role: 'tool'; tool_call_id: string; content: string };
 
-interface ToolCall { id: string; type: 'function'; function: { name: string; arguments: string } }
+export interface ToolCall { id: string; type: 'function'; function: { name: string; arguments: string } }
 
 export interface AgentOptions {
   backend: Backend;
@@ -336,7 +336,11 @@ export async function runAgent(o: AgentOptions): Promise<AgentResult> {
         case 'open_tool': {
           const t = toolMap.get(id);
           if (!t) { answer({ error: `no tool "${id}"; use an id from the catalog` }); break; }
-          const params = (args.params && typeof args.params === 'object' && !Array.isArray(args.params) ? args.params : {}) as Record<string, unknown>;
+          // A tool page can run by itself when it opens (dashboards, live
+          // tools), so a risky tool gets no settings from the model: that
+          // would be a run nobody approved.
+          const risky = riskOf(t, o.confirm) !== null || t.params.some((p) => p.type === 'path');
+          const params = (!risky && args.params && typeof args.params === 'object' && !Array.isArray(args.params) ? args.params : {}) as Record<string, unknown>;
           const note = typeof args.note === 'string' ? args.note : undefined;
           answer({ status: 'opened' });
           return { history, reply: note ?? '', steps, open: { toolId: id, params, note } };
@@ -423,6 +427,47 @@ export async function runAgent(o: AgentOptions): Promise<AgentResult> {
     }
   }
   return { history, reply: 'I stopped after many steps without finishing. Try a more specific request.', steps };
+}
+
+/** Mask secret parameters (passwords, keys) of a tool call; unknown tools keep nothing. */
+export function maskSecrets(t: Pick<ToolInfo, 'params'> | undefined, params: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!params || !t) return {};
+  const out = { ...params };
+  for (const p of t.params) if (p.type === 'secret' && p.name in out) out[p.name] = '••••••';
+  return out;
+}
+
+/**
+ * A copy of steps and conversation that is safe to keep in browser storage:
+ * secret parameters are masked in the steps, their jobs and the model's
+ * tool-call arguments.
+ */
+export function redactForStorage(steps: Step[], history: ChatMessage[], toolMap: Map<string, ToolInfo>): { steps: Step[]; history: ChatMessage[] } {
+  const stepsOut = steps.map((st) => {
+    const t = toolMap.get(st.toolId);
+    return { ...st, params: maskSecrets(t, st.params), job: st.job && { ...st.job, params: maskSecrets(t, st.job.params) } };
+  });
+  const historyOut = history.map((m) => {
+    if (m.role !== 'assistant' || !m.tool_calls?.length) return m;
+    return {
+      ...m,
+      tool_calls: m.tool_calls.map((c) => {
+        const a = parseArgs(c.function.arguments);
+        if (!a || (c.function.name !== 'run_tool' && c.function.name !== 'open_tool')) return c;
+        const t = toolMap.get(String(a.tool_id ?? ''));
+        const params = a.params && typeof a.params === 'object' && !Array.isArray(a.params) ? (a.params as Record<string, unknown>) : {};
+        return { ...c, function: { ...c.function, arguments: JSON.stringify({ ...a, params: maskSecrets(t, params) }) } };
+      }),
+    };
+  });
+  return { steps: stepsOut, history: historyOut };
+}
+
+/** The step renamed, deleted or wrote files outside Dogubako's own outputs. */
+export function changesFiles(st: Step, toolMap: Map<string, ToolInfo>): boolean {
+  if (st.status !== 'done') return false;
+  const t = toolMap.get(st.toolId);
+  return !!t && (t.destructive || t.permissions.includes('host_fs_write') || t.params.some((p) => p.type === 'path' && !!st.params[p.name]));
 }
 
 /** Output files of finished steps, newest last. */

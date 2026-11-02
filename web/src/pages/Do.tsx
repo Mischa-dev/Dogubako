@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, Ban, Undo2, ChevronRight, CircleAlert, CircleCheck, CircleDashed, CornerDownLeft, FileText, Hand, Settings2, Sparkles, Square,
+  ArrowLeft, ArrowRight, Ban, Trash2, Undo2, ChevronRight, CircleAlert, CircleCheck, CircleDashed, CornerDownLeft, FileText, Hand, Settings2, Sparkles, Square,
 } from 'lucide-react';
 import { useApp } from '../lib/app';
 import { href, navigate } from '../lib/router';
-import { droppedNow, pendingInput, pendingParams } from '../lib/store';
+import { droppedNow, pendingInput, pendingParams, prefs } from '../lib/store';
 import { ApiError } from '../lib/backend';
 import { toast } from '../components/toast';
 import { matchIntent, shortHint } from '../lib/intent';
 import { errorText } from '../lib/errors';
 import { formatBytes } from '../lib/format';
-import { outputsOf, runAgent, type AgentFile, type ChatMessage, type Step } from '../lib/assistant/agent';
+import { changesFiles, outputsOf, redactForStorage, runAgent, type AgentFile, type ChatMessage, type Step } from '../lib/assistant/agent';
 import { targetFor } from '../lib/assistant/settings';
 import { useAssistant } from '../lib/assistant/useAssistant';
 import type { Artifact, ToolInfo } from '../lib/types';
@@ -49,7 +49,7 @@ function fullValue(v: unknown, names: Map<string, string>): string {
 }
 
 /** Finished requests are kept for this tab, so coming Back doesn't run them again. */
-interface Saved { turns: Turn[]; history: ChatMessage[]; undone?: boolean }
+interface Saved { turns: Turn[]; history: ChatMessage[]; undone?: boolean; partial?: boolean }
 const savedKey = (k: string) => `dgb.do.${k}`;
 function loadSaved(k: string): Saved | null {
   if (!k) return null;
@@ -125,7 +125,12 @@ export default function DoPage({ request, withFiles, runKey = '' }: { request: s
   const abort = useRef<AbortController | null>(null);
   const answers = useRef(new Map<string, (ok: boolean) => void>());
   const started = useRef(!!saved);
-  useEffect(() => { save(runKey, { turns, history: history.current }); }, [runKey, turns]);
+  // Kept for this tab only when History is on, with passwords and keys masked.
+  useEffect(() => {
+    if (!prefs.get().history) return;
+    const turnsSafe = turns.map((t) => ({ ...t, steps: redactForStorage(t.steps, [], toolMap).steps }));
+    save(runKey, { turns: turnsSafe, history: redactForStorage([], history.current, toolMap).history });
+  }, [runKey, turns, toolMap]);
 
   const names = useMemo(() => {
     const m = new Map<string, string>(files.map((f) => [f.ref, f.name]));
@@ -200,14 +205,17 @@ export default function DoPage({ request, withFiles, runKey = '' }: { request: s
 
   useEffect(() => () => abort.current?.abort(), []);
 
-  // Undo: tools never change the originals, so taking back a request means
-  // removing what it produced (outputs and history entries) and going back.
+  // Undo: most tools never change the originals, so taking back a request
+  // means removing what it produced (outputs and history entries). When a step
+  // did change files, this only removes results and says so.
   const [undoing, setUndoing] = useState(false);
   const undo = async () => {
     setUndoing(true);
     // Only runs that actually started have a job to discard.
     // (A run that failed to even start has a stand-in job named after the step.)
-    const jobs = turns.flatMap((t) => t.steps.flatMap((s) => (s.job && s.job.id !== s.id ? [s.job] : [])));
+    // Steps that changed the person's files keep their History entry: it is
+    // the record of what changed.
+    const jobs = turns.flatMap((t) => t.steps.flatMap((s) => (s.job && s.job.id !== s.id && !changesFiles(s, toolMap) ? [s.job] : [])));
     let failed = 0;
     for (const j of jobs) {
       try {
@@ -222,12 +230,16 @@ export default function DoPage({ request, withFiles, runKey = '' }: { request: s
       toast(`Couldn’t remove ${failed} of ${jobs.length} results. Check History.`, 'error');
       return;
     }
-    save(runKey, { turns: [], history: [], undone: true });
-    toast.success('Undone: the new files were removed');
+    save(runKey, { turns: [], history: [], undone: true, partial: !canUndo });
+    toast.success(canUndo ? 'Undone: the new files were removed' : 'Results removed. Changes to your files stay as they are.');
     window.history.length > 1 ? window.history.back() : navigate(href.home);
   };
 
   const outputs: Artifact[] = useMemo(() => turns.flatMap((t) => outputsOf(t.steps)), [turns]);
+  // Steps that changed things outside Dogubako's own outputs (renamed or
+  // deleted files, wrote to folders). Removing results can't reverse them.
+  const changed = useMemo(() => turns.flatMap((t) => t.steps.filter((st) => changesFiles(st, toolMap)).map((st) => toolMap.get(st.toolId)!.name)), [turns, toolMap]);
+  const canUndo = changed.length === 0;
   const suggestions = useMemo(
     () => matchIntent(visibleTools, docs, request).slice(0, 5),
     [visibleTools, docs, request],
@@ -301,7 +313,7 @@ export default function DoPage({ request, withFiles, runKey = '' }: { request: s
       {saved?.undone && turns.length === 0 && (
         <>
           <h1 className="do-request" tabIndex={-1} data-route-focus>“{request}”</h1>
-          <p className="muted">You undid this request; what it made was removed.</p>
+          <p className="muted">{saved.partial ? 'You removed this request’s result files. Changes it made to your files stay; they’re listed in History.' : 'You undid this request; what it made was removed.'}</p>
         </>
       )}
       {turns.map((t, ti) => (
@@ -336,10 +348,16 @@ export default function DoPage({ request, withFiles, runKey = '' }: { request: s
           <div className="do-outputs-head">
             <h2 id="do-out-h" className="module-title">Results</h2>
             {!running && (
-              <Button size="sm" variant="ghost" icon={Undo2} loading={undoing} onClick={() => void undo()} title="Remove what this made and go back. Your original files were never changed.">Undo</Button>
+              canUndo
+                ? <Button size="sm" variant="ghost" icon={Undo2} loading={undoing} onClick={() => void undo()} title="Remove what this made and go back. Your original files were never changed.">Undo</Button>
+                : <Button size="sm" variant="ghost" icon={Trash2} loading={undoing} onClick={() => void undo()} title="Remove the new result files. This doesn’t reverse changes made to your files.">Remove results</Button>
             )}
           </div>
-          <p className="muted small do-originals">Your original files weren’t changed. Every step above is in History too.</p>
+          <p className="muted small do-originals">
+            {canUndo
+              ? 'Your original files weren’t changed. Every step above is in History too.'
+              : `${[...new Set(changed)].join(', ')} changed files on this computer. That can’t be undone from here; every step is in History.`}
+          </p>
           <ArtifactList artifacts={outputs} />
         </section>
       )}

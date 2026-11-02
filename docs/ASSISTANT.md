@@ -58,7 +58,14 @@ administrator's key on other models.
   not instructions, in the prompt, and settings that name host paths always
   wait for your OK, with every value shown in full.
 * Undo removes what the request made (output files and History entries) and
-  goes back; finished requests aren't re-run when you return with Back.
+  goes back; finished requests aren't re-run when you return with Back. If a
+  step changed your files (renamed, deleted or wrote to a folder, always after
+  your OK), Undo becomes "Remove results": it removes only the new result
+  files, says that the changes stay, and keeps those steps in History.
+* Finished requests are kept for the browser tab only when History is on,
+  with passwords and keys masked.
+* Opening a tool on your behalf never prefills a tool that would need your OK
+  to run, since some tool pages run as soon as they open.
 * Steps that use the internet, write to host folders, read processes or change
   files wait for your OK; choose "Every step" to approve each run.
 * On a server the relay follows the network policy: it reaches only public
