@@ -55,6 +55,11 @@ jobs:
           # The app starts and stays up.
           cp -R "$app" "$RUNNER_TEMP/"
           exe="$(find "$RUNNER_TEMP/Dogubako.app/Contents/MacOS" -type f -perm -u+x | head -1)"
+          # It links only system libraries, nothing from Homebrew or /usr/local.
+          otool -L "$exe"
+          if otool -L "$exe" | tail -n +2 | grep -Ev '^[[:space:]]*(/usr/lib/|/System/Library/|@rpath/|@executable_path/)'; then
+            echo "app links a library users won't have"; exit 1
+          fi
           "$exe" &
           pid=$!
           sleep 15
