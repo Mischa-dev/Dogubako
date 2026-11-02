@@ -7,7 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
+  RUST_BACKTRACE: 0
 
 jobs:
   web:
@@ -58,6 +58,12 @@ jobs:
       - name: Install processing engines (macOS)
         if: runner.os == 'macOS'
         run: brew install ffmpeg qpdf poppler tesseract exiftool || true
+      - name: Engine versions
+        shell: bash
+        run: |
+          for c in "ffmpeg -version" "qpdf --version" "tesseract --version" "magick -version" "convert -version" "exiftool -ver"; do
+            echo "== $c"; $c 2>&1 | head -1 || true
+          done
       - name: Build CLI
         run: cargo build -p dogubako-cli --locked
       - name: Test workspace
