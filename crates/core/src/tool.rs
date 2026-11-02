@@ -149,6 +149,7 @@ pub(crate) struct CtxInner {
     pub permissions: PermissionSet,
     pub input_paths: Vec<PathBuf>,
     pub used_names: Mutex<HashSet<String>>,
+    pub worker_exe: Option<PathBuf>,
     /// Blocking workers started through [`ToolContext::blocking`]. They
     /// cannot be aborted, so the engine waits for them after interrupting a
     /// tool (async work and child processes stop when the run is dropped).
@@ -336,6 +337,20 @@ impl ToolContext {
         Ok(Exec::new(self.clone(), path, binary.to_string()))
     }
 
+    /// A separate, killable worker process for in-process engines that cannot
+    /// observe cancellation (e.g. jq evaluation). `None` when the host binary
+    /// does not provide workers (tests, other embedders); callers then run
+    /// the work in-process. The worker runs under the same limits, timeout
+    /// and cancellation as any other external command.
+    pub fn worker(&self, name: &str) -> Option<Exec> {
+        let exe = self.inner.worker_exe.clone()?;
+        Some(
+            Exec::new(self.clone(), exe, format!("dogubako worker {name}"))
+                .arg(WORKER_ARG)
+                .arg(name),
+        )
+    }
+
     /// Command for an arbitrary program path (used by trusted extension manifests).
     pub fn command_path(&self, program: PathBuf, display: &str) -> Exec {
         Exec::new(self.clone(), program, display.to_string())
@@ -378,7 +393,11 @@ pub struct ContextBuilder {
     pub env: Environment,
     pub permissions: PermissionSet,
     pub input_paths: Vec<PathBuf>,
+    pub worker_exe: Option<PathBuf>,
 }
+
+/// First argument that makes a host binary act as a tool worker.
+pub const WORKER_ARG: &str = "__dogubako-worker";
 
 impl ContextBuilder {
     pub fn build(self) -> ToolContext {
@@ -398,6 +417,7 @@ impl ContextBuilder {
                 permissions: self.permissions,
                 input_paths: self.input_paths,
                 used_names: Mutex::new(HashSet::new()),
+                worker_exe: self.worker_exe,
                 blocking: tokio_util::task::TaskTracker::new(),
             }),
         }

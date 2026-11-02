@@ -20,6 +20,7 @@ pub fn build_engine(env: Environment) -> Engine {
     let dirs = AppDirs::default_local();
     let (registry, _) = dogubako_tools::build_registry(Some(&dirs.extensions));
     let mut cfg = EngineConfig::local(env);
+    cfg.worker_exe = std::env::current_exe().ok();
     cfg.models_dir = std::env::var_os("DOGUBAKO_MODELS_DIR")
         .map(Into::into)
         .unwrap_or(dirs.models.clone());
@@ -235,6 +236,9 @@ fn init_tracing(verbose: u8, quiet: bool) {
 }
 
 fn main() -> ExitCode {
+    if let Some(code) = dogubako_tools::worker_main_from_args() {
+        return ExitCode::from(code.clamp(0, 255) as u8);
+    }
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -380,6 +384,7 @@ async fn server_start(m: &ArgMatches) -> i32 {
     if m.get_flag("no-auth") {
         cfg.auth = dogubako_server::config::AuthMode::None;
     }
+    cfg.worker_exe = std::env::current_exe().ok();
     let _ = tracing_subscriber::fmt().try_init();
     match dogubako_server::serve(cfg).await {
         Ok(()) => 0,

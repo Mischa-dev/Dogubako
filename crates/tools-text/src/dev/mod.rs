@@ -6,7 +6,7 @@ mod crypto;
 mod encoders;
 pub(crate) mod formatters;
 mod misc;
-pub(crate) mod query;
+pub mod query;
 mod regex_tool;
 pub(crate) mod time;
 

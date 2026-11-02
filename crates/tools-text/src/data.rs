@@ -795,8 +795,9 @@ fn csv_filter_sort() -> Arc<dyn Tool> {
                 for (i, desc) in &keys {
                     let (x, y) = (&a[*i], &b[*i]);
                     let o = match (parse_number(x), parse_number(y)) {
-                        (Some(m), Some(n)) => {
-                            m.partial_cmp(&n).unwrap_or(std::cmp::Ordering::Equal)
+                        // Exact for integers beyond f64's 2^53 precision.
+                        (Some(_), Some(_)) => {
+                            crate::util::compare_numbers(x, y).unwrap_or(std::cmp::Ordering::Equal)
                         }
                         (Some(_), None) if y.trim().is_empty() => std::cmp::Ordering::Less,
                         (None, Some(_)) if x.trim().is_empty() => std::cmp::Ordering::Greater,
@@ -2106,6 +2107,17 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.text.unwrap(), "id\n9007199254740993\n");
+        let out = h
+            .run(
+                "data.csv_filter_sort",
+                json!({"text": "id\n9007199254740993\n9007199254740992\n", "sort": "id asc"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            out.text.unwrap(),
+            "id\n9007199254740992\n9007199254740993\n"
+        );
         assert_eq!(
             h.run(
                 "data.csv_filter_sort",

@@ -106,9 +106,10 @@ fn hash() -> Arc<dyn Tool> {
             let d = digest(a, &bytes)?;
             let s = encode_digest(&d, enc);
             if let Some(c) = &cmp {
-                if c.eq_ignore_ascii_case(&s)
-                    || c.eq_ignore_ascii_case(&hex::encode(&d))
+                // Hex is case-insensitive; Base64 is not (case changes the bytes).
+                if c.eq_ignore_ascii_case(&hex::encode(&d))
                     || *c == base64::engine::general_purpose::STANDARD.encode(&d)
+                    || *c == s
                 {
                     matched = Some(a.clone());
                 }
@@ -699,6 +700,24 @@ mod tests {
         );
         let out = h.run("dev.hash", json!({"text": "abc", "algorithms": ["md5"], "compare": "900150983CD24FB0D6963F7D28E17F72"})).await.unwrap();
         assert_eq!(out.data["match"], true);
+        // Base64 is case-sensitive: a case-changed digest must not match.
+        let b64 = |c: &str| json!({"text": "abc", "algorithms": ["sha256"], "encoding": "base64", "compare": c});
+        let out = h
+            .run(
+                "dev.hash",
+                b64("ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0="),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.data["match"], true);
+        let out = h
+            .run(
+                "dev.hash",
+                b64("UNGwV48bZ+PbqudExA4Ii7adyAowf3QCTbd/yFiafA0="),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.data["match"], false);
         assert_eq!(
             h.run("dev.hash", json!({"text": "x", "algorithms": []}))
                 .await

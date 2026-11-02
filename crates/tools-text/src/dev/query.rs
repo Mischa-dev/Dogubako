@@ -74,6 +74,62 @@ fn jsonpath() -> Arc<dyn Tool> {
 // ---------------------------------------------------------------------------
 // dev.jq
 
+/// Evaluate jq in a separate worker process when the host provides one.
+/// jaq cannot observe cancellation, and a filter can loop indefinitely
+/// without yielding (`range(0; 1e12) | select(false)`), so only a process
+/// can be stopped on cancel/timeout. Without a worker (tests, embedders)
+/// it runs in-process.
+async fn jq_eval(
+    ctx: &ToolContext,
+    program: &str,
+    input: &Value,
+    max_out: usize,
+) -> ToolResult<Vec<Value>> {
+    let Some(cmd) = ctx.worker("jq") else {
+        let (program, input) = (program.to_string(), input.clone());
+        return ctx
+            .blocking(move || run_jq(&program, &input, max_out))
+            .await;
+    };
+    let req = serde_json::to_vec(&json!({"filter": program, "input": input, "max": max_out}))?;
+    let out = cmd.stdin(req).run_unchecked().await?;
+    let reply: Value = serde_json::from_slice(&out.stdout)
+        .map_err(|_| ToolError::failed(format!("jq worker failed: {}", out.stderr.trim())))?;
+    if let Some(e) = reply.get("error").and_then(|e| e.as_str()) {
+        return Err(ToolError::invalid("filter", e.to_string()));
+    }
+    Ok(reply
+        .get("results")
+        .and_then(|r| r.as_array())
+        .cloned()
+        .unwrap_or_default())
+}
+
+/// Entry point of the `jq` worker: request JSON on stdin, reply on stdout.
+pub fn jq_worker_main() -> i32 {
+    use std::io::{Read, Write};
+    let mut buf = Vec::new();
+    if std::io::stdin().read_to_end(&mut buf).is_err() {
+        return 2;
+    }
+    let reply = match serde_json::from_slice::<Value>(&buf) {
+        Ok(req) => {
+            let program = req["filter"].as_str().unwrap_or(".");
+            let max = req["max"].as_u64().unwrap_or(10000) as usize;
+            match run_jq(program, &req["input"], max) {
+                Ok(results) => json!({ "results": results }),
+                Err(ToolError::InvalidInput { message, .. }) => json!({ "error": message }),
+                Err(e) => json!({ "error": e.to_string() }),
+            }
+        }
+        Err(e) => json!({ "error": format!("bad worker request: {e}") }),
+    };
+    let mut out = std::io::stdout().lock();
+    let _ = serde_json::to_writer(&mut out, &reply);
+    let _ = out.flush();
+    0
+}
+
 pub(crate) fn run_jq(program: &str, input: &Value, max_out: usize) -> ToolResult<Vec<Value>> {
     use jaq_core::load::{Arena, File, Loader};
     use jaq_core::{data, unwrap_valr, Compiler, Ctx, Vars};
@@ -144,10 +200,10 @@ fn jq() -> Arc<dyn Tool> {
         .text_output("application/json")
         .timeout(30)
         .ui("live");
-    sync_tool(spec, |_ctx, p| {
-        let doc = input_doc(p)?;
+    async_tool(spec, |ctx, p| async move {
+        let doc = input_doc(&p)?;
         let max = p.int_or("max_results", 10000).max(1) as usize;
-        let results = run_jq(p.str("filter")?, &doc, max)?;
+        let results = jq_eval(&ctx, p.str("filter")?, &doc, max).await?;
         let (compact, raw) = (p.bool("compact"), p.bool("raw"));
         let lines: Vec<String> = results
             .iter()

@@ -180,3 +180,73 @@ fn mcp_stdio_roundtrip() {
     assert_eq!(by_id(3)["result"]["structuredContent"]["text"], "MCP");
     assert_eq!(by_id(4)["result"]["isError"], true);
 }
+
+#[test]
+fn jq_runs_in_a_worker_process() {
+    let h = tempfile::tempdir().unwrap();
+    // Through the CLI (which sets itself as the worker executable).
+    let out = cmd(&h)
+        .args([
+            "--json",
+            "run",
+            "dev.jq",
+            "--set",
+            "filter=.a",
+            "--set",
+            r#"text={"a":42}"#,
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["text"].as_str().unwrap().trim(), "42");
+    // The worker protocol itself.
+    let out = cmd(&h)
+        .args(["__dogubako-worker", "jq"])
+        .write_stdin(r#"{"filter":"[.[]|.*2]","input":[1,2],"max":10}"#)
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["results"], serde_json::json!([[2, 4]]));
+}
+
+/// A jq filter that loops without yielding cannot be stopped in-process;
+/// in a worker process the timeout kills it and the run ends promptly.
+#[tokio::test]
+async fn runaway_jq_is_stopped_by_timeout() {
+    use dogubako_core::engine::{Engine, EngineConfig, RunRequest};
+    use dogubako_core::tool::Environment;
+    let (registry, _) = dogubako_tools::build_registry(None);
+    let mut cfg = EngineConfig::local(Environment::Cli);
+    cfg.worker_exe = Some(env!("CARGO_BIN_EXE_dogubako").into());
+    let engine = Engine::new(registry, cfg, vec![]);
+    let out = tempfile::tempdir().unwrap();
+    let resolver = dogubako_core::params::LocalFileResolver::unrestricted();
+    let mut params = serde_json::Map::new();
+    params.insert(
+        "filter".into(),
+        "range(0; 1000000000000) | select(false)".into(),
+    );
+    params.insert("text".into(), "null".into());
+    let t = std::time::Instant::now();
+    let r = engine
+        .run(RunRequest {
+            tool_id: "dev.jq",
+            params,
+            resolver: &resolver,
+            out_dir: out.path().to_path_buf(),
+            permissions: dogubako_core::policy::PermissionSet::all(),
+            authorize: None,
+            progress: None,
+            cancel: Default::default(),
+            timeout: Some(std::time::Duration::from_secs(2)),
+            fs: None,
+        })
+        .await;
+    assert_eq!(r.unwrap_err().code(), "timeout");
+    assert!(t.elapsed().as_secs() < 10, "took {:?}", t.elapsed());
+}

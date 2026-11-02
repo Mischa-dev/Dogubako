@@ -58,6 +58,8 @@ Roles: `owner`, `admin`, `user`, `agent`. Each principal has a **policy**:
 * Global and per-principal concurrency limits; bounded stdout capture.
 * Optional **bubblewrap sandbox** (`sandbox = "bwrap"`, Linux): no network, private `/tmp`, PID/IPC/UTS namespaces, read-only system directories, and only the job's inputs, scratch and output directories visible. Requires unprivileged user namespaces; inside Docker the container itself is the isolation boundary (the compose file drops all capabilities, uses a read-only root filesystem, `no-new-privileges`, and CPU/memory/PID limits).
 * Windows: timeouts and cancellation work; rlimits and bwrap are not available. macOS: rlimits work, bwrap is not available.
+* **In-process engines that cannot observe cancellation** (currently jq via jaq, where a filter can loop forever without output) run in a worker process: the host binary re-executes itself as `dogubako __dogubako-worker jq`, under the same limits, timeout and cancellation as any external program. When cancelled or timed out, other blocking work that cannot be aborted is awaited before the job's concurrency slot is released.
+* Command arguments are never logged (some carry secrets such as archive passwords).
 
 ## Untrusted content
 

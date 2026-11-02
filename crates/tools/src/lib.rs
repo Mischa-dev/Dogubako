@@ -28,6 +28,23 @@ pub fn builtin_tools() -> Vec<Arc<dyn Tool>> {
     v
 }
 
+/// Host binaries call this first: when started as a tool worker
+/// (`<exe> __dogubako-worker <name>`), it runs the worker and returns its
+/// exit code; otherwise `None` and the host continues normally.
+pub fn worker_main_from_args() -> Option<i32> {
+    let mut args = std::env::args().skip(1);
+    if args.next().as_deref() != Some(dogubako_core::tool::WORKER_ARG) {
+        return None;
+    }
+    let name = args.next().unwrap_or_default();
+    #[cfg(feature = "text")]
+    if let Some(code) = dogubako_tools_text::run_worker(&name) {
+        return Some(code);
+    }
+    eprintln!("unknown worker '{name}'");
+    Some(2)
+}
+
 /// Registry with builtins plus trusted extensions from `extensions_dir`.
 pub fn build_registry(extensions_dir: Option<&Path>) -> (Registry, Vec<ExtensionStatus>) {
     let mut reg = Registry::new();

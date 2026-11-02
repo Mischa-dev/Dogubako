@@ -249,11 +249,16 @@ fn model_remove(state: State<'_, Desktop>, id: String) -> Result<(), String> {
 }
 
 pub fn run() {
+    // Started as a tool worker (killable jq evaluation etc.)?
+    if let Some(code) = dogubako_tools::worker_main_from_args() {
+        std::process::exit(code);
+    }
     let dirs = AppDirs::default_local();
     let (registry, _ext) = dogubako_tools::build_registry(Some(&dirs.extensions));
     let mut cfg = EngineConfig::local(Environment::Desktop);
     cfg.models_dir = dirs.models.clone();
     cfg.temp_root = std::env::temp_dir().join("dogubako");
+    cfg.worker_exe = std::env::current_exe().ok();
     let engine = Arc::new(Engine::new(registry, cfg, vec![dirs.bin.clone()]));
     let output_dir = dirs.data.join("outputs");
     let staging_dir = std::env::temp_dir().join("dogubako-staging");

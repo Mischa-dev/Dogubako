@@ -51,6 +51,10 @@ pub struct ServerConfig {
     /// Extra allowed Origins for browser requests / MCP (besides same-origin).
     pub allowed_origins: Vec<String>,
     pub sandbox: SandboxMode,
+    /// Worker executable for killable in-process engines (set by the host
+    /// binary, not configurable).
+    #[serde(skip)]
+    pub worker_exe: Option<PathBuf>,
     pub exec_memory_mb: Option<u64>,
     pub exec_cpu_secs: Option<u64>,
     pub max_job_seconds: u64,
@@ -86,6 +90,7 @@ impl Default for ServerConfig {
             mcp_discovery: "full".into(),
             allowed_origins: vec![],
             sandbox: SandboxMode::None,
+            worker_exe: None,
             exec_memory_mb: Some(4096),
             exec_cpu_secs: Some(3600),
             max_job_seconds: 3600,

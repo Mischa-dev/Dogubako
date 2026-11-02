@@ -29,6 +29,9 @@ pub struct EngineConfig {
     pub temp_root: PathBuf,
     pub models_dir: PathBuf,
     pub env: Environment,
+    /// Executable that handles `__dogubako-worker <name>` (normally the host
+    /// binary itself); see [`crate::tool::ToolContext::worker`].
+    pub worker_exe: Option<PathBuf>,
 }
 
 impl EngineConfig {
@@ -41,6 +44,7 @@ impl EngineConfig {
             temp_root: std::env::temp_dir(),
             models_dir: dirs.models,
             env,
+            worker_exe: None,
         }
     }
 }
@@ -227,6 +231,7 @@ impl Engine {
             env: self.config.env,
             permissions: req.permissions.clone(),
             input_paths: params.all_files().map(|f| f.path.clone()).collect(),
+            worker_exe: self.config.worker_exe.clone(),
         }
         .build();
 

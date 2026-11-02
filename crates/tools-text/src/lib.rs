@@ -3,11 +3,19 @@
 use dogubako_core::prelude::*;
 
 mod data;
-mod dev;
+pub(crate) mod dev;
 mod escape;
 mod sheet;
 mod text;
 mod util;
+
+/// Run a named worker (see `ToolContext::worker`); `None` if unknown.
+pub fn run_worker(name: &str) -> Option<i32> {
+    match name {
+        "jq" => Some(dev::query::jq_worker_main()),
+        _ => None,
+    }
+}
 
 /// All tools provided by this crate.
 pub fn tools() -> Vec<Arc<dyn Tool>> {
