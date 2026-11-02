@@ -36,12 +36,23 @@ export default function FaceRedact({ tool, jobId }: { tool: ToolInfo; jobId?: st
   const item = ((form.values[fileParam.name] as FileItem[]) ?? []).find((i) => i.status === 'ready');
   const imageUrl = form.input.imageUrl;
 
-  const runDetect = async () => {
+  const boxesRef = useRef<Region[]>(boxes);
+  boxesRef.current = boxes;
+  const currentRef = useRef<string | undefined>();
+  currentRef.current = item?.ref;
+
+  const runDetect = async (startBoxes: Region[] = boxesRef.current) => {
     if (!item?.ref || !canDetect) return;
-    const j = await detectJob.run('image.face_detect', { input: item.ref });
+    const ref = item.ref;
+    const before = new Set(startBoxes);
+    const j = await detectJob.run('image.face_detect', { input: ref });
+    if (currentRef.current !== ref) return; // the image changed meanwhile
     if (j?.status === 'succeeded') {
       const regs = ((j.result?.data as any)?.regions as Region[]) ?? [];
-      setBoxes(regs.map((r, i) => ({ ...r, label: r.label ?? `face ${i + 1}` })));
+      const faces = regs.map((r, i) => ({ ...r, label: r.label ?? `face ${i + 1}` }));
+      // Replace only the boxes that existed when detection started; regions
+      // drawn or edited meanwhile are kept (over-redacting is the safe side).
+      setBoxes((prev) => mergeDetected(faces, prev, before));
       setSelected(null);
       setDetected(regs.length ? `${regs.length} face${regs.length === 1 ? '' : 's'} found` : 'No faces found — draw boxes manually');
     }
@@ -67,7 +78,7 @@ export default function FaceRedact({ tool, jobId }: { tool: ToolInfo; jobId?: st
       setNatural(null);
       setDetected(null);
       form.job.reset();
-      if (canDetect) void runDetect();
+      if (canDetect) void runDetect([]);
     }
     if (!item) { lastRef.current = undefined; setBoxes([]); setNatural(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,7 +119,7 @@ export default function FaceRedact({ tool, jobId }: { tool: ToolInfo; jobId?: st
               <span className="editor-hint">Drag on the image to add a box. Select a box to move or resize it.</span>
               <span className="editor-actions">
                 {canDetect && (
-                  <Button size="sm" variant="ghost" icon={ScanFace} onClick={runDetect} loading={detectJob.running}>Detect faces</Button>
+                  <Button size="sm" variant="ghost" icon={ScanFace} onClick={() => void runDetect()} loading={detectJob.running}>Detect faces</Button>
                 )}
                 <Button size="sm" variant="ghost" icon={Trash2} onClick={() => { setBoxes([]); setSelected(null); }} disabled={!boxes.length}>Clear</Button>
               </span>
@@ -174,4 +185,10 @@ export function restoredRegions(params: Record<string, unknown> | undefined): Re
     r && ['x', 'y', 'width', 'height'].every((k) => Number.isFinite(Number((r as any)[k]))))
     .map((r) => ({ x: Number(r.x), y: Number(r.y), width: Number(r.width), height: Number(r.height) }));
   return regs.length ? regs : null;
+}
+
+/** Detection results replace the boxes that existed when detection started;
+ *  boxes drawn or edited since then are kept. */
+export function mergeDetected(faces: Region[], current: Region[], atStart: Set<Region>): Region[] {
+  return [...faces, ...current.filter((b) => !atStart.has(b))];
 }
