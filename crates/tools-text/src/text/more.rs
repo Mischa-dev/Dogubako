@@ -1061,18 +1061,26 @@ fn column_extract() -> Arc<dyn Tool> {
             };
             let n = fields.len() as i64;
             let idx = |i: i64| if i < 0 { n + i } else { i - 1 };
-            let mut sel = vec![];
+            // Build the line directly: ranges may repeat fields ("1,1,1,..."),
+            // so count as we go, and charge at least a byte per selection so
+            // empty fields with an empty delimiter can't loop unboundedly.
+            let mut sel = String::new();
+            let mut first = true;
             for (a, b) in &cols {
                 let (s, e) = (idx(*a).max(0), idx(*b).min(n - 1));
                 let mut i = s;
                 while i <= e {
-                    // Ranges may repeat fields ("1,1,1,..."), so count as we go.
-                    budget.add(fields[i as usize].len() + od.len())?;
-                    sel.push(fields[i as usize]);
+                    let f = fields[i as usize];
+                    budget.add((f.len() + od.len()).max(1))?;
+                    if !first {
+                        sel.push_str(od);
+                    }
+                    first = false;
+                    sel.push_str(f);
                     i += 1;
                 }
             }
-            out.push(sel.join(od));
+            out.push(sel);
         }
         Ok(ToolOutput::text(out.join("\n")))
     })

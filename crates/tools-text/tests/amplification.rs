@@ -51,6 +51,13 @@ async fn repeated_separators_are_bounded() {
         json!({"text": lines, "prefix": big, "skip_empty": false}),
     )
     .await;
+    // Empty fields joined with an empty delimiter still count per selection.
+    limited(
+        &h,
+        "text.column_extract",
+        json!({"text": "|".repeat(99_999), "delimiter": "|", "output_delimiter": "", "columns": vec!["1-100000"; 10_000].join(",")}),
+    )
+    .await;
     // Repeating a column in the list repeats it in every line.
     limited(
         &h,
