@@ -412,14 +412,14 @@
 
       <div class="from-source">
 <pre class="code"><code><span class="c"># build the desktop app</span>
-<span class="p">$</span> git clone https://github.com/Mischa-dev/Dogubako &amp;&amp; cd Dogubako
+<span class="p">$</span> git clone --branch claude/brave-wright-yuzn0d https://github.com/Mischa-dev/Dogubako &amp;&amp; cd Dogubako
 <span class="p">$</span> (cd web &amp;&amp; npm ci &amp;&amp; npm run build)
 <span class="p">$</span> cargo install tauri-cli --version '^2'
 <span class="p">$</span> (cd apps/desktop/src-tauri &amp;&amp; cargo tauri build)
 
 <span class="c"># or just the CLI</span>
 <span class="p">$</span> cargo install --path crates/cli</code></pre>
-        <p>Source builds require Rust 1.95+, Node.js 20+, a C compiler and your platform’s Tauri system dependencies. See the <a href="https://github.com/Mischa-dev/Dogubako/blob/claude/project-thread-i6syyt/docs/BUILD.md">build prerequisites</a>.</p>
+        <p>The application is currently on the redesign branch shown in the clone command; main only contains a placeholder README. Source builds require Rust 1.95+, Node.js 20+, a C compiler and your platform’s Tauri system dependencies. See the <a href="https://github.com/Mischa-dev/Dogubako/blob/claude/project-thread-i6syyt/docs/BUILD.md">build prerequisites</a>.</p>
         <p>Optional engines are installed separately and models download on request. Optional engines unlock more tools. <code class="mono">dogubako deps</code> lists what’s missing and the command to install it on your system.</p>
       </div>
     </section>
