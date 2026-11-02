@@ -58,6 +58,7 @@ fn jsonpath() -> Arc<dyn Tool> {
         let q = p.str("query")?;
         let path = serde_json_path::JsonPath::parse(q)
             .map_err(|e| ToolError::invalid("query", e.to_string()))?;
+        check_match_fanout(q, &doc)?;
         let located = path.query_located(&doc);
         // Recursive queries match every ancestor of a large value, so the
         // copies can dwarf the document: size the result before cloning.
@@ -79,6 +80,83 @@ fn jsonpath() -> Arc<dyn Tool> {
                 .with_data(json!({"count": values.len(), "paths": paths})),
         )
     })
+}
+
+/// JSONPath keeps duplicate selections, so `[0,0]` repeated n times makes
+/// 2^n matches of a tiny document, all collected before any output check.
+/// Bound the worst case from the query's shape: each segment's selector
+/// count multiplies how often a node can be matched, and every descendant
+/// segment after the first multiplies it by the document depth (a node is
+/// reached once per matched ancestor). Without duplication the matches are
+/// at most the document's nodes, which is always allowed.
+fn check_match_fanout(query: &str, doc: &Value) -> ToolResult<()> {
+    const MAX_MATCHES: f64 = 4_000_000.0;
+    fn size(v: &Value, depth: usize, nodes: &mut f64, max_depth: &mut usize) {
+        *nodes += 1.0;
+        *max_depth = (*max_depth).max(depth);
+        match v {
+            Value::Array(a) => a.iter().for_each(|x| size(x, depth + 1, nodes, max_depth)),
+            Value::Object(m) => m
+                .values()
+                .for_each(|x| size(x, depth + 1, nodes, max_depth)),
+            _ => {}
+        }
+    }
+    // Scan the query's top level: string literals and filter parentheses
+    // are skipped, `..` marks a descendant segment, and the commas directly
+    // inside a top-level `[...]` separate its selectors.
+    let mut factor = 1.0f64;
+    let mut descendants = 0usize;
+    let (mut bracket, mut paren) = (0usize, 0usize);
+    let mut selectors = 1usize;
+    let mut quote: Option<char> = None;
+    let chars: Vec<char> = query.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if let Some(q) = quote {
+            if c == '\\' {
+                i += 1;
+            } else if c == q {
+                quote = None;
+            }
+        } else {
+            match c {
+                '\'' | '"' => quote = Some(c),
+                '(' => paren += 1,
+                ')' => paren = paren.saturating_sub(1),
+                '[' => {
+                    if bracket == 0 {
+                        selectors = 1;
+                    }
+                    bracket += 1;
+                }
+                ']' => {
+                    bracket = bracket.saturating_sub(1);
+                    if bracket == 0 {
+                        factor *= selectors as f64;
+                    }
+                }
+                ',' if bracket == 1 && paren == 0 => selectors += 1,
+                '.' if bracket == 0 && chars.get(i + 1) == Some(&'.') => {
+                    descendants += 1;
+                    i += 1;
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    let (mut nodes, mut depth) = (0.0, 0usize);
+    size(doc, 1, &mut nodes, &mut depth);
+    factor *= (depth as f64).powi(descendants.saturating_sub(1) as i32);
+    if factor > 1.0 && nodes * factor > MAX_MATCHES {
+        return Err(ToolError::limit(format!(
+            "this query can repeat matches up to {factor:.0} times over {nodes:.0} values; \
+             remove repeated selectors or descendant (..) steps"
+        )));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

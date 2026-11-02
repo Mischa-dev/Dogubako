@@ -132,6 +132,29 @@ async fn json_results_are_bounded() {
     }
     let text = serde_json::to_string(&doc).unwrap();
     limited(&h, "dev.jsonpath", json!({"query": "$..*", "text": text})).await;
+    // Repeated selectors keep duplicates: 2^30 matches of a tiny document.
+    let doc = format!("{}0{}", "[".repeat(30), "]".repeat(30));
+    limited(
+        &h,
+        "dev.jsonpath",
+        json!({"query": format!("${}", "[0,0]".repeat(30)), "text": doc}),
+    )
+    .await;
+    // A couple of repeats on a small document are still answered.
+    let out = h
+        .run("dev.jsonpath", json!({"query": "$[0,0]", "text": "[1]"}))
+        .await
+        .unwrap();
+    assert_eq!(out.data["count"], 2);
+    let out = h
+        .run(
+            "dev.jsonpath",
+            json!({"query": "$..a..b", "text": r#"{"a":{"b":1,"c":{"b":2}}}"#}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["count"], 2);
+
     // A long key over many array items: every location repeats the key.
     let text = format!(
         "{{\"{}\":[{}0]}}",
