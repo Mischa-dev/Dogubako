@@ -163,7 +163,9 @@ pub fn parse_csv(text: &str, delim: u8, has_header: bool) -> ToolResult<Table> {
 }
 
 fn dedupe_headers(h: Vec<String>) -> Vec<String> {
-    let mut seen: HashMap<String, usize> = HashMap::new();
+    // Every emitted name is tracked, so a generated suffix can never collide
+    // with a header that already exists (e.g. `a,a,a_2`).
+    let mut used: HashSet<String> = HashSet::new();
     h.into_iter()
         .enumerate()
         .map(|(i, s)| {
@@ -172,13 +174,14 @@ fn dedupe_headers(h: Vec<String>) -> Vec<String> {
             } else {
                 s.trim().to_string()
             };
-            let n = seen.entry(base.clone()).or_insert(0);
-            *n += 1;
-            if *n > 1 {
-                format!("{base}_{n}")
-            } else {
-                base
+            let mut name = base.clone();
+            let mut n = 2;
+            while used.contains(&name) {
+                name = format!("{base}_{n}");
+                n += 1;
             }
+            used.insert(name.clone());
+            name
         })
         .collect()
 }
@@ -2101,6 +2104,15 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.text.unwrap(), "{\"a\":1,\"b\":2}\n");
+        // Generated suffixes never collide with existing headers.
+        let out = h
+            .run(
+                "data.csv_to_json",
+                json!({"text": "a,a,a_2\n1,2,3", "shape": "ndjson", "header": "yes"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.text.unwrap(), "{\"a\":1,\"a_2\":2,\"a_2_2\":3}\n");
         let out = h.run("data.json_to_csv", json!({"text": "[{\"id\":1,\"u\":{\"n\":\"x\"},\"tags\":[\"a\",\"b\"]},{\"id\":2,\"extra\":\"y,z\"}]", "arrays": "join"})).await.unwrap();
         assert_eq!(
             out.text.unwrap(),

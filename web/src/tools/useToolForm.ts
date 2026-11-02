@@ -68,6 +68,7 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null } = {}
     if (!id || loadedJob.current === id) return;
     loadedJob.current = id;
     let alive = true;
+    let finished = false;
     (async () => {
       let j: JobView | undefined;
       if (backend.mode === 'server') {
@@ -86,10 +87,16 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null } = {}
         v[name] = items;
       }
       if (!alive) return;
+      finished = true;
       setValues(v);
       setJob(j);
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+      // Interrupted before it finished (e.g. StrictMode's mount/unmount/
+      // mount in development): let the next run of this effect retry.
+      if (!finished && loadedJob.current === id) loadedJob.current = null;
+    };
   }, [opts.jobId, backend, tool, setJob]);
 
   const valuesRef = useRef(values);
