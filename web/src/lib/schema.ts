@@ -137,6 +137,10 @@ export function toRunParams(tool: Pick<ToolInfo, 'params'>, values: FormValues):
         else if (!isEmpty(v)) out[p.name] = v;
         break;
       case 'text':
+        // An explicitly cleared field with a non-empty default is sent as ''
+        // so the engine does not restore the default (e.g. an empty separator).
+        if (typeof v === 'string' && (v !== '' || p.required || (p.default != null && p.default !== ''))) out[p.name] = v;
+        break;
       case 'secret':
         if (typeof v === 'string' && (v !== '' || p.required)) out[p.name] = v;
         break;

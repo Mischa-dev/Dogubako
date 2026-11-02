@@ -81,6 +81,12 @@ describe('toRunParams', () => {
     expect(JSON.parse(values.regions as string)).toEqual([{ x: 1 }]);
   });
 
+  it('sends a cleared text field that has a non-empty default', () => {
+    const tt = tool({ id: 'text.slugify', name: 'S', params: [{ name: 'separator', label: 'Sep', type: 'text', default: '-' }, { name: 'note', label: 'Note', type: 'text' }] });
+    expect(toRunParams(tt, { separator: '', note: '' })).toEqual({ separator: '' });
+    expect(toRunParams(tt, { separator: '_', note: 'x' })).toEqual({ separator: '_', note: 'x' });
+  });
+
   it('keeps an explicitly empty multi-choice selection', () => {
     const mt = tool({ id: 'pdf.protect', name: 'P', params: [{ name: 'allow', label: 'Allow', type: 'enum', multi: true, options: [{ value: 'print', label: 'Print' }], default: ['print'] }] });
     expect(toRunParams(mt, { allow: [] })).toEqual({ allow: [] });

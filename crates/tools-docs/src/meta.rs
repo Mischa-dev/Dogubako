@@ -81,6 +81,12 @@ fn metadata_edit() -> Arc<dyn Tool> {
                     file.name
                 ));
             }
+            if clear || had_xmp {
+                // Removing the references is not enough: the old Info/XMP
+                // objects would still be written (recoverable). Drop every
+                // object no longer reachable from the trailer.
+                doc.prune_objects();
+            }
             if !changes.is_empty() {
                 let info_id = match doc.trailer.get(b"Info") {
                     Ok(Object::Reference(id)) if doc.get_dictionary(*id).is_ok() => *id,

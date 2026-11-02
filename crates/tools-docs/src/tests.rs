@@ -640,6 +640,38 @@ async fn metadata() {
         .unwrap();
     let doc = Document::load(&out.artifacts[0].path).unwrap();
     assert!(doc.trailer.get(b"Info").is_err());
+
+    // An indirect XMP stream must be gone from the file, not just unlinked.
+    let x = h.path("xmp.pdf");
+    let mut d = Document::load(&a).unwrap();
+    let xmp = d.add_object(Stream::new(
+        dictionary! { "Type" => "Metadata", "Subtype" => "XML" },
+        b"<x:xmpmeta><dc:creator>SECRET-AUTHOR</dc:creator></x:xmpmeta>".to_vec(),
+    ));
+    d.catalog_mut()
+        .unwrap()
+        .set("Metadata", Object::Reference(xmp));
+    d.save(&x).unwrap();
+    let contains_marker = |path: &Path| {
+        let doc = Document::load(path).unwrap();
+        doc.objects.values().any(|o| match o {
+            Object::Stream(st) => {
+                let bytes = st
+                    .decompressed_content()
+                    .unwrap_or_else(|_| st.content.clone());
+                bytes.windows(13).any(|w| w == b"SECRET-AUTHOR")
+            }
+            _ => false,
+        })
+    };
+    assert!(contains_marker(&x));
+    for params in [
+        json!({"input": [s(&x)], "clear_all": true}),
+        json!({"input": [s(&x)], "title": "New"}),
+    ] {
+        let out = h.run("pdf.metadata_edit", params).await.unwrap();
+        assert!(!contains_marker(&out.artifacts[0].path));
+    }
     let err = h
         .run("pdf.metadata_edit", json!({"input": [s(&a)]}))
         .await
