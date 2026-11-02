@@ -249,6 +249,13 @@ async fn wrap_indent_and_regex_groups_are_bounded() {
         .unwrap();
     assert_eq!(out.text.as_deref(), Some("aa bb\n> cc"));
 
+    // A long group name is repeated as a key in every match.
+    limited(
+        &h,
+        "dev.regex",
+        json!({"pattern": format!("(?P<{}>x)", "n".repeat(100_000)), "text": "x".repeat(100_000), "max_matches": 100_000}),
+    )
+    .await;
     // 100 nested groups each capture the whole 4 MiB match.
     let pattern = format!("{}a+{}", "(".repeat(100), ")".repeat(100));
     limited(

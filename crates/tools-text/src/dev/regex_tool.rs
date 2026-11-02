@@ -235,12 +235,13 @@ fn regex_tester() -> Arc<dyn Tool> {
             budget.add(m.end - m.start + 64)?;
             for (i, g) in m.groups.iter().enumerate() {
                 let len = g.map(|(s, e)| e - s).unwrap_or(0) + 48;
-                let copies = if matches!(names.get(i + 1), Some(Some(_))) {
-                    2
-                } else {
-                    1
+                // A named group is copied again under its name, and the name
+                // itself is repeated as a key in every match.
+                let extra = match names.get(i + 1) {
+                    Some(Some(n)) => len + n.len(),
+                    _ => 0,
                 };
-                budget.add(len * copies)?;
+                budget.add(len + extra)?;
             }
         }
         let idx = Utf16Index::new(text);
