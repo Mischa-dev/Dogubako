@@ -372,6 +372,17 @@ pub fn flatten_records_with(
         }
         flat_rows.push(pairs);
     }
+    // Rows are built full width: objects with disjoint keys make a sparse
+    // table whose empty cells can outnumber the input many times over.
+    let have: u128 = flat_rows.iter().map(|p| p.len() as u128).sum();
+    let added = (cols.len() as u128 * flat_rows.len() as u128).saturating_sub(have);
+    if added > MAX_PADDED_CELLS {
+        return Err(ToolError::limit(format!(
+            "{} records with {} distinct fields would need {added} empty cells (max {MAX_PADDED_CELLS})",
+            flat_rows.len(),
+            cols.len()
+        )));
+    }
     let rows = flat_rows
         .into_iter()
         .map(|pairs| {
@@ -1982,6 +1993,21 @@ fn sql_value(s: &str, infer: bool) -> String {
 
 pub fn render_table(t: &Table, to: &str, opts: &Params) -> ToolResult<(Vec<u8>, &'static str)> {
     let infer = opts.bool("infer_types");
+    // Some formats repeat text on every row (JSON/YAML keys, the SQL table
+    // name and column list): long names times many rows can dwarf the input.
+    let cells: u128 = t
+        .rows
+        .iter()
+        .flat_map(|r| r.iter())
+        .map(|c| c.len() as u128 + 8)
+        .sum();
+    let names: u128 = t.headers.iter().map(|h| h.len() as u128 + 8).sum();
+    let per_row = match to {
+        "json" | "ndjson" | "yaml" => names,
+        "sql" => names + opts.str_or("table_name", "data").len() as u128 + 32,
+        _ => 0,
+    };
+    crate::util::check_generated_size(cells + names + per_row * t.rows.len() as u128)?;
     Ok(match to {
         "csv" => (
             write_csv(&t.headers, &t.rows, b',', false)?.into_bytes(),

@@ -244,3 +244,43 @@ async fn replacements_and_column_splits_are_bounded() {
         .unwrap();
     assert_eq!(out.text.as_deref(), Some("$1$b"));
 }
+
+#[tokio::test]
+async fn table_exports_and_sparse_json_are_bounded() {
+    let h = harness();
+    let csv = format!("a\n{}", "1\n".repeat(100_000));
+    limited(
+        &h,
+        "data.convert",
+        json!({"text": csv, "header": "yes", "to": "sql", "table_name": "t".repeat(100_000)}),
+    )
+    .await;
+    // A long header repeated as a JSON key on every row.
+    let csv = format!("{}\n{}", "k".repeat(100_000), "1\n".repeat(100_000));
+    limited(
+        &h,
+        "data.convert",
+        json!({"text": csv, "header": "yes", "to": "json"}),
+    )
+    .await;
+    // 100,000 objects, each with its own key: a 100,000 x 100,000 table.
+    let sparse: Vec<Value> = (0..100_000)
+        .map(|i| json!({ format!("k{i}"): 1 }))
+        .collect();
+    limited(
+        &h,
+        "data.json_to_csv",
+        json!({"text": serde_json::to_string(&sparse).unwrap()}),
+    )
+    .await;
+
+    // Normal exports still work.
+    let out = h
+        .run(
+            "data.convert",
+            json!({"text": "a,b\n1,x\n", "header": "yes", "to": "sql", "table_name": "t"}),
+        )
+        .await
+        .unwrap();
+    assert!(out.artifacts.len() == 1 || out.text.is_some());
+}
