@@ -35,6 +35,57 @@ fn indent_str(p: &Params) -> String {
 // JSON
 
 pub(crate) fn parse_json(text: &str, param: &str) -> ToolResult<Value> {
+    let v = parse_json_raw(text, param)?;
+    check_json_numbers(text).map_err(|m| ToolError::invalid(param, m))?;
+    Ok(v)
+}
+
+/// serde_json (without arbitrary precision) stores numbers as i64, u64 or
+/// f64, so a literal such as 18446744073709551617 or
+/// 0.10000000000000000001 would come back changed. Reject those instead of
+/// silently altering data. `text` must already be valid JSON.
+fn check_json_numbers(text: &str) -> Result<(), String> {
+    let b = text.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'"' => {
+                i += 1;
+                while i < b.len() && b[i] != b'"' {
+                    i += if b[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            b'-' | b'0'..=b'9' => {
+                let start = i;
+                while i < b.len() && matches!(b[i], b'0'..=b'9' | b'-' | b'+' | b'.' | b'e' | b'E')
+                {
+                    i += 1;
+                }
+                let tok = &text[start..i];
+                let exact = if tok.bytes().all(|c| c.is_ascii_digit() || c == b'-') {
+                    tok.parse::<i64>().is_ok() || tok.parse::<u64>().is_ok()
+                } else {
+                    tok.parse::<f64>().is_ok_and(|f| {
+                        f.is_finite()
+                            && crate::util::compare_numbers(tok, &f.to_string())
+                                == Some(std::cmp::Ordering::Equal)
+                    })
+                };
+                if !exact {
+                    let shown: String = tok.chars().take(40).collect();
+                    return Err(format!(
+                        "the number {shown} cannot be represented exactly (64-bit integers and double-precision floats only); quote it as a string to keep it unchanged"
+                    ));
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    Ok(())
+}
+
+fn parse_json_raw(text: &str, param: &str) -> ToolResult<Value> {
     serde_json::from_str(text).map_err(|e| {
         let line = e.line();
         let col = e.column();
@@ -445,6 +496,12 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
             .read_event()
             .map_err(|e| err(&reader, e.to_string()))?;
         match &ev {
+            Event::Start(e) | Event::Empty(e) if e.attributes().any(|a| a.is_err()) => {
+                // The event reader does not validate attributes itself
+                // (duplicates, missing quotes); report the first error.
+                let bad = e.attributes().find_map(|a| a.err()).unwrap();
+                return Err(err(&reader, format!("invalid attribute: {bad}")));
+            }
             Event::Start(_) => {
                 if depth == 0 {
                     roots += 1;
@@ -942,8 +999,11 @@ pub(crate) fn parse_any(text: &str, from: &str) -> ToolResult<Value> {
                 .enumerate()
                 .filter(|(_, l)| !l.trim().is_empty())
                 .map(|(i, l)| {
-                    serde_json::from_str(l)
-                        .map_err(|e| ToolError::invalid("text", format!("line {}: {e}", i + 1)))
+                    let v = serde_json::from_str(l)
+                        .map_err(|e| ToolError::invalid("text", format!("line {}: {e}", i + 1)))?;
+                    check_json_numbers(l)
+                        .map_err(|m| ToolError::invalid("text", format!("line {}: {m}", i + 1)))?;
+                    Ok(v)
                 })
                 .collect::<ToolResult<_>>()?,
         ),
@@ -1126,6 +1186,37 @@ mod tests {
                 .code(),
             "invalid_input"
         );
+        // Numbers that would change are rejected; representable ones (and
+        // number-like text inside strings) pass through.
+        for bad in [
+            "{\"id\":18446744073709551617}",
+            "[-9223372036854775809]",
+            "[0.10000000000000000001]",
+        ] {
+            let e = h.run("dev.json", json!({"text": bad})).await.unwrap_err();
+            assert!(
+                e.to_string().contains("cannot be represented exactly"),
+                "{bad}: {e}"
+            );
+        }
+        let out = h
+            .run(
+                "dev.json",
+                json!({"text": "{\"a\":18446744073709551615,\"b\":-9223372036854775808,\"c\":[0.1,1.5e3,1E-7,-0,2.0],\"d\":\"99999999999999999999\\\"9\"}", "mode": "minify"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            out.text.unwrap(),
+            "{\"a\":18446744073709551615,\"b\":-9223372036854775808,\"c\":[0.1,1500.0,1e-7,-0.0,2.0],\"d\":\"99999999999999999999\\\"9\"}"
+        );
+        assert!(h
+            .run(
+                "dev.diff_json",
+                json!({"original": "[18446744073709551617]", "changed": "[18446744073709551618]"}),
+            )
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -1225,6 +1316,16 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.text.unwrap(), "<a><b>x</b></a>");
+        // Attribute errors (duplicates, unquoted values) are not well-formed,
+        // on empty and start elements alike.
+        for bad in [
+            "<r a=\"1\" a=\"2\"/>",
+            "<r><s a=\"1\" a=\"2\">x</s></r>",
+            "<r a=1/>",
+        ] {
+            let e = h.run("dev.xml", json!({"text": bad})).await.unwrap_err();
+            assert!(e.to_string().contains("attribute"), "{bad}: {e}");
+        }
         // Mixed content keeps its meaningful whitespace (minify and format).
         let mixed = "<doc>\n  <p><b>Hello</b> <i>world</i></p>\n</doc>";
         let out = h
