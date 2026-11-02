@@ -28,12 +28,29 @@ pub fn safe_rel_path(name: &str) -> Result<PathBuf, &'static str> {
                 if c.chars().any(|ch| ch.is_control()) {
                     return Err("name contains control characters");
                 }
+                // A drive prefix in any component ("a/C:/x") would replace
+                // the path built so far on Windows when pushed.
+                let cb = c.as_bytes();
+                if cb.len() >= 2 && cb[1] == b':' && cb[0].is_ascii_alphabetic() {
+                    return Err("absolute path (drive letter)");
+                }
+                // On Windows ':' also selects an alternate data stream.
+                if cfg!(windows) && c.contains(':') {
+                    return Err("name contains ':'");
+                }
                 out.push(c);
             }
         }
     }
     if out.as_os_str().is_empty() {
         return Err("empty name");
+    }
+    // Belt and braces: only plain relative components may remain.
+    if !out
+        .components()
+        .all(|c| matches!(c, std::path::Component::Normal(_)))
+    {
+        return Err("unsafe path component");
     }
     Ok(out)
 }
@@ -252,6 +269,8 @@ mod tests {
             ".",
             "a\0b",
             "a/\nb",
+            "ordinary/C:/escape.txt",
+            "ordinary\\d:escape.txt",
         ] {
             assert!(safe_rel_path(bad).is_err(), "{bad:?}");
         }
