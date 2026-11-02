@@ -600,13 +600,16 @@ fn protect() -> Arc<dyn Tool> {
                 format!("--annotate={}", yn("annotate")),
                 format!("--form={}", yn("forms")),
                 format!("--assemble={}", yn("assemble")),
-                "--".into(),
-                out.to_string_lossy().to_string(),
             ];
             write_private(&argfile, lines.join("\n").as_bytes())?;
             let res = ctx
                 .command("qpdf")?
                 .arg(format!("@{}", argfile.display()))
+                // The encryption-group terminator and the output path are
+                // passed as plain arguments: some qpdf builds do not honour
+                // `--` inside an @argfile. Passwords stay in the private file.
+                .arg("--")
+                .arg(&out)
                 .run()
                 .await
                 .map_err(map_qpdf_err("input"));
