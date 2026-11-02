@@ -448,17 +448,22 @@ fn count() -> Arc<dyn Tool> {
 
 fn leading_number(s: &str) -> Option<f64> {
     let t = s.trim_start();
-    let end = t
-        .char_indices()
-        .take_while(|(i, c)| {
-            c.is_ascii_digit()
-                || *c == '.'
-                || ((*c == '-' || *c == '+') && *i == 0)
-                || *c == 'e'
-                || *c == 'E'
-        })
-        .last()
-        .map(|(i, c)| i + c.len_utf8())?;
+    // Numeric prefix: digits, '.', 'e'/'E', and a sign at the start or right
+    // after the exponent marker (`1e-3`, `2E+3`). All ASCII, so byte indices.
+    let b = t.as_bytes();
+    let mut end = 0;
+    while end < b.len() {
+        let c = b[end];
+        let sign_ok = (c == b'-' || c == b'+') && (end == 0 || matches!(b[end - 1], b'e' | b'E'));
+        if c.is_ascii_digit() || c == b'.' || c == b'e' || c == b'E' || sign_ok {
+            end += 1;
+        } else {
+            break;
+        }
+    }
+    if end == 0 {
+        return None;
+    }
     // shrink until it parses (handles "1.2.3", "3e" ...)
     let mut e = end;
     while e > 0 {
@@ -1114,6 +1119,16 @@ mod tests {
     #[tokio::test]
     async fn sort_and_dedupe() {
         let h = h();
+        // Signed exponents are part of the number.
+        assert_eq!(
+            txt(
+                &h,
+                "text.sort_lines",
+                json!({"text": "1e-3\n0.5\n2e+3\n10\n-4 apples", "mode": "numeric"})
+            )
+            .await,
+            "-4 apples\n1e-3\n0.5\n10\n2e+3"
+        );
         assert_eq!(
             txt(
                 &h,
