@@ -31,8 +31,17 @@ pub const FULL_URL: &AsciiSet = &COMPONENT
 // '%' stays encoded (as in encodeURI): "100% organic" -> "100%25%20organic",
 // so the output always decodes back to the input.
 
+/// With spaces written as '+', a literal '+' must be escaped or it would
+/// decode as a space.
+const FULL_URL_PLUS_SPACES: &AsciiSet = &FULL_URL.add(b'+');
+
 pub fn url_encode(s: &str, full: bool, space_plus: bool) -> String {
-    let enc = utf8_percent_encode(s, if full { FULL_URL } else { COMPONENT }).to_string();
+    let set = match (full, space_plus) {
+        (true, true) => FULL_URL_PLUS_SPACES,
+        (true, false) => FULL_URL,
+        (false, _) => COMPONENT,
+    };
+    let enc = utf8_percent_encode(s, set).to_string();
     if space_plus {
         enc.replace("%20", "+")
     } else {
@@ -479,6 +488,12 @@ mod tests {
         }
         // Malformed multibyte input is an error, not a panic.
         assert!(xml_unescape("&\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}").is_err());
+        // Form-style spaces escape literal '+' so the output decodes back.
+        let src = "https://example.com/search?q=C++ guide";
+        let enc = url_encode(src, true, true);
+        assert_eq!(enc, "https://example.com/search?q=C%2B%2B+guide");
+        assert_eq!(url_decode(&enc, true).unwrap(), src);
+        assert_eq!(url_encode("a+b c", true, false), "a+b%20c");
         // Full-URL mode keeps URL syntax but encodes literal '%'.
         let full = url_encode("https://example.com/100% organic?q=a&b=c", true, false);
         assert_eq!(full, "https://example.com/100%25%20organic?q=a&b=c");
