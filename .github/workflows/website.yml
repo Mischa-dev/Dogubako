@@ -4,8 +4,8 @@ name: Website
 # deploy ticked and the Cloudflare secrets present, publishes it to the
 # Cloudflare Pages project "dogubako-website". Pull requests only build.
 #
-# Inputs pick the landing page and flip the links once things are live:
-#   concept   which design to publish at the root (website/ or website/concepts/<name>/)
+# It publishes website/ (the design concepts in design/website-concepts/ are
+# never published). Inputs flip the links once things are live:
 #   docs_live docs.dogubako.app is deployed: point docs links there
 #   release   the published release tag: point downloads at its assets
 on:
@@ -13,11 +13,6 @@ on:
     paths: ["website/**", "deploy/website/**", "packaging/release/website_links.py", ".github/workflows/website.yml"]
   workflow_dispatch:
     inputs:
-      concept:
-        description: Landing page to publish
-        type: choice
-        default: current
-        options: [current, live-product, ink-and-paper, open-the-box, bench-3d]
       docs_live:
         description: docs.dogubako.app is live
         type: boolean
@@ -43,7 +38,6 @@ jobs:
     name: Build site
     runs-on: ubuntu-latest
     env:
-      CONCEPT: ${{ inputs.concept || 'current' }}
       DOCS_LIVE: ${{ inputs.docs_live && '1' || '' }}
       RELEASE: ${{ inputs.release }}
     steps:
@@ -62,21 +56,10 @@ jobs:
           if [ -f website/scripts/trailer.sh ]; then
             sh website/scripts/trailer.sh || echo "::warning::Trailer not copied; the page shows its placeholder."
           fi
-          if [ "$CONCEPT" = current ]; then
-            src=website
-          else
-            src="website/concepts/$CONCEPT"
-            [ -d "$src" ] || { echo "::error::No concept at $src"; exit 1; }
-          fi
           mkdir _site
-          cp -R "$src"/. _site/
-          # Shared files every variant needs at the root.
-          for f in CNAME og.png apple-touch-icon.png; do
-            [ -e "_site/$f" ] || { [ -e "website/$f" ] && cp "website/$f" _site/; } || true
-          done
-          if [ -d website/trailer ] && [ ! -d _site/trailer ]; then cp -R website/trailer _site/; fi
-          # Review material and sources don't belong on the public site.
-          rm -rf _site/concepts _site/review _site/scripts _site/README.md _site/NOTES.md
+          cp -R website/. _site/
+          # Build scripts, notes and review material don't belong on the public site.
+          rm -rf _site/concepts _site/review _site/scripts _site/README.md _site/NOTES.md _site/.gitignore
           cp deploy/website/_headers _site/_headers
       - name: Point links at live docs and the release
         if: env.NO_SITE != '1'
@@ -106,7 +89,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: env.NO_SITE != '1'
         with:
-          name: website-${{ env.CONCEPT }}
+          name: website
           path: _site
           retention-days: 14
 
@@ -129,7 +112,7 @@ jobs:
           fi
       - uses: actions/download-artifact@v4
         with:
-          name: website-${{ inputs.concept }}
+          name: website
           path: _site
       - uses: actions/setup-node@v4
         with: { node-version: 22 }

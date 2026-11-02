@@ -19,10 +19,15 @@ Nothing here has been merged, tagged, published or deployed.
       `released` status on launch day.
 - [x] **Pick the website concept.** Picked on 2026-11-02: Live product,
       reworked, with extra pages for self-hosting and agents. The website
-      thread is rebuilding it on PR #3. Deploy it with the Website workflow's
-      default `concept` (`current`). The other concepts stay under
-      `website/concepts/` for later, and the workflow never publishes them.
+      thread is rebuilding it on PR #3 as a multi-page site in `website/`.
+      All the concepts (and the old draft, as `classic`) are kept in
+      `design/website-concepts/`. The Website workflow publishes only `website/`.
 - [ ] **Review the rebuilt website** on PR #3 before it merges.
+- [ ] **Decide what happens to your PR #8.** It edits the old single-page
+      files, which #3 has moved to `design/website-concepts/classic/`, so it
+      will conflict. The website thread is applying its accuracy rules to the
+      new copy. You can close #8 once that's done, or keep it for the archived
+      classic page.
 - [ ] **Signing: decide signed or unsigned.**
       - Signed (recommended before sharing widely): enrol in the Apple
         Developer Program (USD 99/year, can take a day or two), create a
@@ -54,7 +59,8 @@ Without the Apple secrets the release builds an unsigned DMG; nothing fails.
 
 ## 2. Merge plan
 
-All eight PRs plus this one merge cleanly when combined. The combined tree
+All eight PRs plus this one merged cleanly when combined (checked before #3's
+rebuild; #8 now conflicts with #3, see part 1). The combined tree
 builds, and the web tests (89) and every Rust workspace test pass. The one
 conflict (#6 and #7 both adding desktop commands) is already resolved on #7.
 
@@ -68,8 +74,8 @@ main
          ├─ #6 plain words  claude/project-thread-l241kf
          │   └─ #7 engines + release builds  claude/project-thread-j1bqd1
          ├─ #5 trailer      claude/project-thread-1zypgm
-         ├─ #3 website      claude/project-thread-i6syyt
-         │   └─ #8 website accuracy (Mischa)  review/prerelease-materials
+         ├─ #3 website (being rebuilt)  claude/project-thread-i6syyt
+         │   └─ #8 website accuracy (Mischa, conflicts with the rebuild)  review/prerelease-materials
          └─ #9 launch prep (this)  claude/project-thread-9dwqvf
 ```
 
@@ -87,7 +93,7 @@ merging it.
 | 5 | #7 engines → main | Latest "Alpha test builds" run green |
 | 6 | #9 launch prep → main | Regenerate notices (part 3) |
 | 7 | #5 trailer → main | Music approved, end card decided |
-| 8 | #8 → #3, then #3 → main | Rebuilt site reviewed |
+| 8 | #3 → main | Rebuilt site reviewed; #8 closed or rebased by Mischa |
 
 Steps 1 to 6 are what the release needs. The website and trailer (7, 8) can
 land later, because the release doesn't depend on them. `release.yml` (#7)
@@ -114,8 +120,7 @@ from this PR, so #7 and #9 must both be on `main` before tagging.
    **Set as a pre-release**, and publish.
 6. Make the `dogubako` package public: GitHub → Packages → dogubako →
    Package settings → Change visibility.
-7. Deploy the website: Actions → Website → Run workflow with the chosen
-   concept, `docs_live` ticked if docs.dogubako.app is up, release
+7. Deploy the website: Actions → Website → Run workflow with `docs_live` ticked if docs.dogubako.app is up, release
    `v0.1.0-alpha.1`, `deploy` ticked. Its summary lists any copy that still
    says "not released yet"; edit that copy on the concept first (the link
    script only changes links).
