@@ -1,0 +1,282 @@
+<!doctype html>
+<!--
+  Dogubako alpha trailer: the whole film as one page.
+  Nothing here animates on its own. tools/render.mjs calls window.render(t)
+  for every frame and screenshots it, so every frame is exact and the
+  video can't stutter. Open with ?t=12.5 to look at a single moment, or
+  ?play to watch it in real time (with build/music.wav if it exists).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dogubako trailer</title>
+<style>
+@font-face { font-family: 'Instrument Sans'; src: url('fonts/instrument-sans-latin-wght-normal.woff2') format('woff2'); font-weight: 400 700; }
+@font-face { font-family: 'DM Mono'; src: url('fonts/dm-mono-latin-400-normal.woff2') format('woff2'); font-weight: 400; }
+@font-face { font-family: 'DM Mono'; src: url('fonts/dm-mono-latin-500-normal.woff2') format('woff2'); font-weight: 500; }
+
+:root {
+  --paper: #f7f6f3; --paper-2: #fbfaf8; --paper-sunken: #f1efea; --ink: #161616; --ink-2: #4a4843; --ink-3: #6a6862;
+  --night: #151412; --night-2: #1f1e1b; --night-text: #edeae4; --night-text-2: #c9c5bd; --night-text-3: #a29e96;
+  --line: #e4e1da; --brand: #e0533d; --success: #1f7a45;
+  --obj-shadow: 0 1px 2px rgba(40, 30, 20, .12), 0 26px 44px -18px rgba(40, 30, 20, .55);
+  --pop: 0 0 0 1px rgba(60, 45, 30, .08), 0 40px 90px -30px rgba(60, 45, 30, .55);
+  --pop-dark: 0 0 0 1px rgba(255, 255, 255, .07), 0 40px 90px -24px rgba(0, 0, 0, .85);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+body { font-family: 'Instrument Sans', system-ui, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.mono { font-family: 'DM Mono', ui-monospace, monospace; }
+
+#stage { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--paper); }
+.abs { position: absolute; left: 0; top: 0; will-change: transform, opacity; }
+.layer { position: absolute; inset: 0; }
+.scene { position: absolute; inset: 0; display: none; }
+.center { position: absolute; left: 50%; top: 50%; }
+
+/* ambient light: the same soft colour fields the app and website use */
+#ambient .blob { position: absolute; border-radius: 50%; filter: blur(80px); }
+#bg-dark { background: var(--night); opacity: 0; }
+#vignette { background: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0, 0, 0, .35)); opacity: 0; pointer-events: none; }
+#fade { background: #000; opacity: 0; }
+
+.display { font-weight: 600; letter-spacing: -0.035em; line-height: 1.02; }
+.headline { font-size: 92px; font-weight: 600; letter-spacing: -0.035em; line-height: 1.04; white-space: nowrap; }
+.sub { font-size: 30px; color: var(--ink-3); letter-spacing: -0.01em; line-height: 1.35; }
+.dark-text { color: var(--night-text); }
+.dark-text .sub, .sub.dark { color: var(--night-text-3); }
+.word { display: inline-block; will-change: transform, opacity; }
+
+/* frosted glass: floating surfaces only */
+.glass { background: rgba(255, 255, 255, .62); backdrop-filter: blur(22px) saturate(1.4); border: 1px solid rgba(255, 255, 255, .8); box-shadow: 0 0 0 1px rgba(60, 45, 30, .08), 0 24px 50px -28px rgba(60, 45, 30, .45); }
+.glass-dark { background: rgba(42, 40, 37, .58); backdrop-filter: blur(22px) saturate(1.4); border: 1px solid rgba(255, 255, 255, .09); box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 24px 50px -24px rgba(0, 0, 0, .7); color: var(--night-text); }
+.pill { border-radius: 999px; padding: 14px 26px; font-size: 26px; font-weight: 500; white-space: nowrap; }
+
+/* ---------- 1. logo */
+#logo-mark { width: 300px; height: 300px; }
+#logo-word { font-size: 150px; font-weight: 600; letter-spacing: -0.045em; color: var(--night-text); white-space: nowrap; }
+#logo-kanji { font-size: 30px; letter-spacing: .5em; color: var(--night-text-3); white-space: nowrap; }
+
+/* ---------- 2. tool slips */
+.slip { padding: 14px 22px; border-radius: 12px; background: var(--paper-2); color: var(--ink); font-size: 27px; font-weight: 500; white-space: nowrap; box-shadow: var(--obj-shadow); display: flex; align-items: center; gap: 12px; }
+.slip svg { width: 26px; height: 26px; stroke: var(--ink-3); }
+#box-big { width: 520px; height: 420px; z-index: 200; }
+#slips-h1, #slips-h2 { z-index: 300; }
+
+/* ---------- 3. bench objects */
+#bench-shelf { left: 0; right: 0; top: 780px; height: 260px; background: linear-gradient(#efece6, #e8e4dc); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 -1px 0 #ddd8ce; }
+.obj { width: 270px; }
+.obj .thing { transform-origin: 50% 100%; }
+.obj > .thing { scale: 1.14; }
+.obj .thing { position: relative; width: 270px; height: 200px; display: flex; align-items: flex-end; justify-content: center; }
+.obj .label { margin-top: 26px; text-align: center; font-size: 22px; font-weight: 500; color: var(--ink); white-space: nowrap; }
+.obj .meta { margin-top: 4px; text-align: center; font-size: 17px; color: var(--ink-3); white-space: nowrap; }
+.shadow { position: absolute; left: 50%; bottom: -14px; width: 86%; height: 26px; margin-left: -43%; border-radius: 50%; background: radial-gradient(closest-side, rgba(40, 30, 20, .32), transparent); }
+.photo { position: relative; padding: 9px 9px 9px; background: #fff; box-shadow: var(--obj-shadow); border-radius: 3px; }
+.photo img { display: block; width: 236px; height: 170px; object-fit: cover; }
+.doc { position: relative; width: 150px; height: 196px; background: #fff; border-radius: 4px; box-shadow: var(--obj-shadow); padding: 22px 18px; overflow: hidden; }
+.doc::after { content: ''; position: absolute; right: 0; top: 0; width: 34px; height: 34px; background: linear-gradient(225deg, var(--paper) 50%, #e9e5de 50%); box-shadow: -2px 2px 3px rgba(0,0,0,.06); }
+.doc .ln { height: 7px; border-radius: 4px; background: #e6e2da; margin-bottom: 11px; }
+.doc .ln.h { height: 13px; background: #cfc9be; width: 70%; margin-bottom: 18px; }
+.doc-under { position: absolute; width: 150px; height: 196px; background: #fbfaf8; border-radius: 4px; box-shadow: 0 1px 2px rgba(40,30,20,.12); }
+.film { position: relative; width: 250px; height: 160px; background: #1c1b19; border-radius: 6px; box-shadow: var(--obj-shadow); padding: 22px 12px; }
+.film .holes { position: absolute; left: 10px; right: 10px; height: 10px; display: flex; justify-content: space-between; }
+.film .holes i { width: 12px; height: 8px; background: #f7f6f3; border-radius: 2px; opacity: .85; }
+.film img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 2px; }
+.tape { position: relative; width: 250px; height: 150px; background: #efe9df; border-radius: 12px; box-shadow: var(--obj-shadow); display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 22px; }
+.tape i { display: block; width: 5px; border-radius: 3px; background: #4a4843; }
+.code { position: relative; width: 200px; height: 196px; background: #1f1e1b; border-radius: 8px; box-shadow: var(--obj-shadow); padding: 18px 18px; font-size: 15px; line-height: 1.6; color: #c9c5bd; white-space: pre; overflow: hidden; }
+.code .k { color: #9cc2ec; } .code .s { color: #e2bf86; } .code .n { color: #f0a291; }
+.sheet { position: relative; width: 210px; height: 176px; background: #fff; border-radius: 6px; box-shadow: var(--obj-shadow); overflow: hidden; display: grid; grid-template-columns: 30px repeat(3, 1fr); grid-auto-rows: 22px; }
+.sheet b, .sheet span { border-right: 1px solid #ece9e3; border-bottom: 1px solid #ece9e3; }
+.sheet b { background: #f4f2ee; }
+.sheet span.f { background: #e5f2ea; }
+
+/* ---------- app windows */
+.win { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; border-radius: 16px; overflow: hidden; background: var(--paper); }
+.win.light { box-shadow: var(--pop); }
+.win.dark { box-shadow: var(--pop-dark); background: var(--night); }
+.win img.shot { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; display: block; }
+.cursor { width: 40px; height: 40px; filter: drop-shadow(0 3px 4px rgba(0,0,0,.3)); }
+.ripple { width: 80px; height: 80px; margin: -40px 0 0 -40px; border-radius: 50%; border: 3px solid rgba(22,22,22,.35); }
+.drop-overlay { position: absolute; inset: 0; background: rgba(28, 24, 20, .26); display: flex; align-items: center; justify-content: center; }
+.drop-card { width: 560px; height: 300px; border-radius: 24px; border: 2.5px dashed rgba(22, 22, 22, .35); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 34px; font-weight: 600; letter-spacing: -0.02em; }
+.drop-card small { font-size: 20px; font-weight: 400; color: var(--ink-3); letter-spacing: 0; }
+.caption { font-size: 34px; font-weight: 600; letter-spacing: -0.02em; padding: 20px 30px; border-radius: 18px; white-space: nowrap; }
+.caption small { display: block; font-size: 21px; font-weight: 400; letter-spacing: 0; opacity: .72; margin-top: 4px; }
+.key { display: inline-block; font-family: 'DM Mono', monospace; font-size: .8em; padding: 2px 10px; border-radius: 8px; border: 1px solid currentColor; opacity: .7; }
+
+/* ---------- 6. montage */
+.mframe { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; border-radius: 16px; overflow: hidden; box-shadow: var(--pop-dark); }
+.mframe img { width: 1440px; height: 900px; display: block; }
+.mcap { width: 500px; font-size: 64px; font-weight: 600; letter-spacing: -0.035em; line-height: 1.04; color: var(--night-text); }
+.mcap small { display: block; font-size: 26px; font-weight: 400; letter-spacing: -0.005em; color: var(--night-text-3); margin-top: 14px; }
+
+/* ---------- 7. count */
+#count-num { font-size: 330px; font-weight: 600; letter-spacing: -0.06em; line-height: 1; color: var(--night-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#count-label { font-size: 64px; font-weight: 500; letter-spacing: -0.03em; color: var(--night-text-3); white-space: nowrap; }
+.cat { width: 330px; height: 92px; border-radius: 18px; display: flex; align-items: center; gap: 16px; padding: 0 24px; font-size: 27px; font-weight: 500; }
+.cat svg { width: 30px; height: 30px; stroke: var(--night-text-2); flex: none; }
+.cat .n { margin-left: auto; font-family: 'DM Mono', monospace; font-size: 22px; color: var(--night-text-3); }
+
+/* ---------- 8. interfaces */
+.spec { width: 560px; border-radius: 22px; background: #fff; box-shadow: var(--pop); padding: 34px 38px; font-size: 22px; line-height: 1.75; color: var(--ink-2); }
+.spec .id { font-size: 32px; color: var(--ink); font-weight: 500; margin-bottom: 14px; display: flex; align-items: center; gap: 14px; }
+.spec .id svg { width: 34px; height: 34px; stroke: var(--ink); }
+.spec .row { display: flex; gap: 24px; }
+.spec .row span:first-child { width: 120px; color: var(--ink-3); }
+.iface { width: 420px; border-radius: 20px; padding: 24px 26px; }
+.iface .t { display: flex; align-items: center; gap: 14px; font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
+.iface .t svg { width: 30px; height: 30px; stroke: var(--ink); }
+.iface .b { margin-top: 12px; font-size: 18.5px; line-height: 1.5; color: var(--ink-3); white-space: pre; overflow: hidden; }
+.iface .b.term { font-family: 'DM Mono', monospace; background: #1f1e1b; color: #edeae4; border-radius: 10px; padding: 12px 14px; font-size: 17px; }
+.iface .b.term .p { color: #a29e96; }
+#wires { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+#wires path { fill: none; stroke: rgba(22, 22, 22, .28); stroke-width: 2.2; stroke-dasharray: 1; }
+
+/* ---------- 9. local */
+.ring { border-radius: 50%; border: 2px dashed rgba(237, 234, 228, .25); }
+.chip-dark { font-size: 25px; font-weight: 500; padding: 12px 22px; border-radius: 999px; white-space: nowrap; color: var(--night-text-2); border: 1px solid rgba(237, 234, 228, .14); background: rgba(255, 255, 255, .04); }
+.orb { width: 110px; height: 84px; border-radius: 10px; overflow: hidden; box-shadow: 0 16px 30px -12px rgba(0,0,0,.7); }
+.orb img { width: 100%; height: 100%; object-fit: cover; }
+.orb.doclike { background: #fbfaf8; padding: 14px 12px; }
+.orb.doclike i { display: block; height: 5px; border-radius: 3px; background: #ddd8ce; margin-bottom: 8px; }
+.never { font-size: 46px; font-weight: 600; letter-spacing: -0.03em; color: var(--night-text); white-space: nowrap; }
+
+/* ---------- 10. themes + phone */
+.phone { width: 400px; height: 820px; border-radius: 62px; background: #1a1917; padding: 14px; box-shadow: 0 50px 90px -30px rgba(0, 0, 0, .6), 0 0 0 2px #2e2c28 inset; }
+.phone .screen { width: 372px; height: 792px; border-radius: 49px; overflow: hidden; background: var(--paper); position: relative; }
+.phone .screen img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.phone .island { position: absolute; left: 50%; top: 14px; width: 112px; height: 32px; margin-left: -56px; border-radius: 20px; background: #000; }
+
+/* ---------- 11. end */
+#end-word { font-size: 170px; font-weight: 600; letter-spacing: -0.05em; color: var(--night-text); white-space: nowrap; }
+#end-tag { font-size: 40px; color: var(--night-text-2); letter-spacing: -0.015em; white-space: nowrap; }
+#end-alpha { font-size: 24px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; padding: 10px 22px; border-radius: 999px; }
+#end-meta { font-size: 25px; color: var(--night-text-3); letter-spacing: .02em; white-space: nowrap; }
+#end-url { font-size: 34px; color: var(--night-text); font-weight: 500; letter-spacing: .01em; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="layer" id="bg-dark"></div>
+  <div class="layer" id="ambient"></div>
+
+  <!-- 1. logo -->
+  <section class="scene" id="s-logo">
+    <svg class="abs" id="logo-mark" viewBox="0 0 100 100" fill="none">
+      <rect id="lm-box" x="10" y="24" width="80" height="58" rx="10" stroke="#edeae4" stroke-width="6" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+      <line id="lm-seam" x1="10" y1="46" x2="90" y2="46" stroke="#edeae4" stroke-width="6" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+      <rect id="lm-latch" x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/>
+    </svg>
+    <div class="abs" id="logo-word"></div>
+    <div class="abs mono" id="logo-kanji">道具箱 · TOOLBOX</div>
+  </section>
+
+  <!-- 2. every little tool -->
+  <section class="scene" id="s-slips">
+    <div class="abs headline" id="slips-h1"></div>
+    <div class="abs headline" id="slips-h2"></div>
+    <div id="slips"></div>
+    <svg class="abs" id="box-big" viewBox="0 0 130 105" fill="none" overflow="visible">
+      <g id="box-lid"><rect x="5" y="5" width="120" height="28" rx="9" stroke="#161616" stroke-width="5" fill="#f7f6f3"/></g>
+      <path d="M5 33 h120 v48 a14 14 0 0 1 -14 14 h-92 a14 14 0 0 1 -14 -14 z" stroke="#161616" stroke-width="5" fill="#f7f6f3"/>
+      <rect id="box-latch" x="54" y="25" width="22" height="16" rx="3" fill="#e0533d"/>
+    </svg>
+  </section>
+
+  <!-- 3. the bench -->
+  <section class="scene" id="s-bench">
+    <div class="abs" id="bench-shelf"></div>
+    <div class="abs headline" id="bench-h"></div>
+    <div class="abs sub" id="bench-sub">Dogubako sees what it is, and offers what you'd want to do with it.</div>
+    <div id="bench-objs"></div>
+  </section>
+
+  <!-- 4–5. the flow: drop, choose, run -->
+  <section class="scene" id="s-flow">
+    <div class="abs" id="flow-cam">
+      <div class="win light" id="flow-win">
+        <img class="shot" id="flow-home" data-src="home-light">
+        <img class="shot" id="flow-intent" data-src="intent-0">
+        <img class="shot" id="flow-tool" data-src="compress-ready">
+        <img class="shot" id="flow-result" data-src="compress-result">
+        <div class="drop-overlay" id="flow-overlay"><div class="drop-card glass" id="flow-dropcard">Drop to open<small>Any file. Dogubako figures out the rest.</small></div></div>
+      </div>
+      <div class="abs" id="flow-photo"><div class="photo"><img data-src="dune.jpg"></div></div>
+      <div class="abs ripple" id="flow-ripple"></div>
+      <svg class="abs cursor" id="flow-cursor" viewBox="0 0 24 24"><path d="M5 2.5 L5 19 L9.3 15 L12.2 21.4 L15 20.2 L12.2 14 L18 14 Z" fill="#161616" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="abs caption glass" id="flow-cap"></div>
+  </section>
+
+  <!-- 6. montage -->
+  <section class="scene" id="s-montage"></section>
+
+  <!-- 7. 249 tools -->
+  <section class="scene" id="s-count">
+    <div class="abs" id="count-num">0</div>
+    <div class="abs" id="count-label">tools, in one box.</div>
+    <div id="cats"></div>
+  </section>
+
+  <!-- 8. one implementation, every interface -->
+  <section class="scene" id="s-iface">
+    <svg id="wires"></svg>
+    <div class="abs headline" id="iface-h" style="font-size:72px"></div>
+    <div class="abs spec mono" id="iface-spec">
+      <div class="id" id="iface-spec-id"></div>
+      <div class="row"><span>input</span><span>images…</span></div>
+      <div class="row"><span>format</span><span>webp · avif · png · jpg</span></div>
+      <div class="row"><span>quality</span><span>1 – 100</span></div>
+      <div class="row"><span>runs on</span><span>libvips, in Rust</span></div>
+    </div>
+    <div id="ifaces"></div>
+  </section>
+
+  <!-- 9. local first -->
+  <section class="scene" id="s-local">
+    <div class="abs ring" id="local-ring"></div>
+    <div id="local-orbs"></div>
+    <div class="abs" id="local-icon"></div>
+    <div class="abs headline dark-text" id="local-h"></div>
+    <div id="local-nevers"></div>
+    <div class="abs mono" id="local-engines-label" style="font-size:20px;letter-spacing:.18em;color:#a29e96;white-space:nowrap">BUILT ON ENGINES YOU ALREADY TRUST</div>
+    <div class="abs" id="local-engines" style="display:flex;gap:16px"></div>
+  </section>
+
+  <!-- 10. light, dark, phone -->
+  <section class="scene" id="s-theme">
+    <div class="abs" id="theme-cam">
+      <div class="win light" id="theme-win">
+        <img class="shot" data-src="home-light-2">
+        <img class="shot" id="theme-dark-shot" data-src="home-dark">
+      </div>
+    </div>
+    <div class="abs phone" id="theme-phone"><div class="screen"><img data-src="phone-home-light"><div class="island"></div></div></div>
+    <div class="abs caption glass" id="theme-cap"></div>
+  </section>
+
+  <!-- 11. end card -->
+  <section class="scene" id="s-end">
+    <svg class="abs" id="end-tile" viewBox="0 0 100 100" width="200" height="200">
+      <rect x="2" y="2" width="96" height="96" rx="22" fill="#1d1c1a" stroke="rgba(255,255,255,.08)" stroke-width=".8"/>
+      <rect x="22" y="29" width="56" height="44" rx="8" fill="none" stroke="#f1f0ed" stroke-width="5"/>
+      <line x1="22" y1="46" x2="78" y2="46" stroke="#f1f0ed" stroke-width="5"/>
+      <rect id="end-latch" x="43" y="40" width="14" height="12" rx="2" fill="#e0533d"/>
+    </svg>
+    <div class="abs" id="end-word">Dogubako</div>
+    <div class="abs" id="end-tag">Every tool you reach for. Local, open source, yours.</div>
+    <div class="abs glass-dark" id="end-alpha">Alpha · out now</div>
+    <div class="abs mono" id="end-meta">macOS · Windows · Linux · Docker · CLI · MCP</div>
+    <div class="abs" id="end-url">dogubako.app</div>
+  </section>
+
+  <div class="layer" id="vignette"></div>
+  <div class="layer" id="fade"></div>
+</div>
+<script src="icons.js"></script>
+<script src="../build/captures/boxes.js"></script>
+<script src="timeline.js"></script>
+</body>
+</html>
