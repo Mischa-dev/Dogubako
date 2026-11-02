@@ -333,6 +333,14 @@ async fn table_exports_and_sparse_json_are_bounded() {
         .await;
     }
 
+    // A long key over a long array: every leaf's path repeats the key.
+    let text = format!(
+        "[{{\"{}\":[{}0]}}]",
+        "k".repeat(100_000),
+        "0,".repeat(100_000)
+    );
+    limited(&h, "data.json_to_csv", json!({"text": text})).await;
+
     // Normal exports still work.
     let out = h
         .run(

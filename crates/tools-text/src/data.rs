@@ -318,33 +318,47 @@ pub fn flatten_records_with(
     // not by the joined name: {"a":{"b":1}} and {"a.b":2} are different
     // fields even though both display as "a.b".
     type Path = Vec<String>;
-    fn walk(path: &mut Path, v: &Value, arrays: &str, out: &mut Vec<(Path, String)>) {
+    // Every leaf copies its whole path, so a long key over many array items
+    // multiplies: charge each copy before making it.
+    fn walk(
+        path: &mut Path,
+        v: &Value,
+        arrays: &str,
+        out: &mut Vec<(Path, String)>,
+        budget: &mut crate::util::OutputBudget,
+    ) -> ToolResult<()> {
+        let mut leaf = |path: &Path, cell: String| -> ToolResult<()> {
+            budget.add(path.iter().map(|s| s.len() + 24).sum::<usize>() + cell.len())?;
+            out.push((path.clone(), cell));
+            Ok(())
+        };
         match v {
             Value::Object(m) if !m.is_empty() => {
                 for (k, x) in m {
                     path.push(k.clone());
-                    walk(path, x, arrays, out);
+                    walk(path, x, arrays, out, budget)?;
                     path.pop();
                 }
             }
             Value::Array(a) if !a.is_empty() => match arrays {
-                "join" if a.iter().all(|x| !x.is_object() && !x.is_array()) => out.push((
-                    path.clone(),
+                "join" if a.iter().all(|x| !x.is_object() && !x.is_array()) => leaf(
+                    path,
                     a.iter().map(cell_string).collect::<Vec<_>>().join("; "),
-                )),
-                "json" => out.push((path.clone(), serde_json::to_string(v).unwrap_or_default())),
+                )?,
+                "json" => leaf(path, serde_json::to_string(v).unwrap_or_default())?,
                 _ => {
                     for (i, x) in a.iter().enumerate() {
                         path.push(i.to_string());
-                        walk(path, x, arrays, out);
+                        walk(path, x, arrays, out, budget)?;
                         path.pop();
                     }
                 }
             },
-            Value::Object(_) => out.push((path.clone(), "{}".into())),
-            Value::Array(_) => out.push((path.clone(), "[]".into())),
-            other => out.push((path.clone(), cell_string(other))),
+            Value::Object(_) => leaf(path, "{}".into())?,
+            Value::Array(_) => leaf(path, "[]".into())?,
+            other => leaf(path, cell_string(other))?,
         }
+        Ok(())
     }
     let mut cols: Vec<String> = vec![];
     let mut used: HashSet<String> = HashSet::new();
@@ -354,7 +368,14 @@ pub fn flatten_records_with(
     let mut budget = crate::util::OutputBudget::default();
     for it in items {
         let mut pairs = vec![];
-        walk(&mut vec![], it, arrays, &mut pairs);
+        // Per record: the pairs are dropped after each one.
+        walk(
+            &mut vec![],
+            it,
+            arrays,
+            &mut pairs,
+            &mut crate::util::OutputBudget::default(),
+        )?;
         for (path, _) in &pairs {
             if idx.contains_key(path) {
                 continue;
