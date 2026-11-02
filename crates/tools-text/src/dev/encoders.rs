@@ -216,13 +216,15 @@ fn html_entities() -> Arc<dyn Tool> {
 
 fn parse_hex(s: &str) -> Result<Vec<u8>, String> {
     let mut digits = String::with_capacity(s.len());
+    // Computed once: rescanning per token would make decoding quadratic.
+    let several_words = s.split_whitespace().nth(1).is_some();
     for tok in s.split(|c: char| c.is_whitespace() || c == ',' || c == ':' || c == '-') {
         let tok = tok
             .trim_start_matches("0x")
             .trim_start_matches("0X")
             .trim_start_matches("\\x");
         let tok = tok.replace("\\x", "");
-        if tok.len() % 2 == 1 && s.split_whitespace().count() > 1 {
+        if tok.len() % 2 == 1 && several_words {
             digits.push('0');
         }
         digits.push_str(&tok);
@@ -584,6 +586,19 @@ mod tests {
 
     async fn txt(h: &TestHarness, id: &str, p: serde_json::Value) -> String {
         h.run(id, p).await.unwrap().text.unwrap()
+    }
+
+    #[test]
+    fn parse_hex_single_digit_tokens_are_linear() {
+        assert_eq!(super::parse_hex("a b ff").unwrap(), vec![0x0a, 0x0b, 0xff]);
+        assert_eq!(
+            super::parse_hex("abc").unwrap_err(),
+            "odd number of hex digits"
+        );
+        let big = "a ".repeat(200_000);
+        let start = std::time::Instant::now();
+        assert_eq!(super::parse_hex(&big).unwrap().len(), 200_000);
+        assert!(start.elapsed() < std::time::Duration::from_secs(10));
     }
 
     #[tokio::test]
