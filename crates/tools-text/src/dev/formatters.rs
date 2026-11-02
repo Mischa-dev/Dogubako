@@ -343,6 +343,7 @@ fn toml_tool() -> Arc<dyn Tool> {
 /// Re-serialize XML. `indent` None = minify. Never resolves external entities
 /// (quick-xml does not process DTDs).
 pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResult<(String, usize)> {
+    let verbatim = mixed_content_elements(text);
     let mut reader = quick_xml::Reader::from_str(text);
     reader.config_mut().check_end_names = true;
     let mut writer = match indent {
@@ -352,6 +353,10 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
     let mut depth = 0usize;
     let mut roots = 0usize;
     let mut elements = 0usize;
+    // Mixed-content / xml:space="preserve" elements are copied unchanged
+    // (no whitespace dropped or indentation added) via a plain sub-writer.
+    let mut start_index = 0usize;
+    let mut sub: Option<(quick_xml::Writer<Vec<u8>>, usize)> = None;
     let err = |reader: &quick_xml::Reader<&[u8]>, e: String| {
         let (l, c) = line_col(text, reader.buffer_position() as usize);
         ToolError::invalid("text", format!("{e} (line {l}, column {c})"))
@@ -367,6 +372,10 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
                 }
                 depth += 1;
                 elements += 1;
+                if sub.is_none() && verbatim.contains(&start_index) {
+                    sub = Some((quick_xml::Writer::new(Vec::new()), depth));
+                }
+                start_index += 1;
             }
             Event::Empty(_) => {
                 if depth == 0 {
@@ -376,7 +385,7 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
             }
             Event::End(_) => depth = depth.saturating_sub(1),
             Event::Text(t) => {
-                if t.trim().is_empty() {
+                if t.trim().is_empty() && sub.is_none() {
                     continue;
                 }
                 if depth == 0 {
@@ -389,10 +398,27 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
         if roots > 1 {
             return Err(err(&reader, "more than one root element".into()));
         }
+        let ends_here = matches!(ev, Event::End(_));
         let ev = match ev {
             Event::GeneralRef(r) => Event::Text(BytesText::from_escaped(format!("&{};", &*r))),
             e => e,
         };
+        if let Some((w, at)) = &mut sub {
+            w.write_event(ev).ctx("writing XML")?;
+            if ends_here && depth + 1 == *at {
+                let (w, _) = sub.take().unwrap();
+                // Placed like an element (newline + indent), content untouched.
+                if indent.is_some() && !writer.get_ref().is_empty() {
+                    writer.write_indent().ctx("writing XML")?;
+                }
+                use std::io::Write as _;
+                writer
+                    .get_mut()
+                    .write_all(&w.into_inner())
+                    .ctx("writing XML")?;
+            }
+            continue;
+        }
         writer.write_event(ev).ctx("writing XML")?;
     }
     if depth > 0 {
@@ -408,6 +434,77 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
         String::from_utf8(writer.into_inner()).ctx("XML output")?,
         elements,
     ))
+}
+
+/// Indices (in start-tag order) of elements to copy unchanged: mixed content
+/// (child elements plus text, including whitespace between children that is
+/// not just line-break indentation, as in `<b>Hello</b> <i>world</i>`) and
+/// `xml:space="preserve"`. Text-only elements are handled by the writer.
+/// Errors are left to the main pass.
+fn mixed_content_elements(text: &str) -> std::collections::HashSet<usize> {
+    struct Open {
+        id: usize,
+        preserve: bool,
+        child: bool,
+        text: bool,
+    }
+    let mut reader = quick_xml::Reader::from_str(text);
+    let mut out = std::collections::HashSet::new();
+    let mut stack: Vec<Open> = vec![];
+    let mut next = 0usize;
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(e)) => {
+                if let Some(parent) = stack.last_mut() {
+                    parent.child = true;
+                }
+                let inherited = stack.last().map(|s| s.preserve).unwrap_or(false);
+                let preserve = match e
+                    .attributes()
+                    .flatten()
+                    .find(|a| a.key.into_inner() == "xml:space")
+                {
+                    Some(a) => &*a.value == "preserve",
+                    None => inherited,
+                };
+                stack.push(Open {
+                    id: next,
+                    preserve,
+                    child: false,
+                    text: false,
+                });
+                next += 1;
+            }
+            Ok(Event::Empty(_)) => {
+                if let Some(parent) = stack.last_mut() {
+                    parent.child = true;
+                }
+            }
+            Ok(Event::End(_)) => {
+                if let Some(o) = stack.pop() {
+                    if o.preserve || (o.child && o.text) {
+                        out.insert(o.id);
+                    }
+                }
+            }
+            Ok(Event::Text(t)) => {
+                if let Some(o) = stack.last_mut() {
+                    let s: &str = t.as_ref();
+                    if !s.trim().is_empty() || !s.contains(['\n', '\r']) {
+                        o.text = true;
+                    }
+                }
+            }
+            Ok(Event::CData(_)) | Ok(Event::GeneralRef(_)) => {
+                if let Some(o) = stack.last_mut() {
+                    o.text = true;
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+    out
 }
 
 fn xml_tool() -> Arc<dyn Tool> {
@@ -1001,6 +1098,34 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.text.unwrap(), "<a><b>x</b></a>");
+        // Mixed content keeps its meaningful whitespace (minify and format).
+        let mixed = "<doc>\n  <p><b>Hello</b> <i>world</i></p>\n</doc>";
+        let out = h
+            .run("dev.xml", json!({"text": mixed, "mode": "minify"}))
+            .await
+            .unwrap();
+        assert_eq!(
+            out.text.unwrap(),
+            "<doc><p><b>Hello</b> <i>world</i></p></doc>"
+        );
+        let out = h.run("dev.xml", json!({"text": mixed})).await.unwrap();
+        assert!(
+            out.text
+                .unwrap()
+                .contains("<p><b>Hello</b> <i>world</i></p>"),
+            "mixed content must not be re-indented"
+        );
+        let out = h
+            .run(
+                "dev.xml",
+                json!({"text": "<a><pre xml:space=\"preserve\">  x\n  y </pre></a>", "mode": "minify"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            out.text.unwrap(),
+            "<a><pre xml:space=\"preserve\">  x\n  y </pre></a>"
+        );
         assert_eq!(
             h.run("dev.xml", json!({"text": "<a><b></a>"}))
                 .await
