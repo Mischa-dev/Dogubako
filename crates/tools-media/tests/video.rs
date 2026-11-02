@@ -101,6 +101,17 @@ async fn compress_to_size_and_quality() {
         .unwrap();
     let size = out.artifacts[0].size as f64 / 1024.0 / 1024.0;
     assert!(size < 0.55, "size {size}");
+    // A small target caps the audio budget; the encoder must use that cap,
+    // not the full audio_kbps, or the file overshoots.
+    let small = h
+        .run(
+            "video.compress",
+            json!({"input": [s(&v)], "mode": "size", "target_mb": 0.15, "speed": "fast"}),
+        )
+        .await
+        .unwrap();
+    let size = small.artifacts[0].size as f64 / 1024.0 / 1024.0;
+    assert!(size < 0.165, "size {size}");
     assert!(out.data["files"][0]["method"]
         .as_str()
         .unwrap()
