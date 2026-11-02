@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dogubako, every file job in one box</title>
+<meta name="description" content="Dogubako (道具箱, toolbox) is 249 free, open-source tools for images, video, audio, PDFs, text and data. It runs on your machine, with a desktop app, a CLI, an HTTP API and an MCP server for agents.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f7f6f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151412" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/dm-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script>try{var t=localStorage.getItem('dgb-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}document.documentElement.classList.add('js')</script>
+<style>
+@font-face { font-family: "Instrument Sans Variable"; src: url("assets/fonts/instrument-sans-latin-wght-normal.woff2") format("woff2-variations"); font-weight: 400 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "DM Mono"; src: url("assets/fonts/dm-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "DM Mono"; src: url("assets/fonts/dm-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+</style>
+<link rel="stylesheet" href="assets/css/site.css">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- Shared drawings: icons (Lucide, ISC), the logo mark, and the photo the demo works on. -->
+<svg class="sprite" aria-hidden="true" focusable="false" width="0" height="0">
+  <defs>
+    <linearGradient id="g-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b5079"/><stop offset=".55" stop-color="#b98a9c"/><stop offset=".78" stop-color="#e2b4a6"/></linearGradient>
+    <radialGradient id="g-glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff1dc" stop-opacity=".95"/><stop offset="1" stop-color="#ffe3cc" stop-opacity="0"/></radialGradient>
+    <linearGradient id="g-box" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c79d6f"/><stop offset="1" stop-color="#a97f53"/></linearGradient>
+  </defs>
+  <symbol id="logo" viewBox="0 0 100 100"><rect x="10" y="24" width="80" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="8"/><line x1="10" y1="46" x2="90" y2="46" stroke="currentColor" stroke-width="8"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></symbol>
+  <symbol id="ph-dune" viewBox="0 0 224 150" preserveAspectRatio="xMidYMid slice">
+    <rect width="224" height="150" fill="url(#g-sky)"/>
+    <circle cx="98" cy="84" r="36" fill="url(#g-glow)"/>
+    <circle cx="98" cy="84" r="8.5" fill="#fff4e4"/>
+    <path d="M0 98 C30 92 52 84 78 88 S120 80 148 86 S196 92 224 88 V150 H0Z" fill="#c4898a"/>
+    <path d="M0 112 C40 104 70 108 104 102 S170 98 224 108 V150 H0Z" fill="#9c6873"/>
+    <path d="M0 124 C50 118 92 126 140 120 S200 118 224 122 V150 H0Z" fill="#5e3e4f"/>
+    <path d="M0 138 C60 132 120 136 224 134 V150 H0Z" fill="#2f2028"/>
+  </symbol>
+  <symbol id="github" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M12 .5a11.5 11.5 0 0 0-3.64 22.4c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.7 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol><symbol id="i-clapperboard" viewBox="0 0 24 24"><path d="m12.296 3.464 3.02 3.956"/><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m6.18 5.276 3.1 3.899"/></symbol><symbol id="i-audio-lines" viewBox="0 0 24 24"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></symbol><symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></symbol><symbol id="i-file-text" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol><symbol id="i-folder-archive" viewBox="0 0 24 24"><circle cx="15" cy="19" r="2"/><path d="M20.9 19.8A2 2 0 0 0 22 18V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h5.1"/><path d="M15 11v-1"/><path d="M15 17v-2"/></symbol><symbol id="i-type" viewBox="0 0 24 24"><path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/></symbol><symbol id="i-code-xml" viewBox="0 0 24 24"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></symbol><symbol id="i-sheet" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/><line x1="9" x2="9" y1="9" y2="21"/><line x1="15" x2="15" y1="9" y2="21"/></symbol><symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol><symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></symbol><symbol id="i-cpu" viewBox="0 0 24 24"><path d="M12 20v2"/><path d="M12 2v2"/><path d="M17 20v2"/><path d="M17 2v2"/><path d="M2 12h2"/><path d="M2 17h2"/><path d="M2 7h2"/><path d="M20 12h2"/><path d="M20 17h2"/><path d="M20 7h2"/><path d="M7 20v2"/><path d="M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol><symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol><symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></symbol><symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol><symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol><symbol id="i-panel-left-close" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></symbol><symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol><symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol><symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></symbol><symbol id="i-file-up" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M12 12v6"/><path d="m15 15-3-3-3 3"/></symbol><symbol id="i-sliders-horizontal" viewBox="0 0 24 24"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></symbol><symbol id="i-play" viewBox="0 0 24 24"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></symbol><symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></symbol><symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol><symbol id="i-corner-down-left" viewBox="0 0 24 24"><path d="M20 4v7a4 4 0 0 1-4 4H4"/><path d="m9 10-5 5 5 5"/></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol><symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol><symbol id="i-terminal" viewBox="0 0 24 24"><path d="M12 19h8"/><path d="m4 17 6-6-6-6"/></symbol><symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol><symbol id="i-key-round" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></symbol><symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></symbol><symbol id="i-laptop" viewBox="0 0 24 24"><path d="M18 5a2 2 0 0 1 2 2v8.526a2 2 0 0 0 .212.897l1.068 2.127a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45l1.068-2.127A2 2 0 0 0 4 15.526V7a2 2 0 0 1 2-2z"/><path d="M20.054 15.987H3.946"/></symbol><symbol id="i-smartphone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></symbol><symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol><symbol id="i-shield-check" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol><symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></symbol><symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol><symbol id="i-file-stack" viewBox="0 0 24 24"><path d="M11 21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1"/><path d="M16 16a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1"/><path d="M21 6a2 2 0 0 0-.586-1.414l-2-2A2 2 0 0 0 17 2h-3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1z"/></symbol><symbol id="i-hash" viewBox="0 0 24 24"><line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/></symbol><symbol id="i-braces" viewBox="0 0 24 24"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/></symbol><symbol id="i-table" viewBox="0 0 24 24"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></symbol><symbol id="i-eraser" viewBox="0 0 24 24"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></symbol><symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></symbol><symbol id="i-layout-panel-left" viewBox="0 0 24 24"><rect width="7" height="18" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol><symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol><symbol id="i-circle-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/></symbol><symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></symbol><symbol id="i-user-round" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol><symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/></symbol><symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></symbol><symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></symbol><symbol id="i-send" viewBox="0 0 24 24"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></symbol>
+</svg>
+
+<header class="nav" id="nav">
+  <div class="nav-in">
+    <a class="brand" href="#top" aria-label="Dogubako, back to top">
+      <svg class="mark" aria-hidden="true"><use href="#logo"/></svg>
+      <span>Dogubako</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#tools">Tools</a>
+      <a href="#ways">Ways in</a>
+      <a href="#local">Privacy</a>
+      <a href="#server">Self-host</a>
+      <a href="https://docs.dogubako.app">Docs</a>
+    </nav>
+    <div class="nav-acts">
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch to dark theme" title="Toggle theme">
+        <svg class="i i-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        <svg class="i i-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+      </button>
+      <a class="icon-btn" href="https://github.com/Mischa-dev/Dogubako" aria-label="Dogubako on GitHub"><svg class="i i-fill" aria-hidden="true"><use href="#github"/></svg></a>
+      <a class="btn btn-ink btn-sm" href="#download">Alpha</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<!-- ============================================================ HERO -->
+<section class="hero" id="top" aria-labelledby="hero-title">
+  <div class="hero-copy">
+    <p class="eyebrow"><span lang="ja" class="eb-jp">道具箱</span><span class="eb-rule" aria-hidden="true"></span><span>dōgu-bako, “toolbox”</span></p>
+    <h1 id="hero-title" class="h1"><span class="ln"><span>Every file job,</span></span> <span class="ln"><span>in one box.</span></span></h1>
+    <p class="lede">Convert a photo, shrink a PDF, transcribe an interview, format JSON. Dogubako is 249 tools in one free, open-source app that runs on your own machine. No uploads to sites you don’t know, no account, no telemetry.</p>
+    <div class="cta-row">
+      <a class="btn btn-ink" href="https://github.com/Mischa-dev/Dogubako/releases">Follow the alpha <svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a>
+      <a class="btn btn-line" href="https://docs.dogubako.app">Read the docs</a>
+    </div>
+    <p class="hero-meta mono"><span class="hm-a"><span class="dot-warn" aria-hidden="true"></span>Alpha in progress</span><span class="hm-sep" aria-hidden="true">·</span><span>macOS, Windows, Linux · AGPL-3.0</span></p>
+  </div>
+
+  <figure class="demo" id="demo">
+    <div class="demo-tilt" id="demoTilt">
+      <div class="win" id="win" aria-hidden="true">
+        <div class="win-scale" id="ws">
+          <div class="win-bar"><span class="win-dots"><i></i><i></i><i></i></span><span class="win-title">Dogubako</span></div>
+          <div class="a-app" id="app">
+            <div class="a-ambient"></div>
+
+            <div class="a-topbar">
+              <svg class="i" ><use href="#i-menu"/></svg>
+              <span class="a-brand"><svg class="a-mark"><use href="#logo"/></svg>Dogubako</span>
+              <span class="a-tb-btn" data-a="tb-search"><svg class="i"><use href="#i-search"/></svg></span>
+            </div>
+
+            <aside class="a-sb">
+              <div class="a-sb-brand"><span class="a-brand"><svg class="a-mark"><use href="#logo"/></svg>Dogubako</span><span class="a-sb-acts"><svg class="i"><use href="#i-moon"/></svg><svg class="i"><use href="#i-panel-left-close"/></svg></span></div>
+              <div class="a-search"><svg class="i"><use href="#i-search"/></svg><span>Search tools and files</span><span class="a-kbd">Ctrl K</span></div>
+              <div class="a-nav-group">
+                <div class="a-nav-head"><span>Pinned</span><span>Edit</span></div>
+                <div class="a-nav"><svg class="i"><use href="#i-image"/></svg><span>Convert Images</span></div>
+                <div class="a-nav"><svg class="i"><use href="#i-code-xml"/></svg><span>JSON Formatter &amp; Valid…</span></div>
+                <div class="a-nav"><svg class="i"><use href="#i-file-text"/></svg><span>Compress PDF</span></div>
+              </div>
+              <div class="a-nav-group" id="sbCats">
+                <div class="a-nav-head"><span>All tools</span><span class="a-count">249</span></div>
+              </div>
+              <div class="a-sb-foot">
+                <div class="a-nav"><svg class="i"><use href="#i-history"/></svg><span>History</span></div>
+                <div class="a-nav"><svg class="i"><use href="#i-settings"/></svg><span>Settings</span></div>
+              </div>
+            </aside>
+
+            <div class="a-main">
+              <!-- home -->
+              <section class="a-screen a-home" id="sHome">
+                <div class="a-home-label"><span class="a-mono">249 tools on this device</span><span class="a-link"><svg class="i"><use href="#i-sliders-horizontal"/></svg>Customize</span></div>
+                <div class="a-input-row"><span class="a-big-input">Drop a file, or say what you need</span><span class="a-kbd a-hide-p">Ctrl K</span><span class="a-btn-sec" data-a="choose"><svg class="i"><use href="#i-file-up"/></svg><span class="a-hide-p">Choose files</span></span></div>
+                <div class="a-sec-head"><span>On your bench</span><span class="a-link">History <svg class="i"><use href="#i-arrow-right"/></svg></span></div>
+                <div class="a-shelf" id="shelf">
+                  <div class="a-bo"><span class="a-thing"><span class="bo-stack"><span class="bo-sheet bo-sheet-3"></span><span class="bo-sheet bo-sheet-2"></span><span class="bo-sheet bo-page"><span class="bo-line bo-title"></span><span class="bo-line bo-w40"></span><span class="bo-line"></span><span class="bo-line bo-w90"></span><span class="bo-line"></span><span class="bo-line bo-w60"></span><span class="bo-line"></span><span class="bo-line bo-w80"></span></span></span></span><span class="a-bo-name">lease-signed.pdf</span><span class="a-bo-meta">Compress PDF · 3 min ago</span></div>
+                  <div class="a-bo"><span class="a-thing"><span class="bo-film"><span class="bo-sprockets"></span><span class="bo-frame"><svg viewBox="0 0 224 150" preserveAspectRatio="xMidYMid slice"><use href="#ph-dune"/></svg></span><span class="bo-sprockets"></span></span></span><span class="a-bo-name">talk.mov</span><span class="a-bo-meta">Trim Video · 1 hr ago</span></div>
+                  <div class="a-bo"><span class="a-thing"><span class="bo-wave" id="benchWave"></span></span><span class="a-bo-name">standup.m4a</span><span class="a-bo-meta">Normalize Audio · 1 hr ago</span></div>
+                  <div class="a-bo"><span class="a-thing"><span class="bo-grid"></span></span><span class="a-bo-name">q3-sales.csv</span><span class="a-bo-meta">Clean CSV Data · yesterday</span></div>
+                </div>
+                <div class="a-module">
+                  <div class="a-module-head"><span>Recent runs</span><span class="a-link">All</span></div>
+                  <div class="a-run"><span>Compress PDF</span><span class="a-mono">612 KB</span><span>3 min ago</span></div>
+                  <div class="a-run"><span>Normalize Audio</span><span class="a-mono">8.1 MB</span><span>1 hr ago</span></div>
+                  <div class="a-run"><span>Trim Video</span><span class="a-mono">96 MB</span><span>1 hr ago</span></div>
+                  <div class="a-run"><span>Clean CSV Data</span><span class="a-mono">13 KB</span><span>yesterday</span></div>
+                </div>
+              </section>
+
+              <!-- drop screen: what should happen to it? -->
+              <section class="a-screen a-intent" id="sIntent">
+                <span class="a-link a-back"><svg class="i"><use href="#i-arrow-left"/></svg>Back</span>
+                <div class="a-intent-grid">
+                  <div class="a-figure">
+                    <div class="a-fig-files"><span class="a-print" id="figPrint"><svg viewBox="0 0 224 150" preserveAspectRatio="xMidYMid slice"><use href="#ph-dune"/></svg></span></div>
+                    <div class="a-fig-cap"><b>dune.jpg</b><span class="a-mono">4.2 MB</span></div>
+                  </div>
+                  <div class="a-choices">
+                    <div class="a-intent-title">What should happen to it?</div>
+                    <div class="a-intent-input" id="intentInput"><span class="a-typed" id="intentTyped"></span><span class="a-caret" id="intentCaret"></span><span class="a-ph" id="intentPh">Type what you want, like “smaller” or “jpg”</span><span class="a-keys" id="intentKeys"><span class="a-kbd">1</span>–<span class="a-kbd">4</span></span></div>
+                    <div class="a-opts" id="opts">
+                      <div class="a-opt-hl" id="optHl"></div>
+                      <div class="a-opt" data-o="convert"><span class="a-num">1</span><span class="a-opt-t"><span class="a-opt-n">Convert Images <svg class="i a-pin"><use href="#i-pin"/></svg></span><span class="a-opt-h">Convert images between PNG, JPEG, WebP, AVIF, GIF, BMP, TIFF…</span></span><svg class="i a-go"><use href="#i-arrow-right"/></svg></div>
+                      <div class="a-opt" data-o="compress"><span class="a-num">2</span><span class="a-opt-t"><span class="a-opt-n">Compress Images</span><span class="a-opt-h">Reduce image file size</span></span><svg class="i a-go"><use href="#i-arrow-right"/></svg></div>
+                      <div class="a-opt" data-o="redact"><span class="a-num">3</span><span class="a-opt-t"><span class="a-opt-n">Redact Regions <svg class="i a-pin"><use href="#i-pin"/></svg></span><span class="a-opt-h">Blur, pixelate or black out rectangular regions of an image</span></span><svg class="i a-go"><use href="#i-arrow-right"/></svg></div>
+                      <div class="a-opt" data-o="resize"><span class="a-num">4</span><span class="a-opt-t"><span class="a-opt-n">Resize Images</span><span class="a-opt-h">Resize images in bulk by width, height or percentage</span></span><svg class="i a-go"><use href="#i-arrow-right"/></svg></div>
+                      <div class="a-opt" data-o="meta"><span class="a-num">4</span><span class="a-opt-t"><span class="a-opt-n">Remove Image Metadata</span><span class="a-opt-h">Remove EXIF, GPS location, XMP, IPTC and comments</span></span><svg class="i a-go"><use href="#i-arrow-right"/></svg></div>
+                    </div>
+                    <div class="a-intent-foot">Choose different files · Put it away</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- tool page with the result -->
+              <section class="a-screen a-tool" id="sTool">
+                <div class="a-tool-top">
+                  <span class="a-round"><svg class="i"><use href="#i-arrow-left"/></svg></span>
+                  <div class="a-tabs"><span class="a-file-chip"><span class="a-thumb"><svg viewBox="0 0 224 150" preserveAspectRatio="xMidYMid slice"><use href="#ph-dune"/></svg></span>dune.jpg</span><span class="a-tab">Convert</span><span class="a-tab is-on">Compress</span><span class="a-tab">Redact Regions</span><span class="a-tab">Resize</span><span class="a-tab a-fade-tab">Remove Metadata</span></div>
+                  <span class="a-search-sm"><svg class="i"><use href="#i-search"/></svg><span>Search tools and files</span><span class="a-kbd">Ctrl K</span></span>
+                </div>
+                <div class="a-compare">
+                  <div class="a-pane">
+                    <div class="a-pane-img"><svg viewBox="0 0 224 150" preserveAspectRatio="xMidYMid slice"><use href="#ph-dune"/></svg></div>
+                    <div class="a-pane-cap"><span>Original</span><span class="a-mono">JPG · 4.2 MB</span></div>
+                  </div>
+                  <div class="a-pane">
+                    <div class="a-pane-img a-result">
+                      <div class="a-wait" id="resWait"><span class="a-wait-t" id="resWaitT">Run to see the result</span><span class="a-prog" id="resProg"><i id="resBar"></i></span><span class="a-mono a-wait-p" id="resPct">0%</span></div>
+                      <div class="a-res-img" id="resImg"><svg viewBox="0 0 224 150" preserveAspectRatio="xMidYMid slice"><use href="#ph-dune"/></svg></div>
+                      <div class="a-sweep" id="resSweep"></div>
+                    </div>
+                    <div class="a-pane-cap"><span>Result</span><span class="a-mono" id="resMeta">JPG · <span id="resSize">1.1 MB</span> <b class="a-ok">−74%</b></span></div>
+                  </div>
+                  <div class="a-callout" id="callout"><span class="a-co-sz"><span id="coFrom">4.2 MB</span><svg class="i"><use href="#i-arrow-right"/></svg><span id="coTo">1.1 MB</span></span><span class="a-co-pct"><span id="coPct">74</span>% smaller</span></div>
+                </div>
+                <div class="a-card a-tool-card">
+                  <div class="a-tc-head">
+                    <div class="a-tc-text"><div class="a-tc-title">Compress Images <svg class="i"><use href="#i-pin"/></svg></div><p class="a-tc-desc">Reduce image file size: lossy JPEG/WebP/AVIF re-encoding and lossless PNG optimization (oxipng), in bulk</p></div>
+                    <div class="a-run-row"><span class="a-btn-ink" id="runBtn"><svg class="i"><use href="#i-play"/></svg><span id="runLbl">Run</span></span><span class="a-kbd a-hide-p">Ctrl</span><span class="a-kbd a-hide-p">↵</span><span class="a-link a-hide-p"><svg class="i"><use href="#i-rotate-ccw"/></svg>Reset</span></div>
+                  </div>
+                  <div class="a-field-l">Images <b>*</b></div>
+                  <div class="a-filechip"><span class="a-thumb a-thumb-lg"><svg viewBox="0 0 224 150" preserveAspectRatio="xMidYMid slice"><use href="#ph-dune"/></svg></span><span class="a-fc-t"><b>dune.jpg</b><span>4.2 MB</span></span><svg class="i"><use href="#i-x"/></svg></div>
+                  <div class="a-row3">
+                    <div><div class="a-field-l">Quality</div><div class="a-slider"><span class="a-track"><i></i></span><span class="a-thumbk"></span><span class="a-num-in">75</span></div></div>
+                    <div class="a-hide-p"><div class="a-field-l">Format</div><div class="a-select">Same as input<svg class="i"><use href="#i-chevron-down"/></svg></div></div>
+                    <div class="a-hide-p"><div class="a-field-l">Max dimension</div><div class="a-text-in">1–100000</div></div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <!-- drop overlay -->
+            <div class="a-drop" id="dropOv"><div class="a-drop-card"><span class="a-tray"><span class="a-tray-sheet" id="traySheet"></span></span><span class="a-drop-title">Drop to put it on the bench</span><span class="a-drop-sub">Then choose what should happen to it.</span></div></div>
+
+            <!-- command palette -->
+            <div class="a-scrim" id="palScrim"></div>
+            <div class="a-pal-wrap" id="palWrap">
+              <div class="a-pal" id="pal">
+                <div class="a-pal-in"><svg class="i"><use href="#i-search"/></svg><span class="a-typed" id="palTyped"></span><span class="a-caret" id="palCaret"></span><span class="a-ph" id="palPh">Search tools and files</span><span class="a-kbd">Esc</span></div>
+                <div class="a-pal-sec">Tools</div>
+                <div class="a-pal-rows" id="palRows"><div class="a-pal-hl" id="palHl"></div></div>
+                <div class="a-pal-foot"><span><span class="a-kbd">↑</span><span class="a-kbd">↓</span>navigate</span><span><span class="a-kbd">↵</span>open</span><span><span class="a-kbd">Esc</span>close</span></div>
+              </div>
+            </div>
+
+            <!-- keystroke HUD -->
+            <div class="a-hud" id="hud"><span class="a-hud-k" id="hudK"></span></div>
+          </div>
+
+          <!-- terminal: a second window that slides over -->
+          <div class="a-term" id="term">
+            <div class="a-term-bar"><span class="win-dots"><i></i><i></i><i></i></span><span>~/contracts — zsh</span></div>
+            <div class="a-term-body">
+              <div class="t-l"><span class="t-p">~/contracts</span> <span class="t-d">$</span> <span id="tCmd"></span><span class="t-caret" id="tCaret"></span></div>
+              <div class="t-l" id="tProg"></div>
+              <div class="t-l" id="tO1"></div>
+              <div class="t-l t-dim" id="tO2"></div>
+              <div class="t-l" id="tP2"><span class="t-p">~/contracts</span> <span class="t-d">$</span> <span class="t-caret t-blink"></span></div>
+            </div>
+          </div>
+
+          <!-- agent chat: calls Dogubako over MCP -->
+          <div class="a-agent" id="agent">
+            <div class="a-agent-bar"><svg class="i"><use href="#i-bot"/></svg><span>Agent</span><span class="a-mono ag-srv">mcp · dogubako</span></div>
+            <div class="a-agent-body">
+              <div class="ag-user" id="agU">Make talk.mov small enough for the 25&nbsp;MB upload limit.</div>
+              <div class="ag-bot" id="agB1">I’ll look for a Dogubako tool that can do that.</div>
+              <div class="ag-call" id="agC1"><svg class="i"><use href="#i-search"/></svg><span class="ag-fn">dogubako_search_tools</span><span class="ag-arg">“compress video”</span><span class="ag-res">→ video.compress</span></div>
+              <div class="ag-card" id="agC2">
+                <div class="ag-head"><span class="ag-fn">dogubako_run_tool</span><span class="ag-st" id="agSt"><span class="ag-spin" id="agSpin"></span><span id="agStT">running</span></span></div>
+                <div class="ag-json" id="agJson"><div>{</div><div>  <i>"tool"</i>: <s>"video.compress"</s>,</div><div>  <i>"arguments"</i>: {</div><div>    <i>"input"</i>: [<s>"talk.mov"</s>],</div><div>    <i>"mode"</i>: <s>"size"</s>,</div><div>    <i>"target_mb"</i>: <u>25</u></div><div>  }</div><div>}</div></div>
+                <div class="ag-prog"><i id="agBar"></i></div>
+                <div class="ag-out" id="agOut"><svg class="i"><use href="#i-clapperboard"/></svg><span>talk-compressed.mp4</span><span class="a-mono">24.6 MB</span></div>
+              </div>
+              <div class="ag-bot" id="agB2">Done. talk-compressed.mp4 is 24.6&nbsp;MB and sits next to the original.</div>
+            </div>
+            <div class="ag-input">Message your agent…</div>
+          </div>
+
+          <!-- the photo being dragged in, and the pointer -->
+          <div class="a-carry" id="carry"><span class="a-print"><svg viewBox="0 0 224 150" preserveAspectRatio="xMidYMid slice"><use href="#ph-dune"/></svg></span><span class="a-carry-badge">dune.jpg</span></div>
+          <div class="a-cursor" id="cursor"><svg class="a-arrow" viewBox="0 0 24 24"><path d="M5.5 3.2v15.6l4.1-3.9 2.6 6 2.7-1.2-2.6-5.9h5.7z" fill="#111" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg><span class="a-touch"></span><span class="a-ring" id="cursorRing"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <figcaption class="demo-ui">
+      <p class="sr-only">An animated recreation of the Dogubako app. A photo is dropped onto the window, Dogubako suggests tools, Compress Images shrinks it from 4.2 MB to 1.1 MB, then the command palette searches for PDF tools, the same PDF tool runs from a terminal, and an AI agent compresses a video through the MCP server.</p>
+      <div class="demo-bar">
+        <button class="demo-play" id="demoPlay" type="button" aria-label="Pause the demo" aria-pressed="false">
+          <svg class="i i-pause" aria-hidden="true"><use href="#i-pause"/></svg>
+          <svg class="i i-play" aria-hidden="true"><use href="#i-play"/></svg>
+        </button>
+        <ol class="pips" id="pips" aria-label="Demo chapters"></ol>
+      </div>
+      <p class="demo-cap" id="demoCap" aria-live="off"></p>
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ============================================================ BENTO -->
+<section class="sec" id="product" aria-labelledby="bento-title">
+  <div class="wrap">
+    <header class="sec-head">
+      <p class="kicker">Inside the box</p>
+      <h2 id="bento-title" class="h2">Each tool shows its work.</h2>
+      <p class="sec-lede">Every tool gets a screen that fits the job: a transcript that follows the waveform, pages you can count, a size you can aim for. A few of them, running right here.</p>
+    </header>
+
+    <div class="bento">
+      <article class="tile t-wide" data-tile="transcribe">
+        <div class="tile-vis" aria-hidden="true">
+          <div class="tr">
+            <div class="tr-left">
+              <div class="tr-file"><svg class="i"><use href="#i-mic"/></svg><span>interview.m4a</span><span class="tr-time mono" id="trTime">00:00</span></div>
+              <div class="tr-wave" id="trWave"><span class="tr-head" id="trHead"></span></div>
+              <p class="tr-words" id="trWords"></p>
+            </div>
+            <div class="tr-srt mono" id="trSrt"><div class="tr-srt-h">interview.srt</div><div class="tr-srt-b" id="trSrtB"></div></div>
+          </div>
+        </div>
+        <div class="tile-txt">
+          <h3>Transcribe Audio / Video</h3>
+          <p>Offline speech to text with whisper.cpp. Text, SRT, WebVTT, JSON or Markdown, with optional word timestamps.</p>
+          <code class="tool-id">speech.transcribe</code>
+        </div>
+      </article>
+
+      <article class="tile t-tall" data-tile="json">
+        <div class="tile-vis" aria-hidden="true">
+          <div class="jf">
+            <div class="jf-in mono"><span class="jf-lbl">JSON</span><span class="jf-min" id="jsMin"></span></div>
+            <div class="jf-out mono" id="jsOut"></div>
+            <div class="jf-stats" id="jsStats">
+              <div><span>Valid</span><b class="ok">Yes</b></div>
+              <div><span>Root</span><b>object with 7 keys</b></div>
+              <div><span>Depth</span><b>2</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="tile-txt">
+          <h3>JSON Formatter &amp; Validator</h3>
+          <p>Format, minify, validate and sort keys, with the exact line and column of any error.</p>
+          <code class="tool-id">dev.json</code>
+        </div>
+      </article>
+
+      <article class="tile" data-tile="merge">
+        <div class="tile-vis" aria-hidden="true">
+          <div class="mg" id="mg">
+            <div class="mg-lbl mg-la mono"><b>a.pdf</b> 3 pages</div>
+            <div class="mg-lbl mg-lb mono"><b>b.pdf</b> 2 pages</div>
+            <div class="mg-lbl mg-lm mono" id="mgOut"><b>merged.pdf</b> <span id="mgCount">0</span> pages</div>
+          </div>
+        </div>
+        <div class="tile-txt">
+          <h3>Merge PDFs</h3>
+          <p>Combine PDFs in the order you choose, optionally taking only some pages of each.</p>
+          <code class="tool-id">pdf.merge</code>
+        </div>
+      </article>
+
+      <article class="tile" data-tile="video">
+        <div class="tile-vis" aria-hidden="true">
+          <div class="vc">
+            <div class="vc-film"><span class="vc-spr"></span><span class="vc-frames" id="vcFrames"></span><span class="vc-spr"></span></div>
+            <div class="vc-meter">
+              <div class="vc-bar"><i id="vcFill"></i><span class="vc-target" id="vcTarget"><span class="mono">25 MB target</span></span></div>
+              <div class="vc-read mono"><span>talk.mov</span><span><span id="vcFrom">182</span> MB <svg class="i"><use href="#i-arrow-right"/></svg> <b id="vcTo">182.0 MB</b></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="tile-txt">
+          <h3>Compress Video</h3>
+          <p>Shrink a video by quality level or to a target file size, with a two-pass bitrate.</p>
+          <code class="tool-id">video.compress</code>
+        </div>
+      </article>
+
+      <article class="tile" data-tile="hash">
+        <div class="tile-vis" aria-hidden="true">
+          <div class="hs">
+            <div class="hs-file"><svg class="i"><use href="#i-hash"/></svg><span>big.iso</span><span class="mono hs-sz" id="hsSz">0.0 / 4.7 GB</span></div>
+            <div class="hs-prog"><i id="hsBar"></i></div>
+            <div class="hs-row mono"><span class="hs-alg">sha256</span><span class="hs-hex" id="hsA"></span></div>
+            <div class="hs-row mono"><span class="hs-alg">blake3</span><span class="hs-hex" id="hsB"></span></div>
+          </div>
+        </div>
+        <div class="tile-txt">
+          <h3>File Hash</h3>
+          <p>MD5, SHA-1, SHA-256, SHA-512, SHA3-256, BLAKE3, CRC32 or XXH3 checksums of files or text.</p>
+          <code class="tool-id">files.hash</code>
+        </div>
+      </article>
+
+      <article class="tile" data-tile="redact">
+        <div class="tile-vis" aria-hidden="true">
+          <div class="rd">
+            <div class="rd-photo" id="rdPhoto">
+              <svg class="rd-svg" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
+                <rect width="320" height="200" fill="#d9cdbd"/>
+                <rect x="0" y="150" width="320" height="50" fill="#cbbca8"/>
+                <path d="M40 40 L232 28 L282 52 L282 178 L90 190 L40 166Z" fill="url(#g-box)"/>
+                <path d="M40 40 L232 28 L282 52 L90 64Z" fill="#d8b285"/>
+                <path d="M90 64 L282 52 L282 178 L90 190Z" fill="#b8895a" opacity=".55"/>
+                <path d="M146 60 L188 57" stroke="#e8d3b3" stroke-width="10"/>
+                <g transform="rotate(-3.4 186 120)"><rect x="118" y="82" width="138" height="82" rx="3" fill="#fbfaf6"/><rect x="128" y="92" width="44" height="6" rx="1" fill="#2b2a28"/><rect x="128" y="106" width="92" height="5" rx="1" fill="#55524c"/><rect x="128" y="116" width="80" height="5" rx="1" fill="#55524c"/><rect x="128" y="126" width="62" height="5" rx="1" fill="#55524c"/><g fill="#2b2a28"><rect x="128" y="142" width="2" height="14"/><rect x="132" y="142" width="1" height="14"/><rect x="135" y="142" width="3" height="14"/><rect x="140" y="142" width="1" height="14"/><rect x="143" y="142" width="2" height="14"/><rect x="147" y="142" width="1" height="14"/><rect x="150" y="142" width="3" height="14"/><rect x="155" y="142" width="1" height="14"/><rect x="158" y="142" width="2" height="14"/><rect x="162" y="142" width="1" height="14"/><rect x="165" y="142" width="2" height="14"/><rect x="169" y="142" width="3" height="14"/></g><rect x="214" y="90" width="30" height="30" rx="2" fill="none" stroke="#2b2a28" stroke-width="1.5"/></g>
+              </svg>
+              <div class="rd-mosaic" id="rdMosaic"></div>
+              <div class="rd-box" id="rdBox"><span class="rd-n">1</span></div>
+              <svg class="rd-cur" id="rdCur" viewBox="0 0 24 24"><path d="M5.5 3.2v15.6l4.1-3.9 2.6 6 2.7-1.2-2.6-5.9h5.7z" fill="#111" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="rd-foot mono"><span id="rdInfo">Drag on the image to add a box</span><span>pixelate</span></div>
+          </div>
+        </div>
+        <div class="tile-txt">
+          <h3>Redact Regions</h3>
+          <p>Blur, pixelate or black out regions of an image: faces, license plates, addresses.</p>
+          <code class="tool-id">image.redact</code>
+        </div>
+      </article>
+
+      <article class="tile" data-tile="csv">
+        <div class="tile-vis" aria-hidden="true">
+          <div class="cv">
+            <div class="cv-ops" id="cvOps"><span>trim</span><span>nulls</span><span>dates</span><span>empty rows</span></div>
+            <div class="cv-table mono" id="cvTable"></div>
+          </div>
+        </div>
+        <div class="tile-txt">
+          <h3>Clean CSV Data</h3>
+          <p>Trim cells, blank out N/A and NULL, turn dates into ISO 8601, drop empty rows and columns.</p>
+          <code class="tool-id">data.clean</code>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 249 TOOLS -->
+<section class="sec finder-sec" id="tools" aria-labelledby="finder-title">
+  <div class="wrap">
+    <header class="sec-head sec-head-c">
+      <p class="kicker">What’s inside</p>
+      <h2 id="finder-title" class="h2" aria-label="249 tools. One keystroke away."><span class="big-n" id="bigN" aria-hidden="true">249</span><span aria-hidden="true"> tools. One keystroke away.</span></h2>
+      <p class="sec-lede">Images 30, Video 27, Audio 21, Speech &amp; Voice 9, PDF &amp; Documents 27, Files 23, Text 27, Developer 34, Data 12, Network &amp; Web 18, Design 9, System 12. Search them the way the app does: by name, or by what you want done.</p>
+    </header>
+  </div>
+  <div class="finder" id="finder">
+    <div class="finder-wall" id="fwall" aria-hidden="true"></div>
+    <div class="finder-pal">
+      <div class="finder-in">
+        <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+        <label for="fq" class="sr-only">Search all 249 Dogubako tools</label>
+        <input id="fq" type="text" placeholder="Search 249 tools" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="fres" aria-autocomplete="list">
+        <span class="finder-count mono" id="fcount" aria-live="polite">249 tools</span>
+      </div>
+      <div class="finder-cats" id="fcats" role="group" aria-label="Filter by category"></div>
+      <ul class="finder-res" id="fres" role="listbox" aria-label="Matching tools"></ul>
+      <div class="finder-foot mono"><span class="ff-cli"><span class="ff-p">$</span> <span id="fcli">dogubako image compress --help</span></span><span class="ff-keys"><span class="kbd">↑</span><span class="kbd">↓</span> move</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ WAYS IN -->
+<section class="sec" id="ways" aria-labelledby="ways-title">
+  <div class="wrap ways">
+    <div class="ways-copy">
+      <p class="kicker">Ways in</p>
+      <h2 id="ways-title" class="h2">One description.<br>Four ways in.</h2>
+      <p class="sec-lede">Each tool is described once. The app’s form, the CLI flags, the HTTP endpoint and the MCP tool are generated from that description, and the same engine runs all of them. Here is one job, four times.</p>
+      <div class="ways-tabs" role="tablist" aria-label="Ways to use Dogubako" id="waysTabs">
+        <button role="tab" id="wt-app" aria-controls="wp-app" aria-selected="true" tabindex="0" type="button"><span class="wt-n">App</span><span class="wt-d">Desktop app for macOS, Windows and Linux, or the web UI on your server.</span><span class="wt-bar"><i></i></span></button>
+        <button role="tab" id="wt-cli" aria-controls="wp-cli" aria-selected="false" tabindex="-1" type="button"><span class="wt-n">CLI</span><span class="wt-d"><code>dogubako &lt;category&gt; &lt;tool&gt;</code>, every option as a flag.</span><span class="wt-bar"><i></i></span></button>
+        <button role="tab" id="wt-api" aria-controls="wp-api" aria-selected="false" tabindex="-1" type="button"><span class="wt-n">HTTP API</span><span class="wt-d">Upload a file, run a tool, fetch the result. OpenAPI included.</span><span class="wt-bar"><i></i></span></button>
+        <button role="tab" id="wt-mcp" aria-controls="wp-mcp" aria-selected="false" tabindex="-1" type="button"><span class="wt-n">MCP</span><span class="wt-d">Agents search and run tools, with the permissions you give them.</span><span class="wt-bar"><i></i></span></button>
+      </div>
+    </div>
+    <div class="ways-stage">
+      <div class="ways-spec mono"><span class="ws-id">image.compress</span><span class="ws-sep"></span><span>input <i>dune.jpg</i></span><span class="ws-sep"></span><span>quality <mark>75</mark></span></div>
+      <div class="ways-panels">
+        <div class="wp" role="tabpanel" id="wp-app" aria-labelledby="wt-app" tabindex="0">
+          <div class="wp-app">
+            <div class="wa-head"><div><div class="wa-title">Compress Images</div><div class="wa-desc">Reduce image file size</div></div><span class="btn-mini"><svg class="i" aria-hidden="true"><use href="#i-play"/></svg>Run</span></div>
+            <div class="wa-l">Images</div>
+            <div class="wa-file"><span class="wa-thumb"><svg viewBox="0 0 224 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#ph-dune"/></svg></span><b>dune.jpg</b><span class="mono">4.2 MB</span></div>
+            <div class="wa-l">Quality</div>
+            <div class="wa-slider"><span class="wa-track"><i></i><b></b></span><mark class="mono">75</mark></div>
+            <div class="wa-res"><span>Result</span><span class="mono">dune.jpg · 4.2 MB → 1.1 MB</span></div>
+          </div>
+        </div>
+        <div class="wp" role="tabpanel" id="wp-cli" aria-labelledby="wt-cli" tabindex="0" hidden>
+          <pre class="code"><code><span class="c-p">$</span> dogubako image compress dune.jpg <mark>--quality 75</mark> -o dune-small.jpg
+<span class="c-dim">saved dune-small.jpg (1.1 MB)</span>
+
+<span class="c-p">$</span> dogubako image compress --help   <span class="c-dim"># every option, generated</span></code></pre>
+        </div>
+        <div class="wp" role="tabpanel" id="wp-api" aria-labelledby="wt-api" tabindex="0" hidden>
+          <pre class="code"><code><span class="c-k">PUT</span>  /api/v1/files/raw?name=dune.jpg
+<span class="c-dim">→ {"id": "f_…"}</span>
+
+<span class="c-k">POST</span> /api/v1/tools/image.compress/run
+{
+  "params": {"input": ["f_…"], <mark>"quality": 75</mark>},
+  "wait_seconds": 60
+}</code></pre>
+        </div>
+        <div class="wp" role="tabpanel" id="wp-mcp" aria-labelledby="wt-mcp" tabindex="0" hidden>
+          <pre class="code"><code><span class="c-p">$</span> claude mcp add dogubako -- dogubako mcp serve --discovery compact
+
+<span class="c-dim"># the agent finds the tool, then runs it</span>
+<span class="c-k">dogubako_search_tools</span> {"query": "compress image"}
+<span class="c-k">dogubako_run_tool</span> {
+  "tool": "image.compress",
+  "arguments": {"input": ["dune.jpg"], <mark>"quality": 75</mark>}
+}</code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ LOCAL-FIRST -->
+<section class="sec" id="local" aria-labelledby="local-title">
+  <div class="wrap local">
+    <div class="local-copy">
+      <p class="kicker">Local-first</p>
+      <h2 id="local-title" class="h2">Your files stay on your machine.</h2>
+      <p class="sec-lede">Nothing leaves your machine unless you host Dogubako yourself. The desktop app needs no account and sends no telemetry. The engines that do the work are in the box.</p>
+      <dl class="facts">
+        <div><dt>Runs here</dt><dd>Every tool runs on your own computer, using mature open-source engines and native Rust code.</dd></div>
+        <div><dt>No shell</dt><dd>External programs get exact arguments, timeouts and resource limits. A shell is never used.</dd></div>
+        <div><dt>Network</dt><dd>Only the Network &amp; Web tools go online, because that is their job. On a server they are guarded against SSRF.</dd></div>
+        <div><dt>Open</dt><dd>AGPL-3.0-or-later. Every line is on GitHub.</dd></div>
+      </dl>
+    </div>
+    <div class="cabinet" id="cabinet">
+      <div class="cab-top"><svg class="mark" aria-hidden="true"><use href="#logo"/></svg><span lang="ja">道具箱</span><span class="mono">engines inside</span></div>
+      <ul class="cab-grid">
+        <li class="drawer"><b>FFmpeg</b><span>video &amp; audio</span></li>
+        <li class="drawer"><b>libvips</b><span>fast image processing</span></li>
+        <li class="drawer"><b>ImageMagick</b><span>image formats</span></li>
+        <li class="drawer"><b>ExifTool</b><span>metadata</span></li>
+        <li class="drawer"><b>qpdf</b><span>PDF structure</span></li>
+        <li class="drawer"><b>Poppler</b><span>PDF text &amp; images</span></li>
+        <li class="drawer"><b>Ghostscript</b><span>PDF compression</span></li>
+        <li class="drawer"><b>Tesseract</b><span>OCR</span></li>
+        <li class="drawer"><b>whisper.cpp</b><span>speech to text</span></li>
+        <li class="drawer"><b>Piper</b><span>text to speech</span></li>
+        <li class="drawer"><b>LibreOffice</b><span>office documents</span></li>
+        <li class="drawer"><b>Pandoc</b><span>markup</span></li>
+        <li class="drawer"><b>7-Zip</b><span>archives</span></li>
+        <li class="drawer drawer-rust"><b>Rust</b><span>everything else</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ SELF-HOST + AGENTS -->
+<section class="sec" id="server" aria-labelledby="server-title">
+  <div class="wrap server">
+    <div class="server-copy">
+      <p class="kicker">Self-hosting &amp; agents</p>
+      <h2 id="server-title" class="h2">Host it once.<br>One key per agent.</h2>
+      <p class="sec-lede">Run Dogubako on a home server or a VPS with all the heavy engines installed. The web UI works on phones. Every person and every agent gets an account that can use exactly the tools you allow, and nothing else.</p>
+      <pre class="code code-tight"><code><span class="c-p">$</span> docker compose up -d --build</code></pre>
+      <pre class="code code-tight"><code><span class="c-p">$</span> dogubako users create media-bot --role agent \
+    --allow 'video.*' --allow 'speech.*'
+<span class="c-p">$</span> dogubako tokens create --user media-bot --name laptop-agent
+<span class="c-dim">dgb_…</span></code></pre>
+    </div>
+    <div class="server-vis">
+      <div class="phone" aria-hidden="true">
+        <img class="ph-l" src="assets/img/phone-home-light.webp" alt="" width="585" height="1266" loading="lazy" decoding="async">
+        <img class="ph-d" src="assets/img/phone-regex-dark.webp" alt="" width="585" height="1266" loading="lazy" decoding="async">
+      </div>
+      <div class="policy" id="policy">
+        <div class="pol-head"><span class="pol-av" aria-hidden="true">m</span><span><b>media-bot</b><span class="mono">agent · video.*, speech.*</span></span></div>
+        <ol class="pol-log" id="polLog" aria-label="Example policy checks for the media-bot agent">
+          <li><span class="mono">video.compress</span><span class="pol-st ok">allowed</span></li>
+          <li><span class="mono">speech.transcribe</span><span class="pol-st ok">allowed</span></li>
+          <li><span class="mono">pdf.merge</span><span class="pol-st no">denied</span></li>
+          <li><span class="mono">video.to_gif</span><span class="pol-st ok">allowed</span></li>
+          <li><span class="mono">system.processes</span><span class="pol-st no">denied</span></li>
+        </ol>
+        <p class="pol-note">Every call is checked against the agent’s policy, including tools it only guessed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ DOWNLOAD -->
+<section class="sec sec-dl" id="download" aria-labelledby="dl-title">
+  <div class="wrap">
+    <div class="dl">
+      <svg class="dl-mark" viewBox="0 0 100 100" aria-hidden="true">
+        <g class="dl-body"><path d="M10 46 V72 a10 10 0 0 0 10 10 H80 a10 10 0 0 0 10-10 V46" fill="none" stroke="currentColor" stroke-width="8"/></g>
+        <g class="dl-lid"><path d="M10 46 V34 a10 10 0 0 1 10-10 H80 a10 10 0 0 1 10 10 V46 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></g>
+      </svg>
+      <h2 id="dl-title" class="h2">The alpha is almost here.</h2>
+      <p class="sec-lede">Installers for macOS, Windows and Linux arrive with the first alpha release. Watch the repository to hear when it lands, or build it from source today.</p>
+      <ul class="dl-plats">
+        <li><svg class="i" aria-hidden="true"><use href="#i-laptop"/></svg><span><b>macOS</b><span>With the alpha</span></span></li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg><span><b>Windows</b><span>With the alpha</span></span></li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-laptop"/></svg><span><b>Linux</b><span>With the alpha</span></span></li>
+        <li><svg class="i" aria-hidden="true"><use href="#i-server"/></svg><span><b>Server</b><span>Docker or source</span></span></li>
+      </ul>
+      <div class="cta-row cta-c">
+        <a class="btn btn-ink" href="https://github.com/Mischa-dev/Dogubako/releases"><svg class="i i-fill" aria-hidden="true"><use href="#github"/></svg>Watch releases</a>
+        <a class="btn btn-line" href="https://github.com/Mischa-dev/Dogubako">Build from source</a>
+      </div>
+      <p class="dl-cli mono"><span class="c-p">$</span> cargo install --path crates/cli</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="foot-brand">
+      <a class="brand" href="#top"><svg class="mark" aria-hidden="true"><use href="#logo"/></svg><span>Dogubako</span></a>
+      <p><span lang="ja">道具箱</span>, a local-first, open-source toolbox.</p>
+    </div>
+    <nav class="foot-cols" aria-label="Footer">
+      <div><h3>Product</h3><a href="#product">Tools in motion</a><a href="#tools">All 249 tools</a><a href="#ways">Ways in</a><a href="#download">Alpha status</a></div>
+      <div><h3>Docs</h3><a href="https://docs.dogubako.app">Documentation</a><a href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/CLI.md">CLI</a><a href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/MCP.md">MCP</a><a href="https://github.com/Mischa-dev/Dogubako/blob/main/docs/SECURITY.md">Security</a></div>
+      <div><h3>Project</h3><a href="https://github.com/Mischa-dev/Dogubako">GitHub</a><a href="https://github.com/Mischa-dev/Dogubako/releases">Releases</a><a href="https://github.com/Mischa-dev/Dogubako/blob/main/LICENSE">AGPL-3.0-or-later</a></div>
+    </nav>
+  </div>
+  <div class="wrap foot-base mono"><span>dogubako.app</span><span>Set in Instrument Sans and DM Mono (SIL OFL). Icons from Lucide (ISC).</span></div>
+</footer>
+
+<script src="assets/js/tools-data.js"></script>
+<script src="assets/js/timeline.js"></script>
+<script src="assets/js/hero.js"></script>
+<script src="assets/js/bento.js"></script>
+<script src="assets/js/finder.js"></script>
+<script src="assets/js/site.js"></script>
+</body>
+</html>
