@@ -6,7 +6,7 @@ use crate::spec::Permission;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::net::IpAddr;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 /// Restricts which host paths `path` parameters may reference.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -291,14 +291,13 @@ impl ExecLimits {
 /// Sanitize a user-provided file name: strip directories and dangerous
 /// characters so it is safe to create inside an output directory.
 pub fn sanitize_filename(name: &str) -> String {
-    let base = Path::new(name)
-        .components()
-        .filter_map(|c| match c {
-            Component::Normal(s) => Some(s.to_string_lossy().to_string()),
-            _ => None,
-        })
-        .next_back()
-        .unwrap_or_default();
+    // Treat both `/` and `\` as separators on every platform: names come
+    // from browsers and remote clients, not just the local OS.
+    let base = name
+        .rsplit(['/', '\\'])
+        .find(|seg| !seg.is_empty() && *seg != "." && *seg != "..")
+        .unwrap_or("")
+        .to_string();
     let mut s: String = base
         .chars()
         .map(|c| {
@@ -364,7 +363,9 @@ mod tests {
     #[test]
     fn sanitizes_names() {
         assert_eq!(sanitize_filename("../../etc/passwd"), "passwd");
-        assert_eq!(sanitize_filename("a/b\\c.txt"), "b_c.txt");
+        assert_eq!(sanitize_filename("a/b\\c.txt"), "c.txt");
+        assert_eq!(sanitize_filename("C:\\Users\\x\\photo.jpg"), "photo.jpg");
+        assert_eq!(sanitize_filename("dir/"), "dir");
         assert_eq!(sanitize_filename(".."), "file");
         assert_eq!(sanitize_filename("CON.txt"), "_CON.txt");
     }
