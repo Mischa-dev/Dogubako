@@ -37,10 +37,13 @@ CLI tool command.
 
 Some tools run entirely inside Dogubako (**native**). Others call a mature
 external program (**external**), such as FFmpeg for video or Tesseract for
-OCR. Dogubako never bundles or links those programs; it finds them on your
-`PATH`, in its own `bin` folder, or at a path you set with
+OCR. Dogubako runs them as separate programs and never links them. The macOS
+app brings its own pinned copies (some built in, the rest downloaded the first
+time you need them), the Docker image has all of them baked in, and the CLI
+finds them on your `PATH`, in its own `bin` folder, or at a path you set with
 `DOGUBAKO_<ID>_PATH`. When one is missing, the tools that need it stay listed,
-are marked unavailable, and explain how to install it.
+are marked unavailable, and explain how to get it. See
+[Engines and models](/app/engines-and-models/).
 
 ## Models
 

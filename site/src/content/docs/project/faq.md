@@ -10,27 +10,34 @@ are no paid tiers, accounts for desktop use, ads or telemetry.
 
 ### Do my files leave my computer?
 
-Not with the desktop app or the CLI: everything runs on your machine. With a
-self-hosted server, files go to that server and nowhere else. The only
-outbound traffic comes from tools whose job is the network (such as DNS
-lookups) and from model downloads you start.
+It depends on how you run Dogubako. The desktop app and the CLI process files
+on your computer. With a hosted Dogubako, files go to that server and are
+processed there, so use a server you trust. Other outbound traffic comes only
+from tools whose job is the network (such as DNS lookups), from model and
+engine downloads you start, and from [plain words](/app/plain-words/) if you
+turn it on: that sends your request, file names and tool results (not the
+files themselves) to the model provider you picked.
 
 ### Why do some tools say they need extra software?
 
-About half the tools are built in. The rest use mature programs such as FFmpeg
-or Tesseract, which Dogubako calls but doesn't bundle, so you install only what
-you need. See [Engines and models](/app/engines-and-models/).
+About half the tools are native. The rest use mature programs such as FFmpeg
+or Tesseract. The macOS app has the common ones built in and downloads the
+bigger ones the first time you need them, and the Docker image includes them
+all. With the CLI you install what you need. See
+[Engines and models](/app/engines-and-models/).
 
 ### Does it work offline?
 
-Yes, apart from network tools. Speech recognition, OCR, face detection and
+Yes, apart from network tools and plain words with a hosted model. Speech recognition, OCR, face detection and
 text to speech all run locally once their engine and model are installed.
 
 ### Which operating systems are supported?
 
-The desktop app and CLI run on macOS, Windows and Linux. The server runs
-anywhere the CLI does, and in Docker on Linux. The web app works in current
-browsers, including on phones.
+The released desktop app is for macOS 15 or newer on Apple silicon. It also
+builds on Windows and Linux, but there are no installers for those yet. The CLI
+runs on macOS, Windows and Linux, the server runs anywhere the CLI does and in
+Docker on Linux (x86-64), and the web app works in current browsers, including
+on phones.
 
 ### What does "Dogubako" mean?
 

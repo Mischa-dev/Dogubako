@@ -10,6 +10,10 @@ interface. It calls the engine **in-process**: there is no HTTP server, no
 open port and no background service. When the window is closed, nothing of
 Dogubako is running.
 
+Released builds are for **macOS 15 or newer on Apple silicon**. The app also
+builds and runs on Windows and Linux, but there are no installers for them
+yet; see [Building](/develop/building/#desktop-app-tauri-2).
+
 ## What's different from the web app
 
 | | Desktop app | Self-hosted web app |
@@ -38,6 +42,7 @@ Inside it:
 |---|---|
 | `outputs/<run id>/` | The output files of each run |
 | `models/` | Downloaded models |
+| `engines/` | Engines downloaded on demand (macOS) |
 | `extensions/` | Your [extension](/develop/extensions/) manifests and `trusted.toml` |
 | `bin/` | Engine binaries you want Dogubako to prefer over your `PATH` |
 
@@ -47,17 +52,25 @@ folder.
 
 ## How it finds engines
 
-For each engine, Dogubako looks in this order:
+On macOS, the app [manages most engines itself](/app/engines-and-models/#in-the-macos-app):
+FFmpeg, qpdf, Poppler, ExifTool and 7-Zip are built in, and ImageMagick,
+Tesseract, Ghostscript, Real-ESRGAN, Pandoc and whisper.cpp download into
+`~/Library/Application Support/Dogubako/engines` with one click. For those
+engines the app uses only its own copies.
 
-1. the path in `DOGUBAKO_<ID>_PATH`, for example `DOGUBAKO_FFMPEG_PATH`;
+For every other engine (LibreOffice, Piper, rembg, and all engines in builds
+without the managed set, such as development builds or other platforms),
+Dogubako looks in this order:
+
+1. the path in `DOGUBAKO_<ID>_PATH`, for example `DOGUBAKO_FFMPEG_PATH`
+   (this overrides a managed engine too);
 2. the `bin/` folder above;
 3. your `PATH`;
 4. on macOS, the usual Homebrew and MacPorts folders: `/opt/homebrew/bin`,
    `/usr/local/bin` and `/opt/local/bin`.
 
 The last step matters because apps opened from the Dock or Finder get a
-minimal `PATH` that leaves those folders out. Engines installed with `brew` or
-`port` are found anyway, with no extra setup.
+minimal `PATH` that leaves those folders out.
 
 **Settings → Dependencies** shows what was found, the version, and the
 install command for your system. If you install an engine while Dogubako is
@@ -74,6 +87,9 @@ explicitly says it will (such as batch rename with **apply**).
 
 ## Privacy
 
-The desktop app sends nothing anywhere. The only network traffic comes from
-tools whose job is the network (DNS lookups, HTTP header checks and so on)
-and from model downloads you start yourself.
+Your files are processed on this computer. The only network traffic comes
+from tools whose job is the network (DNS lookups, HTTP header checks and so
+on), from model and engine downloads you start yourself, and from
+[plain words](/app/plain-words/) if you turn it on, which sends your request,
+file names and tool results (not the files) to the model provider you chose.
+There is no telemetry.

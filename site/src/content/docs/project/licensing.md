@@ -48,25 +48,39 @@ Bundled data files:
 | `crates/tools-image/assets/DejaVuSans.ttf` | Bitstream Vera / DejaVu (permissive; `DejaVuSans-LICENSE.txt` alongside) |
 | `crates/tools-text/data/eff_large_wordlist.txt` | EFF Large Wordlist, CC BY 3.0 US (attribution shown with generated passphrases) |
 
-## External programs (not bundled with the desktop app or CLI)
+## External programs
 
-Dogubako **invokes** these as separate processes when installed; it never links
-them. Users install them through their package manager (`dogubako deps` shows
-the commands). The Docker image installs Debian's packages, whose license terms
-and source availability follow Debian's.
+Dogubako **invokes** these as separate programs; it never links them, so
+shipping them alongside the AGPL app is aggregation. How they reach you:
+
+- **macOS app:** FFmpeg, qpdf, Poppler, ExifTool and 7-Zip ship inside the
+  app; ImageMagick, Tesseract, Ghostscript, Real-ESRGAN, Pandoc and
+  whisper.cpp download on demand. All are pinned builds (from Homebrew's
+  bottles, Real-ESRGAN's release, and whisper.cpp built from a tag), and each
+  engine folder carries `licenses/<component>/` with the license text of the
+  engine and every library it links.
+- **Docker image:** pinned Debian packages, whose license terms and source
+  availability follow Debian's.
+- **CLI and native servers:** whatever you install (`dogubako deps` shows the
+  commands).
+
+Every release attaches `engine-sources-<version>.tar` with the corresponding
+source of each GPL, LGPL, AGPL and MPL engine component at its pinned version,
+and the app includes `THIRD_PARTY_NOTICES.md` (generated from the engine lock,
+the Rust dependency tree and the web UI's npm packages, with a written source
+offer) next to its `LICENSE`.
 
 | Program | License | Notes |
 |---|---|---|
 | FFmpeg / FFprobe | LGPL-2.1+ or GPL-2.0+ (build-dependent) | Debian's build enables GPL components; combined distribution in the Docker image is under GPL-compatible terms with source available from Debian |
 | ImageMagick | ImageMagick License (Apache-2.0 style) | |
-| libvips | LGPL-2.1+ | |
 | ExifTool | Artistic / GPL-1.0+ | |
 | qpdf | Apache-2.0 | |
 | Poppler utils | GPL-2.0+ | |
 | Ghostscript | AGPL-3.0 | Compatible with Dogubako's AGPL |
 | Tesseract | Apache-2.0 | Language data: Apache-2.0 |
-| whisper.cpp | MIT | Optional; compiled into the `WITH_WHISPER=1` image |
-| Piper | MIT | Voices have individual licenses (shown in the model list) |
+| whisper.cpp | MIT | On demand in the macOS app; in the Docker image by default |
+| Piper | MIT (GPL-3.0 via espeak-ng) | In the Docker image by default. Voices have individual licenses (shown in the model list) |
 | rembg | MIT | Downloads U²-Net models (Apache-2.0) itself |
 | Real-ESRGAN ncnn | BSD-3-Clause | |
 | LibreOffice | MPL-2.0 | |

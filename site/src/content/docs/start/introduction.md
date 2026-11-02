@@ -41,8 +41,9 @@ needs and the platforms it runs on.
 All five share one engine and one catalog, so a tool behaves the same
 everywhere.
 
-1. **[Desktop app](/app/desktop/)** for macOS, Windows and Linux. Everything
-   runs in-process on your machine. There is no server and no network port.
+1. **[Desktop app](/app/desktop/)**, released for macOS on Apple silicon
+   (it builds on Windows and Linux too). Everything runs in-process on your
+   machine. There is no server and no network port.
 2. **[Self-hosted web app](/self-hosting/overview/)**. Run one server with all
    the engines installed and use it from any browser on your network,
    including phones.
@@ -55,10 +56,14 @@ everywhere.
 
 ## What makes it different
 
-- **Built on mature open-source engines.** FFmpeg, ImageMagick, libvips,
+- **Built on mature open-source engines.** FFmpeg, ImageMagick,
   ExifTool, qpdf, Poppler, Ghostscript, Tesseract, whisper.cpp, Piper,
   LibreOffice, Pandoc and 7-Zip do the heavy lifting. About half the catalog
-  needs none of them and runs as fast native Rust code.
+  needs none of them and runs as fast native Rust code. The macOS app and the
+  Docker image bring the engines with them.
+- **Plain words, if you want them.** Type "make these photos smaller" and a
+  model you choose runs the right tools, asking before anything that touches
+  the network or your folders. Off by default. See [Plain words](/app/plain-words/).
 - **One implementation, every interface.** Each tool is a declarative spec and
   one function. Forms, CLI flags, API schemas and MCP tool definitions are
   generated from the spec. See [Architecture](/develop/architecture/).
@@ -72,6 +77,6 @@ everywhere.
 
 ## Next steps
 
-- [Install Dogubako](/start/install/)
+- [Install Dogubako](/start/install/), or [try the alpha](/start/alpha/)
 - [Quick start](/start/quick-start/): your first tool in each interface
 - [Key concepts](/start/concepts/): tools, engines, jobs and artifacts

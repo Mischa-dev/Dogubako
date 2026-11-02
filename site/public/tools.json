@@ -1,5 +1,5 @@
 {
- "version": "0.1.0",
+ "version": "0.1.0-alpha.1",
  "tools": [
   {
    "id": "image.convert",
@@ -19455,6 +19455,7 @@
      "description": "Placeholders: {name} (name without extension), {ext} (extension incl. dot), {n} / {n:03} (counter), {date} (modified date), {parent}, {original}",
      "type": "text",
      "multiline": false,
+     "max_len": 1024,
      "required": false,
      "default": "{name}{ext}",
      "advanced": false,
@@ -19466,6 +19467,7 @@
      "description": "Applied to {name}",
      "type": "text",
      "multiline": false,
+     "max_len": 1024,
      "required": false,
      "advanced": false,
      "primary": false
@@ -19476,6 +19478,7 @@
      "description": "Use $1, $2 for capture groups",
      "type": "text",
      "multiline": false,
+     "max_len": 1024,
      "required": false,
      "advanced": false,
      "primary": false

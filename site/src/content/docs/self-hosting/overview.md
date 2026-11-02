@@ -28,6 +28,8 @@ over MCP.
 - The [HTTP API](/reference/http-api/) under `/api/v1`, with an OpenAPI
   document at `/api/v1/openapi.json`.
 - The [MCP endpoint](/agents/remote/) at `/mcp`.
+- Optional [plain words](/app/plain-words/), with a shared model you
+  configure or each person's own.
 - Accounts with roles, per-account tool policies, API tokens, quotas, file
   retention and an audit log.
 
@@ -35,14 +37,16 @@ over MCP.
 
 | Option | Best for | Guide |
 |---|---|---|
-| Docker Compose | Most people. Engines included, hardened by default | [Docker](/self-hosting/docker/) |
+| Docker Compose | Most people. Every engine baked in at pinned versions, hardened by default | [Docker](/self-hosting/docker/) |
 | Native binary with systemd | Machines without Docker, or when you want the host's own engine builds | [Native install](/self-hosting/native/) |
 | `dogubako server start` | Trying it out, or macOS and Windows hosts | [Native install](/self-hosting/native/#macos-and-windows) |
 
 ## Then
 
 1. **Make it reachable**: only from the machine, on your LAN, on your
-   tailnet, or behind a reverse proxy with HTTPS. See
+   tailnet, or behind a reverse proxy with HTTPS. For a home server we
+   recommend [Tailscale](/self-hosting/docker/#reach-it-from-your-devices-with-tailscale):
+   HTTPS on every device and nothing exposed to the internet. See
    [Networking](/self-hosting/networking/).
 2. **Create accounts and agents** and decide what each may do. See
    [Accounts and agents](/self-hosting/accounts-and-agents/).

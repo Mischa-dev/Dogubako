@@ -3,22 +3,47 @@ title: Troubleshooting
 description: Fixes for the most common Dogubako problems, from missing engines to sign-in and upload issues.
 ---
 
+## macOS says the app can't be opened
+
+The alpha isn't signed with an Apple Developer ID yet. Click **Done**, then
+**System Settings → Privacy & Security → Open Anyway**. See
+[Try the alpha](/start/alpha/#open-the-unsigned-app). The app needs macOS 15
+or newer on Apple silicon.
+
 ## A tool says it needs software that isn't installed
 
-The tool's engine wasn't found. The notice on the tool page (and
-`dogubako deps`) shows the install command for your system.
+The tool's engine wasn't found.
 
-- After installing, click refresh on **Settings → Dependencies**, or restart
-  the app or server.
-- If it's installed but still not found, point Dogubako at it with
-  `DOGUBAKO_<ID>_PATH`, for example `DOGUBAKO_FFMPEG_PATH=/opt/ffmpeg/bin/ffmpeg`.
+- **macOS app:** if the notice has a **Download** button, click it (or use
+  **Settings → Dependencies**). LibreOffice, Piper and rembg aren't managed
+  by the app yet; install them yourself and click refresh.
+- **CLI or native server:** the notice (and `dogubako deps`) shows the install
+  command for your system. After installing, click refresh on
+  **Settings → Dependencies**, or restart the server.
 - **Installed somewhere unusual:** Dogubako checks your `PATH`, its own `bin`
   folder and, on macOS, the Homebrew and MacPorts folders. Anywhere else, set
   `DOGUBAKO_<ID>_PATH` or link the program into the `bin` folder; see
   [Desktop app](/app/desktop/#how-it-finds-engines).
-- **Docker:** the image includes the common engines. For OCR languages,
-  document converters or speech recognition, rebuild with
-  [build arguments](/self-hosting/docker/#build-options).
+- **Docker:** every engine is in the image except LibreOffice, which needs
+  `DOGUBAKO_WITH_OFFICE=1` in `.env` and a rebuild. Extra OCR languages need
+  [`EXTRA_PACKAGES`](/self-hosting/docker/#build-options).
+
+## An engine download fails
+
+On-demand engines come from the project's GitHub release and are checked
+against a pinned SHA-256. A failed or interrupted download is discarded; try
+again from **Settings → Dependencies**. If you're offline or behind a proxy
+that blocks GitHub, the download can't complete.
+
+## Plain words doesn't respond or picks nothing
+
+- Click **Test connection** in **Settings → Plain words**. It shows the
+  provider's own error, such as a wrong key or model id.
+- Use a model that supports **tool calling**.
+- On a server, a model on the same host or LAN needs
+  `DOGUBAKO_ASSISTANT_ALLOW_PRIVATE=true`. If the toggle is missing, the
+  administrator set `DOGUBAKO_ASSISTANT_ENABLED=false`.
+- Agent accounts can't use plain words; they use [MCP](/agents/overview/).
 
 ## Transcription says a model is missing
 
@@ -29,9 +54,10 @@ server, only admins can download models.
 ## A tool fails with `unsupported`
 
 The tool or option isn't possible with this engine build or platform. A common
-case is Homebrew's FFmpeg, which lacks libass, drawtext, libvorbis and
-animated WebP. Install an FFmpeg build that includes them, and point to it
-with `DOGUBAKO_FFMPEG_PATH`. See
+case is Homebrew's FFmpeg (which the macOS app also uses), which lacks libass,
+drawtext, libvorbis and animated WebP. On a CLI or server, install an FFmpeg
+build that includes them and point to it with `DOGUBAKO_FFMPEG_PATH`; the
+Docker image's FFmpeg has them. See
 [Known engine issues](/app/engines-and-models/#known-engine-issues).
 
 ## A job times out or hits a limit

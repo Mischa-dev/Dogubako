@@ -16,7 +16,8 @@ Bruno, Insomnia or Postman.
 
 ## Authentication
 
-- **Scripts and agents:** `Authorization: Bearer dgb_…`. Create a token in
+- **Scripts and agents:** `Authorization: Bearer dgb_…` (the scheme name is
+  case-insensitive). Create a token in
   **Account → API tokens**, or with `dogubako tokens create`. See
   [API tokens](/self-hosting/accounts-and-agents/#api-tokens).
 - **Browsers:** a session cookie from `POST /api/v1/auth/login`. Every
@@ -190,6 +191,18 @@ All codes and HTTP statuses are in [Errors](/reference/errors/).
 | `POST /models/{id}/download` | Download a model (admin) |
 | `DELETE /models/{id}` | Remove a model (admin) |
 | `GET /extensions` | Extension status (admin) |
+
+### Plain words
+
+The relay for [plain words](/app/plain-words/). People only: agent accounts
+get `403`. Session requests need the CSRF token, and each user may have at most
+4 requests in flight.
+
+| Method and path | Purpose |
+|---|---|
+| `GET /assistant/config` | Whether plain words is enabled for the caller, the shared "This server" model if any, and whether private addresses are allowed |
+| `POST /assistant/models` | List the models of an endpoint (the base URL and key come in the body, or use "This server") |
+| `POST /assistant/chat` | Relay one OpenAI-style chat-completions request to the chosen endpoint |
 
 ### Administration (admin only)
 

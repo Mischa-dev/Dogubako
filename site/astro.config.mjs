@@ -43,6 +43,7 @@ export default defineConfig({
           items: [
             'start/introduction',
             'start/install',
+            'start/alpha',
             'start/quick-start',
             'start/concepts',
           ],
@@ -55,6 +56,7 @@ export default defineConfig({
             'app/opening-files',
             'app/tool-page',
             'app/results',
+            'app/plain-words',
             'app/customize',
             'app/keyboard-shortcuts',
             'app/desktop',

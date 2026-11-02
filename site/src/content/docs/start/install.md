@@ -18,15 +18,20 @@ side by side.
 
 ## Desktop app
 
-Installers for macOS (universal), Windows (`.msi` and `.exe`) and Linux
-(`.deb`, `.rpm` and `.AppImage`) are attached to each
-[GitHub release](https://github.com/mischa-dev/dogubako/releases). Until the
-first release is published, [build the app yourself](/develop/building/#desktop-app-tauri-2).
+The current release is **0.1.0-alpha.1**, a test build. The desktop app is
+available for **macOS 15 (Sequoia) or newer on Apple silicon**. Installers for
+Windows, Linux and Intel Macs aren't part of the alpha; you can
+[build those yourself](/develop/building/#desktop-app-tauri-2).
 
-1. Download the installer for your system and install it the usual way.
-2. Open Dogubako. Native tools (about half the catalog) work immediately.
-3. Open **Settings → Dependencies** to see which engines are missing and copy
-   the install command for your system. See [Engines](#engines) below.
+1. Download `Dogubako_0.1.0-alpha.1_aarch64.dmg` from the
+   [GitHub release](https://github.com/mischa-dev/dogubako/releases), open it
+   and drag **Dogubako** into **Applications**.
+2. Open Dogubako. If the build isn't signed yet, macOS refuses the first time;
+   [Try the alpha](/start/alpha/#open-the-unsigned-app) shows the two clicks
+   that let it open.
+3. That's it: the common engines (FFmpeg, qpdf, Poppler, ExifTool and 7-Zip)
+   are inside the app, and the bigger ones download with one click the first
+   time a tool needs them. See [Engines](#engines) below.
 
 ## CLI
 
@@ -39,9 +44,9 @@ cd web && npm ci && npm run build && cd ..   # optional: embeds the web UI for `
 cargo install --path crates/cli
 ```
 
-The release workflow also builds standalone binaries for Linux (x86_64),
-macOS (Apple silicon) and Windows (x86_64); you can download them from the
-workflow run of a release tag. Put the binary on your `PATH` and check it:
+Each release also has standalone CLI binaries for Linux (x86-64), macOS
+(Apple silicon) and Windows (x86-64), plus `SHA256SUMS.txt`. Put the binary on
+your `PATH` and check it:
 
 ```sh
 dogubako --version
@@ -52,19 +57,21 @@ Continue with the [CLI overview](/cli/overview/).
 
 ## Docker
 
-The image bundles FFmpeg, ImageMagick, libvips, ExifTool, qpdf, Poppler,
-Ghostscript, Tesseract (English), 7-Zip and bubblewrap, so every common tool
-works out of the box.
+The homelab image bakes in every engine at pinned versions, so every tool
+works out of the box. Build it from a checkout:
 
 ```sh
 git clone https://github.com/mischa-dev/dogubako && cd dogubako
+cp .env.example .env            # optional: extra engines, a shared plain-words model
 docker compose up -d --build
 docker compose logs dogubako | grep "Setup token"
 ```
 
 Open <http://localhost:8420>, paste the setup token and create the owner
-account. The full guide, including speech recognition and extra languages, is
-in [Docker](/self-hosting/docker/).
+account. Each release also publishes the image as
+`ghcr.io/mischa-dev/dogubako:<version>`; for the alpha the package is still
+private, so build it yourself for now. The full guide, including Tailscale,
+speech recognition and a local model, is in [Docker](/self-hosting/docker/).
 
 ## From source
 
@@ -82,10 +89,17 @@ smaller binaries and running the tests.
 
 ## Engines
 
-Dogubako calls well-known open-source programs for the heavy work. They are
-never bundled with the desktop app or CLI, so you install only the ones you
-need. A tool whose engine is missing stays visible, is marked unavailable and
-tells you what to install.
+Dogubako calls well-known open-source programs for the heavy work. How you
+get them depends on what you installed:
+
+| You run | Engines |
+|---|---|
+| The macOS app | Managed by the app: five are built in, the rest download into the app's folder on first use. Nothing to install |
+| The Docker image | All baked into the image |
+| The CLI, or a native server | Whatever is installed on the system |
+
+A tool whose engine is missing stays visible, is marked unavailable and tells
+you what to do. For the CLI and native servers:
 
 ```sh
 dogubako deps          # what is installed, what is missing, and how to install it
@@ -95,11 +109,11 @@ Common sets:
 
 ```sh
 # macOS (Homebrew)
-brew install ffmpeg qpdf poppler tesseract exiftool imagemagick vips ghostscript sevenzip
+brew install ffmpeg qpdf poppler tesseract exiftool imagemagick ghostscript sevenzip
 
 # Debian / Ubuntu
 sudo apt install ffmpeg qpdf poppler-utils tesseract-ocr libimage-exiftool-perl \
-  imagemagick libvips-tools ghostscript 7zip
+  imagemagick ghostscript 7zip
 
 # Windows (winget)
 winget install Gyan.FFmpeg QPDF.QPDF
@@ -113,7 +127,9 @@ models, which you download from **Settings → Models** or with
 ## Updating
 
 - **Desktop:** install the newer release over the old one. Downloaded models,
-  extensions and outputs live in your user data folder and are kept.
+  extensions and outputs live in your user data folder and are kept. When an
+  update pins a newer engine version, the app downloads it the next time it's
+  needed and deletes the old one.
 - **CLI:** replace the binary, or run `cargo install --path crates/cli` again
   from an updated checkout.
 - **Docker:** `git pull && docker compose up -d --build`. Your data lives in

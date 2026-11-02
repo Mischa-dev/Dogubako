@@ -27,6 +27,7 @@ in a field.
 | <kbd>↑</kbd> <kbd>↓</kbd> | Move through results |
 | <kbd>Page Up</kbd> <kbd>Page Down</kbd> | Jump eight results |
 | <kbd>Enter</kbd> | Open the selected result |
+| <kbd>⌘</kbd> <kbd>Enter</kbd> | Run what you typed in [plain words](/app/plain-words/) (when it's on) |
 | <kbd>Esc</kbd> | Close search |
 
 ## Drop screen
@@ -36,6 +37,7 @@ in a field.
 | <kbd>1</kbd> … <kbd>9</kbd> | Open the numbered suggestion (when nothing is typed) |
 | <kbd>↑</kbd> <kbd>↓</kbd> | Move through the suggestions |
 | <kbd>Enter</kbd> | Open the selected tool |
+| <kbd>⌘</kbd> <kbd>Enter</kbd> | Run what you typed in [plain words](/app/plain-words/) (when it's on) |
 | <kbd>Esc</kbd> | Clear what you typed, or go back |
 
 ## Tool page

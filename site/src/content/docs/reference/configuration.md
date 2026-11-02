@@ -38,6 +38,19 @@ for precedence and examples.
 | `models_dir` | `DOGUBAKO_MODELS_DIR` | `<data_dir>/models` | Model storage |
 | `extensions_dir` | `DOGUBAKO_EXTENSIONS_DIR` | `<data_dir>/extensions` | Trusted TOML extensions |
 
+## Plain words
+
+Settings for the [plain words](/app/plain-words/) relay at
+`/api/v1/assistant/*`.
+
+| TOML key | Environment variable | Default | Meaning |
+|---|---|---|---|
+| `assistant_enabled` | `DOGUBAKO_ASSISTANT_ENABLED` | `true` | Allow plain words on this server. People still have to turn it on and pick a model |
+| `assistant_allow_private` | `DOGUBAKO_ASSISTANT_ALLOW_PRIVATE` | `false` | Let the relay reach loopback and LAN model servers, such as Ollama on this host |
+| `assistant_base_url` | `DOGUBAKO_ASSISTANT_BASE_URL` | — | A shared OpenAI-compatible endpoint, offered to everyone as "This server" |
+| `assistant_api_key` | `DOGUBAKO_ASSISTANT_API_KEY` | — | Its API key. Never sent to browsers |
+| `assistant_model` | `DOGUBAKO_ASSISTANT_MODEL` | — | Its model id. When set, every request through "This server" uses it |
+
 ## Environment-only settings
 
 These apply to the server, the CLI, the MCP server and the desktop app.
@@ -47,6 +60,7 @@ These apply to the server, the CLI, the MCP server and the desktop app.
 | `DOGUBAKO_CONFIG` | Path to the TOML config file (same as `--config`) |
 | `DOGUBAKO_HOME` | Base folder for models, extensions and `bin` for the CLI, stdio MCP server and desktop app |
 | `DOGUBAKO_<ID>_PATH` | Explicit path to an engine, such as `DOGUBAKO_FFMPEG_PATH` or `DOGUBAKO_7ZIP_PATH` |
+| `DOGUBAKO_ENGINES` | How the macOS app uses its managed engines: unset (only its own copies of the engines it manages), `prefer` (its copies first, then the system) or `system` (ignore them). The Docker image sets `system`. Without a managed set (CLI, native server, development builds) it changes nothing |
 | `DOGUBAKO_LOG` | Log filter, such as `info`, `debug` or `dogubako_server=debug` |
 
 ## Command-line flags

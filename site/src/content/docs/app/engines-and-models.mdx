@@ -10,14 +10,48 @@ import ModelTable from '../../../components/ModelTable.astro';
 
 About half of Dogubako's tools are native and need nothing else. The rest
 call a mature open-source program (an **engine**) or use a small local
-machine-learning **model**. Install only what you need; everything else
-keeps working.
+machine-learning **model**. Everything else keeps working without them.
+
+## Who provides the engines
+
+| You run | Engines come from |
+|---|---|
+| The macOS app | The app itself: [built in or downloaded on demand](#in-the-macos-app), at pinned versions |
+| The [Docker image](/self-hosting/docker/) | The image: every engine is baked in from a pinned Debian snapshot |
+| The CLI, a native server, or a development build | Your system: install what you need (below) |
+
+## In the macOS app
+
+The app manages its own engines, so there is nothing to install:
+
+| Tier | Engines | Where |
+|---|---|---|
+| **Built in** | FFmpeg and FFprobe, qpdf, Poppler, ExifTool, 7-Zip | Inside `Dogubako.app` (36 MB of the download) |
+| **On demand** | ImageMagick (9 MB), Tesseract (10 MB), Ghostscript (20 MB), Real-ESRGAN (51 MB), Pandoc (63 MB), whisper.cpp (~3 MB) | Downloaded into `~/Library/Application Support/Dogubako/engines` the first time you need one |
+| **System** | LibreOffice, Piper, rembg | Not managed yet. Install them yourself and the app finds them |
+
+When a tool needs an on-demand engine you don't have yet, its notice (and
+**Settings → Dependencies**) shows a **Download** button with the size.
+Downloads are checked against a pinned SHA-256 before they're unpacked, and
+nothing is installed system-wide.
+
+Every managed engine is pinned to an exact version, and the app uses only its
+own copies of them, never one from your `PATH` or Homebrew, so what runs is
+what was tested. An app update that bumps an engine downloads the new version
+when it's next needed and deletes the old one. Each engine folder carries the
+license texts of everything in it.
+
+To test a different build of a managed engine, set `DOGUBAKO_ENGINES=prefer`
+(use the app's copies first, then the system) or `DOGUBAKO_ENGINES=system`
+(ignore the app's copies), or point at one binary with
+[`DOGUBAKO_<ID>_PATH`](#pointing-at-a-specific-binary).
 
 ## Checking what you have
 
-- In the app: **Settings → Dependencies** lists every engine with its status,
-  version and the install command for your system (pick macOS, Debian,
-  Fedora, Arch or Windows to see the right one).
+- In the app: **Settings → Dependencies** lists every engine with its status
+  (**Built in**, **Downloaded**, **Not downloaded**, **Found** or
+  **Missing**), its version, and either a **Download** button or the install
+  command for your system.
 - On the command line: `dogubako deps`.
 - On a server: `GET /api/v1/deps`.
 
@@ -26,10 +60,13 @@ install something, click the refresh button on the Dependencies page or
 restart the app (`POST /api/v1/deps/refresh` on a server).
 
 A tool whose engine is missing is never hidden. It shows a notice with the
-install command, and running it returns a `missing_dependency` error that
-names the engine.
+download button or install command, and running it returns a
+`missing_dependency` error that names the engine.
 
 ## Engines
+
+The install commands below are for the CLI and native servers. The macOS
+app and the Docker image don't need them.
 
 <DependencyTable />
 
@@ -38,7 +75,8 @@ options use them. For example, **View Image Metadata** reads every tag with
 ExifTool when it is installed and falls back to its built-in EXIF reader
 otherwise, and **Create Archive** needs 7-Zip only for `.7z` archives. Choosing
 such an option without the engine gives a `missing_dependency` error that
-names it. `bwrap` (Bubblewrap) is not used by tools at all; it sandboxes the
+names it. libvips is still detected but no tool uses it any more, so the macOS app and
+the Docker image leave it out. `bwrap` (Bubblewrap) is not used by tools at all; it sandboxes the
 other engines on Linux servers (see
 [Security](/project/security/#executing-external-programs)).
 
