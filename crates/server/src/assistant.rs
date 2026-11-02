@@ -73,6 +73,45 @@ fn check_access(s: &AppState, p: &Principal) -> ApiResult<()> {
     Ok(())
 }
 
+/// Relay requests one person may have open at once. A chat can take minutes
+/// (reasoning models), so this bounds the connections one account can hold.
+const MAX_IN_FLIGHT: u32 = 4;
+
+/// Counts one in-flight relay request; released on drop.
+struct InFlight {
+    map: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, u32>>>,
+    user: String,
+}
+
+impl InFlight {
+    fn acquire(s: &AppState, user: &str) -> ApiResult<InFlight> {
+        let mut m = s.assistant_inflight.lock().unwrap();
+        let n = m.entry(user.to_string()).or_insert(0);
+        if *n >= MAX_IN_FLIGHT {
+            return Err(ApiError::too_many(
+                "too many assistant requests at once; wait for one to finish",
+            ));
+        }
+        *n += 1;
+        Ok(InFlight {
+            map: s.assistant_inflight.clone(),
+            user: user.to_string(),
+        })
+    }
+}
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        let mut m = self.map.lock().unwrap();
+        if let Some(n) = m.get_mut(&self.user) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                m.remove(&self.user);
+            }
+        }
+    }
+}
+
 fn endpoint(s: &AppState, t: Target) -> ApiResult<Endpoint> {
     if t.provider.as_deref() == Some("server") {
         return s
@@ -118,6 +157,7 @@ async fn models(
     Json(t): Json<Target>,
 ) -> ApiResult<Json<Value>> {
     check_access(&s, &p)?;
+    let _slot = InFlight::acquire(&s, &p.user_id)?;
     let ep = endpoint(&s, t)?;
     let list = llm::list_models(s.cfg.assistant_net_policy(), &ep)
         .await
@@ -131,18 +171,20 @@ async fn chat(
     Json(r): Json<ChatReq>,
 ) -> ApiResult<Json<Value>> {
     check_access(&s, &p)?;
+    let _slot = InFlight::acquire(&s, &p.user_id)?;
     let server = r.target.provider.as_deref() == Some("server");
     let ep = endpoint(&s, r.target)?;
     let mut body = r.body;
-    // The server provider's default model applies when the user picked none.
-    if server
-        && body
-            .get("model")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .is_empty()
-    {
-        if let (Some(m), Some(obj)) = (s.cfg.assistant_model.clone(), body.as_object_mut()) {
+    // The server provider runs on the administrator's key, so when they named
+    // a model, that model is used whatever the request says.
+    if server {
+        if let (Some(m), Some(obj)) = (
+            s.cfg
+                .assistant_model
+                .clone()
+                .filter(|m| !m.trim().is_empty()),
+            body.as_object_mut(),
+        ) {
             obj.insert("model".into(), Value::String(m));
         }
     }

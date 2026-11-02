@@ -203,7 +203,7 @@ export function AssistantSettingsPanel() {
               <Button size="sm" variant="ghost" icon={showKey ? EyeOff : Eye} onClick={() => setShowKey((v) => !v)} aria-label={showKey ? 'Hide key' : 'Show key'} />
             </div>
             <span className="setting-desc">
-              Saved in this browser only{isServer ? ' and sent with each request to the model, never stored on the server' : ''}.
+              Saved in this browser only{isServer ? ', sent with each request to the model, never stored on the server, and forgotten when you sign out' : ''}.
               {preset.keyUrl && <> <a className="link-sm" href={preset.keyUrl} target="_blank" rel="noopener noreferrer"><KeyRound size={12} aria-hidden /> Get a key <ExternalLink size={11} aria-hidden /></a></>}
             </span>
           </div>
@@ -219,10 +219,13 @@ export function AssistantSettingsPanel() {
               placeholder={settings.provider === 'server' && info?.server_provider?.model ? info.server_provider.model : 'Model id, e.g. gpt-6-luna'}
               spellCheck={false}
               autoComplete="off"
+              disabled={settings.provider === 'server' && !!info?.server_provider?.model}
               onChange={(e) => updateProvider(settings.provider, { model: e.target.value })}
               onBlur={(e) => { if (e.target.value.trim()) selectModel(settings.provider, e.target.value.trim()); }}
             />
-            <Button size="sm" variant="secondary" icon={RefreshCw} loading={loading} onClick={() => void loadModels()}>Load models</Button>
+            {!(settings.provider === 'server' && info?.server_provider?.model) && (
+              <Button size="sm" variant="secondary" icon={RefreshCw} loading={loading} onClick={() => void loadModels()}>Load models</Button>
+            )}
           </div>
           {preset.models.length > 0 && (
             <div className="model-suggest" role="list" aria-label="Suggested models">

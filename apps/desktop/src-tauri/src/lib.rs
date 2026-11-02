@@ -190,6 +190,22 @@ fn save_artifact(state: State<'_, Desktop>, src: String, dest: String) -> Result
     std::fs::copy(&src, &dest).map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// Remove the output folder of one run (plain-words Undo). Only run folders
+/// directly inside the output directory can be removed.
+#[tauri::command]
+fn discard_run_outputs(state: State<'_, Desktop>, run_id: String) -> Result<(), String> {
+    if !valid_run_id(&run_id) {
+        return Err("invalid run id".into());
+    }
+    let dir = state.output_dir.join(&run_id);
+    match std::fs::symlink_metadata(&dir) {
+        Ok(m) if m.is_dir() => std::fs::remove_dir_all(&dir).map_err(|e| e.to_string()),
+        Ok(_) => Err("not a run folder".into()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 #[tauri::command]
 fn reveal_path(app: AppHandle, path: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
@@ -315,7 +331,8 @@ pub fn run() {
             model_download,
             model_remove,
             assistant_chat,
-            assistant_models
+            assistant_models,
+            discard_run_outputs
         ])
         .run(tauri::generate_context!())
         .expect("error while running Dogubako");

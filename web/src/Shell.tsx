@@ -100,7 +100,7 @@ export function Shell() {
   switch (p0) {
     case undefined: page = <HomePage onSearch={openPalette} />; break;
     case 'open': page = <IntentPage key={route.query.get('v') ?? ''} />; break;
-    case 'do': page = <DoPage key={route.query.get('t') ?? ''} request={route.query.get('q') ?? ''} withFiles={route.query.get('files') === '1'} />; break;
+    case 'do': page = <DoPage key={route.query.get('t') ?? ''} request={route.query.get('q') ?? ''} withFiles={route.query.get('files') === '1'} runKey={route.query.get('t') ?? ''} />; break;
     case 'tool': page = <ToolPage key={p1} toolId={p1} />; break;
     case 'category': page = <CategoryPage key={p1} categoryId={p1} />; break;
     case 'favorites': page = <FavoritesPage />; break;

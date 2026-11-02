@@ -87,3 +87,8 @@
   .do-request { font-size: var(--fs-xl); }
   .do-step-progress, .do-step-ask, .do-step-result { margin-left: 0; }
 }
+.do-step-ask { flex-direction: row; }
+.do-step-full { width: 100%; margin: 0 0 4px; display: grid; gap: 4px; }
+.do-step-full > div { display: grid; grid-template-columns: minmax(80px, max-content) 1fr; gap: 10px; align-items: baseline; }
+.do-step-full dt { color: var(--text-3); font-size: var(--fs-sm); }
+.do-step-full dd { margin: 0; font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; max-height: 160px; overflow: auto; }

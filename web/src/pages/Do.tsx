@@ -5,7 +5,7 @@ import {
 import { useApp } from '../lib/app';
 import { href, navigate } from '../lib/router';
 import { droppedNow, pendingInput, pendingParams } from '../lib/store';
-import { asServer } from '../lib/backend';
+import { ApiError } from '../lib/backend';
 import { toast } from '../components/toast';
 import { matchIntent, shortHint } from '../lib/intent';
 import { errorText } from '../lib/errors';
@@ -42,6 +42,27 @@ function paramSummary(params: Record<string, unknown>, names: Map<string, string
     .join(' · ');
 }
 
+function fullValue(v: unknown, names: Map<string, string>): string {
+  if (Array.isArray(v)) return v.map((x) => fullValue(x, names)).join(', ');
+  if (typeof v === 'string') return names.has(v) ? `${names.get(v)} (${v})` : v;
+  return JSON.stringify(v);
+}
+
+/** Finished requests are kept for this tab, so coming Back doesn't run them again. */
+interface Saved { turns: Turn[]; history: ChatMessage[]; undone?: boolean }
+const savedKey = (k: string) => `dgb.do.${k}`;
+function loadSaved(k: string): Saved | null {
+  if (!k) return null;
+  try {
+    const v = JSON.parse(sessionStorage.getItem(savedKey(k)) ?? 'null');
+    return v && Array.isArray(v.turns) && Array.isArray(v.history) ? v : null;
+  } catch { return null; }
+}
+function save(k: string, v: Saved) {
+  if (!k) return;
+  try { sessionStorage.setItem(savedKey(k), JSON.stringify(v)); } catch { /* storage full or off: Back reruns */ }
+}
+
 function StepRow({ step, tool, names, open, onToggle, onAnswer }: {
   step: Step; tool?: ToolInfo; names: Map<string, string>; open: boolean; onToggle: () => void; onAnswer: (ok: boolean) => void;
 }) {
@@ -71,6 +92,12 @@ function StepRow({ step, tool, names, open, onToggle, onAnswer }: {
       )}
       {step.status === 'asking' && (
         <div className="do-step-ask" role="group" aria-label={`Allow ${name}?`}>
+          {/* Show every value in full: this is what you're agreeing to. */}
+          <dl className="do-step-full">
+            {Object.entries(step.params).map(([k, v]) => (
+              <div key={k}><dt>{k.replace(/_/g, ' ')}</dt><dd className="mono">{fullValue(v, names)}</dd></div>
+            ))}
+          </dl>
           <span className="small">{step.reason}. Run it?</span>
           <Button size="sm" variant="primary" onClick={() => onAnswer(true)}>Run</Button>
           <Button size="sm" variant="ghost" onClick={() => onAnswer(false)}>Skip</Button>
@@ -82,20 +109,23 @@ function StepRow({ step, tool, names, open, onToggle, onAnswer }: {
 }
 
 /** A plain-words request, carried out in place: the steps the model took and what came out. */
-export default function DoPage({ request, withFiles }: { request: string; withFiles: boolean }) {
+export default function DoPage({ request, withFiles, runKey = '' }: { request: string; withFiles: boolean; runKey?: string }) {
   const app = useApp();
   const { backend, toolMap, visibleTools, docs } = app;
   const assistant = useAssistant();
   const [files] = useState<AgentFile[]>(() => (withFiles ? droppedNow() : []));
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [saved] = useState(() => loadSaved(runKey));
+  // A request interrupted by leaving the page shows as stopped, not stuck.
+  const [turns, setTurns] = useState<Turn[]>(() => (saved?.turns ?? []).map((t) => (t.done ? t : { ...t, done: true, error: 'Stopped.' })));
   const [thinking, setThinking] = useState(false);
   const [running, setRunning] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [more, setMore] = useState('');
-  const history = useRef<ChatMessage[]>([]);
+  const history = useRef<ChatMessage[]>(saved?.history ?? []);
   const abort = useRef<AbortController | null>(null);
   const answers = useRef(new Map<string, (ok: boolean) => void>());
-  const started = useRef(false);
+  const started = useRef(!!saved);
+  useEffect(() => { save(runKey, { turns, history: history.current }); }, [runKey, turns]);
 
   const names = useMemo(() => {
     const m = new Map<string, string>(files.map((f) => [f.ref, f.name]));
@@ -121,6 +151,7 @@ export default function DoPage({ request, withFiles }: { request: string; withFi
         docs,
         files,
         history: history.current,
+        knownRefs: names.keys(),
         request: req,
         confirm: s.confirm,
         signal: ctrl.signal,
@@ -158,7 +189,7 @@ export default function DoPage({ request, withFiles }: { request: string; withFi
       setThinking(false);
       abort.current = null;
     }
-  }, [assistant.settings, assistant.model, backend, visibleTools, docs, files, running]);
+  }, [assistant.settings, assistant.model, backend, visibleTools, docs, files, running, names, toolMap]);
 
   // Start right away with the words typed in the search or on the drop screen.
   useEffect(() => {
@@ -174,14 +205,25 @@ export default function DoPage({ request, withFiles }: { request: string; withFi
   const [undoing, setUndoing] = useState(false);
   const undo = async () => {
     setUndoing(true);
-    const server = asServer(backend);
-    const jobs = turns.flatMap((t) => t.steps.map((s) => s.job).filter((j): j is NonNullable<typeof j> => !!j));
+    // Only runs that actually started have a job to discard.
+    // (A run that failed to even start has a stand-in job named after the step.)
+    const jobs = turns.flatMap((t) => t.steps.flatMap((s) => (s.job && s.job.id !== s.id ? [s.job] : [])));
+    let failed = 0;
     for (const j of jobs) {
-      if (server) for (const a of j.result?.artifacts ?? []) if (a.id) await server.deleteFile(a.id).catch(() => undefined);
-      await backend.deleteJob(j.id).catch(() => undefined);
+      try {
+        await backend.discardRun(j.id);
+      } catch (e) {
+        // Already gone counts as undone.
+        if (!(e instanceof ApiError && e.status === 404)) failed++;
+      }
     }
     setUndoing(false);
-    toast(server ? 'Undone: the new files were removed' : 'Undone: removed from history (saved copies stay in your output folder)', 'success');
+    if (failed) {
+      toast(`Couldn’t remove ${failed} of ${jobs.length} results. Check History.`, 'error');
+      return;
+    }
+    save(runKey, { turns: [], history: [], undone: true });
+    toast.success('Undone: the new files were removed');
     window.history.length > 1 ? window.history.back() : navigate(href.home);
   };
 
@@ -256,6 +298,12 @@ export default function DoPage({ request, withFiles }: { request: string; withFi
         </div>
       )}
 
+      {saved?.undone && turns.length === 0 && (
+        <>
+          <h1 className="do-request" tabIndex={-1} data-route-focus>“{request}”</h1>
+          <p className="muted">You undid this request; what it made was removed.</p>
+        </>
+      )}
       {turns.map((t, ti) => (
         <section key={ti} className="do-turn" aria-label={t.request}>
           {ti === 0

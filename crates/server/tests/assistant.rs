@@ -33,6 +33,9 @@ async fn fake_model(seen: Seen) -> String {
             .unwrap_or("")
             .to_string();
         *s.last.lock().unwrap() = Some((auth.clone(), body.clone()));
+        if body["model"] == "slow" {
+            tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+        }
         if auth == "Bearer bad" {
             return (
                 StatusCode::UNAUTHORIZED,
@@ -232,7 +235,7 @@ async fn server_provider_uses_admin_key_without_revealing_it() {
         "admin config must not echo the key"
     );
 
-    let (s, v) = call(&t.app, Method::POST, "/api/v1/assistant/chat", &h, Some(json!({"provider": "server", "base_url": "https://evil.example/v1", "body": chat_body("")}))).await;
+    let (s, v) = call(&t.app, Method::POST, "/api/v1/assistant/chat", &h, Some(json!({"provider": "server", "base_url": "https://evil.example/v1", "body": chat_body("expensive-model")}))).await;
     assert_eq!(s, StatusCode::OK, "{v}");
     assert_eq!(v["choices"][0]["message"]["content"], "model=house-model");
     let (auth, _) = seen.last.lock().unwrap().clone().unwrap();
@@ -286,4 +289,56 @@ async fn agents_and_disabled_servers_are_refused() {
     )
     .await;
     assert_eq!(s, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn relay_limits_requests_in_flight_per_user() {
+    let base = fake_model(Seen::default()).await;
+    let t = setup(|c| c.assistant_allow_private = true);
+    let (c, x) = owner(&t).await;
+    let mut calls = Vec::new();
+    for _ in 0..5 {
+        let app = t.app.clone();
+        let (c, x, base) = (c.clone(), x.clone(), base.clone());
+        calls.push(tokio::spawn(async move {
+            let h = [("cookie", c.as_str()), ("x-csrf-token", x.as_str())];
+            call(
+                &app,
+                Method::POST,
+                "/api/v1/assistant/chat",
+                &h,
+                Some(json!({"base_url": base, "body": chat_body("slow")})),
+            )
+            .await
+            .0
+        }));
+    }
+    let mut codes = Vec::new();
+    for c in calls {
+        codes.push(c.await.unwrap());
+    }
+    assert_eq!(
+        codes.iter().filter(|s| **s == StatusCode::OK).count(),
+        4,
+        "{codes:?}"
+    );
+    assert_eq!(
+        codes
+            .iter()
+            .filter(|s| **s == StatusCode::TOO_MANY_REQUESTS)
+            .count(),
+        1,
+        "{codes:?}"
+    );
+    // Slots are released when requests finish.
+    let h = [("cookie", c.as_str()), ("x-csrf-token", x.as_str())];
+    let (s, _) = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/assistant/chat",
+        &h,
+        Some(json!({"base_url": base, "body": chat_body("m")})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
 }

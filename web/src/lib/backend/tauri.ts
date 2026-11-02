@@ -237,6 +237,11 @@ export class TauriBackend implements Backend {
   }
   clearHistory() { writeJson(HISTORY_KEY, []); }
 
+  async discardRun(id: string) {
+    await invoke('discard_run_outputs', { runId: id });
+    await this.deleteJob(id);
+  }
+
   async deps() { return { dependencies: await invoke<DepInfo[]>('deps_status'), platform: this.info?.platform }; }
   async models() {
     const r = await invoke<{ models: ModelInfo[]; downloads?: ModelDownload[] } | ModelInfo[]>('models_list');

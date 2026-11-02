@@ -83,3 +83,11 @@ export const modelLabel = (provider: ProviderId, model: string): string =>
   providerById(provider).models.find((m) => m.id === model)?.label ?? model;
 
 export { PROVIDERS };
+
+/** Forget every saved API key (on sign-out, so the next person at this browser can't use them). */
+export function clearAssistantKeys() {
+  assistantSettings.set((s) => ({
+    ...s,
+    configs: Object.fromEntries(Object.entries(s.configs).map(([k, c]) => [k, c ? { ...c, apiKey: '' } : c])) as AssistantSettings['configs'],
+  }));
+}

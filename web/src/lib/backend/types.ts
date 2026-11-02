@@ -56,6 +56,8 @@ export interface Backend {
 
   listJobs(limit?: number): Promise<JobView[]>;
   deleteJob(id: string): Promise<void>;
+  /** Remove a run's output files as well as its history entry (server: deleteJob already does). */
+  discardRun(id: string): Promise<void>;
 
   deps(): Promise<{ dependencies: DepInfo[]; platform?: string }>;
   models(): Promise<{ models: ModelInfo[]; downloads: ModelDownload[] }>;

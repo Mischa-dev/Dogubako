@@ -27,7 +27,9 @@ OpenRouter, Ollama, LM Studio, and Custom (any base URL). Every preset accepts
 any model id; **Load models** asks the endpoint for its list, and **Test
 connection** sends a one-word request. A server administrator can also offer a
 shared model ("This server") with `DOGUBAKO_ASSISTANT_BASE_URL`,
-`DOGUBAKO_ASSISTANT_API_KEY` and `DOGUBAKO_ASSISTANT_MODEL`.
+`DOGUBAKO_ASSISTANT_API_KEY` and `DOGUBAKO_ASSISTANT_MODEL`. When a model is set,
+every request through "This server" uses it, so users can't spend the
+administrator's key on other models.
 
 ## How it works
 
@@ -48,12 +50,19 @@ shared model ("This server") with `DOGUBAKO_ASSISTANT_BASE_URL`,
   to the model provider you chose. File contents are processed by Dogubako and
   are not uploaded to the model. With a local model, nothing leaves your machine.
 * API keys are saved in the browser/app on your device only. On a server they
-  travel with each relayed request and are never stored; the server's own key
-  (if configured) is never sent to browsers.
+  travel with each relayed request and are never stored, and signing out
+  forgets them; the server's own key (if configured) is never sent to browsers.
+* The model can only pass the files you gave it, or outputs of its own runs,
+  to tools. Any other file id or path is refused, so instructions hidden in a
+  document can't make it read other files. Tool results are marked as data,
+  not instructions, in the prompt, and settings that name host paths always
+  wait for your OK, with every value shown in full.
+* Undo removes what the request made (output files and History entries) and
+  goes back; finished requests aren't re-run when you return with Back.
 * Steps that use the internet, write to host folders, read processes or change
   files wait for your OK; choose "Every step" to approve each run.
 * On a server the relay follows the network policy: it reaches only public
   addresses unless `DOGUBAKO_ALLOW_PRIVATE_NETWORK` or
   `DOGUBAKO_ASSISTANT_ALLOW_PRIVATE` is set. Agent accounts can't use it (they
-  bring their own model through MCP). Requests are rate limited per user and
-  audit-logged with the model id and endpoint host.
+  bring their own model through MCP). Requests are rate limited per user (at most
+  4 at once) and audit-logged with the model id and endpoint host.

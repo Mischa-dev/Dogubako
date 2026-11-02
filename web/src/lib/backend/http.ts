@@ -231,6 +231,8 @@ export class HttpBackend implements Backend {
     return r.jobs;
   }
   async deleteJob(id: string) { await this.del(`/jobs/${encodeURIComponent(id)}`); }
+  /** Deleting a job also deletes its output files on the server. */
+  async discardRun(id: string) { await this.deleteJob(id); }
 
   // ---------------------------------------------------------------- deps/models
   deps() { return this.get<{ dependencies: DepInfo[]; platform?: string }>('/deps'); }
