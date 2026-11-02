@@ -279,75 +279,65 @@ pub fn flatten_records_with(
     sep: &str,
     arrays: &str,
 ) -> (Vec<String>, Vec<Vec<String>>) {
-    fn walk(prefix: &str, v: &Value, sep: &str, arrays: &str, out: &mut Vec<(String, String)>) {
+    // Columns are identified by their structural path (the key segments),
+    // not by the joined name: {"a":{"b":1}} and {"a.b":2} are different
+    // fields even though both display as "a.b".
+    type Path = Vec<String>;
+    fn walk(path: &mut Path, v: &Value, arrays: &str, out: &mut Vec<(Path, String)>) {
         match v {
             Value::Object(m) if !m.is_empty() => {
                 for (k, x) in m {
-                    let key = if prefix.is_empty() {
-                        k.clone()
-                    } else {
-                        format!("{prefix}{sep}{k}")
-                    };
-                    walk(&key, x, sep, arrays, out);
+                    path.push(k.clone());
+                    walk(path, x, arrays, out);
+                    path.pop();
                 }
             }
             Value::Array(a) if !a.is_empty() => match arrays {
                 "join" if a.iter().all(|x| !x.is_object() && !x.is_array()) => out.push((
-                    prefix.to_string(),
+                    path.clone(),
                     a.iter().map(cell_string).collect::<Vec<_>>().join("; "),
                 )),
-                "json" => out.push((
-                    prefix.to_string(),
-                    serde_json::to_string(v).unwrap_or_default(),
-                )),
+                "json" => out.push((path.clone(), serde_json::to_string(v).unwrap_or_default())),
                 _ => {
                     for (i, x) in a.iter().enumerate() {
-                        let key = if prefix.is_empty() {
-                            i.to_string()
-                        } else {
-                            format!("{prefix}{sep}{i}")
-                        };
-                        walk(&key, x, sep, arrays, out);
+                        path.push(i.to_string());
+                        walk(path, x, arrays, out);
+                        path.pop();
                     }
                 }
             },
-            Value::Object(_) => out.push((prefix.to_string(), "{}".into())),
-            Value::Array(_) => out.push((prefix.to_string(), "[]".into())),
-            other => out.push((
-                if prefix.is_empty() {
-                    "value".into()
-                } else {
-                    prefix.to_string()
-                },
-                cell_string(other),
-            )),
+            Value::Object(_) => out.push((path.clone(), "{}".into())),
+            Value::Array(_) => out.push((path.clone(), "[]".into())),
+            other => out.push((path.clone(), cell_string(other))),
         }
     }
     let mut cols: Vec<String> = vec![];
-    let mut idx: HashMap<String, usize> = HashMap::new();
+    let mut used: HashSet<String> = HashSet::new();
+    let mut idx: HashMap<Path, usize> = HashMap::new();
     let mut flat_rows = vec![];
     for it in items {
         let mut pairs = vec![];
-        walk("", it, sep, arrays, &mut pairs);
-        // A literal key can equal a flattened path ({"a":{"b":1},"a.b":2});
-        // give later duplicates a unique suffix so no value is dropped.
-        let mut seen: HashSet<String> = HashSet::new();
-        for (k, _) in pairs.iter_mut() {
-            if !seen.insert(k.clone()) {
-                let base = k.clone();
-                let mut n = 2;
-                while seen.contains(&format!("{base}_{n}")) {
-                    n += 1;
-                }
-                *k = format!("{base}_{n}");
-                seen.insert(k.clone());
+        walk(&mut vec![], it, arrays, &mut pairs);
+        for (path, _) in &pairs {
+            if idx.contains_key(path) {
+                continue;
             }
-        }
-        for (k, _) in &pairs {
-            if !idx.contains_key(k) {
-                idx.insert(k.clone(), cols.len());
-                cols.push(k.clone());
+            // Name chosen once per structural path for the whole dataset;
+            // a display-name collision gets a stable suffix.
+            let base = if path.is_empty() {
+                "value".to_string()
+            } else {
+                path.join(sep)
+            };
+            let mut name = base.clone();
+            let mut n = 2;
+            while used.contains(&name) {
+                name = format!("{base}_{n}");
+                n += 1;
             }
+            used.insert(name.clone());
+            idx.insert(path.clone(), cols.len());
+            cols.push(name);
         }
         flat_rows.push(pairs);
     }
@@ -2248,6 +2238,15 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.text.unwrap(), "a.b,a.b_2\n1,2\n");
+        // The same source field keeps its column across records.
+        let out = h
+            .run(
+                "data.json_to_csv",
+                json!({"text": "[{\"a\":{\"b\":1},\"a.b\":2},{\"a.b\":3}]"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.text.unwrap(), "a.b,a.b_2\n1,2\n,3\n");
         let out = h.run("data.json_to_csv", json!({"text": "[{\"id\":1,\"u\":{\"n\":\"x\"},\"tags\":[\"a\",\"b\"]},{\"id\":2,\"extra\":\"y,z\"}]", "arrays": "join"})).await.unwrap();
         assert_eq!(
             out.text.unwrap(),
