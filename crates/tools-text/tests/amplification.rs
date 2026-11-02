@@ -242,6 +242,14 @@ async fn replacements_and_column_splits_are_bounded() {
     )
     .await;
 
+    // The default merged name joins a long header once per selection.
+    limited(
+        &h,
+        "data.columns",
+        json!({"text": format!("{}\nx\n", "h".repeat(100_000)), "header": "yes", "operation": "merge", "columns": "1,".repeat(100_000)}),
+    )
+    .await;
+
     // Ordinary replacements are unchanged, including $ expansion.
     let out = h
         .run(

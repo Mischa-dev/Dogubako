@@ -1373,16 +1373,21 @@ fn columns() -> Arc<dyn Tool> {
             "merge" => {
                 let idx = need_cols()?;
                 let sep = p.text("separator");
-                let new_name = p
-                    .opt_str("new_names")
-                    .map(|s| s.trim().to_string())
-                    .unwrap_or_else(|| {
+                let mut budget = crate::util::OutputBudget::default();
+                let new_name = match p.opt_str("new_names") {
+                    Some(s) => s.trim().to_string(),
+                    None => {
+                        // The default name joins every selected header, and
+                        // a column may be selected many times.
+                        for i in &idx {
+                            budget.add(t.headers[*i].len() + 1)?;
+                        }
                         idx.iter()
-                            .map(|i| t.headers[*i].clone())
+                            .map(|i| t.headers[*i].as_str())
                             .collect::<Vec<_>>()
                             .join("_")
-                    });
-                let mut budget = crate::util::OutputBudget::default();
+                    }
+                };
                 for r in &t.rows {
                     for i in &idx {
                         budget.add(r[*i].len() + sep.len())?;
@@ -1431,7 +1436,13 @@ fn columns() -> Arc<dyn Tool> {
                 }
             }
             "upper" | "lower" | "title" | "trim" | "replace" => {
-                let idx = need_cols()?;
+                let mut idx = need_cols()?;
+                if op != "replace" {
+                    // These are idempotent: a repeated column would only
+                    // redo the same work.
+                    let mut seen = HashSet::new();
+                    idx.retain(|i| seen.insert(*i));
+                }
                 let re = if op == "replace" {
                     let find = p
                         .opt_str("find")
