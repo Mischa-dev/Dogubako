@@ -287,7 +287,14 @@ fn http_request() -> Arc<dyn Tool> {
             .unwrap_or_default();
         let ctype = get(&hs, "content-type").unwrap_or_default();
         let q = crate::escape::shell_quote;
-        let mut curl = format!("curl --globoff -X {} {}", q(&method), q(&url));
+        // --globoff: literal [] and {} in URLs; --path-as-is: keep dot
+        // segments. HEAD needs -I, since -X HEAD still waits for a body.
+        let method_opt = if method == "HEAD" {
+            "-I".to_string()
+        } else {
+            format!("-X {}", q(&method))
+        };
+        let mut curl = format!("curl --globoff --path-as-is {method_opt} {}", q(&url));
         for (k, v) in &hs {
             if k.eq_ignore_ascii_case("host") || k.eq_ignore_ascii_case("content-length") {
                 continue;
@@ -554,8 +561,9 @@ mod tests {
             .contains("\"name\": \"it's\""));
         let curl = out.data["curl"].as_str().unwrap();
         assert!(
-            curl.starts_with("curl --globoff -X POST 'https://example.com/api/items?id=5&x=a%20b'")
-                && curl.contains("--data-raw '{\"name\":\"it'\\''s\"}'"),
+            curl.starts_with(
+                "curl --globoff --path-as-is -X POST 'https://example.com/api/items?id=5&x=a%20b'"
+            ) && curl.contains("--data-raw '{\"name\":\"it'\\''s\"}'"),
             "{curl}"
         );
         let out = h
@@ -566,7 +574,10 @@ mod tests {
             .await
             .unwrap();
         let curl = out.data["curl"].as_str().unwrap();
-        assert!(curl.starts_with("curl --globoff -X 'X`id`' "), "{curl}");
+        assert!(
+            curl.starts_with("curl --globoff --path-as-is -X 'X`id`' "),
+            "{curl}"
+        );
         // CRLF inside the body is payload, not framing: keep it.
         let out = h
             .run(
@@ -590,6 +601,18 @@ mod tests {
             .unwrap();
         assert_eq!(out.data["method"], "GET");
         assert_eq!(out.data["body_bytes"], 0);
+        let out = h
+            .run(
+                "dev.http_request",
+                json!({"text": "HEAD /a/../b HTTP/1.1\nHost: example.com\n\n"}),
+            )
+            .await
+            .unwrap();
+        let curl = out.data["curl"].as_str().unwrap();
+        assert!(
+            curl.starts_with("curl --globoff --path-as-is -I 'https://example.com/a/../b'"),
+            "{curl}"
+        );
         let out = h
             .run(
                 "dev.http_request",
