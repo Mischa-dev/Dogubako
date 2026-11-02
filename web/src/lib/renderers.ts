@@ -79,7 +79,7 @@ export function extForMime(mime?: string): string {
     'application/json': 'json', 'text/markdown': 'md', 'text/html': 'html', 'image/svg+xml': 'svg',
     'text/csv': 'csv', 'application/xml': 'xml', 'text/xml': 'xml', 'application/yaml': 'yaml', 'text/yaml': 'yaml',
     'text/x-yaml': 'yaml', 'application/toml': 'toml', 'text/vtt': 'vtt', 'application/x-subrip': 'srt',
-    'text/css': 'css', 'application/javascript': 'js', 'text/javascript': 'js', 'application/sql': 'sql',
+    'text/css': 'css', 'text/x-diff': 'diff', 'text/x-patch': 'patch', 'application/javascript': 'js', 'text/javascript': 'js', 'application/sql': 'sql',
   };
   return map[m] ?? 'txt';
 }

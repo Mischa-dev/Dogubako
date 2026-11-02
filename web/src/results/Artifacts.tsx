@@ -20,11 +20,11 @@ export function previewKind(a: Artifact): 'image' | 'audio' | 'video' | 'pdf' | 
   return null;
 }
 
-export const ArtifactList = memo(function ArtifactList({ artifacts, jobId, inputImage }: { artifacts: Artifact[]; jobId?: string; inputImage?: string }) {
+export const ArtifactList = memo(function ArtifactList({ artifacts, jobId, inputImage, collapsed }: { artifacts: Artifact[]; jobId?: string; inputImage?: string; collapsed?: boolean }) {
   const { backend } = useApp();
   const server = asServer(backend);
   // Preview the first few previewable artifacts by default.
-  const autoOpen = artifacts.length <= 4;
+  const autoOpen = !collapsed && artifacts.length <= 4;
   return (
     <div className="artifacts">
       <div className="output-head">
@@ -132,6 +132,8 @@ function TextFilePreview({ url }: { url: string }) {
 /** Draggable before/after comparison slider. */
 export function BeforeAfter({ before, after }: { before: string; after: string }) {
   const [pos, setPos] = useState(50);
+  // Show both at the original's pixel size (never upscale beyond it) so quality differences are visible.
+  const [maxW, setMaxW] = useState<number | undefined>(undefined);
   const stage = useRef<HTMLDivElement>(null);
   const drag = useRef(false);
   const update = (clientX: number) => {
@@ -143,13 +145,14 @@ export function BeforeAfter({ before, after }: { before: string; after: string }
     <div
       className="ba checker"
       ref={stage}
+      style={{ maxWidth: maxW }}
       onPointerDown={(e) => { drag.current = true; (e.target as HTMLElement).setPointerCapture?.(e.pointerId); update(e.clientX); }}
       onPointerMove={(e) => drag.current && update(e.clientX)}
       onPointerUp={() => { drag.current = false; }}
     >
       <img src={after} alt="After" className="ba-img" draggable={false} />
       <div className="ba-before" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
-        <img src={before} alt="Before" className="ba-img" draggable={false} />
+        <img src={before} alt="Before" className="ba-img" draggable={false} onLoad={(e) => setMaxW(e.currentTarget.naturalWidth || undefined)} />
       </div>
       <span className="ba-tag ba-tag-l" aria-hidden>Before</span>
       <span className="ba-tag ba-tag-r" aria-hidden>After</span>

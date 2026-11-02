@@ -7,12 +7,13 @@ import { DataViews, type InputContext } from './DataViews';
 import { ArtifactList } from './Artifacts';
 import { ErrorView } from './ErrorView';
 
-export const ResultView = memo(function ResultView({ job, tool, input, live, hideData }: {
+export const ResultView = memo(function ResultView({ job, tool, input, live, hideData, dataFirst }: {
   job: JobView;
   tool: ToolInfo;
   input?: InputContext;
   live?: boolean;
   hideData?: boolean;
+  dataFirst?: boolean;
 }) {
   if (job.status === 'failed' || job.status === 'cancelled') {
     return <div className="result"><ErrorView error={job.error ?? { code: job.status === 'cancelled' ? 'cancelled' : 'failed' }} /></div>;
@@ -35,8 +36,9 @@ export const ResultView = memo(function ResultView({ job, tool, input, live, hid
           {r.warnings.map((w, i) => <li key={i}><TriangleAlert size={13} aria-hidden />{w}</li>)}
         </ul>
       )}
+      {dataFirst && !hideData && <DataViews data={r.data} input={input} />}
       {hasText && <TextOutput text={r.text!} mime={r.text_mime ?? tool.output.text_mime} filename={filename} live={live} />}
-      {!hideData && <DataViews data={r.data} input={input} />}
+      {!dataFirst && !hideData && <DataViews data={r.data} input={input} />}
       {hasArtifacts && <ArtifactList artifacts={r.artifacts} jobId={job.id || undefined} inputImage={input?.imageUrl} />}
       {!hasText && !hasArtifacts && (r.data == null || (typeof r.data === 'object' && Object.keys(r.data as object).length === 0)) && (
         <p className="muted small">The tool finished without output.</p>

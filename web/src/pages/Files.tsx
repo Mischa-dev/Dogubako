@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Folder, Upload, Download, Trash2, Eye, RefreshCw, Search, X, ExternalLink } from 'lucide-react';
+import { Folder, Upload, Download, Trash2, Eye, RefreshCw, Search, X, Wand2 } from 'lucide-react';
 import type { FileView } from '../lib/types';
 import { useApp } from '../lib/app';
 import { asServer } from '../lib/backend';
@@ -9,7 +9,11 @@ import { fileKindIcon } from '../form/FileField';
 import { previewKind } from '../results/Artifacts';
 import { toast } from '../components/toast';
 import { errorText } from '../lib/errors';
-import { copyText } from '../lib/clipboard';
+import { pendingInput } from '../lib/store';
+import { acceptMatches } from '../form/FileField';
+import { navigate, href } from '../lib/router';
+import { categoryIcon } from '../lib/icons';
+import { search } from '../lib/search';
 
 type Src = 'all' | 'upload' | 'artifact';
 
@@ -21,6 +25,7 @@ export default function FilesPage() {
   const [q, setQ] = useState('');
   const [src, setSrc] = useState<Src>('all');
   const [preview, setPreview] = useState<FileView | null>(null);
+  const [useIn, setUseIn] = useState<FileView | null>(null);
   const [upload, setUpload] = useState<number | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const [confirm, confirmNode] = useConfirm();
@@ -116,7 +121,7 @@ export default function FilesPage() {
                     <td title={formatDateTime(f.created_at)}>{formatRelative(f.created_at)}{f.expires_at ? <span className="muted small"> · expires {formatRelative(f.expires_at)}</span> : null}</td>
                     <td className="row-actions">
                       {previewKind(art) && <IconButton icon={Eye} label={`Preview ${f.name}`} onClick={() => setPreview(f)} />}
-                      <IconButton icon={ExternalLink} label="Copy file id (use as tool input via API)" onClick={async () => { if (await copyText(f.id)) toast.success(`Copied ${f.id}`); }} />
+                      <IconButton icon={Wand2} label={`Use ${f.name} in a tool`} onClick={() => setUseIn(f)} />
                       <a className="icon-btn" href={server.downloadUrl(art)} download={f.name} aria-label={`Download ${f.name}`} title="Download"><Download size={16} aria-hidden /></a>
                       <IconButton icon={Trash2} label={`Delete ${f.name}`} onClick={() => void remove(f)} />
                     </td>
@@ -130,7 +135,45 @@ export default function FilesPage() {
       <Modal open={!!preview} onClose={() => setPreview(null)} title={preview?.name} width={860}>
         {preview && <FilePreview f={preview} />}
       </Modal>
+      <Modal open={!!useIn} onClose={() => setUseIn(null)} title="Use in a tool" description={useIn ? <>Open a tool with <strong>{useIn.name}</strong> as its input.</> : undefined} width={560}>
+        {useIn && <ToolPicker file={useIn} onPick={() => setUseIn(null)} />}
+      </Modal>
       {confirmNode}
+    </div>
+  );
+}
+
+function ToolPicker({ file, onPick }: { file: FileView; onPick: () => void }) {
+  const { docs, categoryLabel } = useApp();
+  const [q, setQ] = useState('');
+  const compatible = useMemo(() => docs.filter(({ item }) => item.availability.available && item.params.some((p) => p.type === 'file' && acceptMatches(p.accept, file.name, file.mime))), [docs, file]);
+  const list = useMemo(() => (q.trim() ? search(compatible, q).map((h) => h.item) : compatible.map((d) => d.item)).slice(0, 60), [compatible, q]);
+  const pick = (id: string) => {
+    pendingInput.value = { ref: file.id, name: file.name, size: file.size, mime: file.mime };
+    onPick();
+    navigate(href.tool(id));
+  };
+  return (
+    <div className="form-stack">
+      <div className="input-group">
+        <span className="input-prefix" aria-hidden><Search size={14} /></span>
+        <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${compatible.length} compatible tools`} aria-label="Search compatible tools" data-autofocus />
+      </div>
+      <ul className="picker-list">
+        {list.map((t) => {
+          const Icon = categoryIcon(t.category);
+          return (
+            <li key={t.id}>
+              <button type="button" className="picker-item" onClick={() => pick(t.id)}>
+                <Icon size={15} aria-hidden />
+                <span className="picker-name">{t.name}</span>
+                <span className="muted small">{categoryLabel(t.category)}</span>
+              </button>
+            </li>
+          );
+        })}
+        {list.length === 0 && <li className="muted small">No matching tools accept this file type.</li>}
+      </ul>
     </div>
   );
 }

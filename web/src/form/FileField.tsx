@@ -6,6 +6,7 @@ import { fileItemFromRef } from '../lib/schema';
 import { useApp } from '../lib/app';
 import { formatBytes } from '../lib/format';
 import { errorText } from '../lib/errors';
+import type { Backend, FileRef } from '../lib/backend';
 import { cx } from '../components/ui';
 import type { Setter } from './Field';
 
@@ -80,6 +81,27 @@ export function useFileAdder(param: ParamSpec & { type: 'file' }, onChange: Sett
   };
 }
 
+interface DropTarget { accept?: string[]; deliver: (refs: FileRef[]) => void }
+const dropTargets: DropTarget[] = [];
+let dropUnlisten: Promise<() => void> | null = null;
+
+function registerDropTarget(backend: Backend, t: DropTarget) {
+  dropTargets.push(t);
+  if (!dropUnlisten && backend.onNativeDrop) {
+    dropUnlisten = backend.onNativeDrop((refs) => {
+      for (const target of dropTargets) {
+        const ok = refs.filter((r) => acceptMatches(target.accept, r.name, r.mime));
+        if (ok.length) { target.deliver(ok); return; }
+      }
+    });
+  }
+  return () => {
+    const i = dropTargets.indexOf(t);
+    if (i >= 0) dropTargets.splice(i, 1);
+    if (!dropTargets.length && dropUnlisten) { const u = dropUnlisten; dropUnlisten = null; void u.then((f) => f()); }
+  };
+}
+
 export const FileField = memo(function FileField({ param, items, onChange, labelledBy, describedBy, invalid }: {
   param: ParamSpec & { type: 'file' };
   items: FileItem[];
@@ -147,19 +169,16 @@ export const FileField = memo(function FileField({ param, items, onChange, label
     }
   };
 
-  // Desktop: OS-level drag & drop delivers paths.
+  // Desktop: OS-level drag & drop delivers paths to the first mounted file field that accepts them.
   useEffect(() => {
     if (!backend.onNativeDrop) return;
-    let un: (() => void) | undefined;
-    let alive = true;
-    void backend.onNativeDrop((refs) => {
-      if (!alive) return;
-      const ok = refs.filter((r) => acceptMatches(param.accept, r.name, r.mime));
-      if (!ok.length) return;
-      const its = ok.map(fileItemFromRef);
-      onChange(param.name, (prev: unknown) => (multiple ? [...((prev as FileItem[]) ?? []), ...its] : its.slice(0, 1)));
-    }).then((u) => { if (alive) un = u; else u(); });
-    return () => { alive = false; un?.(); };
+    return registerDropTarget(backend, {
+      accept: param.accept,
+      deliver: (refs) => {
+        const its = refs.map(fileItemFromRef);
+        onChange(param.name, (prev: unknown) => (multiple ? [...((prev as FileItem[]) ?? []), ...its] : its.slice(0, 1)));
+      },
+    });
   }, [backend, param.accept, param.name, multiple, onChange]);
 
   const showZone = multiple || items.length === 0;

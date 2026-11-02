@@ -48,9 +48,19 @@ export function formatDateTime(ts: number | undefined | null): string {
   return new Date(ts * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+const ACRONYMS: Record<string, string> = {
+  cpu: 'CPU', gpu: 'GPU', os: 'OS', ip: 'IP', ipv4: 'IPv4', ipv6: 'IPv6', url: 'URL', uri: 'URI', id: 'ID', dns: 'DNS', tls: 'TLS',
+  ssl: 'SSL', http: 'HTTP', https: 'HTTPS', mime: 'MIME', pdf: 'PDF', css: 'CSS', html: 'HTML', json: 'JSON', csv: 'CSV', mhz: 'MHz',
+  ghz: 'GHz', ram: 'RAM', ssd: 'SSD', hdd: 'HDD', mac: 'MAC', utc: 'UTC', dpi: 'DPI', fps: 'FPS', exif: 'EXIF', gps: 'GPS', rgb: 'RGB',
+  hsl: 'HSL', hex: 'Hex', sha256: 'SHA-256', sha1: 'SHA-1', md5: 'MD5', mcp: 'MCP', api: 'API', mb: 'MB', kb: 'KB', gb: 'GB', ms: 'ms',
+  wh: 'Wh', ttl: 'TTL', asn: 'ASN', cidr: 'CIDR', utf8: 'UTF-8', aa: 'AA', aaa: 'AAA', pid: 'PID', tz: 'TZ',
+};
+
 export function humanizeKey(k: string): string {
-  const s = k.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  const words = k.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim().split(/\s+/);
+  const out = words.map((w) => ACRONYMS[w.toLowerCase()] ?? w.toLowerCase());
+  if (out.length && out[0] === out[0].toLowerCase()) out[0] = out[0].charAt(0).toUpperCase() + out[0].slice(1);
+  return out.join(' ');
 }
 
 export function plural(n: number, one: string, many = `${one}s`) {

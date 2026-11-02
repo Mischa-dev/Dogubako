@@ -7,6 +7,7 @@ import { useToolForm, type ToolForm } from './useToolForm';
 import { RunBar } from './RunBar';
 import { Spinner, cx } from '../components/ui';
 import { useFileAdder } from '../form/FileField';
+import type { FileItem } from '../lib/schema';
 
 export const MONO_CATEGORIES = new Set(['dev', 'data', 'network']);
 
@@ -39,11 +40,22 @@ export function useToolShortcuts(form: ToolForm, enabled = true) {
 }
 
 /** Debounced auto-run for live tools. */
+/** Whether the user has provided some input (text, file or JSON) — avoids auto-running on an empty form. */
+export function hasUserInput(form: ToolForm): boolean {
+  const inputs = form.tool.params.filter((p) => p.type === 'text' || p.type === 'file' || p.type === 'json' || p.type === 'secret');
+  if (!inputs.length) return true;
+  return inputs.some((p) => {
+    const v = form.values[p.name];
+    if (p.type === 'file') return Array.isArray(v) && v.some((i: FileItem) => i.status === 'ready');
+    return typeof v === 'string' ? v.trim() !== '' && v !== (p.default ?? '') : v != null;
+  });
+}
+
 export function useLiveRun(form: ToolForm, enabled: boolean, delay = 250) {
   const first = useRef(true);
   useEffect(() => {
     if (!enabled) return;
-    if (!form.valid) return;
+    if (!form.valid || !hasUserInput(form)) return;
     const t = window.setTimeout(() => { void form.run({ silent: true, live: true }); }, first.current ? 50 : delay);
     first.current = false;
     return () => window.clearTimeout(t);
@@ -55,9 +67,8 @@ export function GenericTool({ tool, jobId }: { tool: ToolInfo; jobId?: string | 
   const form = useToolForm(tool, { jobId });
   const live = tool.ui === 'live';
   const available = tool.availability.available;
-  const hasRequiredInput = tool.params.some((p) => p.required);
   useToolShortcuts(form);
-  useLiveRun(form, live && available && hasRequiredInput);
+  useLiveRun(form, live && available);
   const mono = MONO_CATEGORIES.has(tool.category);
   const resultsRef = useRef<HTMLDivElement>(null);
 

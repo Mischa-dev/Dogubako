@@ -47,7 +47,7 @@ function ToolPageInner({ tool, jobId }: { tool: ToolInfo; jobId: string | null }
     <div className={cx('page tool-page', tool.ui === 'live' && 'is-live')} ref={root}>
       <ToolHeader tool={tool} />
       <Availability tool={tool} />
-      {special && special !== 'system' && (
+      {special && (special === 'face-redact' || special === 'crop') && (
         <div className="ui-switch">
           <Segmented<'editor' | 'form'>
             size="sm"

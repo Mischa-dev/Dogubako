@@ -34,9 +34,12 @@ function PatternInput({ label, values, onChange, id }: { label: string; values: 
   const suggestions = useMemo(() => {
     const s = q.trim().toLowerCase();
     const list = [...hits];
-    if (s && /^[a-z0-9._*-]+$/.test(s) && !list.includes(s)) list.unshift(s);
-    if (s && !s.includes('.') && /^[a-z]+$/.test(s)) list.splice(1, 0, `${s}.*`);
-    return list.filter((x) => !values.includes(x)).slice(0, 8);
+    const raw = s && /^[a-z0-9._*-]+$/.test(s) ? s : null;
+    // A literal pattern goes first only if it is a wildcard or an exact tool id; otherwise best matches lead.
+    if (raw && (raw.includes('*') || hits.includes(raw))) list.unshift(raw);
+    if (s && /^[a-z]+$/.test(s)) list.splice(raw?.includes('*') ? 1 : 0, 0, `${s}.*`);
+    if (raw && !list.includes(raw)) list.push(raw);
+    return [...new Set(list)].filter((x) => !values.includes(x)).slice(0, 8);
   }, [q, hits, values]);
   const add = (v: string) => {
     if (!v || values.includes(v)) return;

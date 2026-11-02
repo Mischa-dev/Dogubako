@@ -26,7 +26,7 @@ export default function DiffTool({ tool, jobId }: { tool: ToolInfo; jobId?: stri
         {!textMode && <RunBar form={form} label="Compare" disabled={!tool.availability.available} />}
       </div>
       <div className="tool-output">
-        {job && <ResultView job={job} tool={tool} input={form.input} live={textMode} />}
+        {job && <ResultView job={job} tool={tool} input={form.input} live={textMode} dataFirst />}
       </div>
     </div>
   );

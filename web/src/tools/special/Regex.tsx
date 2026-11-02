@@ -40,7 +40,7 @@ export default function Regex({ tool, jobId }: { tool: ToolInfo; jobId?: string 
   const rest = data ? Object.fromEntries(Object.entries(data).filter(([k]) => !['matches', 'group_names', 'replaced', 'table'].includes(k))) : null;
 
   return (
-    <div className="tool-body special special-regex">
+    <div className="tool-body tool-live special special-regex">
       <div className="tool-input">
         {patternParam && <Field param={patternParam} value={form.values.pattern} error={form.shownErrors.pattern} onChange={form.setValue} mono />}
         <ParamForm params={tool.params} exclude={['pattern', 'text']} values={form.values} errors={form.shownErrors} onChange={form.setValue} mono idPrefix="regex" />

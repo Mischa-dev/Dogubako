@@ -61,7 +61,7 @@ export function AuditPanel() {
                 <td>{r.actor}</td>
                 <td className="mono small">{r.action}</td>
                 <td className="small trunc" title={r.target}>{r.target}</td>
-                <td><Badge tone={r.outcome === 'ok' ? 'success' : r.outcome === 'started' ? 'neutral' : 'danger'}>{r.outcome}</Badge></td>
+                <td><Badge tone={['ok', 'succeeded', 'done'].includes(r.outcome) ? 'success' : ['denied', 'failed', 'rate_limited', 'error'].includes(r.outcome) ? 'danger' : 'neutral'}>{r.outcome}</Badge></td>
                 <td className="mono small">{r.ip}</td>
                 <td className="small trunc" title={r.detail}>{r.detail}</td>
               </tr>

@@ -104,7 +104,7 @@ export default function HistoryPage() {
                       </dl>
                     )}
                     {j.result?.text && <pre className="code-view mono small history-text-out">{j.result.text.slice(0, 2000)}{j.result.text.length > 2000 ? '…' : ''}</pre>}
-                    {nArt > 0 && <ArtifactList artifacts={j.result!.artifacts} jobId={j.id} />}
+                    {nArt > 0 && <ArtifactList artifacts={j.result!.artifacts} jobId={j.id} collapsed />}
                   </div>
                 )}
               </li>

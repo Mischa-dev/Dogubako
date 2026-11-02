@@ -43,7 +43,7 @@ export default function Qr({ tool, jobId }: { tool: ToolInfo; jobId?: string | n
           {form.job.running && <span className="qr-busy"><Spinner size={12} /></span>}
         </div>
         {job?.status === 'failed' && <ErrorView error={job.error ?? { code: 'failed' }} />}
-        {arts.length > 0 && <ArtifactList artifacts={arts} jobId={job?.id} />}
+        {arts.length > 0 && <ArtifactList artifacts={arts} jobId={job?.id} collapsed />}
       </div>
     </div>
   );

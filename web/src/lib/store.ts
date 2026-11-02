@@ -100,3 +100,7 @@ export function cycleTheme() {
   const cur = resolvedTheme();
   setPref('theme', cur === 'dark' ? 'light' : 'dark');
 }
+
+/** A stored file chosen on the Files page to prefill the next tool's input (session only). */
+export interface PendingInput { ref: string; name: string; size: number; mime: string }
+export const pendingInput = { value: null as PendingInput | null };

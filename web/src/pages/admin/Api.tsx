@@ -5,6 +5,7 @@ import { asServer } from '../../lib/backend';
 import { errorText } from '../../lib/errors';
 import { Callout, CopyButton, Section, Spinner, cx } from '../../components/ui';
 import { mcpConfig } from './TokenReveal';
+import { humanizeKey } from '../../lib/format';
 
 interface Op { method: string; path: string; summary: string; tag: string }
 
@@ -56,7 +57,7 @@ export function ApiPanel() {
                 <div key={tag} className="api-group">
                   <button type="button" className="api-group-head" aria-expanded={isOpen} onClick={() => setOpen((o) => ({ ...o, [tag]: !isOpen }))}>
                     <ChevronRight size={14} aria-hidden className="chev" />
-                    <span className="api-tag">{tag}</span>
+                    <span className="api-tag">{humanizeKey(tag)}</span>
                     <span className="muted small">{ops.length} endpoint{ops.length === 1 ? '' : 's'}</span>
                   </button>
                   {isOpen && (

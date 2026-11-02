@@ -27,7 +27,7 @@ export const DataTable = memo(function DataTable({ table, caption }: { table: Ta
   return (
     <div className="data-block">
       <div className="data-block-head">
-        <span className="data-block-title">{caption ?? 'Table'} <span className="muted">· {table.rows.length.toLocaleString()} rows</span></span>
+        <span className="data-block-title">{caption ?? 'Table'} <span className="muted">· {table.rows.length.toLocaleString()} {table.rows.length === 1 ? 'row' : 'rows'}</span></span>
         <span className="data-block-actions">
           <CopyButton text={() => tableToCsv(table)} label="Copy CSV" />
           <Button size="sm" variant="ghost" icon={Download} onClick={() => downloadText(tableToCsv(table), 'table.csv', 'text/csv')}>CSV</Button>
@@ -65,11 +65,17 @@ export const DataTable = memo(function DataTable({ table, caption }: { table: Ta
   );
 });
 
+/** Group digits only for large magnitudes so ports, years and ids stay readable. */
+export function fmtNum(v: number): string {
+  if (Number.isInteger(v)) return Math.abs(v) >= 1e6 ? v.toLocaleString() : String(v);
+  return v.toLocaleString(undefined, { maximumFractionDigits: 6, useGrouping: Math.abs(v) >= 1e6 });
+}
+
 function Cell({ v }: { v: unknown }) {
   if (v === true) return <span className="cell-bool is-true">Yes</span>;
   if (v === false) return <span className="cell-bool is-false">No</span>;
   if (v == null) return <span className="muted">—</span>;
-  if (typeof v === 'number') return <span className="num">{v.toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>;
+  if (typeof v === 'number') return <span className="num">{fmtNum(v)}</span>;
   if (typeof v === 'object') return <span className="mono small">{JSON.stringify(v)}</span>;
   const s = String(v);
   if (/^#[0-9a-f]{6}$/i.test(s)) return <span className="cell-color"><span className="dot" style={{ background: s }} />{s}</span>;
@@ -201,7 +207,7 @@ function KvValue({ v }: { v: unknown }) {
   if (v === true) return <span className="cell-bool is-true">Yes</span>;
   if (v === false) return <span className="cell-bool is-false">No</span>;
   if (v == null) return <span className="muted">—</span>;
-  if (typeof v === 'number') return <span className="num">{v.toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>;
+  if (typeof v === 'number') return <span className="num">{fmtNum(v)}</span>;
   if (typeof v === 'string') {
     if (/^#[0-9a-f]{6}$/i.test(v)) return <span className="cell-color"><span className="dot" style={{ background: v }} />{v}</span>;
     if (v.includes('\n') || v.length > 140) return <pre className="kv-pre mono">{v}</pre>;

@@ -5,7 +5,8 @@ import {
   defaultValues, fromRunParams, fileItemFromRef, persistableValues, toRunParams, validate,
   type FileItem, type FormErrors, type FormValues,
 } from '../lib/schema';
-import { loadToolParams, prefs, saveToolParams } from '../lib/store';
+import { loadToolParams, pendingInput, prefs, saveToolParams } from '../lib/store';
+import { acceptMatches } from '../form/FileField';
 import type { Setter } from '../form/Field';
 import type { InputContext } from '../results/DataViews';
 import { useJob } from './useJob';
@@ -27,6 +28,11 @@ export interface ToolForm {
 
 function initialValues(tool: ToolInfo): FormValues {
   const base = defaultValues(tool);
+  const pending = pendingInput.value;
+  if (pending) {
+    const fp = tool.params.find((p) => p.type === 'file' && acceptMatches(p.accept, pending.name, pending.mime));
+    if (fp) { base[fp.name] = [fileItemFromRef(pending)]; pendingInput.value = null; }
+  }
   if (prefs.get().rememberParams) {
     const saved = loadToolParams(tool.id);
     if (saved) {
@@ -92,6 +98,7 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null } = {}
   const run = useCallback<ToolForm['run']>(async (o = {}) => {
     const vals = valuesRef.current;
     const errs = validate(tool, vals);
+    for (const k of Object.keys(o.overrides ?? {})) delete errs[k];
     if (Object.keys(errs).length) {
       if (!o.silent) {
         setAttempted(true);

@@ -63,11 +63,21 @@ export default function FaceRedact({ tool }: { tool: ToolInfo }) {
   }, [item?.ref]);
 
   const apply = () => {
-    if (!boxes.length) return;
+    if (!boxes.length || form.job.running) return;
     const regions = boxes.map(({ x, y, width, height }) => ({ x, y, width, height }));
     if (target.id === 'image.redact') void form.run({ overrides: { regions } });
     else void form.run({ overrides: { extra_regions: regions } });
   };
+
+  const applyRef = useRef(apply);
+  applyRef.current = apply;
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); applyRef.current(); }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
 
   const optionParams = target.params.filter((p) => !['input', 'regions', 'extra_regions'].includes(p.name));
   const detectErr = detectJob.job?.status === 'failed' ? describeError(detectJob.job.error) : null;

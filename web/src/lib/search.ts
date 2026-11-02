@@ -113,7 +113,7 @@ function scoreToken(d: SearchDoc, tok: string): { score: number; ranges: [number
     else if (tok.length >= 3 && d.description.includes(tok)) best = 9;
   }
   const fz = tok.length >= 2 ? fuzzyMatch(name, tok) : null;
-  if (fz && fz.score >= tok.length * 3) {
+  if (fz && fz.score >= tok.length * 2.5) {
     const fs = Math.min(38, fz.score * 1.3);
     if (fs > best) return { score: fs, ranges: toRanges(fz.positions) };
   }

@@ -49,7 +49,9 @@ export function TextOutput({ text, mime, filename = 'output', live }: { text: st
       )}
       {effective === 'tree' && <div className="tree-wrap"><JsonTree value={json} /></div>}
       {effective === 'source' && (
-        <pre className={`code-view mono${wrap ? ' wrap' : ''}`} tabIndex={0} aria-label="Output text" aria-live={live ? 'polite' : undefined}>{text || <span className="muted">(empty)</span>}</pre>
+        <pre className={`code-view mono${wrap ? ' wrap' : ''}`} tabIndex={0} aria-label="Output text" aria-live={live ? 'polite' : undefined}>
+          {!text ? <span className="muted">(empty)</span> : m === 'text/x-diff' && text.length < 300_000 ? <DiffLines text={text} /> : text}
+        </pre>
       )}
     </div>
   );
@@ -66,4 +68,15 @@ function htmlDoc(body: string, mime: string): string {
   table{border-collapse:collapse}td,th{border:1px solid ${dark ? '#3a3b40' : '#ddd'};padding:4px 8px}
   img{max-width:100%}a{color:${dark ? '#8fb0ff' : '#2f5fd0'}}blockquote{margin:0;padding-left:12px;border-left:3px solid ${dark ? '#3a3b40' : '#ddd'};color:${dark ? '#a6a8ae' : '#5d6068'}}
   </style></head><body>${content}</body></html>`;
+}
+
+function DiffLines({ text }: { text: string }) {
+  return (
+    <>
+      {text.split('\n').map((l, i) => {
+        const cls = l.startsWith('+++') || l.startsWith('---') ? 'dl-meta' : l.startsWith('@@') ? 'dl-hunk' : l.startsWith('+') ? 'dl-add' : l.startsWith('-') ? 'dl-del' : l.startsWith('\\') ? 'dl-meta' : undefined;
+        return <span key={i} className={cls}>{l}{'\n'}</span>;
+      })}
+    </>
+  );
 }

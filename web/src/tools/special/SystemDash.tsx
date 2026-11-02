@@ -3,7 +3,7 @@ import { Pause, Play, RefreshCw, Info } from 'lucide-react';
 import type { ToolInfo } from '../../lib/types';
 import { ParamForm } from '../../form/ParamForm';
 import { useToolForm } from '../useToolForm';
-import { DataTable, KeyValue } from '../../results/DataViews';
+import { DataTable, KeyValue, fmtNum } from '../../results/DataViews';
 import { ErrorView } from '../../results/ErrorView';
 import { Button, Meter, Segmented, Spinner } from '../../components/ui';
 import { humanizeKey, formatRelative } from '../../lib/format';
@@ -23,7 +23,7 @@ function titleOf(o: Record<string, any>, i: number): string {
 
 function ValueText({ v }: { v: unknown }) {
   if (isHuman(v)) return <>{v.human}</>;
-  if (typeof v === 'number') return <span className="num">{v.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>;
+  if (typeof v === 'number') return <span className="num">{Number.isInteger(v) ? fmtNum(v) : v.toFixed(2)}</span>;
   if (typeof v === 'boolean') return <>{v ? 'Yes' : 'No'}</>;
   if (v == null) return <span className="muted">—</span>;
   if (Array.isArray(v)) return <>{v.length <= 8 && v.every((x) => typeof x !== 'object') ? v.join(', ') : `${v.length} items`}</>;

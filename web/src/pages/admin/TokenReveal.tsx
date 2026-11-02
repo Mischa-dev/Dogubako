@@ -27,7 +27,7 @@ export function TokenReveal({ token, showExamples = true }: { token: NewToken; s
             <Segmented size="sm" label="Example" value={tab} onChange={setTab} options={[{ value: 'mcp', label: 'MCP client config' }, { value: 'curl', label: 'curl' }]} />
             <CopyButton text={tab === 'mcp' ? mcpConfig(origin, token.token) : curlExample(origin, token.token)} />
           </div>
-          <pre className="code-view mono small">{tab === 'mcp' ? mcpConfig(origin, token.token) : curlExample(origin, token.token)}</pre>
+          <pre className="code-view mono small wrap">{tab === 'mcp' ? mcpConfig(origin, token.token) : curlExample(origin, token.token)}</pre>
         </div>
       )}
     </div>

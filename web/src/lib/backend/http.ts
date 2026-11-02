@@ -193,11 +193,11 @@ export class HttpBackend implements Backend {
   }
 
   fileUrl(ref: FileRef): string {
-    return this.url(`/files/${encodeURIComponent(ref.ref)}/content?inline=1`);
+    return this.url(`/files/${encodeURIComponent(ref.ref)}/content?inline=true`);
   }
 
   artifactUrl(a: Artifact): string {
-    if (a.id) return this.url(`/files/${encodeURIComponent(a.id)}/content?inline=1`);
+    if (a.id) return this.url(`/files/${encodeURIComponent(a.id)}/content?inline=true`);
     return a.url ?? '';
   }
 
