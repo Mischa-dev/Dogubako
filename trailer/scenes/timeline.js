@@ -458,7 +458,7 @@
   const s8w = words(S8.h, 'Write a tool once. Use it everywhere.');
   const CMD = 'dogubako image convert photo.heic --format webp';
   const IFACES = [
-    { ic: 'laptop', t: 'Desktop app', b: 'macOS, Windows and Linux.\nNo account. Works offline.', x: 90, y: 300 },
+    { ic: 'laptop', t: 'Desktop app', b: 'macOS on Apple silicon.\nNo account. Works offline.', x: 90, y: 300 },
     { ic: 'server', t: 'Self-hosted web', b: 'One server for your house or team.\nPhones and laptops just open it.', x: 90, y: 640 },
     { ic: 'terminal', t: 'Command line', term: true, x: 1410, y: 300 },
     { ic: 'braces', t: 'HTTP API', term: true, b: '<span class="p">POST</span> /api/v1/tools/\n     image.convert/run', x: 1410, y: 640 },
