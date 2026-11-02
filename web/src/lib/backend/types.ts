@@ -61,6 +61,28 @@ export interface Backend {
   models(): Promise<{ models: ModelInfo[]; downloads: ModelDownload[] }>;
   modelDownload(id: string): Promise<void>;
   modelRemove(id: string): Promise<void>;
+
+  /** Natural-language assistant: what this host offers (relay, server provider). */
+  assistantInfo(): Promise<AssistantInfo>;
+  /** Relay one OpenAI-compatible chat completion; resolves with the endpoint's JSON. */
+  assistantChat(target: AssistantTarget, body: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
+  /** The endpoint's model ids, for the model picker. */
+  assistantModels(target: AssistantTarget): Promise<{ id: string; owned_by?: string }[]>;
+}
+
+/** Where assistant requests go. `provider: 'server'` uses the server's own endpoint and key. */
+export interface AssistantTarget {
+  provider?: 'server';
+  base_url?: string;
+  api_key?: string;
+}
+
+export interface AssistantInfo {
+  enabled: boolean;
+  /** Set when the server administrator configured a shared endpoint. */
+  server_provider: { model?: string | null } | null;
+  /** Whether the relay may reach loopback/LAN endpoints (always true on desktop). */
+  private_network: boolean;
 }
 
 /** Thrown for non-2xx API responses. */

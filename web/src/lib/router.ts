@@ -51,6 +51,8 @@ export const href = {
   history: '#/history',
   files: '#/files',
   open: '#/open',
+  /** Carry out a plain-words request; `files` uses the files waiting on the drop screen. */
+  do: (q: string, files = false) => `#/do?${new URLSearchParams({ q, ...(files ? { files: '1' } : {}), t: Date.now().toString(36) })}`,
   settings: (s = '') => `#/settings${s ? `/${s}` : ''}`,
   account: '#/account',
   admin: (s = '') => `#/admin${s ? `/${s}` : ''}`,

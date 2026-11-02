@@ -37,6 +37,8 @@ pub struct AppState {
     pub storage: Arc<Storage>,
     pub jobs: Arc<JobManager>,
     pub login_limiter: Arc<RateLimiter>,
+    /// Assistant relay requests per user.
+    pub assistant_limiter: Arc<RateLimiter>,
     pub setup_token: Arc<Mutex<Option<String>>>,
     pub mcp_sessions: Arc<Mutex<HashMap<String, McpSession>>>,
     pub extensions: Arc<Vec<ExtensionStatus>>,
@@ -151,6 +153,7 @@ impl AppState {
             storage,
             jobs,
             login_limiter: Arc::new(RateLimiter::new(10, Duration::from_secs(300))),
+            assistant_limiter: Arc::new(RateLimiter::new(300, Duration::from_secs(600))),
             setup_token: Arc::new(Mutex::new(setup_token)),
             mcp_sessions: Arc::new(Mutex::new(HashMap::new())),
             extensions: Arc::new(extensions),

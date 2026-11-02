@@ -11,6 +11,7 @@
 pub mod deps;
 pub mod engine;
 pub mod error;
+pub mod llm;
 pub mod manifest;
 pub mod models;
 pub mod net;

@@ -5,7 +5,7 @@ import {
   defaultValues, fromRunParams, fileItemFromRef, persistableValues, toRunParams, validate,
   type FileItem, type FormErrors, type FormValues,
 } from '../lib/schema';
-import { loadToolParams, pendingInput, prefs, saveToolParams } from '../lib/store';
+import { loadToolParams, pendingInput, pendingParams, prefs, saveToolParams } from '../lib/store';
 import { acceptMatches } from '../form/FileField';
 import type { Setter } from '../form/Field';
 import type { InputContext } from '../results/DataViews';
@@ -46,6 +46,14 @@ function initialValues(tool: ToolInfo): FormValues {
         if (p.type !== 'file' && p.type !== 'secret' && p.name in saved) base[p.name] = saved[p.name];
       }
     }
+  }
+  // Natural-language mode opened this tool with some settings already chosen.
+  const pre = pendingParams.value;
+  if (pre && pre.toolId === tool.id) {
+    for (const p of tool.params) {
+      if (p.type !== 'file' && p.type !== 'secret' && p.type !== 'path' && p.name in pre.params) base[p.name] = pre.params[p.name];
+    }
+    pendingParams.value = null;
   }
   return base;
 }

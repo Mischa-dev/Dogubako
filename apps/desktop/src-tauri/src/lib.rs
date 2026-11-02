@@ -246,6 +246,27 @@ async fn model_download(app: AppHandle, state: State<'_, Desktop>, id: String) -
         .map_err(|e| e.to_string())
 }
 
+/// Natural-language assistant: relay one chat completion to the endpoint the
+/// user picked. The desktop app is the user's own machine, so local runtimes
+/// (Ollama, LM Studio) on loopback or the LAN are allowed.
+#[tauri::command]
+async fn assistant_chat(base_url: String, api_key: Option<String>, body: Value) -> Result<Value, Value> {
+    let ep = dogubako_core::llm::Endpoint { base_url, api_key };
+    dogubako_core::llm::chat(dogubako_core::policy::NetPolicy::default(), &ep, body)
+        .await
+        .map_err(|e| dogubako_core::llm::error_json(&e))
+}
+
+/// The endpoint's model list, for the model picker.
+#[tauri::command]
+async fn assistant_models(base_url: String, api_key: Option<String>) -> Result<Value, Value> {
+    let ep = dogubako_core::llm::Endpoint { base_url, api_key };
+    dogubako_core::llm::list_models(dogubako_core::policy::NetPolicy::default(), &ep)
+        .await
+        .map(|m| json!({ "models": m }))
+        .map_err(|e| dogubako_core::llm::error_json(&e))
+}
+
 #[tauri::command]
 fn model_remove(state: State<'_, Desktop>, id: String) -> Result<(), String> {
     state.engine.models.remove(&id).map_err(|e| e.to_string())
@@ -292,7 +313,9 @@ pub fn run() {
             deps_refresh,
             models_list,
             model_download,
-            model_remove
+            model_remove,
+            assistant_chat,
+            assistant_models
         ])
         .run(tauri::generate_context!())
         .expect("error while running Dogubako");

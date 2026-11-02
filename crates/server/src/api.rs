@@ -74,6 +74,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/admin/audit", get(admin_audit))
         .route("/admin/config", get(admin_config))
         .route("/openapi.json", get(openapi))
+        .merge(crate::assistant::router())
 }
 
 // ---------------------------------------------------------------- status & auth
@@ -89,6 +90,7 @@ async fn status(State(s): State<AppState>) -> Json<Value> {
         "tools": s.engine.registry.len(),
         "mode": "server",
         "max_upload_mb": s.cfg.max_upload_mb,
+        "assistant": s.cfg.assistant_enabled,
     }))
 }
 
