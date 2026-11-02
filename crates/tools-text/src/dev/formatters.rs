@@ -887,18 +887,27 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> ToolResult<String> {
     fn esc_attr(s: &str) -> ToolResult<String> {
         Ok(esc(s)?.replace('\n', "&#10;").replace('\t', "&#9;"))
     }
+    // XML 1.0 (fifth edition) NameStartChar and NameChar.
+    fn name_start(c: char) -> bool {
+        matches!(c,
+            ':' | 'A'..='Z' | '_' | 'a'..='z'
+            | '\u{C0}'..='\u{D6}' | '\u{D8}'..='\u{F6}' | '\u{F8}'..='\u{2FF}'
+            | '\u{370}'..='\u{37D}' | '\u{37F}'..='\u{1FFF}' | '\u{200C}'..='\u{200D}'
+            | '\u{2070}'..='\u{218F}' | '\u{2C00}'..='\u{2FEF}' | '\u{3001}'..='\u{D7FF}'
+            | '\u{F900}'..='\u{FDCF}' | '\u{FDF0}'..='\u{FFFD}' | '\u{10000}'..='\u{EFFFF}')
+    }
+    fn name_char(c: char) -> bool {
+        name_start(c)
+            || matches!(c,
+                '-' | '.' | '0'..='9' | '\u{B7}' | '\u{300}'..='\u{36F}' | '\u{203F}'..='\u{2040}')
+    }
     fn valid_name(n: &str) -> String {
         let mut s: String = n
             .chars()
-            .map(|c| {
-                if c.is_alphanumeric() || "_-.:".contains(c) {
-                    c
-                } else {
-                    '_'
-                }
-            })
+            .map(|c| if name_char(c) { c } else { '_' })
             .collect();
-        if s.is_empty() || !(s.chars().next().unwrap().is_alphabetic() || s.starts_with('_')) {
+        // A leading colon would read as an empty namespace prefix.
+        if !s.chars().next().is_some_and(|c| name_start(c) && c != ':') {
             s = format!("_{s}");
         }
         s
@@ -942,6 +951,19 @@ pub(crate) fn json_to_xml(v: &Value, root_name: &str) -> ToolResult<String> {
                     out.push_str(&esc(t)?);
                 }
                 if !children.is_empty() {
+                    let mut seen = std::collections::HashMap::new();
+                    for (k, _) in &children {
+                        let cn = valid_name(k);
+                        if let Some(prev) = seen.insert(cn.clone(), *k) {
+                            return Err(ToolError::invalid(
+                                "text",
+                                format!(
+                                    "keys {prev:?} and {k:?} in <{n}> would both be \
+                                     written as <{cn}>; rename one of them"
+                                ),
+                            ));
+                        }
+                    }
                     out.push('\n');
                     for (k, val) in children {
                         write(out, k, val, depth + 1)?;
@@ -1555,6 +1577,33 @@ mod tests {
         assert_eq!(v["r"]["b"], " ");
         assert_eq!(v["r"]["c"]["#text"], "y");
         assert_eq!(super::xml_to_json("<r> z </r>").unwrap()["r"], "z");
+        // Names follow XML's character ranges, not Unicode alphanumerics,
+        // and keys that clean up to the same element name are rejected.
+        let xml = h
+            .run(
+                "dev.convert",
+                json!({"text": r#"{"r":{"x²":"v","@a²":"w","1st":"y","é·b":"z"}}"#, "from": "json", "to": "xml"}),
+            )
+            .await
+            .unwrap()
+            .text
+            .unwrap();
+        assert!(
+            xml.contains("<x_>v</x_>")
+                && xml.contains("a_=\"w\"")
+                && xml.contains("<_1st>")
+                && xml.contains("<é·b>"),
+            "{xml}"
+        );
+        super::xml_to_json(&xml).unwrap();
+        let e = h
+            .run(
+                "dev.convert",
+                json!({"text": r#"{"r":{"a!":1,"a?":2}}"#, "from": "json", "to": "xml"}),
+            )
+            .await
+            .unwrap_err();
+        assert!(e.to_string().contains("<a_>"), "{e}");
     }
 
     #[tokio::test]
