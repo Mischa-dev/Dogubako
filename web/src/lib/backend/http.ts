@@ -91,7 +91,7 @@ export class HttpBackend implements Backend {
 
   run(toolId: string, params: Record<string, unknown>, opts: RunOptions = {}): RunHandle {
     let jobId: string | null = null;
-    let es: EventSource | null = null;
+    let settle: ((j: JobView) => void) | null = null;
     let cancelled = false;
     const done = (async () => {
       const first = await this.post<JobView>(`/tools/${encodeURIComponent(toolId)}/run`, { params, wait_seconds: opts.wait ?? 0, ephemeral: opts.ephemeral ?? false });
@@ -101,31 +101,40 @@ export class HttpBackend implements Backend {
         try { await this.post(`/jobs/${first.id}/cancel`); } catch { /* ignore */ }
       }
       if (isTerminal(first.status)) return first;
-      return this.follow(first, opts, (s) => { es = s; });
+      return this.follow(first, opts, (finish) => { settle = finish; });
     })();
     return {
       done,
       cancel: async () => {
         if (cancelled) return;
         cancelled = true;
-        if (jobId) {
-          try { await this.post(`/jobs/${jobId}/cancel`); } catch { /* ignore */ }
-        }
-        if (es) (es as EventSource).close?.call(es);
+        if (!jobId) return; // the run request is still in flight; it cancels once it has an id
+        // Keep following the job: the event stream (or polling) delivers the
+        // terminal status. The cancel response usually already carries it.
+        try {
+          const j = await this.post<JobView>(`/jobs/${jobId}/cancel`);
+          if (j && isTerminal(j.status)) {
+            opts.onUpdate?.(j);
+            (settle as ((j: JobView) => void) | null)?.(j);
+          }
+        } catch { /* ignore: the stream reports the outcome */ }
       },
     };
   }
 
   /** Follow a job via SSE, falling back to long-polling. */
-  follow(initial: JobView, opts: RunOptions, setEs?: (es: EventSource) => void): Promise<JobView> {
+  follow(initial: JobView, opts: RunOptions, onFinisher?: (finish: (j: JobView) => void) => void): Promise<JobView> {
     return new Promise<JobView>((resolve, reject) => {
       let last = initial;
       let settled = false;
+      let es: EventSource | null = null;
       const finish = (j: JobView) => {
         if (settled) return;
         settled = true;
+        es?.close();
         resolve(j);
       };
+      onFinisher?.(finish);
       const poll = async () => {
         try {
           while (!settled) {
@@ -139,18 +148,18 @@ export class HttpBackend implements Backend {
         }
       };
       if (typeof EventSource === 'undefined') { void poll(); return; }
-      const es = new EventSource(this.url(`/jobs/${initial.id}/events`), { withCredentials: true });
-      setEs?.(es);
-      es.addEventListener('job', (ev) => {
+      const source = new EventSource(this.url(`/jobs/${initial.id}/events`), { withCredentials: true });
+      es = source;
+      source.addEventListener('job', (ev) => {
         try {
           const j = JSON.parse((ev as MessageEvent).data) as JobView;
           last = j;
           opts.onUpdate?.(j);
-          if (isTerminal(j.status)) { es.close(); finish(j); }
+          if (isTerminal(j.status)) finish(j);
         } catch { /* ignore malformed */ }
       });
-      es.onerror = () => {
-        es.close();
+      source.onerror = () => {
+        source.close();
         if (settled) return;
         if (isTerminal(last.status)) return finish(last);
         void poll();

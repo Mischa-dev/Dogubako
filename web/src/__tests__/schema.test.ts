@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultValues, fromRunParams, isSliderRange, isVisible, toRunParams, validate, type FileItem } from '../lib/schema';
 import type { ParamSpec } from '../lib/types';
 import { tool } from './fixtures';
+import { redactSecrets } from '../lib/backend/tauri';
 
 const params: ParamSpec[] = [
   { name: 'input', label: 'Images', type: 'file', multiple: true, accept: ['image/*'], required: true },
@@ -78,6 +79,23 @@ describe('toRunParams', () => {
     expect(fileRefs).toEqual({ input: ['f_1'] });
     expect(values.quality).toBe(60);
     expect(JSON.parse(values.regions as string)).toEqual([{ x: 1 }]);
+  });
+
+  it('never restores a (masked) secret from history', () => {
+    const st = tool({ id: 'files.encrypt', name: 'E', params: [{ name: 'password', label: 'Password', type: 'secret' }, { name: 'level', label: 'Level', type: 'integer' }] });
+    const { values } = fromRunParams(st, { password: '••••••', level: 5 });
+    expect(values.password).toBe('');
+    expect(values.level).toBe(5);
+  });
+});
+
+describe('redactSecrets (desktop history)', () => {
+  const st = tool({ id: 'dev.hmac', name: 'H', params: [{ name: 'key', label: 'Key', type: 'secret' }, { name: 'text', label: 'Text', type: 'text' }] });
+  it('masks secret params and keeps the rest', () => {
+    expect(redactSecrets(st, { key: 'hunter2', text: 'hi' })).toEqual({ key: '••••••', text: 'hi' });
+  });
+  it('drops all params when the tool spec is unknown', () => {
+    expect(redactSecrets(undefined, { key: 'hunter2' })).toEqual({});
   });
 });
 

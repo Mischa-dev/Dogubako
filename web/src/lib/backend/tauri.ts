@@ -66,7 +66,13 @@ export class TauriBackend implements Backend {
     };
   }
 
-  listTools() { return invoke<ToolInfo[]>('list_tools'); }
+  private tools: Promise<ToolInfo[]> | null = null;
+
+  listTools() {
+    const p = invoke<ToolInfo[]>('list_tools');
+    this.tools = p.catch(() => []);
+    return p;
+  }
   async listCategories(): Promise<Category[] | null> { return null; }
 
   run(toolId: string, params: Record<string, unknown>, opts: RunOptions = {}): RunHandle {
@@ -90,16 +96,18 @@ export class TauriBackend implements Backend {
         unlisten();
       }
       job = { ...job, params: job.params ?? params, created_at: job.created_at ?? created };
-      if (!opts?.ephemeral) this.recordHistory(job);
+      if (!opts?.ephemeral) await this.recordHistory(job);
       return job;
     })();
     return { done, cancel: async () => { await invoke('cancel_run', { runId }).catch(() => undefined); } };
   }
 
-  private recordHistory(job: JobView) {
+  private async recordHistory(job: JobView) {
     if (readJson<boolean>('dgb.prefs.history', true) === false) return;
+    this.tools ??= invoke<ToolInfo[]>('list_tools').catch(() => []);
+    const tool = (await this.tools).find((t) => t.id === job.tool_id);
     const list = readJson<JobView[]>(HISTORY_KEY, []);
-    const slim: JobView = { ...job };
+    const slim: JobView = { ...job, params: redactSecrets(tool, job.params) };
     if (slim.result?.text && slim.result.text.length > 100_000) {
       slim.result = { ...slim.result, text: slim.result.text.slice(0, 100_000) + '\n…(truncated)' };
     }
@@ -188,4 +196,15 @@ export class TauriBackend implements Backend {
     const { listen } = await import('@tauri-apps/api/event');
     return listen<{ id: string; done: number; total: number }>('dogubako://model-progress', (e) => cb(e.payload));
   }
+}
+
+/** Mask secret parameters (passwords, keys) before persisting history, as the
+ *  server does. Without the tool's spec nothing is known to be safe, so all
+ *  parameters are dropped. */
+export function redactSecrets(tool: Pick<ToolInfo, 'params'> | undefined, params: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!params) return {};
+  if (!tool) return {};
+  const out = { ...params };
+  for (const p of tool.params) if (p.type === 'secret' && p.name in out) out[p.name] = '••••••';
+  return out;
 }

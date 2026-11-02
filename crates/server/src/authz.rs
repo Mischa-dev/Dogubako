@@ -143,13 +143,11 @@ pub struct Principal {
 }
 
 impl Principal {
+    /// Administrative access requires an admin role and no token scope:
+    /// a scoped token never carries admin rights, even with `allow: ["*"]`,
+    /// so it cannot be used to mint an unrestricted token.
     pub fn is_admin(&self) -> bool {
-        self.role.is_admin()
-            && self
-                .token_scope
-                .as_ref()
-                .map(|t| t.allow.iter().any(|a| a == "*"))
-                .unwrap_or(true)
+        self.role.is_admin() && self.token_scope.is_none()
     }
 
     pub fn can_use(&self, spec: &ToolSpec) -> bool {
@@ -271,6 +269,18 @@ mod tests {
         assert!(admin.can_use(&img));
         assert!(!admin.can_use(&sys));
         assert!(!admin.is_admin(), "scoped tokens do not carry admin rights");
+        let mut wildcard = admin.clone();
+        wildcard.token_scope = Some(Policy {
+            allow: vec!["*".into()],
+            deny: vec!["system.*".into()],
+            ..Default::default()
+        });
+        assert!(
+            !wildcard.is_admin(),
+            "a wildcard-scoped token still carries no admin rights"
+        );
+        wildcard.token_scope = None;
+        assert!(wildcard.is_admin());
         let perms = admin.permissions(false);
         assert!(perms.has(Permission::Network));
         assert!(!perms.has(Permission::SystemInfo));

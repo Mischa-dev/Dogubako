@@ -23,7 +23,8 @@ class FakeEventSource {
   closed = false;
   constructor(url: string) { this.url = url; FakeEventSource.last = this; }
   addEventListener(name: string, cb: (e: MessageEvent) => void) { (this.listeners[name] ??= []).push(cb); }
-  emit(job: Partial<JobView>) { this.listeners.job?.forEach((cb) => cb({ data: JSON.stringify(job) } as MessageEvent)); }
+  // Like a real EventSource, a closed source delivers nothing.
+  emit(job: Partial<JobView>) { if (this.closed) return; this.listeners.job?.forEach((cb) => cb({ data: JSON.stringify(job) } as MessageEvent)); }
   close() { this.closed = true; }
 }
 
@@ -88,8 +89,22 @@ describe('HttpBackend', () => {
     await vi.waitFor(() => expect(FakeEventSource.last).not.toBeNull());
     await h.cancel();
     expect(calls.some((c) => c.url === '/api/v1/jobs/j_1/cancel' && c.init.method === 'POST')).toBe(true);
-    FakeEventSource.last!.emit(job({ status: 'cancelled' }));
+    // The cancel response is terminal: the run settles without further events.
     expect((await h.done).status).toBe('cancelled');
+    expect(FakeEventSource.last!.closed).toBe(true);
+  });
+
+  it('keeps following the stream when cancellation is still settling', async () => {
+    mockFetch((url) => ({ status: url.endsWith('/cancel') ? 200 : 202, body: job({ status: 'running' }) }));
+    const b = new HttpBackend('/api/v1');
+    const h = b.run('x.y', {});
+    await vi.waitFor(() => expect(FakeEventSource.last).not.toBeNull());
+    await h.cancel();
+    const es = FakeEventSource.last!;
+    expect(es.closed).toBe(false);
+    es.emit(job({ status: 'cancelled' }));
+    expect((await h.done).status).toBe('cancelled');
+    expect(es.closed).toBe(true);
   });
 
   it('turns API errors into ApiError with structured tool error detail', async () => {

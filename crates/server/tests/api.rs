@@ -33,6 +33,17 @@ fn test_tools() -> Vec<Arc<dyn Tool>> {
             },
         ),
         sync_tool(
+            ToolSpec::new("data.fill", "Fill", Category::Data)
+                .describe("Writes an output file of the requested size")
+                .param(ParamSpec::integer("kib").default_int(1))
+                .output(OutputKind::Files),
+            |c, p| {
+                let out = c.output_path("fill.bin");
+                std::fs::write(&out, vec![0u8; p.int_or("kib", 1) as usize * 1024])?;
+                Ok(ToolOutput::files(vec![c.artifact(&out)?]))
+            },
+        ),
+        sync_tool(
             ToolSpec::new("system.secret_info", "Secret info", Category::System)
                 .describe("Needs system_info")
                 .permission(Permission::SystemInfo),
@@ -175,7 +186,7 @@ async fn setup_login_and_csrf() {
     )
     .await;
     assert_eq!(r.status, StatusCode::OK);
-    assert_eq!(r.body["count"], 4);
+    assert_eq!(r.body["count"], 5);
     // POST without CSRF header is rejected
     let r = call(
         &t.app,
@@ -757,4 +768,81 @@ async fn mcp_endpoint() {
     )
     .await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn job_outputs_count_against_quota() {
+    let t = setup(AuthMode::Required);
+    let (cookie, csrf) = owner_session(&t).await;
+    let token = create_agent_token(
+        &t,
+        &cookie,
+        &csrf,
+        "fillbot",
+        json!({"allow": ["data.*"], "permissions": [], "quota_mb": 1}),
+    )
+    .await;
+    let bearer = format!("Bearer {token}");
+    let auth = [("authorization", bearer.as_str())];
+    let run = |kib: i64| {
+        call(
+            &t.app,
+            Method::POST,
+            "/api/v1/tools/data.fill/run",
+            &auth,
+            Some(json!({"params": {"kib": kib}, "wait_seconds": 10})),
+        )
+    };
+    // Fits: stored.
+    let r = run(600).await;
+    assert_eq!(r.body["status"], "succeeded", "{:?}", r.body);
+    // Would exceed the 1 MiB quota (600 + 600 KiB): refused, nothing stored.
+    let r = run(600).await;
+    assert_eq!(r.body["status"], "failed", "{:?}", r.body);
+    assert!(
+        r.body["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("quota"),
+        "{:?}",
+        r.body
+    );
+    let r = call(&t.app, Method::GET, "/api/v1/files", &auth, None).await;
+    assert_eq!(r.body["files"].as_array().unwrap().len(), 1, "{:?}", r.body);
+    assert_eq!(r.body["used"], 600 * 1024);
+}
+
+#[tokio::test]
+async fn scoped_tokens_never_carry_admin_rights() {
+    let t = setup(AuthMode::Required);
+    let (cookie, csrf) = owner_session(&t).await;
+    let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
+    let mint = |scope: Option<Value>| {
+        let mut body = json!({"name": "t"});
+        if let Some(s) = scope {
+            body["scope"] = s;
+        }
+        call(&t.app, Method::POST, "/api/v1/tokens", &h, Some(body))
+    };
+    // Even a wildcard scope with a deny list is a restriction, not admin.
+    let r = mint(Some(json!({"allow": ["*"], "deny": ["system.*"]}))).await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    let scoped = format!("Bearer {}", r.body["token"].as_str().unwrap());
+    let a = [("authorization", scoped.as_str())];
+    for uri in ["/api/v1/admin/users", "/api/v1/admin/tokens"] {
+        let r = call(&t.app, Method::GET, uri, &a, None).await;
+        assert_eq!(r.status, StatusCode::FORBIDDEN, "{uri}");
+    }
+    // An unscoped owner token keeps the owner's admin rights.
+    let r = mint(None).await;
+    let full = format!("Bearer {}", r.body["token"].as_str().unwrap());
+    let r = call(
+        &t.app,
+        Method::GET,
+        "/api/v1/admin/users",
+        &[("authorization", full.as_str())],
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
 }

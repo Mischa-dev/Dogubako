@@ -150,7 +150,9 @@ export function fromRunParams(tool: Pick<ToolInfo, 'params'>, params: Record<str
   const values = defaultValues(tool);
   const fileRefs: Record<string, string[]> = {};
   for (const p of tool.params) {
-    if (!(p.name in params)) continue;
+    // Secrets are never stored in history (they come back masked): leave
+    // the field empty so a re-run cannot submit the mask as the value.
+    if (!(p.name in params) || p.type === 'secret') continue;
     const v = params[p.name];
     if (p.type === 'file') {
       fileRefs[p.name] = (Array.isArray(v) ? v : [v]).filter((x): x is string => typeof x === 'string');

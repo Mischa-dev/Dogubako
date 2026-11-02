@@ -35,6 +35,9 @@ pub struct JobManager {
     live: Mutex<HashMap<String, Live>>,
     host_fs_enabled: bool,
     max_job: Duration,
+    /// Serializes "check quota + register outputs" so concurrent jobs of one
+    /// user cannot together exceed the storage quota.
+    store_lock: Mutex<()>,
 }
 
 pub fn new_job_id() -> String {
@@ -65,6 +68,7 @@ impl JobManager {
             live: Mutex::new(HashMap::new()),
             host_fs_enabled,
             max_job,
+            store_lock: Mutex::new(()),
         }
     }
 
@@ -154,12 +158,14 @@ impl JobManager {
         let p = principal.clone();
         let job_id = view.id.clone();
         let via = via.to_string();
+        let quota = principal.quota_bytes(quota_default_mb);
         tokio::spawn(async move {
-            me.execute(job_id, p, params, tx, cancel, via).await;
+            me.execute(job_id, p, params, tx, cancel, via, quota).await;
         });
         Ok(view)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn execute(
         self: Arc<Self>,
         job_id: String,
@@ -168,6 +174,7 @@ impl JobManager {
         tx: watch::Sender<JobView>,
         cancel: CancellationToken,
         via: String,
+        quota: u64,
     ) {
         let user_sem = self.user_sem(&p);
         let permits = tokio::select! {
@@ -238,14 +245,31 @@ impl JobManager {
             Ok((out, stats)) => {
                 let mut artifacts = vec![];
                 let mut err = None;
-                for a in &out.artifacts {
-                    match self.storage.register_artifact(&p.user_id, &job_id, a) {
-                        Ok(v) => artifacts.push(v),
-                        Err(e) => {
-                            err = Some(ToolError::failed(format!("storing output failed: {e}")))
+                let incoming: u64 = out
+                    .artifacts
+                    .iter()
+                    .map(|a| std::fs::metadata(&a.path).map(|m| m.len()).unwrap_or(0))
+                    .sum();
+                let _guard = self.store_lock.lock().unwrap();
+                let used = self.db.storage_used(&p.user_id);
+                if incoming > 0 && used.saturating_add(incoming) > quota {
+                    err = Some(ToolError::failed(format!(
+                        "storage quota exceeded: outputs need {} but only {} of {} remain; delete some files first",
+                        dogubako_core::util::human_size(incoming),
+                        dogubako_core::util::human_size(quota.saturating_sub(used)),
+                        dogubako_core::util::human_size(quota)
+                    )));
+                } else {
+                    for a in &out.artifacts {
+                        match self.storage.register_artifact(&p.user_id, &job_id, a) {
+                            Ok(v) => artifacts.push(v),
+                            Err(e) => {
+                                err = Some(ToolError::failed(format!("storing output failed: {e}")))
+                            }
                         }
                     }
                 }
+                drop(_guard);
                 if let Some(e) = err {
                     view.status = JobStatus::Failed;
                     view.error = Some(e);
