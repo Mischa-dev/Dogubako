@@ -51,8 +51,14 @@ impl Table {
             ),
         ))
     }
+    /// Resolve a comma-separated column list; an explicit list that names no
+    /// column (e.g. just ",") is an error rather than an empty selection.
     pub fn cols(&self, list: &str) -> ToolResult<Vec<usize>> {
-        split_list(list).iter().map(|c| self.col(c)).collect()
+        let names = split_list(list);
+        if names.is_empty() {
+            return Err(ToolError::invalid("columns", "select at least one column"));
+        }
+        names.iter().map(|c| self.col(c)).collect()
     }
     fn normalize(&mut self) {
         let w = self
@@ -2528,6 +2534,27 @@ mod tests {
                 .await
                 .unwrap_err()
                 .code(),
+            "invalid_input"
+        );
+        // A selector naming no column is rejected (split/merge used to panic).
+        for op in ["split", "merge", "drop"] {
+            assert_eq!(
+                h.run("data.columns", c(op, json!({"columns": " , "})))
+                    .await
+                    .unwrap_err()
+                    .code(),
+                "invalid_input",
+                "{op}"
+            );
+        }
+        assert_eq!(
+            h.run(
+                "data.duplicates",
+                json!({"text": "a\n1\n2\n", "columns": ","})
+            )
+            .await
+            .unwrap_err()
+            .code(),
             "invalid_input"
         );
     }
