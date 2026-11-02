@@ -51,6 +51,13 @@ async fn repeated_separators_are_bounded() {
         json!({"text": lines, "prefix": big, "skip_empty": false}),
     )
     .await;
+    // Empty fields joined with an empty delimiter still count per selection.
+    limited(
+        &h,
+        "text.column_extract",
+        json!({"text": "|".repeat(99_999), "delimiter": "|", "output_delimiter": "", "columns": vec!["1-100000"; 10_000].join(",")}),
+    )
+    .await;
     // Repeating a column in the list repeats it in every line.
     limited(
         &h,
@@ -132,6 +139,66 @@ async fn json_results_are_bounded() {
     }
     let text = serde_json::to_string(&doc).unwrap();
     limited(&h, "dev.jsonpath", json!({"query": "$..*", "text": text})).await;
+    // Repeated selectors keep duplicates: 2^30 matches of a tiny document.
+    let doc = format!("{}0{}", "[".repeat(30), "]".repeat(30));
+    limited(
+        &h,
+        "dev.jsonpath",
+        json!({"query": format!("${}", "[0,0]".repeat(30)), "text": doc}),
+    )
+    .await;
+    // A couple of repeats on a small document are still answered.
+    let out = h
+        .run("dev.jsonpath", json!({"query": "$[0,0]", "text": "[1]"}))
+        .await
+        .unwrap();
+    assert_eq!(out.data["count"], 2);
+    let out = h
+        .run(
+            "dev.jsonpath",
+            json!({"query": "$..a..b", "text": r#"{"a":{"b":1,"c":{"b":2}}}"#}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["count"], 2);
+
+    // A diff of a long key over many differing items repeats the key.
+    let key = "k".repeat(100_000);
+    let a = format!("{{\"{key}\":[{}0]}}", "0,".repeat(100_000));
+    let b = format!("{{\"{key}\":[{}1]}}", "1,".repeat(100_000));
+    limited(
+        &h,
+        "dev.diff_json",
+        json!({"original": a, "changed": b, "format": "json"}),
+    )
+    .await;
+    let out = h
+        .run(
+            "dev.diff_json",
+            json!({"original": r#"{"a":[1,2]}"#, "changed": r#"{"a":[1,3]}"#, "format": "json"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["changed"], 1);
+
+    // Schema errors under a long property name don't each keep the name.
+    let key = "k".repeat(750_000);
+    let schema = json!({"properties": {key.clone(): {"items": {"type": "string"}}}});
+    let doc = format!("{{\"{key}\":[{}0]}}", "0,".repeat(999));
+    let out = h
+        .run(
+            "dev.json_schema_validate",
+            json!({"schema": schema.to_string(), "text": doc}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["errors"], 1000);
+    assert!(
+        out.data.to_string().len() < 10_000_000,
+        "{}",
+        out.data.to_string().len()
+    );
+
     // A long key over many array items: every location repeats the key.
     let text = format!(
         "{{\"{}\":[{}0]}}",
@@ -182,6 +249,13 @@ async fn wrap_indent_and_regex_groups_are_bounded() {
         .unwrap();
     assert_eq!(out.text.as_deref(), Some("aa bb\n> cc"));
 
+    // A long group name is repeated as a key in every match.
+    limited(
+        &h,
+        "dev.regex",
+        json!({"pattern": format!("(?P<{}>x)", "n".repeat(100_000)), "text": "x".repeat(100_000), "max_matches": 100_000}),
+    )
+    .await;
     // 100 nested groups each capture the whole 4 MiB match.
     let pattern = format!("{}a+{}", "(".repeat(100), ")".repeat(100));
     limited(
@@ -230,6 +304,23 @@ async fn replacements_and_column_splits_are_bounded() {
         &h,
         "data.columns",
         json!({"text": wide, "operation": "split", "columns": "a", "separator": "|"}),
+    )
+    .await;
+
+    // Generated part names repeat a long column name.
+    let long = format!("{}\n{}\n", "h".repeat(100_000), "|".repeat(99_999));
+    limited(
+        &h,
+        "data.columns",
+        json!({"text": long, "header": "yes", "operation": "split", "columns": "1", "separator": "|"}),
+    )
+    .await;
+
+    // The default merged name joins a long header once per selection.
+    limited(
+        &h,
+        "data.columns",
+        json!({"text": format!("{}\nx\n", "h".repeat(100_000)), "header": "yes", "operation": "merge", "columns": "1,".repeat(100_000)}),
     )
     .await;
 
@@ -296,6 +387,15 @@ async fn table_exports_and_sparse_json_are_bounded() {
         json!({"text": csv, "header": "yes", "columns": cols}),
     )
     .await;
+    // Repeated comparison columns are compared once, not copied per repeat.
+    let out = h
+        .run(
+            "data.duplicates",
+            json!({"text": format!("a\n{}\n{}\n", "x".repeat(100_000), "x".repeat(100_000)), "header": "yes", "columns": cols}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["duplicate_rows_removed"], 1, "{}", out.data);
     // A long header repeated as a key in every object.
     let csv = format!("{}\n{}", "k".repeat(100_000), "1\n".repeat(100_000));
     for shape in ["objects", "ndjson"] {
@@ -306,6 +406,39 @@ async fn table_exports_and_sparse_json_are_bounded() {
         )
         .await;
     }
+
+    // A long key over a long array: every leaf's path repeats the key.
+    let text = format!(
+        "[{{\"{}\":[{}0]}}]",
+        "k".repeat(100_000),
+        "0,".repeat(100_000)
+    );
+    limited(&h, "data.json_to_csv", json!({"text": text})).await;
+    // The same over many records: each record's paths must not be kept.
+    let rec = format!("{{\"{}\":[{}0]}}", "k".repeat(100_000), "0,".repeat(999));
+    let text = format!("[{}]", vec![rec; 100].join(","));
+    let out = h.run("data.json_to_csv", json!({"text": text})).await;
+    assert!(
+        out.as_ref()
+            .map_or_else(|e| e.code() == "limit_exceeded", |_| true),
+        "{:?}",
+        out.err()
+    );
+
+    // A huge allowed-values rule is not copied into every error message.
+    let out = h
+        .run(
+            "data.validate",
+            json!({"text": format!("a\n{}", "x\n".repeat(1000)), "rules": {"a": {"values": ["v".repeat(1_500_000)]}}}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["errors"], 1000);
+    assert!(
+        out.data.to_string().len() < 1_000_000,
+        "{}",
+        out.data.to_string().len()
+    );
 
     // Normal exports still work.
     let out = h

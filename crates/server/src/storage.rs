@@ -65,6 +65,9 @@ pub fn file_url(id: &str) -> String {
 impl Storage {
     pub fn new(dir: PathBuf, db: Arc<Db>, retention_hours: u64) -> std::io::Result<Self> {
         std::fs::create_dir_all(&dir)?;
+        // Tools run external commands from a scratch directory, so stored
+        // paths must not be relative to the server's working directory.
+        let dir = std::fs::canonicalize(&dir)?;
         Ok(Storage {
             dir,
             db,
@@ -238,7 +241,10 @@ impl FileResolver for StoredResolver {
             .storage
             .get(&self.owner, id)
             .ok_or_else(|| ToolError::invalid(param, format!("file '{id}' not found")))?;
-        let path = PathBuf::from(&f.path);
+        // Rows stored before the directory was made absolute may still hold
+        // relative paths; resolve them here, before the working directory
+        // changes for an external command.
+        let path = std::fs::canonicalize(&f.path).unwrap_or_else(|_| PathBuf::from(&f.path));
         if !path.is_file() {
             return Err(ToolError::invalid(
                 param,
@@ -249,5 +255,29 @@ impl FileResolver for StoredResolver {
             path,
             name: f.view.name,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_data_dir_yields_absolute_input_paths() {
+        // A relative directory (as with the default `./data`) must not leak
+        // into tool inputs: external commands run from a scratch directory.
+        let base = tempfile::tempdir_in(".").unwrap();
+        let rel = PathBuf::from(".")
+            .join(base.path().file_name().unwrap())
+            .join("files");
+        let db = Arc::new(Db::open(&base.path().join("db.sqlite")).unwrap());
+        let storage = Arc::new(Storage::new(rel, db, 1).unwrap());
+        assert!(storage.dir.is_absolute(), "{}", storage.dir.display());
+        let tmp = base.path().join("upload.txt");
+        std::fs::write(&tmp, b"hi").unwrap();
+        let view = storage.store("u", "a.txt", &tmp, "upload", None).unwrap();
+        let f = storage.resolver("u").resolve("file", &view.id).unwrap();
+        assert!(f.path.is_absolute(), "{}", f.path.display());
+        assert_eq!(std::fs::read(&f.path).unwrap(), b"hi");
     }
 }
