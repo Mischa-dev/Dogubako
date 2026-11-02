@@ -4,7 +4,7 @@
 The README and the website share one set of screenshots. Refresh docs/screenshots
 first (see docs/screenshots), then run this from the repository root:
 
-    python3 site/scripts/screenshots.py
+    python3 website/scripts/screenshots.py
 
 Needs Pillow (`pip install pillow`).
 """
@@ -14,7 +14,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "docs" / "screenshots"
-OUT = ROOT / "site" / "screenshots"
+OUT = ROOT / "website" / "screenshots"
 MAX_WIDTH = 1600
 
 OUT.mkdir(parents=True, exist_ok=True)

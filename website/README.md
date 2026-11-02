@@ -1,6 +1,9 @@
 # dogubako.app
 
-The project website: one static page, no build step, no framework, no
+The project website. The documentation is a separate Astro site at
+docs.dogubako.app, in `site/`.
+
+This is a single static page with no build step, no framework and no
 third-party requests. Fonts are self-hosted (SIL OFL, see `fonts/`), and the
 colours and type mirror `web/src/styles/tokens.css` so the site and the app look
 like one thing.
@@ -16,7 +19,7 @@ like one thing.
 ## Preview
 
 ```sh
-python3 -m http.server --directory site 8000
+python3 -m http.server --directory website 8000
 # open http://localhost:8000
 ```
 
@@ -27,7 +30,7 @@ first, then:
 
 ```sh
 pip install pillow
-python3 site/scripts/screenshots.py
+python3 website/scripts/screenshots.py
 ```
 
 ## Placeholders
@@ -42,6 +45,6 @@ These are marked with `PLACEHOLDER` comments in `index.html`:
 
 ## Deploying
 
-Any static host works: serve the `site/` folder as the web root. For GitHub
-Pages, publish `site/` (for example with `actions/upload-pages-artifact` and
+Any static host works: serve the `website/` folder as the web root. For GitHub
+Pages, publish `website/` (for example with `actions/upload-pages-artifact` and
 `actions/deploy-pages`) and keep `CNAME` so the domain stays `dogubako.app`.

@@ -128,7 +128,7 @@ apps/desktop         Tauri 2 desktop app
 web                  React + TypeScript UI (shared by desktop and web)
 extensions           example TOML extension
 deploy               compose overlays, systemd unit, example config
-site                 the dogubako.app website (static, no build step)
+website              the dogubako.app website (static, no build step)
 docs                 documentation
 ```
 
