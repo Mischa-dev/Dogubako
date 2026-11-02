@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Settings as SettingsIcon, SlidersHorizontal, Package, Brain, Info, Sun, Moon, Monitor, RefreshCw, CircleCheck, CircleDashed,
-  Download, Trash2, ExternalLink, ChevronRight,
+  Download, Trash2, ExternalLink, ChevronRight, Sparkles,
 } from 'lucide-react';
+import { AssistantSettingsPanel } from '../components/ModelPicker';
 import type { DepInfo, ModelDownload, ModelInfo } from '../lib/types';
 import { useApp, notifyToolsChanged } from '../lib/app';
 import { asServer } from '../lib/backend';
@@ -16,6 +17,7 @@ import { LogoMark } from '../components/Logo';
 
 const SECTIONS = [
   { id: 'general', label: 'General', icon: SlidersHorizontal },
+  { id: 'assistant', label: 'Plain words', icon: Sparkles },
   { id: 'dependencies', label: 'Dependencies', icon: Package },
   { id: 'models', label: 'Models', icon: Brain },
   { id: 'about', label: 'About', icon: Info },
@@ -36,6 +38,7 @@ export default function SettingsPage({ section = 'general' }: { section?: string
         </nav>
         <div className="settings-body">
           {cur.id === 'general' && <General />}
+          {cur.id === 'assistant' && <Section title="Plain words" description="Say what you want done instead of picking a tool."><AssistantSettingsPanel /></Section>}
           {cur.id === 'dependencies' && <Dependencies />}
           {cur.id === 'models' && <Models />}
           {cur.id === 'about' && <About />}
@@ -120,15 +123,31 @@ function defaultOs(platform?: string): (typeof OS_KEYS)[number]['key'] {
   return 'apt';
 }
 
+/** Desktop-only: engines the app downloads into its own folder. */
+interface EngineBackend {
+  engineInstall(id: string): Promise<void>;
+  onEngineProgress(cb: (p: { id: string; done: number; total: number }) => void): Promise<() => void>;
+}
+
 function Dependencies() {
   const { backend, isAdmin, isServer, toolMap } = useApp();
   const [data, setData] = useState<{ dependencies: DepInfo[]; platform?: string } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [os, setOs] = useState<(typeof OS_KEYS)[number]['key'] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [fetching, setFetching] = useState<{ id: string; done: number; total: number } | null>(null);
   const load = useCallback(async () => {
     try { const d = await backend.deps(); setData(d); setErr(null); } catch (e) { setErr(errorText(e)); }
   }, [backend]);
+  const engines = backend as Partial<EngineBackend>;
+  const download = async (d: DepInfo) => {
+    if (!d.downloadable || !engines.engineInstall) return;
+    const id = d.downloadable;
+    setFetching({ id, done: 0, total: d.download_bytes ?? 0 });
+    const stop = await engines.onEngineProgress?.((p) => { if (p.id === id) setFetching(p); });
+    try { await engines.engineInstall(id); await load(); notifyToolsChanged(); toast.success(`${d.name} is ready`); } catch (e) { toast.error(errorText(e)); }
+    finally { stop?.(); setFetching(null); }
+  };
   useEffect(() => { void load(); }, [load]);
   const osKey = os ?? defaultOs(data?.platform);
   const sorted = useMemo(() => [...(data?.dependencies ?? [])].sort((a, b) => Number(a.found) - Number(b.found) || (b.used_by?.length ?? 0) - (a.used_by?.length ?? 0)), [data]);
@@ -165,12 +184,19 @@ function Dependencies() {
                       <span className="dep-purpose">{d.purpose}</span>
                     </span>
                     {tools.length > 0 && <span className="dep-count">{tools.length} tool{tools.length === 1 ? '' : 's'}</span>}
-                    <Badge tone={d.found ? 'success' : 'neutral'}>{d.found ? 'Found' : 'Missing'}</Badge>
+                    <Badge tone={d.found ? 'success' : 'neutral'}>{d.source === 'bundled' ? 'Built in' : d.source === 'downloaded' ? 'Downloaded' : d.found ? 'Found' : d.downloadable ? 'Not downloaded' : 'Missing'}</Badge>
                     <ChevronRight size={14} aria-hidden className="chev" />
                   </button>
                   {isOpen && (
                     <div className="dep-body">
-                      {!d.found && (cmd ? (
+                      {!d.found && d.downloadable && engines.engineInstall ? (
+                        <div className="cmd">
+                          <Button size="sm" disabled={fetching != null} onClick={() => void download(d)}>
+                            {fetching?.id === d.downloadable ? `Downloading… ${formatBytes(fetching.done)}` : `Download (${formatBytes(d.download_bytes)})`}
+                          </Button>
+                          <span className="muted small">Dogubako keeps it in its own folder and updates it with the app.</span>
+                        </div>
+                      ) : !d.found && (cmd ? (
                         <div className="cmd"><code className="mono">{cmd}</code><CopyButton text={cmd} iconOnly label="Copy install command" /></div>
                       ) : d.install_hint ? <p className="small">{d.install_hint}</p> : null)}
                       {!d.found && d.install?.url && (

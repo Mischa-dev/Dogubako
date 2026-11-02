@@ -1,0 +1,49 @@
+name: Engines
+
+# Builds the app-managed engine folders on a real Mac and smoke-tests them.
+# Runs when the engine pins or scripts change; nothing is published.
+on:
+  push:
+    paths: ["packaging/engines/**", ".github/workflows/engines.yml"]
+  pull_request:
+    paths: ["packaging/engines/**", ".github/workflows/engines.yml"]
+  workflow_dispatch:
+
+jobs:
+  lock:
+    name: Lock matches engines.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python3 -I packaging/engines/lock.py --check
+
+  macos:
+    name: Assemble + smoke test (macOS arm64)
+    needs: lock
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/cache@v4
+        with:
+          path: build/engines/cache
+          key: engines-${{ hashFiles('packaging/engines/engines.lock.json') }}
+      - run: python3 -I packaging/engines/fetch.py
+      - run: packaging/engines/build-from-source.sh whisper
+      - run: python3 -I packaging/engines/assemble.py
+      - name: Smoke test with Homebrew hidden
+        run: |
+          sudo mv /opt/homebrew /opt/homebrew.hidden
+          packaging/engines/smoke.sh apps/desktop/src-tauri/engines build/engines/packs/*/
+          sudo mv /opt/homebrew.hidden /opt/homebrew
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engines-darwin-arm64
+          path: |
+            apps/desktop/src-tauri/engines
+            build/engines/packs/*.tar.gz
+            build/engines/packs/packs.json
+          retention-days: 7

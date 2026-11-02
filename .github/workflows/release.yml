@@ -5,50 +5,93 @@ on:
     tags: ["v*"]
 
 jobs:
+  # The alpha is macOS only: Linux and Windows desktop bundles come back once
+  # their installers accept the pre-release version (Tauri's MSI does not).
   desktop:
-    name: Desktop bundles (${{ matrix.platform }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: ubuntu-22.04
-          - platform: macos-latest
-            args: --target universal-apple-darwin
-          - platform: windows-latest
-    runs-on: ${{ matrix.platform }}
+    name: macOS app (Apple silicon)
+    runs-on: macos-15
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-      - if: matrix.platform == 'ubuntu-22.04'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev patchelf
+        with: { targets: aarch64-apple-darwin }
       - run: npm ci
         working-directory: web
+      - name: Apple signing (optional)
+        # Only exported when set, so a missing secret means an unsigned build
+        # instead of a failed signing attempt with empty values.
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            val="$(printenv "$v" || true)"
+            if [ -n "$val" ]; then
+              delim="EOF_$(openssl rand -hex 8)"
+              printf '%s<<%s\n%s\n%s\n' "$v" "$delim" "$val" "$delim" >> "$GITHUB_ENV"
+            fi
+          done
+          if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then echo "::notice::No Apple signing identity: building an unsigned DMG"; fi
+          # Re-signs each engine folder (bundled and every pack) before packing;
+          # a no-op without APPLE_SIGNING_IDENTITY.
+          if [ -x packaging/macos/sign-engines.sh ]; then
+            echo "DOGUBAKO_ENGINE_SIGN_CMD=$PWD/packaging/macos/sign-engines.sh" >> "$GITHUB_ENV"
+          fi
+      - name: Engines
+        env:
+          # The app downloads on-demand engines from this release's assets.
+          DOGUBAKO_ENGINE_PACK_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+        run: |
+          python3 -I packaging/engines/lock.py --check
+          python3 -I packaging/engines/fetch.py
+          packaging/engines/build-from-source.sh whisper
+          python3 -I packaging/engines/assemble.py
+          sudo mv /opt/homebrew /opt/homebrew.hidden
+          packaging/engines/smoke.sh apps/desktop/src-tauri/engines build/engines/packs/*/
+          sudo mv /opt/homebrew.hidden /opt/homebrew
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Without a Developer ID, ad-hoc sign the bundle ("-"): an unsigned
+          # bundle shows as "damaged" once downloaded, instead of Open Anyway.
+          # Engines are signed earlier, so this only affects the app bundle.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
         with:
           projectPath: apps/desktop/src-tauri
           tagName: ${{ github.ref_name }}
           releaseName: Dogubako ${{ github.ref_name }}
           releaseDraft: true
-          args: ${{ matrix.args }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          args: --target aarch64-apple-darwin --config tauri.engines.conf.json
+      - name: Upload engine packs
+        run: gh release upload "${{ github.ref_name }}" build/engines/packs/*.tar.gz build/engines/packs/packs.json --clobber
 
   cli:
-    name: CLI/server binaries (${{ matrix.target }})
+    name: CLI/server binary (${{ matrix.target }})
+    needs: desktop   # uploads into the draft release the desktop job created
     strategy:
       fail-fast: false
       matrix:
         include:
           - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
-          - { os: macos-latest, target: aarch64-apple-darwin }
-          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { os: macos-15, target: aarch64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, ext: .exe }
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -58,7 +101,68 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: "${{ matrix.target }}" }
       - run: cargo build --release --locked -p dogubako-cli --target ${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
+      - name: Attach to the release
+        shell: bash
+        run: |
+          out="dogubako-${{ matrix.target }}${{ matrix.ext }}"
+          cp "target/${{ matrix.target }}/release/dogubako${{ matrix.ext }}" "$out"
+          gh release upload "${{ github.ref_name }}" "$out" --clobber
+
+  homelab-image:
+    name: Homelab image (ghcr.io, linux/amd64)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
-          name: dogubako-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/dogubako*
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # A new package on ghcr.io is private until Mischa makes it public.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/mischa-dev/dogubako:${{ steps.v.outputs.version }}
+
+  engine-sources:
+    name: Engine source code (GPL source offer)
+    needs: desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      # Fails if any engine's source can't be fetched: no release without it.
+      - run: python3 -I packaging/release/engine_sources.py --version "${{ steps.v.outputs.version }}"
+      - run: gh release upload "${{ github.ref_name }}" "build/release/engine-sources-${{ steps.v.outputs.version }}.tar" --clobber
+
+  checksums:
+    name: SHA256SUMS.txt
+    needs: [desktop, cli, engine-sources]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checksum every release asset
+        run: |
+          mkdir assets && cd assets
+          gh release download "${{ github.ref_name }}" --repo "${{ github.repository }}" --pattern '*'
+          rm -f SHA256SUMS.txt
+          sha256sum * | tee ../SHA256SUMS.txt
+          cd .. && gh release upload "${{ github.ref_name }}" SHA256SUMS.txt --repo "${{ github.repository }}" --clobber
