@@ -169,6 +169,33 @@ fn tz_param(name: &str, default: &str) -> ParamSpec {
         .placeholder("Europe/Berlin")
 }
 
+/// `[-+]digits[.digits]` × `scale`, exactly (fraction digits beyond the
+/// scale's resolution are truncated). `None` for any other syntax.
+fn decimal_to_scaled(t: &str, scale: i128) -> Option<i128> {
+    let (neg, body) = match t.strip_prefix('-') {
+        Some(r) => (true, r),
+        None => (false, t.strip_prefix('+').unwrap_or(t)),
+    };
+    let (int, frac) = body.split_once('.').unwrap_or((body, ""));
+    if (int.is_empty() && frac.is_empty())
+        || !int.bytes().all(|b| b.is_ascii_digit())
+        || !frac.bytes().all(|b| b.is_ascii_digit())
+        || int.len() > 30
+    {
+        return None;
+    }
+    let mut v: i128 = if int.is_empty() { 0 } else { int.parse().ok()? };
+    v = v.checked_mul(scale)?;
+    // Fraction: only as many digits as the scale can represent.
+    let digits = scale.to_string().len() - 1;
+    let f: String = frac.chars().take(digits).collect();
+    if !f.is_empty() {
+        let fv: i128 = f.parse().ok()?;
+        v = v.checked_add(fv * 10i128.pow((digits - f.len()) as u32))?;
+    }
+    Some(if neg { -v } else { v })
+}
+
 /// Interpret user input as an instant: "now", a Unix number (unit auto-detected) or a date string in `tz`.
 pub(crate) fn parse_instant(
     s: &str,
@@ -196,11 +223,17 @@ pub(crate) fn parse_instant(
             }
             u => u,
         };
-        let nanos: i128 = match unit {
-            "ms" => (n * 1e6) as i128,
-            "us" => (n * 1e3) as i128,
-            "ns" => n as i128,
-            _ => (n * 1e9) as i128,
+        let scale: i128 = match unit {
+            "ms" => 1_000_000,
+            "us" => 1_000,
+            "ns" => 1,
+            _ => 1_000_000_000,
+        };
+        // Exact decimal arithmetic for plain numbers (f64 cannot hold
+        // nanosecond timestamps); floating point only for exponent forms.
+        let nanos: i128 = match decimal_to_scaled(t, scale) {
+            Some(v) => v,
+            None => (n * scale as f64) as i128,
         };
         let secs = nanos.div_euclid(1_000_000_000) as i64;
         let ns = nanos.rem_euclid(1_000_000_000) as u32;
@@ -701,6 +734,28 @@ mod tests {
             .unwrap();
         assert_eq!(out.data["interpreted_as"], "milliseconds");
         assert_eq!(out.data["unix_milliseconds"], 1700000000123i64);
+        // Nanosecond and fractional inputs are exact (no f64 rounding).
+        let out = h
+            .run(
+                "dev.timestamp",
+                json!({"value": "1700000000000000001", "unit": "ns"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.data["unix_nanoseconds"], "1700000000000000001");
+        let out = h
+            .run(
+                "dev.timestamp",
+                json!({"value": "1700000000.123456789", "unit": "s"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.data["unix_nanoseconds"], "1700000000123456789");
+        let out = h
+            .run("dev.timestamp", json!({"value": "-1.5", "unit": "s"}))
+            .await
+            .unwrap();
+        assert_eq!(out.data["iso8601_utc"], "1969-12-31T23:59:58.500Z");
         let out = h
             .run(
                 "dev.timestamp",

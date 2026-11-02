@@ -16,14 +16,14 @@ import { describeError } from '../../lib/errors';
 import { BoxEditor } from './BoxEditor';
 
 /** Image redaction editor: detect faces (optional) → edit boxes → image.redact. */
-export default function FaceRedact({ tool }: { tool: ToolInfo }) {
+export default function FaceRedact({ tool, jobId }: { tool: ToolInfo; jobId?: string | null }) {
   const { toolMap, backend } = useApp();
   const redact = toolMap.get('image.redact');
   const detect = toolMap.get('image.face_detect');
   const canDetect = !!detect && detect.availability.available && detect.permitted !== false;
   // The final step always uses image.redact (single image, explicit regions).
   const target = redact && redact.permitted !== false ? redact : tool;
-  const form = useToolForm(target);
+  const form = useToolForm(target, { jobId });
   useToolShortcuts(form, false);
   const detectJob = useJob(backend);
   const [boxes, setBoxes] = useState<Region[]>([]);
@@ -51,7 +51,18 @@ export default function FaceRedact({ tool }: { tool: ToolInfo }) {
   const lastRef = useRef<string | undefined>();
   useEffect(() => {
     if (item?.ref && item.ref !== lastRef.current) {
+      const first = lastRef.current === undefined;
       lastRef.current = item.ref;
+      // "Open with same settings": the restored run's image keeps the
+      // regions the user selected (image.redact `regions` or
+      // image.face_blur `extra_regions`) instead of re-detecting.
+      const restored = first && jobId ? restoredRegions(form.job.job?.params) : null;
+      if (restored) {
+        setBoxes(restored);
+        setSelected(null);
+        setDetected(null);
+        return;
+      }
       setBoxes([]);
       setNatural(null);
       setDetected(null);
@@ -153,4 +164,14 @@ export default function FaceRedact({ tool }: { tool: ToolInfo }) {
       </div>
     </div>
   );
+}
+
+export function restoredRegions(params: Record<string, unknown> | undefined): Region[] | null {
+  const raw = params?.regions ?? params?.extra_regions;
+  const list = typeof raw === 'string' ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : raw;
+  if (!Array.isArray(list)) return null;
+  const regs = list.filter((r): r is Region =>
+    r && ['x', 'y', 'width', 'height'].every((k) => Number.isFinite(Number((r as any)[k]))))
+    .map((r) => ({ x: Number(r.x), y: Number(r.y), width: Number(r.width), height: Number(r.height) }));
+  return regs.length ? regs : null;
 }
