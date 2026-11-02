@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Clock, CornerDownLeft, Folder, History, House, Moon, Search, Settings, Shield, Star, Sun, Package, KeyRound, type LucideIcon,
+  Clock, CornerDownLeft, Folder, History, House, Moon, Search, Settings, Shield, Pin, Sun, Package, KeyRound, type LucideIcon,
 } from 'lucide-react';
 import { useApp } from '../lib/app';
 import { navigate, href } from '../lib/router';
 import { search, fuzzyMatch } from '../lib/search';
+import { matchIntent } from '../lib/intent';
 import { cycleTheme, favorites as favStore, recents as recStore, resolvedTheme, useStore } from '../lib/store';
 import { categoryIcon } from '../lib/icons';
 import type { ToolInfo } from '../lib/types';
@@ -25,7 +26,7 @@ interface Item {
   tool?: ToolInfo;
 }
 
-export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boolean; onClose: () => void; initialQuery?: string }) {
   const { docs, toolMap, categories, isServer, isAdmin, categoryLabel } = useApp();
   const favs = useStore(favStore);
   const recs = useStore(recStore);
@@ -38,12 +39,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   useLayoutEffect(() => {
     if (open) {
       prevFocus.current = document.activeElement;
-      setQ('');
+      setQ(initialQuery);
       setActive(0);
       input.current?.focus();
     } else {
       (prevFocus.current as HTMLElement | null)?.focus?.();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const actions = useMemo<Item[]>(() => {
@@ -54,7 +56,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       { key: 'a:history', kind: 'action', label: 'Open run history', icon: History, run: () => navigate(href.history) },
       { key: 'a:settings', kind: 'action', label: 'Open settings', icon: Settings, run: () => navigate(href.settings()) },
       { key: 'a:deps', kind: 'action', label: 'Dependencies', sub: 'Settings', icon: Package, run: () => navigate(href.settings('dependencies')) },
-      { key: 'a:favs', kind: 'action', label: 'Favorites', icon: Star, run: () => navigate(href.favorites) },
+      { key: 'a:favs', kind: 'action', label: 'Pinned tools', icon: Pin, run: () => navigate(href.favorites) },
       { key: 'a:recent', kind: 'action', label: 'Recently used', icon: Clock, run: () => navigate(href.recent) },
     ];
     if (isServer) {
@@ -84,7 +86,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       }
       for (const id of favs) {
         const t = toolMap.get(id);
-        if (t && !seen.has(id) && t.permitted !== false) { out.push(toolItem(t, [], 'Favorites')); seen.add(id); }
+        if (t && !seen.has(id) && t.permitted !== false) { out.push(toolItem(t, [], 'Pinned')); seen.add(id); }
         if (out.length >= 12) break;
       }
       return [...out, ...actions];
@@ -96,6 +98,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       boost: (id) => (favSet.has(id) ? 6 : 0) + (recentIds.has(id) ? Math.max(0, 8 - recentIds.get(id)!) : 0),
     });
     const tools = hits.map((h) => toolItem(h.item, h.ranges, 'Tools'));
+    // Home invites "say what you need": understand plain words ("make this smaller",
+    // "no location") that name no tool, and offer what they usually mean.
+    const found = new Set(hits.map((h) => h.item.id));
+    const meant = matchIntent(docs.map((d) => d.item).filter((t) => t.permitted !== false), docs, query)
+      .filter((t) => !found.has(t.id))
+      .slice(0, Math.max(0, 8 - tools.length))
+      .map((t) => toolItem(t, [], 'Suggested'));
     const ql = query.toLowerCase();
     const cats: Item[] = categories
       .filter((c) => c.label.toLowerCase().includes(ql) || c.id.startsWith(ql))
@@ -109,7 +118,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       .sort((x, y) => y.m!.score - x.m!.score)
       .slice(0, 4)
       .map(({ a, m }) => ({ ...a, ranges: toRanges(m!.positions) }));
-    return [...tools, ...cats, ...acts];
+    return [...tools, ...meant, ...cats, ...acts];
   }, [q, docs, recs, favs, toolMap, actions, categories, categoryLabel]);
 
   useEffect(() => { setActive(0); }, [q]);

@@ -101,6 +101,59 @@ export function cycleTheme() {
   setPref('theme', cur === 'dark' ? 'light' : 'dark');
 }
 
-/** A stored file chosen on the Files page to prefill the next tool's input (session only). */
+/** File(s) chosen elsewhere (Files page, drop screen, bench) to prefill the next tool's input. */
 export interface PendingInput { ref: string; name: string; size: number; mime: string }
-export const pendingInput = { value: null as PendingInput | null };
+export const pendingInput = { value: null as PendingInput | PendingInput[] | null };
+
+/** Files dropped or picked and waiting on the drop screen. Session only, so a reload keeps them. */
+const DROPPED_KEY = 'dgb.dropped';
+export function getDropped(): PendingInput[] {
+  try { const v = JSON.parse(sessionStorage.getItem(DROPPED_KEY) ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+export function setDropped(files: PendingInput[]) {
+  try { sessionStorage.setItem(DROPPED_KEY, JSON.stringify(files)); } catch { /* storage unavailable: drop screen still works for this view */ }
+  droppedMem = files;
+}
+let droppedMem: PendingInput[] = [];
+export const droppedNow = () => (droppedMem.length ? droppedMem : getDropped());
+
+/** Tool page layout: where the controls sit, how the preview shows, what the tool row lists. */
+export interface ToolLayout { controls: 'below' | 'left' | 'right'; preview: 'side' | 'result'; row: 'file' | 'pinned' }
+export const TOOL_LAYOUT_DEFAULT: ToolLayout = { controls: 'below', preview: 'side', row: 'file' };
+const isToolLayout = (v: any): v is ToolLayout =>
+  !!v && ['below', 'left', 'right'].includes(v.controls) && ['side', 'result'].includes(v.preview) && ['file', 'pinned'].includes(v.row);
+export const toolLayout = new Store<ToolLayout>('dgb.toolLayout', TOOL_LAYOUT_DEFAULT, isToolLayout);
+
+/** Home page: which sections show, in what order, and a few layout choices. Saved on this device. */
+export type HomeModuleId = 'bench' | 'pinned' | 'runs' | 'tip' | 'categories';
+export interface HomeLayout {
+  sidebar: 'left' | 'right';
+  shelf: 'compact' | 'large';
+  glass: boolean;
+  modules: { id: HomeModuleId; on: boolean }[];
+}
+export const HOME_MODULES: HomeModuleId[] = ['bench', 'pinned', 'runs', 'tip', 'categories'];
+export const HOME_LAYOUT_DEFAULT: HomeLayout = {
+  sidebar: 'left',
+  shelf: 'compact',
+  glass: true,
+  modules: [{ id: 'bench', on: true }, { id: 'runs', on: true }, { id: 'tip', on: true }, { id: 'pinned', on: false }, { id: 'categories', on: false }],
+};
+const isHomeLayout = (v: any): v is HomeLayout =>
+  !!v && (v.sidebar === 'left' || v.sidebar === 'right') && (v.shelf === 'compact' || v.shelf === 'large')
+  && typeof v.glass === 'boolean' && Array.isArray(v.modules) && v.modules.every((m: any) => HOME_MODULES.includes(m?.id));
+export const homeLayout = new Store<HomeLayout>('dgb.home', HOME_LAYOUT_DEFAULT, isHomeLayout);
+
+/** Modules in saved order, with any new ones (added in a later version) appended switched off. */
+export function homeModules(l: HomeLayout): { id: HomeModuleId; on: boolean }[] {
+  const seen = new Set(l.modules.map((m) => m.id));
+  return [...l.modules, ...HOME_MODULES.filter((id) => !seen.has(id)).map((id) => ({ id, on: false }))];
+}
+
+function applyGlass() {
+  if (typeof document === 'undefined') return;
+  if (homeLayout.get().glass) delete document.documentElement.dataset.glass;
+  else document.documentElement.dataset.glass = 'off';
+}
+applyGlass();
+homeLayout.subscribe(applyGlass);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ToolInfo, ParamSpec } from '../../lib/types';
+import type { ParamSpec } from '../../lib/types';
 import type { FileItem } from '../../lib/schema';
 import type { Region } from '../../lib/renderers';
 import { useApp } from '../../lib/app';
@@ -9,7 +9,9 @@ import { ResultView } from '../../results/ResultView';
 import { useToolForm } from '../useToolForm';
 import { useToolShortcuts } from '../GenericTool';
 import { RunBar } from '../RunBar';
-import { Segmented } from '../../components/ui';
+import { Segmented, cx } from '../../components/ui';
+import { toolLayout, useStore } from '../../lib/store';
+import type { SpecialProps } from '../ToolPage';
 import { BoxEditor } from './BoxEditor';
 
 const PRESETS: { value: string; label: string; r: number | null }[] = [
@@ -22,8 +24,9 @@ const PRESETS: { value: string; label: string; r: number | null }[] = [
   { value: '4:5', label: '4:5', r: 4 / 5 },
 ];
 
-export default function Crop({ tool, jobId }: { tool: ToolInfo; jobId?: string | null }) {
+export default function Crop({ tool, jobId, head, meta }: SpecialProps) {
   const { backend } = useApp();
+  const layout = useStore(toolLayout);
   const form = useToolForm(tool, { jobId });
   useToolShortcuts(form);
   const isVideo = tool.id.startsWith('video.');
@@ -83,10 +86,9 @@ export default function Crop({ tool, jobId }: { tool: ToolInfo; jobId?: string |
 
   const exclude = [fileParam.name, 'x', 'y', 'width', 'height', 'mode', ...(isVideo ? ['aspect'] : ['aspect', 'anchor'])];
   return (
-    <div className="tool-body special special-crop">
-      <div className="tool-input">
-        <Field param={singleParam} value={form.values[fileParam.name]} error={form.shownErrors[fileParam.name]} onChange={form.setValue} />
-        {src && (
+    <div className={cx('tool-body tool-work special special-crop', `place-${layout.controls}`, src && 'has-stage')}>
+      {src && (
+        <div className="tool-stage editor-stage">
           <div className="editor-panel">
             <div className="editor-toolbar">
               <Segmented size="sm" label="Aspect ratio" value={preset} onChange={applyPreset} options={PRESETS.map((p) => ({ value: p.value, label: p.label }))} />
@@ -122,11 +124,16 @@ export default function Crop({ tool, jobId }: { tool: ToolInfo; jobId?: string |
               {natural && <span className="muted small">of {natural.w}×{natural.h}px</span>}
             </div>
           </div>
-        )}
+        </div>
+      )}
+      <section className="tool-input tool-controls" aria-label="Settings">
+        {head}
+        <Field param={singleParam} value={form.values[fileParam.name]} error={form.shownErrors[fileParam.name]} onChange={form.setValue} />
         <ParamForm params={tool.params} exclude={exclude} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="crop" />
         <RunBar form={form} label="Crop" disabled={!tool.availability.available || !item} disabledReason={!item ? `Choose ${isVideo ? 'a video' : 'an image'} first` : undefined} />
-      </div>
-      <div className="tool-output">
+        {meta}
+      </section>
+      <div className="tool-output" aria-label="Result">
         {form.job.job && <ResultView job={form.job.job} tool={tool} input={undefined} />}
       </div>
     </div>

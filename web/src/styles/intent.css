@@ -1,0 +1,89 @@
+/* ---------------------------------------------------------------- drop screen: "What should happen to it?" */
+.page-intent { max-width: var(--content-w); }
+.intent-back { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 28px; }
+.intent-layout { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 56px; align-items: start; }
+
+.intent-figure { margin: 0; position: sticky; top: 24px; display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 40px 24px 28px; border-radius: var(--r-xl); background: var(--surface-sunken); }
+.intent-files { position: relative; display: grid; place-items: end center; min-height: 300px; width: 100%; }
+.intent-thing { grid-area: 1 / 1; display: flex; justify-content: center; transform-origin: 50% 100%; }
+.intent-thing .bo-thing { height: auto; transform: scale(1.45); transform-origin: 50% 100%; }
+.intent-thing.is-image .bo-thing { transform: none; }
+.intent-thing .bo-photo { max-width: min(380px, 100%); max-height: 300px; }
+/* Several files: fan them out like a small stack in a hand. */
+.intent-files.is-many .intent-thing { transform: translateX(calc((var(--i) - (var(--n) - 1) / 2) * 30px)) rotate(calc((var(--i) - (var(--n) - 1) / 2) * 4deg)); }
+.intent-files.is-many .bo-photo { max-width: min(300px, 78%); max-height: 240px; }
+.intent-files.is-many .intent-thing:nth-child(1) { z-index: 3; }
+.intent-files.is-many .intent-thing:nth-child(2) { z-index: 2; }
+.intent-caption { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; max-width: 100%; }
+.intent-name { font-size: var(--fs-md); font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.intent-meta { font: 400 12px/1.4 var(--font-mono); color: var(--text-3); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.intent-choices { display: flex; flex-direction: column; min-width: 0; }
+.intent-title { font-size: var(--fs-2xl); font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 18px; outline: none; }
+.intent-sub { color: var(--text-2); margin-bottom: 20px; }
+.intent-input-row { display: flex; align-items: center; gap: 12px; padding: 0 14px; height: 46px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--border); margin-bottom: 14px; transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.intent-input-row:focus-within { border-color: var(--border-strong); box-shadow: var(--shadow-card); }
+.intent-input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-size: var(--fs-md); color: var(--text); }
+.intent-input::placeholder { color: var(--text-3); }
+.intent-keys { display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); font-size: 11px; }
+
+.intent-list { display: flex; flex-direction: column; gap: 2px; list-style: none; margin: 0; padding: 0; }
+.intent-option { width: 100%; display: flex; align-items: center; gap: 14px; padding: 11px 12px; border: 0; border-radius: var(--r-md); background: transparent; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.intent-option.is-active { background: var(--surface); box-shadow: var(--shadow-card); }
+.intent-num { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; border: 1px solid var(--border); font: 500 11.5px/1 var(--font-mono); color: var(--text-2); }
+.intent-option.is-active .intent-num { background: var(--accent); border-color: var(--accent); color: var(--text-inverse); }
+.intent-option-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.intent-option-name { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-md); font-weight: 500; }
+.intent-pin { color: var(--text-3); }
+.intent-option-hint { font-size: var(--fs-sm); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.intent-option.is-unavailable .intent-option-name { color: var(--text-3); }
+.intent-go { flex: none; color: var(--text-3); opacity: 0; transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.intent-option.is-active .intent-go { opacity: 1; transform: translateX(2px); color: var(--text); }
+.intent-option:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.intent-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin: 10px 0 0 12px; padding: 4px 0; border: 0; background: none; color: var(--text-2); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.intent-more:hover { color: var(--text); }
+.intent-more .is-flipped { transform: rotate(180deg); }
+.intent-none { color: var(--text-2); padding: 12px; }
+.intent-foot { margin-top: 28px; padding: 14px 12px 0; border-top: 1px solid var(--divider); color: var(--text-3); font-size: var(--fs-sm); }
+.intent-foot .link-sm { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+
+.page-intent.is-empty { display: flex; flex-direction: column; align-items: flex-start; padding-top: 12vh; }
+
+/* drop overlay */
+.drop-overlay { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 24px; pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: drop-in 140ms var(--ease); }
+.drop-overlay.is-uploading { pointer-events: auto; }
+@keyframes drop-in { from { opacity: 0; } }
+.drop-card { width: min(420px, 100%); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 36px 32px 30px; text-align: center; border-radius: var(--r-xl);
+  background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--shadow-float); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
+.drop-card .progress { width: 100%; margin-top: 10px; }
+.drop-tray { position: relative; width: 120px; height: 72px; margin-bottom: 14px; border: 3px solid var(--text); border-top: 0; border-radius: 0 0 14px 14px; }
+.drop-sheet { position: absolute; left: 22px; right: 22px; bottom: 14px; height: 70px; background: var(--surface); box-shadow: var(--shadow-object); animation: drop-sheet 900ms var(--ease) infinite alternate; }
+@keyframes drop-sheet { from { transform: translateY(-26px); } to { transform: translateY(0); } }
+.drop-title { font-size: var(--fs-xl); font-weight: 600; }
+.drop-sub { color: var(--text-2); font-size: var(--fs-sm); }
+@media (prefers-reduced-motion: reduce) { .drop-sheet, .drop-overlay { animation: none; } }
+
+/* home: choose files next to the big input */
+.home-choose { flex: none; margin-bottom: 4px; display: inline-flex; align-items: center; gap: 7px; }
+
+@media (max-width: 860px) {
+  .intent-layout { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .intent-figure { position: static; padding: 28px 16px 20px; }
+  .intent-files { min-height: 200px; }
+  .intent-thing .bo-thing { transform: scale(1.15); }
+  .intent-thing .bo-photo { max-height: 220px; }
+  .intent-keys { display: none; }
+}
+@media (max-width: 520px) {
+  .home-choose { padding-inline: 10px; }
+  .home-choose { font-size: 0; gap: 0; }
+  .home-choose svg { width: 18px; height: 18px; }
+  .intent-title { font-size: var(--fs-xl); }
+}
+@media (max-width: 520px) {
+  .intent-files.is-many .bo-photo { max-width: 62%; max-height: 170px; }
+  .intent-files.is-many .intent-thing { transform: translateX(calc((var(--i) - (var(--n) - 1) / 2) * 18px)) rotate(calc((var(--i) - (var(--n) - 1) / 2) * 3deg)); }
+  .intent-files { min-height: 180px; }
+}

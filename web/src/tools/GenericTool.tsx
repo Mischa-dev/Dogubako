@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { Stage } from './Stage';
+import { toolLayout, useStore } from '../lib/store';
 import { Zap } from 'lucide-react';
 import type { ToolInfo } from '../lib/types';
 import { ParamForm } from '../form/ParamForm';
@@ -63,7 +65,7 @@ export function useLiveRun(form: ToolForm, enabled: boolean, delay = 250) {
   }, [form.values, enabled, form.valid]);
 }
 
-export function GenericTool({ tool, jobId }: { tool: ToolInfo; jobId?: string | null }) {
+export function GenericTool({ tool, jobId, head, meta }: { tool: ToolInfo; jobId?: string | null; head?: React.ReactNode; meta?: React.ReactNode }) {
   const form = useToolForm(tool, { jobId });
   const live = tool.ui === 'live';
   const available = tool.availability.available;
@@ -71,24 +73,43 @@ export function GenericTool({ tool, jobId }: { tool: ToolInfo; jobId?: string | 
   useLiveRun(form, live && available);
   const mono = MONO_CATEGORIES.has(tool.category);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const stageShown = useRef(false);
 
   // After a manual (non-live) run finishes, bring results into view.
   const lastStatus = useRef<string | undefined>();
   useEffect(() => {
     const s = form.job.job?.status;
     if (!live && s && s !== lastStatus.current && (s === 'succeeded' || s === 'failed')) {
-      resultsRef.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
+      // With a stage, the result shows next to the original: bring that into view rather than the detail below.
+      const target = stageShown.current ? stageRef.current : resultsRef.current;
+      target?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: stageShown.current ? 'start' : 'nearest' });
     }
     lastStatus.current = s;
   }, [form.job.job?.status, live]);
 
   const noParams = tool.params.length === 0;
   const result = form.job.job;
-  const resultNode = useMemo(() => result ? <ResultView job={result} tool={tool} input={form.input} live={live} /> : null, [result, tool, form.input, live]);
+  const layout = useStore(toolLayout);
+
+  // The files this tool is working on, for the stage and the tool row.
+  const fileParam = tool.params.find((p) => p.type === 'file');
+  const fileValue = fileParam ? form.values[fileParam.name] : undefined;
+  const files = useMemo(() => (Array.isArray(fileValue) ? (fileValue as FileItem[]).filter((f) => f.status === 'ready') : []), [fileValue]);
+  const hasStage = files.length > 0;
+  stageShown.current = hasStage;
+
+  const resultNode = useMemo(() => result ? <ResultView job={result} tool={tool} input={form.input} live={live} collapseArtifacts={hasStage} /> : null, [result, tool, form.input, live, hasStage]);
 
   return (
-    <div className={cx('tool-body', live && 'tool-live')}>
-      <div className="tool-input">
+    <div className={cx('tool-body tool-work', `place-${layout.controls}`, hasStage && 'has-stage', live && 'tool-live')}>
+      {hasStage && (
+        <div className="tool-stage" ref={stageRef}>
+          <Stage files={files} job={result} running={form.job.running} live={live} mode={layout.preview} />
+        </div>
+      )}
+      <section className="tool-input tool-controls" aria-label="Settings">
+        {head}
         {noParams ? <p className="muted">This tool has no options.</p> : (
           <ParamForm params={tool.params} values={form.values} errors={form.shownErrors} onChange={form.setValue} mono={mono} />
         )}
@@ -98,7 +119,8 @@ export function GenericTool({ tool, jobId }: { tool: ToolInfo; jobId?: string | 
           disabled={!available}
           disabledReason={!available ? 'Unavailable until the missing dependency is installed' : undefined}
         />
-      </div>
+        {meta}
+      </section>
       <div className="tool-output" ref={resultsRef} aria-label="Result">
         {live && !result && (
           <div className="live-placeholder">

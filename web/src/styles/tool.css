@@ -9,6 +9,7 @@
 .tool-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
 .tool-id { font-size: 11.5px; color: var(--text-3); margin-left: 4px; }
 .ui-switch { margin-bottom: var(--sp-4); }
+.tool-head .ui-switch { margin: 12px 0 0; }
 
 /* ---------------------------------------------------------------- tool body */
 .tool-body { display: flex; flex-direction: column; gap: var(--sp-6); }
@@ -27,19 +28,17 @@
   .tool-live .tool-input { max-width: none; }
   .tool-live .tool-output { position: sticky; top: 20px; }
   .tool-live .tool-output:empty { display: block; }
-  .special-redact, .special-crop { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
-  .special-redact .tool-input, .special-crop .tool-input { max-width: none; }
-  .special-redact .tool-output, .special-crop .tool-output { position: sticky; top: 20px; }
 }
 
 /* ---------------------------------------------------------------- run bar */
 .run-bar {
   position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  margin: -4px 0 0; padding: 12px 0; background: var(--bg);
+  margin: -4px -12px 0; padding: 10px 12px; border-radius: var(--r-lg);
+  background: var(--glass-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
 }
 .run-bar-main { display: flex; align-items: center; gap: 8px; }
 .run-bar-main .btn-primary { min-width: 92px; }
-.run-hint { display: inline-flex; opacity: .8; }
+.run-hint { display: inline-flex; }
 .run-reset { margin-left: 4px; }
 .run-bar-status { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 200px; }
 .run-progress { flex: 1; max-width: 260px; }
@@ -82,12 +81,9 @@
 .j-toggle .chev.is-open { transform: rotate(90deg); }
 .j-children { padding-left: 14px; border-left: 1px solid var(--divider); margin-left: 6px; }
 .j-key { color: var(--text-2); }
-.j-str { color: #1d7a4a; }
-.j-num { color: #2f5fd0; }
-.j-bool, .j-null { color: #a3509a; }
-:root[data-theme='dark'] .j-str { color: #8fd6a8; }
-:root[data-theme='dark'] .j-num { color: #8fb0ff; }
-:root[data-theme='dark'] .j-bool, :root[data-theme='dark'] .j-null { color: #e2a3db; }
+.j-str { color: var(--syn-str); }
+.j-num { color: var(--syn-num); }
+.j-bool, .j-null { color: var(--syn-bool); }
 .j-sum { color: var(--text-3); }
 
 .kv { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); }

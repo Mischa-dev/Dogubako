@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ScanFace, Trash2, Plus, Wand2, Info } from 'lucide-react';
-import type { ToolInfo, ParamSpec } from '../../lib/types';
+import { ScanFace, Trash2, Wand2, Info } from 'lucide-react';
+import type { ParamSpec } from '../../lib/types';
+import type { SpecialProps } from '../ToolPage';
+import { toolLayout, useStore } from '../../lib/store';
 import { useApp } from '../../lib/app';
 import type { FileItem } from '../../lib/schema';
 import type { Region } from '../../lib/renderers';
@@ -16,8 +18,9 @@ import { describeError } from '../../lib/errors';
 import { BoxEditor } from './BoxEditor';
 
 /** Image redaction editor: detect faces (optional) → edit boxes → image.redact. */
-export default function FaceRedact({ tool, jobId }: { tool: ToolInfo; jobId?: string | null }) {
+export default function FaceRedact({ tool, jobId, head, meta }: SpecialProps) {
   const { toolMap, backend } = useApp();
+  const layout = useStore(toolLayout);
   const redact = toolMap.get('image.redact');
   const detect = toolMap.get('image.face_detect');
   const canDetect = !!detect && detect.availability.available && detect.permitted !== false;
@@ -104,16 +107,11 @@ export default function FaceRedact({ tool, jobId }: { tool: ToolInfo; jobId?: st
   const optionParams = target.params.filter((p) => !['input', 'regions', 'extra_regions'].includes(p.name));
   const detectErr = detectJob.job?.status === 'failed' ? describeError(detectJob.job.error) : null;
 
+  const staged = !!(imageUrl && item);
   return (
-    <div className="tool-body special special-redact">
-      <div className="tool-input">
-        <Field param={singleParam} value={form.values[fileParam.name]} error={form.shownErrors[fileParam.name]} onChange={form.setValue} />
-        {!canDetect && (
-          <Callout tone="info" icon={Info}>
-            Automatic face detection is unavailable{detect?.availability.missing_model ? ' (no face-detection model installed)' : ''}. Draw boxes over the areas to hide.
-          </Callout>
-        )}
-        {imageUrl && item && (
+    <div className={cx('tool-body tool-work special special-redact', `place-${layout.controls}`, staged && 'has-stage')}>
+      {staged && (
+        <div className="tool-stage editor-stage">
           <div className="editor-panel">
             <div className="editor-toolbar">
               <span className="editor-hint">Drag on the image to add a box. Select a box to move or resize it.</span>
@@ -126,7 +124,7 @@ export default function FaceRedact({ tool, jobId }: { tool: ToolInfo; jobId?: st
             </div>
             <div className="editor-canvas">
               <BoxEditor
-                src={imageUrl}
+                src={imageUrl!}
                 boxes={boxes}
                 onChange={setBoxes}
                 selected={selected}
@@ -141,36 +139,45 @@ export default function FaceRedact({ tool, jobId }: { tool: ToolInfo; jobId?: st
               {detectErr ? <span className="muted small">{detectErr.title}: {detectErr.message}</span> : detected && <span className="muted small">{detected}</span>}
               <span className="muted small">{boxes.length} region{boxes.length === 1 ? '' : 's'}{natural ? ` · ${natural.w}×${natural.h}px` : ''}</span>
             </div>
-            {boxes.length > 0 && (
-              <ul className="region-list" aria-label="Regions">
-                {boxes.map((b, i) => (
-                  <li key={i} className={cx(selected === i && 'is-selected')}>
-                    <button type="button" className="region-pick" onClick={() => setSelected(i)} aria-pressed={selected === i}>
-                      <span className="region-idx">{i + 1}</span>
-                      <span className="mono small">{b.x},{b.y} · {b.width}×{b.height}</span>
-                      {b.score != null && <span className="muted small">score {Number(b.score).toFixed(2)}</span>}
-                    </button>
-                    <IconButton icon={Trash2} label={`Remove region ${i + 1}`} size={14} onClick={() => { setBoxes(boxes.filter((_, k) => k !== i)); setSelected(null); }} />
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
+        </div>
+      )}
+      <section className="tool-input tool-controls" aria-label="Settings">
+        {head}
+        <Field param={singleParam} value={form.values[fileParam.name]} error={form.shownErrors[fileParam.name]} onChange={form.setValue} />
+        {!canDetect && (
+          <Callout tone="info" icon={Info}>
+            Automatic face detection is unavailable{detect?.availability.missing_model ? ' (no face-detection model installed)' : ''}. Draw boxes over the areas to hide.
+          </Callout>
+        )}
+        {staged && boxes.length > 0 && (
+          <ul className="region-list" aria-label="Regions">
+            {boxes.map((b, i) => (
+              <li key={i} className={cx(selected === i && 'is-selected')}>
+                <button type="button" className="region-pick" onClick={() => setSelected(i)} aria-pressed={selected === i}>
+                  <span className="region-idx">{i + 1}</span>
+                  <span className="mono small">{b.x},{b.y} · {b.width}×{b.height}</span>
+                  {b.score != null && <span className="muted small">score {Number(b.score).toFixed(2)}</span>}
+                </button>
+                <IconButton icon={Trash2} label={`Remove region ${i + 1}`} size={14} onClick={() => { setBoxes(boxes.filter((_, k) => k !== i)); setSelected(null); }} />
+              </li>
+            ))}
+          </ul>
         )}
         <ParamForm params={optionParams} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="redact" />
         <RunBar
           form={form}
           label="Apply redaction"
           disabled={!boxes.length || !target.availability.available}
-          disabledReason={!item ? 'Choose an image first' : !boxes.length ? 'Add at least one region' : undefined}
+          disabledReason={!item ? 'Choose an image first' : !boxes.length ? 'Draw a box over what to hide' : undefined}
           onRun={apply}
-          secondary={boxes.length === 0 && item ? <span className="muted small"><Plus size={12} aria-hidden /> Draw a box to begin</span> : null}
         />
-      </div>
-      <div className="tool-output">
+        {meta}
+      </section>
+      <div className="tool-output" aria-label="Result">
         {form.job.job && <ResultView job={form.job.job} tool={target} input={{ imageUrl }} hideData />}
         {!form.job.job && item && boxes.length > 0 && (
-          <p className="muted small"><Wand2 size={13} aria-hidden /> Choose a style, then apply to preview the result side by side.</p>
+          <p className="muted small"><Wand2 size={13} aria-hidden /> Choose a style, then apply to see the result here.</p>
         )}
       </div>
     </div>

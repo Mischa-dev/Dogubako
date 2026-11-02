@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Clock, Search, Star, Trash2, X } from 'lucide-react';
+import { Clock, Pin, Search, Trash2, X } from 'lucide-react';
 import { useApp } from '../lib/app';
 import { favorites as favStore, recents as recStore, useStore } from '../lib/store';
 import { categoryIcon } from '../lib/icons';
@@ -71,11 +71,11 @@ export function FavoritesPage() {
   const tools = favs.map((id) => toolMap.get(id)).filter((t): t is NonNullable<typeof t> => !!t && t.permitted !== false);
   return (
     <div className="page">
-      <PageHeader icon={Star} title="Favorites" subtitle="Tools you've starred for quick access." />
+      <PageHeader icon={Pin} title="Pinned tools" subtitle="Pinned tools appear in the sidebar and in the Tools menu. Alt + 1 to 9 opens the first nine." />
       {tools.length ? (
-        <ToolList tools={tools} favorites={favs} label="Favorite tools" showCategory categoryLabel={categoryLabel} />
+        <ToolList tools={tools} favorites={favs} label="Pinned tools" showCategory categoryLabel={categoryLabel} />
       ) : (
-        <EmptyState icon={Star} title="No favorites yet">Star a tool from any list or tool page to pin it here.</EmptyState>
+        <EmptyState icon={Pin} title="Nothing pinned yet">Pin a tool from the Tools menu, any list or a tool page.</EmptyState>
       )}
     </div>
   );
