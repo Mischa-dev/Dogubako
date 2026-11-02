@@ -200,7 +200,16 @@ class Folder:
             if p.is_dir() and not p.is_symlink():
                 out.mkdir(parents=True, exist_ok=True)
                 continue
-            if p.suffix in (".a", ".la", ".h", ".packlist") or "pkgconfig" in rel.parts or "man" in rel.parts:
+            # ImageMagick loads its coder modules through their libtool .la
+            # files, so keep those; drop other build leftovers.
+            in_modules = any(part.startswith("modules-") for part in rel.parts)
+            if (
+                p.suffix in (".a", ".h")
+                or (p.suffix == ".la" and not in_modules)
+                or p.name == ".packlist"
+                or "pkgconfig" in rel.parts
+                or "man" in rel.parts
+            ):
                 continue
             out.parent.mkdir(parents=True, exist_ok=True)
             if p.is_symlink():
@@ -219,7 +228,9 @@ class Folder:
                 # Homebrew builds these against macOS's own perl (uses_from_macos).
                 data = b"#!/usr/bin/perl" + data[len(b"#!@@HOMEBREW_PERL@@"):]
                 out.write_bytes(data)
-            if b"@@HOMEBREW_" in data and out.name != "configure.xml":  # configure.xml paths are overridden by env
+            # configure.xml and .la paths are overridden by the engine's env vars
+            # (libtool only uses the .la's dlname, relative to the file).
+            if b"@@HOMEBREW_" in data and out.name != "configure.xml" and out.suffix != ".la":
                 self.warnings.append(f"{out.relative_to(self.root)} still contains a Homebrew placeholder")
 
     def check(self) -> None:
