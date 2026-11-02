@@ -470,6 +470,12 @@ fn toml_tool() -> Arc<dyn Tool> {
 // ---------------------------------------------------------------------------
 // XML
 
+/// Only XML's own whitespace (space, tab, CR, LF) is insignificant; other
+/// Unicode spaces such as U+00A0 are character data.
+fn xml_blank(s: &str) -> bool {
+    s.chars().all(|c| matches!(c, ' ' | '\t' | '\r' | '\n'))
+}
+
 /// Entities a document may reference: the predefined ones, character
 /// references to legal XML characters, and general entities declared in the
 /// internal DTD subset. `None` means anything goes (an external DTD or
@@ -611,7 +617,7 @@ pub(crate) fn reformat_xml(text: &str, indent: Option<(u8, usize)>) -> ToolResul
             }
             Event::End(_) => depth = depth.saturating_sub(1),
             Event::Text(t) => {
-                if t.trim().is_empty() && sub.is_none() {
+                if xml_blank(t) && sub.is_none() {
                     continue;
                 }
                 if depth == 0 {
@@ -726,7 +732,7 @@ fn mixed_content_elements(text: &str) -> std::collections::HashSet<usize> {
                 if let Some(o) = stack.last_mut() {
                     let s: &str = t.as_ref();
                     o.any_text = true;
-                    if !s.trim().is_empty() || !s.contains(['\n', '\r']) {
+                    if !xml_blank(s) || !s.contains(['\n', '\r']) {
                         o.text = true;
                     }
                 }
@@ -1496,9 +1502,21 @@ mod tests {
             let t = out.text.unwrap();
             assert!(t.contains("<value> </value>"), "{mode}: {t}");
             assert!(t.contains("<nl>\n</nl>"), "{mode}: {t}");
+            // A non-breaking space between elements is content, not indentation.
+            let out = h
+                .run(
+                    "dev.xml",
+                    json!({"text": "<r>\n  <a/>\u{a0}<b/>\n</r>", "mode": mode}),
+                )
+                .await
+                .unwrap();
+            assert!(out.text.unwrap().contains('\u{a0}'), "{mode}");
         }
-        // Character data outside the root is rejected in every form.
+        // Character data outside the root is rejected in every form,
+        // including Unicode spaces that are not XML whitespace.
         for bad in [
+            "\u{a0}<r/>",
+            "<r/>\u{2003}",
             "<r/><![CDATA[extra]]>",
             "<![CDATA[x]]><r/>",
             "<r/>&amp;",
