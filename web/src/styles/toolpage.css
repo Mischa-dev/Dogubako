@@ -145,8 +145,15 @@
   .layout-wrap { margin-left: auto; }
   .tool-row-gap { display: none; }
   .tool-search { display: none; } /* the phone top bar already has search */
-  .stage.is-side { grid-template-columns: minmax(0, 1fr); }
+  /* Keep original and result side by side, smaller, so the settings and Run stay close. */
+  .stage { gap: 10px; }
   .stage-frame { height: clamp(180px, 34vh, 320px); }
+  .stage.is-side .stage-frame { height: clamp(130px, 24vh, 220px); }
+  .stage.is-side .stage-cap { flex-wrap: wrap; gap: 0 8px; }
   .tool-work .tool-controls { padding: 16px; }
+  /* Long settings on a phone: keep Run in reach at the bottom of the screen. */
+  .tool-work .run-bar { position: sticky; bottom: 10px; z-index: 3; margin: 0 -8px; padding: 8px;
+    background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: var(--r-lg); box-shadow: var(--shadow-pop);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
   .layout-pop { position: fixed; left: 16px; right: 16px; top: 64px; width: auto; }
 }
