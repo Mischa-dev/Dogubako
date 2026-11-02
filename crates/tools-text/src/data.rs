@@ -2525,6 +2525,27 @@ mod tests {
         let j: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&out.artifacts[0].path).unwrap()).unwrap();
         assert_eq!(j[0]["age"], 30);
+        // Two cells at opposite corners must not fill in 17 billion cells.
+        let corners = {
+            let mut wb = rust_xlsxwriter::Workbook::new();
+            let ws = wb.add_worksheet();
+            ws.write_string(0, 0, "a").unwrap();
+            ws.write_string(1_048_575, 16_383, "z").unwrap();
+            let p = std::env::temp_dir().join(format!("corners-{}.xlsx", std::process::id()));
+            wb.save(&p).unwrap();
+            p
+        };
+        assert_eq!(
+            h.run(
+                "data.spreadsheet",
+                json!({"file": corners.to_str().unwrap()})
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            "limit_exceeded"
+        );
+        let _ = std::fs::remove_file(&corners);
         // A long header repeated as the key of every record is bounded.
         let csv = format!("{}\n{}", "k".repeat(30_000), "1\n".repeat(100_000));
         let out = h
