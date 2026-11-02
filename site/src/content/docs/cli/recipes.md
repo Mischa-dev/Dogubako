@@ -79,7 +79,7 @@ dogubako pdf ocr scan.pdf
 dogubako pdf extract-pages report.pdf --pages 3-5
 
 # Get the text out of a PDF
-dogubako pdf extract-text contract.pdf > contract.txt
+dogubako pdf extract-text contract.pdf         # prints the text and saves contract.txt
 ```
 
 ## Files
@@ -95,7 +95,7 @@ dogubako files checksum-verify ubuntu.iso --checksums "$(cat SHA256SUMS)"
 dogubako files archive-list backup.zip
 
 # Find duplicate files in a folder (reads host folders: the CLI trusts you like your shell)
-dogubako files duplicates ~/Pictures
+dogubako files duplicates --path ~/Pictures
 ```
 
 ## Text and developer tools
@@ -127,7 +127,7 @@ dogubako text case "Hello World" --case snake
 dogubako data stats sales.csv
 
 # CSV to JSON
-dogubako data csv-to-json sales.csv > sales.json
+dogubako data csv-to-json sales.csv            # writes sales.json
 
 # Clean up a messy export: trim cells, blank out placeholders like N/A, drop empty rows and columns
 dogubako data clean export.csv

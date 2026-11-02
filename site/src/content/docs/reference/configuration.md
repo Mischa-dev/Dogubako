@@ -24,7 +24,7 @@ for precedence and examples.
 | `user_quota_mb` | `DOGUBAKO_USER_QUOTA_MB` | `10240` | Default storage quota per account |
 | `file_retention_hours` | `DOGUBAKO_FILE_RETENTION_HOURS` | `24` | Uploads and outputs are deleted after this long |
 | `job_retention_days` | `DOGUBAKO_JOB_RETENTION_DAYS` | `14` | Job history is kept this long |
-| `max_concurrent_jobs` | `DOGUBAKO_MAX_CONCURRENT_JOBS` | CPU count | Jobs running at once across the server |
+| `max_concurrent_jobs` | `DOGUBAKO_MAX_CONCURRENT_JOBS` | CPU count, at most 16 | Jobs running at once across the server |
 | `per_user_concurrency` | `DOGUBAKO_PER_USER_CONCURRENCY` | `2` | Default jobs at once per account |
 | `max_job_seconds` | `DOGUBAKO_MAX_JOB_SECONDS` | `3600` | Hard wall-clock limit per job |
 | `exec_memory_mb` | `DOGUBAKO_EXEC_MEMORY_MB` | `4096` | Address-space limit per external program (`0` turns it off). Unix only |

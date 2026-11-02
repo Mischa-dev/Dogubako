@@ -53,13 +53,13 @@ HOST=http://localhost:8420
 # 1. upload the file and keep its id
 ID=$(curl -s -H "$H" -T photo.jpg "$HOST/api/v1/files/raw?name=photo.jpg" | jq -r .id)
 
-# 2. run the tool and wait up to 60 seconds for the result
-curl -s -H "$H" -H 'Content-Type: application/json' \
+# 2. run the tool, wait up to 60 seconds, and keep the output's id
+OUT=$(curl -s -H "$H" -H 'Content-Type: application/json' \
   -d "{\"params\":{\"input\":[\"$ID\"]},\"wait_seconds\":60}" \
-  "$HOST/api/v1/tools/image.compress/run" | jq '.result.artifacts'
+  "$HOST/api/v1/tools/image.compress/run" | jq -r '.result.artifacts[0].id')
 
-# 3. download the output by its id
-curl -H "$H" -o small.jpg "$HOST/api/v1/files/<artifact id>/content"
+# 3. download the output
+curl -H "$H" -o small.jpg "$HOST/api/v1/files/$OUT/content"
 ```
 
 The [HTTP API reference](/reference/http-api/) covers jobs, progress events

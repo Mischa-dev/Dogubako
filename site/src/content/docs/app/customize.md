@@ -65,7 +65,7 @@ preview looks, what the tool row shows and what the next tool works on. See
 | Density | Compact shows more tools per screen |
 | Remember tool options | Restore each tool's last settings (never files or secrets) |
 | Keep run history | Store a local list of past runs on this device (desktop) |
-| Data on this device | Clear your pinned tools (listed as **Favorites**), recently used tools and remembered options |
+| Data on this device | Clear your pinned tools, recently used tools and remembered options |
 
 The other sections are **Dependencies** and **Models** (see
 [Engines and models](/app/engines-and-models/)) and **About**, with the

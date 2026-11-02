@@ -20,8 +20,9 @@ The row across the top holds:
 - **Tabs for the file's other tools.** Jump from Compress to Convert to Strip
   metadata without starting over. The next tool receives the result of this
   one, or the original if you prefer (see [Layout](#layout)). The last tab
-  lists every tool for the file. When no file is loaded, the row shows your
-  pinned tools instead.
+  lists every tool for the file. A tool that takes no file (a generator or a
+  formatter, say) shows the other tools in its category instead, pinned ones
+  first.
 - **Search** and the **Layout** menu.
 
 ## The stage
@@ -76,8 +77,10 @@ Some tools have a purpose-built interface:
 | Diff tools | Two inputs side by side and the rendered difference; text re-runs live |
 | System dashboard | Auto-refreshing CPU, memory, disk and battery panels |
 
-For face blur and crop you can switch between **Visual** and **All options**
-to see the full form.
+The crop and redaction editors use the same layout as every other tool: the
+image you edit is the stage, the settings sit in the panel beside or below
+it, and the result appears underneath. Switch between **Visual** and
+**All options** to see the full form.
 
 ![The redaction editor with boxes over a photo](../../../assets/screenshots/redact-editor-light.png)
 

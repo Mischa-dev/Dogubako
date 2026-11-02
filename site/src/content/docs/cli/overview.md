@@ -71,6 +71,11 @@ into dashes: `image.strip_metadata` is `dogubako image strip-metadata`. The
 - `-o -` writes a single output file to stdout, for piping.
 - **Text results** print to stdout. Informational messages and progress go to
   stderr, so pipes stay clean.
+- Some tools do both: `pdf extract-text` prints the text **and** saves
+  `contract.txt`, and `data csv-to-json` saves `sales.json`. Don't redirect
+  stdout to the name the tool is about to write (`> contract.txt`): the
+  shell creates that file first, so the tool's copy lands in
+  `contract (1).txt`. Use `-o` to choose the name instead.
 - `--json` prints a machine-readable result instead; see
   [Scripting](/cli/scripting/).
 - `-q` / `--quiet` suppresses progress and messages. Progress bars only

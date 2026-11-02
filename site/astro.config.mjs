@@ -11,6 +11,7 @@ export default defineConfig({
   trailingSlash: 'ignore',
   integrations: [
     starlight({
+      disable404Route: true,
       title: 'Dogubako',
       description:
         'Documentation for Dogubako, a local-first, open-source utility toolbox: desktop app, self-hosted web service, CLI, HTTP API and MCP server.',
