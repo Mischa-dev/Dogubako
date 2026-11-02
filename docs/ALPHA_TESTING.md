@@ -19,11 +19,16 @@ The test DMG has every engine inside, so no tool needs a download.
    about Dogubako, and click **Open Anyway**. Confirm with your password or
    Touch ID. From then on it opens normally.
 
-If you prefer Terminal, this does the same as step 4:
+If macOS says Dogubako **"is damaged and can't be opened"** instead, there is
+no Open Anyway button. The app isn't damaged: macOS says this about unsigned
+downloads (builds before November 2, 2026 weren't signed at all). Click
+**Cancel**, then run this in Terminal and open it again:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Dogubako.app
 ```
+
+That also works instead of step 4.
 
 To check the engines: **Settings → Dependencies** shows each one as
 **Built in**.

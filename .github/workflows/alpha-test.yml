@@ -40,6 +40,10 @@ jobs:
           python3 -I packaging/engines/assemble.py --bundle-all
       - name: Build the app
         working-directory: apps/desktop/src-tauri
+        # Ad-hoc sign the whole bundle. Without a bundle signature macOS calls
+        # a downloaded app "damaged" instead of offering Open Anyway.
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
         run: npx --yes @tauri-apps/cli@2 build --target aarch64-apple-darwin --bundles dmg --config tauri.engines.conf.json
       - name: Smoke test the DMG
         run: |
@@ -49,6 +53,11 @@ jobs:
           hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg"
           app="$mnt/Dogubako.app"
           test -f "$app/Contents/Resources/engines/manifest.json"
+          # The bundle carries a valid (ad-hoc) signature covering everything inside.
+          codesign -dv "$app" 2>&1 | tee sig.txt
+          grep -q 'Signature=adhoc' sig.txt
+          grep -q 'Sealed Resources' sig.txt
+          codesign --verify --deep --strict --verbose=2 "$app"
           # Engines run from inside the installed app with Homebrew out of the way.
           sudo mv /opt/homebrew /opt/homebrew.hidden
           packaging/engines/smoke.sh "$app/Contents/Resources/engines"

@@ -63,6 +63,10 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Without a Developer ID, ad-hoc sign the bundle ("-"): an unsigned
+          # bundle shows as "damaged" once downloaded, instead of Open Anyway.
+          # Engines are signed earlier, so this only affects the app bundle.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
         with:
           projectPath: apps/desktop/src-tauri
           tagName: ${{ github.ref_name }}
