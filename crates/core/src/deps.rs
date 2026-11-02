@@ -379,6 +379,9 @@ pub struct DepStatus {
 /// Caches detection results. Cheap to clone via Arc.
 pub struct DepRegistry {
     extra_dirs: Vec<PathBuf>,
+    /// Checked after PATH: well-known install locations that a GUI launch
+    /// may leave off PATH.
+    fallback_dirs: Vec<PathBuf>,
     cache: RwLock<HashMap<String, DepStatus>>,
 }
 
@@ -386,6 +389,7 @@ impl DepRegistry {
     pub fn new(extra_dirs: Vec<PathBuf>) -> Self {
         DepRegistry {
             extra_dirs,
+            fallback_dirs: platform_fallback_dirs(),
             cache: RwLock::new(HashMap::new()),
         }
     }
@@ -434,18 +438,7 @@ impl DepRegistry {
         if !cfg!(windows) {
             names.extend_from_slice(spec.unix_only_binaries);
         }
-        for name in &names {
-            for dir in &self.extra_dirs {
-                let cand = dir.join(exe_name(name));
-                if cand.is_file() {
-                    return Some(cand);
-                }
-            }
-            if let Ok(p) = which::which(name) {
-                return Some(p);
-            }
-        }
-        None
+        search_binary(&names, &self.extra_dirs, &self.fallback_dirs)
     }
 
     fn detect(&self, id: &str) -> DepStatus {
@@ -475,6 +468,39 @@ impl DepRegistry {
             install_hint: install_hint(spec),
             install: spec.install.clone(),
         }
+    }
+}
+
+/// The app's own directories first, then PATH, then the platform's
+/// well-known install locations.
+fn search_binary(names: &[&str], extra: &[PathBuf], fallback: &[PathBuf]) -> Option<PathBuf> {
+    let in_dirs = |name: &str, dirs: &[PathBuf]| {
+        dirs.iter()
+            .map(|d| d.join(exe_name(name)))
+            .find(|c| c.is_file())
+    };
+    for name in names {
+        if let Some(p) = in_dirs(name, extra) {
+            return Some(p);
+        }
+        if let Ok(p) = which::which(name) {
+            return Some(p);
+        }
+    }
+    names.iter().find_map(|name| in_dirs(name, fallback))
+}
+
+/// Apps opened from Finder get launchd's minimal PATH, which leaves out
+/// Homebrew (Apple silicon and Intel) and MacPorts, so engines installed
+/// there would show as missing.
+fn platform_fallback_dirs() -> Vec<PathBuf> {
+    if cfg!(target_os = "macos") {
+        ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"]
+            .iter()
+            .map(PathBuf::from)
+            .collect()
+    } else {
+        Vec::new()
     }
 }
 
@@ -539,5 +565,41 @@ pub fn install_hint(spec: &DepSpec) -> String {
     match os_hint {
         Some(cmd) => format!("Install {} ({cmd}) or see {}", spec.name, h.url),
         None => format!("Install {} from {}", spec.name, h.url),
+    }
+}
+
+#[cfg(test)]
+mod fallback_tests {
+    use super::*;
+
+    #[test]
+    fn macos_checks_homebrew_and_macports() {
+        let dirs = platform_fallback_dirs();
+        if cfg!(target_os = "macos") {
+            for d in ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"] {
+                assert!(dirs.contains(&PathBuf::from(d)), "{d}");
+            }
+        } else {
+            assert!(dirs.is_empty());
+        }
+    }
+
+    #[test]
+    fn fallback_dirs_find_binaries_missing_from_path() {
+        let (extra, fallback) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let name = "dogubako-test-engine-not-on-path";
+        let names = [name];
+        let (e, f) = (
+            vec![extra.path().to_path_buf()],
+            vec![fallback.path().to_path_buf()],
+        );
+        assert_eq!(search_binary(&names, &e, &f), None);
+        let in_fallback = fallback.path().join(exe_name(name));
+        std::fs::write(&in_fallback, b"").unwrap();
+        assert_eq!(search_binary(&names, &e, &f), Some(in_fallback));
+        // The app's own directory still wins over the fallback.
+        let in_extra = extra.path().join(exe_name(name));
+        std::fs::write(&in_extra, b"").unwrap();
+        assert_eq!(search_binary(&names, &e, &f), Some(in_extra));
     }
 }
