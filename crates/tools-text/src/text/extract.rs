@@ -623,9 +623,15 @@ pub(crate) fn rtf_to_text(rtf: &str) -> String {
                     }
                     match n {
                         '*' => skip = true,
-                        '~' => out.push('\u{a0}'),
+                        '~' => {
+                            flush(&mut bytes, &mut out, codepage, &mut hi);
+                            out.push('\u{a0}')
+                        }
                         '-' => {}
-                        '_' => out.push('-'),
+                        '_' => {
+                            flush(&mut bytes, &mut out, codepage, &mut hi);
+                            out.push('-')
+                        }
                         '\n' | '\r' => {
                             flush(&mut bytes, &mut out, codepage, &mut hi);
                             out.push('\n')
@@ -886,6 +892,9 @@ mod tests {
             super::rtf_to_text(r"{\rtf1\ansi\uc1 \u-10179?\u-8704? ok}"),
             "\u{1F600} ok\n"
         );
+        // Buffered \'xx bytes come before a following \~ or \_.
+        assert_eq!(super::rtf_to_text(r"{\rtf1\ansi a\'e9\_b}"), "aé-b\n");
+        assert_eq!(super::rtf_to_text(r"{\rtf1\ansi a\'e9\~b}"), "aé\u{a0}b\n");
         // An escaped literal used as the \uN fallback is skipped, not doubled.
         assert_eq!(super::rtf_to_text(r"{\rtf1\ansi\uc1 \u123\{X}"), "{X\n");
         // A lone surrogate becomes U+FFFD instead of disappearing.

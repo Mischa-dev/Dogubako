@@ -985,6 +985,14 @@ pub(crate) fn parse_columns(spec: &str) -> ToolResult<Vec<(i64, i64)>> {
                 format!("'{part}' is not a column number or range like 2-4"),
             )
         };
+        // Only ASCII digits and '-' are valid; checking first also keeps the
+        // byte slicing below on character boundaries ("１", "−1").
+        if !part
+            .bytes()
+            .all(|c| c.is_ascii_digit() || c == b'-' || c == b' ')
+        {
+            return Err(bad());
+        }
         let (a, b) = match part[1..].find('-') {
             Some(i) => (part[..i + 1].trim(), part[i + 2..].trim()),
             None => (part, part),
@@ -1450,6 +1458,21 @@ fn word_frequency() -> Arc<dyn Tool> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn column_selectors_reject_non_ascii() {
+        assert_eq!(
+            super::parse_columns("1,3-5,-1").unwrap(),
+            vec![(1, 1), (3, 5), (-1, -1)]
+        );
+        for bad in ["\u{ff11}", "\u{2212}1", "1-\u{ff13}", "a"] {
+            assert_eq!(
+                super::parse_columns(bad).unwrap_err().code(),
+                "invalid_input",
+                "{bad}"
+            );
+        }
+    }
+
     use dogubako_core::testing::TestHarness;
     use serde_json::json;
 
