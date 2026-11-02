@@ -250,7 +250,10 @@ async fn loudness_and_filters() {
     ] {
         let mut pr = params.clone();
         pr["input"] = json!([s(&t)]);
-        let out = h.run(id, pr).await.unwrap_or_else(|e| panic!("{id}: {e}"));
+        let out = h
+            .run(id, pr)
+            .await
+            .unwrap_or_else(|e| panic!("{id} {params}: {e}"));
         assert!((duration(&out.artifacts[0].path) - 3.0).abs() < 0.1, "{id}");
     }
     let e = h
