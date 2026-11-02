@@ -1674,6 +1674,24 @@ fn validate() -> Arc<dyn Tool> {
                 ),
                 None => None,
             };
+            // Up to 1000 errors repeat the column and rule text: keep those
+            // short so a huge rule can't multiply into gigabytes.
+            let clip = |s: &str| -> String {
+                if s.chars().count() <= 200 {
+                    s.to_string()
+                } else {
+                    format!("{}…", s.chars().take(200).collect::<String>())
+                }
+            };
+            let col_label = clip(col);
+            let kind_msg = rule
+                .kind
+                .as_deref()
+                .map(|k| format!("not a valid {}", clip(k)));
+            let values_msg = rule
+                .values
+                .as_ref()
+                .map(|vals| format!("not one of: {}", clip(&vals.join(", "))));
             let mut seen: HashMap<&str, usize> = HashMap::new();
             for (n, row) in t.rows.iter().enumerate() {
                 let v = row[i].as_str();
@@ -1681,7 +1699,7 @@ fn validate() -> Arc<dyn Tool> {
                 let mut push = |msg: String| {
                     total_errors += 1;
                     if errors.len() < 1000 {
-                        errors.push(vec![json!(line), json!(col), json!(v), json!(msg)]);
+                        errors.push(vec![json!(line), json!(col_label), json!(v), json!(msg)]);
                     }
                 };
                 if v.trim().is_empty() {
@@ -1692,7 +1710,7 @@ fn validate() -> Arc<dyn Tool> {
                 }
                 if let Some(k) = &rule.kind {
                     if !check_type(k, v) {
-                        push(format!("not a valid {k}"));
+                        push(kind_msg.clone().unwrap_or_default());
                     }
                 }
                 if let Some(re) = &re {
@@ -1715,7 +1733,7 @@ fn validate() -> Arc<dyn Tool> {
                 }
                 if let Some(vals) = &rule.values {
                     if !vals.iter().any(|a| a == v) {
-                        push(format!("not one of: {}", vals.join(", ")));
+                        push(values_msg.clone().unwrap_or_default());
                     }
                 }
                 if let Some(ml) = rule.max_length {

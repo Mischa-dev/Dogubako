@@ -393,6 +393,21 @@ async fn table_exports_and_sparse_json_are_bounded() {
         out.err()
     );
 
+    // A huge allowed-values rule is not copied into every error message.
+    let out = h
+        .run(
+            "data.validate",
+            json!({"text": format!("a\n{}", "x\n".repeat(1000)), "rules": {"a": {"values": ["v".repeat(1_500_000)]}}}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["errors"], 1000);
+    assert!(
+        out.data.to_string().len() < 1_000_000,
+        "{}",
+        out.data.to_string().len()
+    );
+
     // Normal exports still work.
     let out = h
         .run(
