@@ -688,11 +688,13 @@ async fn ocr_with_tesseract() {
         return;
     }
     let mut img = RgbaImage::from_pixel(900, 200, Rgba([255, 255, 255, 255]));
-    let txt = dogubako_tools_image::util::render_text(
+    let txt = dogubako_tools_image::util::render_text_max(
         "Hello Dogubako\nOptical text",
         56.0,
         Rgba([0, 0, 0, 255]),
-    );
+        u64::MAX,
+    )
+    .unwrap();
     dogubako_tools_image::util::composite(
         &mut img,
         &txt,

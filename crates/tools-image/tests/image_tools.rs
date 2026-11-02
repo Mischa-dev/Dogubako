@@ -356,6 +356,16 @@ async fn watermark_text_image_and_tiles() {
         "logo.png",
         &RgbaImage::from_pixel(50, 50, Rgba([255, 0, 255, 255])),
     );
+    // Huge text must hit the pixel limit instead of allocating gigabytes.
+    let big = save(&h, "wide.png", &pattern(1000, 10, false));
+    let err = h
+        .run(
+            "image.watermark",
+            json!({"input": [s(&big)], "text": "W".repeat(10000), "font_size": 50}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "limit_exceeded");
     let out = h.run("image.watermark", json!({"input": [s(&a)], "text": "Hello Ünïcode", "opacity": 1.0, "position": "center", "font_size": 10})).await.unwrap();
     let w = open(&out.artifacts[0].path).to_rgb8();
     let orig = image::open(&a).unwrap().to_rgb8();

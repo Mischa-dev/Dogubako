@@ -473,10 +473,15 @@ fn watermark() -> Arc<dyn Tool> {
                 }
                 None => {
                     let px = (bw * p.num_or("font_size", 5.0) as f32 / 100.0).max(6.0);
-                    let txt = render_text(p.text("text"), px, color);
+                    let txt = render_text(ctx, p.text("text"), px, color)?;
                     if p.bool("shadow") {
                         let off = (px / 18.0).ceil().max(1.0) as i64;
-                        let sh = render_text(p.text("text"), px, Rgba([0, 0, 0, 140]));
+                        let sh = render_text(ctx, p.text("text"), px, Rgba([0, 0, 0, 140]))?;
+                        check_pixels(
+                            ctx,
+                            txt.width() as u64 + off as u64,
+                            txt.height() as u64 + off as u64,
+                        )?;
                         let mut l =
                             RgbaImage::new(txt.width() + off as u32, txt.height() + off as u32);
                         composite(&mut l, &sh, off, off, 1.0, Blend::Normal);
@@ -1093,7 +1098,8 @@ fn contact_sheet() -> Arc<dyn Tool> {
         let label_h = if labels { (label_px * 1.6) as u32 } else { 0 };
         let title = p
             .opt_str("title")
-            .map(|t| render_text(t, label_px * 1.8, tc));
+            .map(|t| render_text(ctx, t, label_px * 1.8, tc))
+            .transpose()?;
         let title_h = title.as_ref().map(|t| t.height() + gap).unwrap_or(0);
         let rows = files.len().div_ceil(cols) as u32;
         let w = cols as u32 * ts + (cols as u32 + 1) * gap;
@@ -1128,7 +1134,7 @@ fn contact_sheet() -> Arc<dyn Tool> {
                     );
                 }
                 Err(_) => {
-                    let x = render_text("unreadable", label_px, Rgba([200, 0, 0, 255]));
+                    let x = render_text(ctx, "unreadable", label_px, Rgba([200, 0, 0, 255]))?;
                     composite(
                         &mut sheet,
                         &x,
@@ -1141,14 +1147,14 @@ fn contact_sheet() -> Arc<dyn Tool> {
             }
             if labels {
                 let mut name = f.name.clone();
-                let mut lbl = render_text(&name, label_px, tc);
+                let mut lbl = render_text(ctx, &name, label_px, tc)?;
                 while lbl.width() > ts && name.chars().count() > 4 {
                     let keep: String = name
                         .chars()
                         .take(name.chars().count().saturating_sub(4))
                         .collect();
                     name = format!("{keep}…");
-                    lbl = render_text(&name, label_px, tc);
+                    lbl = render_text(ctx, &name, label_px, tc)?;
                     name = name.trim_end_matches('…').to_string();
                 }
                 composite(
