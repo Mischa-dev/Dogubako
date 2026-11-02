@@ -32,7 +32,7 @@ dogubako speech transcribe interview.m4a --formats srt,txt
 dogubako pdf merge a.pdf b.pdf c.pdf -o merged.pdf
 dogubako pdf ocr scan.pdf
 echo '{"b":1,"a":[1,2]}' | dogubako dev json
-dogubako dev hash --text "hello"
+dogubako dev hash "hello"
 dogubako files hash big.iso --algorithms sha256,blake3
 dogubako network cidr 10.0.0.0/22
 dogubako run image.resize --set input=photo.png --set width=800     # generic form

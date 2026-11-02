@@ -1,0 +1,140 @@
+---
+title: Engines and models
+description: The external programs and local models Dogubako can use, what each one unlocks, and how to install them.
+sidebar:
+  order: 9
+---
+
+import DependencyTable from '../../../components/DependencyTable.astro';
+import ModelTable from '../../../components/ModelTable.astro';
+
+About half of Dogubako's tools are native and need nothing else. The rest
+call a mature open-source program (an **engine**) or use a small local
+machine-learning **model**. Everything else keeps working without them.
+
+## Who provides the engines
+
+| You run | Engines come from |
+|---|---|
+| The macOS app | The app itself: [built in or downloaded on demand](#in-the-macos-app), at pinned versions |
+| The [Docker image](/self-hosting/docker/) | The image: every engine is baked in from a pinned Debian snapshot |
+| The CLI, a native server, or a development build | Your system: install what you need (below) |
+
+## In the macOS app
+
+The app manages its own engines, so there is nothing to install:
+
+| Tier | Engines | Where |
+|---|---|---|
+| **Built in** | FFmpeg and FFprobe, qpdf, Poppler, ExifTool, 7-Zip | Inside `Dogubako.app` (36 MB of the download) |
+| **On demand** | ImageMagick (9 MB), Tesseract (10 MB), Ghostscript (20 MB), Real-ESRGAN (51 MB), Pandoc (63 MB), whisper.cpp (~3 MB) | Downloaded into `~/Library/Application Support/Dogubako/engines` the first time you need one |
+| **System** | LibreOffice, Piper, rembg | Not managed yet. Install them yourself and the app finds them |
+
+When a tool needs an on-demand engine you don't have yet, its notice (and
+**Settings → Dependencies**) shows a **Download** button with the size.
+Downloads are checked against a pinned SHA-256 before they're unpacked, and
+nothing is installed system-wide.
+
+Every managed engine is pinned to an exact version, and the app uses only its
+own copies of them, never one from your `PATH` or Homebrew, so what runs is
+what was tested. An app update that bumps an engine downloads the new version
+when it's next needed and deletes the old one. Each engine folder carries the
+license texts of everything in it.
+
+To test a different build of a managed engine, set `DOGUBAKO_ENGINES=prefer`
+(use the app's copies first, then the system) or `DOGUBAKO_ENGINES=system`
+(ignore the app's copies), or point at one binary with
+[`DOGUBAKO_<ID>_PATH`](#pointing-at-a-specific-binary).
+
+## Checking what you have
+
+- In the app: **Settings → Dependencies** lists every engine with its status
+  (**Built in**, **Downloaded**, **Not downloaded**, **Found** or
+  **Missing**), its version, and either a **Download** button or the install
+  command for your system.
+- On the command line: `dogubako deps`.
+- On a server: `GET /api/v1/deps`.
+
+Detection happens the first time it is needed and is then cached. After you
+install something, click the refresh button on the Dependencies page or
+restart the app (`POST /api/v1/deps/refresh` on a server).
+
+A tool whose engine is missing is never hidden. It shows a notice with the
+download button or install command, and running it returns a
+`missing_dependency` error that names the engine.
+
+## Engines
+
+The install commands below are for the CLI and native servers. The macOS
+app and the Docker image don't need them.
+
+<DependencyTable />
+
+Engines marked **optional** are not required by any tool as a whole, but some
+options use them. For example, **View Image Metadata** reads every tag with
+ExifTool when it is installed and falls back to its built-in EXIF reader
+otherwise, and **Create Archive** needs 7-Zip only for `.7z` archives. Choosing
+such an option without the engine gives a `missing_dependency` error that
+names it. libvips is still detected but no tool uses it any more, so the macOS app and
+the Docker image leave it out. `bwrap` (Bubblewrap) is not used by tools at all; it sandboxes the
+other engines on Linux servers (see
+[Security](/project/security/#executing-external-programs)).
+
+### Pointing at a specific binary
+
+Set `DOGUBAKO_<ID>_PATH` to use a binary that isn't on your `PATH`, for
+example:
+
+```sh
+DOGUBAKO_FFMPEG_PATH=/opt/ffmpeg-7/bin/ffmpeg dogubako video compress talk.mov
+```
+
+```powershell
+$env:DOGUBAKO_7ZIP_PATH = "C:\Program Files\7-Zip\7z.exe"
+dogubako files archive-extract backup.7z
+```
+
+Or put binaries in Dogubako's `bin` folder (see
+[Desktop app](/app/desktop/#where-files-go)), which is searched before your
+`PATH`.
+
+### Known engine issues
+
+- **FFmpeg 9 `anlmdn`.** The non-local-means audio denoiser crashes
+  intermittently with FFmpeg 9 on Apple-silicon Macs. `audio.denoise` refuses
+  `method: anlmdn` on FFmpeg 9 and later with an `unsupported` error and
+  points you to the FFT method, which is not affected.
+- **Homebrew FFmpeg** is built without libvorbis, libass (the `subtitles`
+  filter), drawtext and animated WebP encoding. Tools that need those report
+  `unsupported` instead of failing obscurely.
+- **Tesseract languages.** Only the languages you install are available for
+  OCR. On Debian and Ubuntu, add packages such as `tesseract-ocr-deu` or
+  `tesseract-ocr-fra`.
+
+## Models
+
+Models are downloaded on request, never bundled, and stored in the `models`
+folder (`DOGUBAKO_MODELS_DIR` overrides it). Where upstream publishes a
+checksum, the download is verified against it; otherwise Dogubako records a
+local SHA-256 when it first downloads the file.
+
+```sh
+dogubako models list
+dogubako models download whisper-base
+dogubako models remove whisper-base
+```
+
+In the app, use **Settings → Models**. On a server, only admins can download
+or remove models.
+
+<ModelTable />
+
+Which Whisper model should you pick? `whisper-base` is a good default on a
+laptop. `whisper-small` is noticeably more accurate and still practical on a
+modern CPU. `whisper-large-v3-turbo-q5_0` gives near-best accuracy at a
+fraction of the full model's size. The `.en` models are English-only and a
+little more accurate for English. `whisper-small.en-tdrz` adds speaker-turn
+detection.
+
+Transcription also needs the `whisper.cpp` engine itself (`whisper-cli`), and
+text to speech needs the `piper` program as well as a voice.

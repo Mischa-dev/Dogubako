@@ -1,0 +1,5 @@
+# Cloudflare Pages project for https://docs.dogubako.app
+# Deploy:  npm run deploy   (after `npx wrangler login`, or with CLOUDFLARE_API_TOKEN set)
+name = "dogubako-docs"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-10-01"

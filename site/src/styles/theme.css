@@ -1,0 +1,156 @@
+/* Dogubako docs theme: the app's "paper" look.
+   Warm paper ground, ink for actions, the vermilion latch only in the mark.
+   Starlight's dark theme is the default (:root); light is [data-theme='light']. */
+
+:root {
+  --sl-font: 'Instrument Sans Variable', 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --sl-font-mono: 'DM Mono', ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --dgb-brand: #e0533d;
+
+  /* dark: warm charcoal paper */
+  --sl-color-accent-low: #2a2622;
+  --sl-color-accent: #d9cfc2;
+  --sl-color-accent-high: #f3ede5;
+  --sl-color-white: #f3f0ea;
+  --sl-color-gray-1: #edeae4;
+  --sl-color-gray-2: #c9c5bd;
+  --sl-color-gray-3: #9d988f;
+  --sl-color-gray-4: #6a665f;
+  --sl-color-gray-5: #3a3732;
+  --sl-color-gray-6: #24221f;
+  --sl-color-black: #151412;
+  --sl-color-bg-nav: #1a1917;
+  --sl-color-bg-sidebar: #151412;
+  --sl-color-hairline: #2e2c28;
+  --sl-color-hairline-light: #26241f;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #ece8e0;
+  --sl-color-accent: #161616;
+  --sl-color-accent-high: #161616;
+  --sl-color-white: #161616;
+  --sl-color-gray-1: #26241f;
+  --sl-color-gray-2: #4a4843;
+  --sl-color-gray-3: #6a6862;
+  --sl-color-gray-4: #9a968e;
+  --sl-color-gray-5: #d2cec5;
+  --sl-color-gray-6: #ece9e3;
+  --sl-color-gray-7: #f1efea;
+  --sl-color-black: #f7f6f3;
+  --sl-color-bg-nav: #f7f6f3;
+  --sl-color-bg-sidebar: #f7f6f3;
+  --sl-color-hairline: #e4e1da;
+  --sl-color-hairline-light: #ece9e3;
+}
+
+/* Frosted header, like the app's floating surfaces. Solid when blur is
+   unavailable or the reader asked for less transparency. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  header.header {
+    background-color: color-mix(in srgb, var(--sl-color-bg-nav) 78%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    backdrop-filter: blur(18px) saturate(1.3);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  header.header {
+    background-color: var(--sl-color-bg-nav);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+.site-title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+h1#_top {
+  letter-spacing: -0.015em;
+}
+
+/* Tables: quiet paper rows that scroll on small screens. */
+.sl-markdown-content table {
+  font-size: var(--sl-text-sm);
+}
+.sl-markdown-content table code {
+  white-space: nowrap;
+}
+
+/* Kbd keys drawn as small physical keys. */
+.sl-markdown-content kbd {
+  font-family: var(--sl-font-mono);
+  font-size: 0.82em;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--sl-color-hairline);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-gray-1);
+  white-space: nowrap;
+}
+
+/* Screenshots sit on the page like prints on a bench. */
+.sl-markdown-content img.shot,
+.sl-markdown-content figure.shot img {
+  border-radius: 12px;
+  border: 1px solid var(--sl-color-hairline);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.18);
+}
+.sl-markdown-content figure.shot figcaption {
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-3);
+  margin-top: 0.5rem;
+}
+
+/* Tool catalog entries. */
+.tool-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  margin-top: 0.25rem;
+  font-size: var(--sl-text-xs);
+}
+.tool-meta span {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 999px;
+  padding: 0.05rem 0.55rem;
+  color: var(--sl-color-gray-2);
+  background: var(--sl-color-gray-6);
+}
+.tool-meta span.engine-external { border-color: color-mix(in srgb, #9a5b00 45%, transparent); }
+.tool-meta span.engine-model { border-color: color-mix(in srgb, #2f5f8a 55%, transparent); }
+.tool-meta span.engine-network { border-color: color-mix(in srgb, #1f7a45 50%, transparent); }
+
+/* Landing page */
+.hero .tagline {
+  max-width: 38rem;
+}
+.dgb-shots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 1rem;
+}
+.dgb-shots img {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--sl-color-hairline);
+}
+
+/* Engine table: install commands as compact wrapping chips. */
+.dgb-muted { color: var(--sl-color-gray-3); }
+.dgb-deps td { vertical-align: top; }
+.dgb-pkgs { line-height: 1.9; }
+.dgb-pkg { display: inline-block; margin: 0 0.75rem 0 0; white-space: nowrap; }
+.dgb-pkg small { color: var(--sl-color-gray-3); }
+
+/* Keep the landing mark modest. */
+.hero > img, .hero > .hero-html { max-width: 14rem; }
+@media (max-width: 50rem) {
+  .hero > img, .hero > .hero-html { max-width: 7rem; }
+}
