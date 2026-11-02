@@ -236,6 +236,41 @@ async fn svg_optimize_and_render() {
         dogubako_tools_image::svg::round_numbers("M5.5-0.001", 1),
         "M5.5 0"
     );
+    // The optimizer uses the path-aware rounding for `d`.
+    let arc = h.write(
+        "arc.svg",
+        br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M0 0A10 10 0 0110.123 20"/></svg>"#,
+    );
+    let out = h
+        .run(
+            "image.svg_optimize",
+            json!({"input": [s(&arc)], "precision": 2}),
+        )
+        .await
+        .unwrap();
+    let r = std::fs::read_to_string(&out.artifacts[0].path).unwrap();
+    assert!(r.contains("A10 10 0 01 10.12 20"), "{r}");
+
+    // Arc flags are single characters that may touch the next number.
+    use dogubako_tools_image::svg::round_path_numbers;
+    assert_eq!(
+        round_path_numbers("M0 0A10 10 0 0110.123 20", 2),
+        "M0 0A10 10 0 01 10.12 20"
+    );
+    // Repeated implicit arcs and comma separators.
+    assert_eq!(
+        round_path_numbers(
+            "M0 0a1.111,1.111 0 1,0 2.222,0 1.111 1.111 0 1 1 -2.222 0z",
+            1
+        ),
+        "M0 0a1.1,1.1 0 1,0 2.2,0 1.1 1.1 0 1 1 -2.2 0z"
+    );
+    assert_eq!(
+        round_path_numbers("M0 0A5 5 30.25 101.5.5", 1),
+        "M0 0A5 5 30.2 10 1.5 .5"
+    );
+    // Other commands are unaffected.
+    assert_eq!(round_path_numbers("M1.25 0L0.5 2", 1), "M1.2 0L.5 2");
 }
 
 #[tokio::test]
