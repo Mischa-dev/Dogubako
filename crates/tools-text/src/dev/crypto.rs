@@ -700,6 +700,18 @@ mod tests {
         );
         let out = h.run("dev.hash", json!({"text": "abc", "algorithms": ["md5"], "compare": "900150983CD24FB0D6963F7D28E17F72"})).await.unwrap();
         assert_eq!(out.data["match"], true);
+        // The uppercase option must not be folded into the lowercase one.
+        let out = h
+            .run(
+                "dev.hash",
+                json!({"text": "abc", "algorithms": ["md5"], "encoding": "HEX"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            out.data["table"]["rows"][0][1],
+            "900150983CD24FB0D6963F7D28E17F72"
+        );
         // Base64 is case-sensitive: a case-changed digest must not match.
         let b64 = |c: &str| json!({"text": "abc", "algorithms": ["sha256"], "encoding": "base64", "compare": c});
         let out = h

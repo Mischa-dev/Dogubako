@@ -452,7 +452,8 @@ fn coerce(p: &ParamSpec, v: Value, fs_policy: &FsPolicy) -> ToolResult<Value> {
             let check = |s: &str| -> ToolResult<String> {
                 options
                     .iter()
-                    .find(|o| o.value.eq_ignore_ascii_case(s))
+                    .find(|o| o.value == s)
+                    .or_else(|| options.iter().find(|o| o.value.eq_ignore_ascii_case(s)))
                     .map(|o| o.value.clone())
                     .ok_or_else(|| {
                         let allowed: Vec<&str> = options.iter().map(|o| o.value.as_str()).collect();
