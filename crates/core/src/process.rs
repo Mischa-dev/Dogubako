@@ -306,7 +306,9 @@ impl Exec {
             }
         }
 
-        tracing::debug!(program = %self.display, args = ?args, "spawning");
+        // Argument values are never logged: some carry secrets (e.g. archive
+        // passwords), and redaction by position cannot be done reliably.
+        tracing::debug!(program = %self.display, arg_count = args.len(), "spawning");
         let mut child = cmd.spawn().map_err(|e| ToolError::External {
             program: self.display.clone(),
             exit_code: None,

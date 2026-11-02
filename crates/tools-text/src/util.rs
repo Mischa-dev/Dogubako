@@ -165,6 +165,22 @@ pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 }
 
 /// Parse a number leniently (allows thousands separators `_`/`,` when unambiguous and surrounding spaces).
+/// Compare two cells numerically: exactly as integers when both are
+/// integral (f64 cannot tell 2^53 from 2^53+1), otherwise as f64.
+pub fn compare_numbers(a: &str, b: &str) -> Option<std::cmp::Ordering> {
+    fn int(s: &str) -> Option<i128> {
+        let t = s.trim();
+        t.parse::<i128>().ok().or_else(|| {
+            let cleaned: String = t.chars().filter(|c| *c != '_' && *c != ',').collect();
+            (cleaned.len() != t.len()).then(|| cleaned.parse::<i128>().ok())?
+        })
+    }
+    match (int(a), int(b)) {
+        (Some(x), Some(y)) => Some(x.cmp(&y)),
+        _ => parse_number(a)?.partial_cmp(&parse_number(b)?),
+    }
+}
+
 pub fn parse_number(s: &str) -> Option<f64> {
     let t = s.trim();
     if t.is_empty() {

@@ -681,17 +681,12 @@ fn row_matches(
     } else {
         (cell.to_string(), value.to_string())
     };
-    let num = || -> Option<std::cmp::Ordering> {
-        match (parse_number(cell), parse_number(value)) {
-            (Some(a), Some(b)) => a.partial_cmp(&b),
-            _ => None,
-        }
-    };
+    let num = || crate::util::compare_numbers(cell, value);
     let ord = || num().unwrap_or_else(|| natural_cmp(&c, &v));
     Ok(match op {
-        "equals" => match (parse_number(cell), parse_number(value)) {
-            (Some(a), Some(b)) => a == b,
-            _ => c == v,
+        "equals" => match num() {
+            Some(o) => o == std::cmp::Ordering::Equal,
+            None => c == v,
         },
         "not_equals" => !row_matches(cell, "equals", value, re, ci)?,
         "contains" => c.contains(&v),
@@ -2093,6 +2088,24 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.data["matched"], 2);
+        // Large integer ids compare exactly (2^53 vs 2^53+1).
+        let ids = "id\n9007199254740992\n9007199254740993\n";
+        let out = h
+            .run(
+                "data.csv_filter_sort",
+                json!({"text": ids, "filter_column": "id", "filter_op": "equals", "filter_value": "9007199254740992"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.text.unwrap(), "id\n9007199254740992\n");
+        let out = h
+            .run(
+                "data.csv_filter_sort",
+                json!({"text": ids, "filter_column": "id", "filter_op": "not_equals", "filter_value": "9007199254740992"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.text.unwrap(), "id\n9007199254740993\n");
         assert_eq!(
             h.run(
                 "data.csv_filter_sort",
