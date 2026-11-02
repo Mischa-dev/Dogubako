@@ -225,6 +225,14 @@ pub fn infer_value(s: &str) -> Value {
         if let Ok(i) = t.parse::<i64>() {
             return Value::from(i);
         }
+        if let Ok(u) = t.parse::<u64>() {
+            return Value::from(u);
+        }
+        // Integers beyond u64/i64 would be rounded by f64: keep them as text.
+        let digits = t.strip_prefix(['-', '+']).unwrap_or(t);
+        if !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) {
+            return Value::String(s.to_string());
+        }
         if t.chars().any(|c| c.is_ascii_digit()) && !t.contains(['x', 'X']) {
             if let Ok(f) = t.parse::<f64>() {
                 if f.is_finite() && !t.eq_ignore_ascii_case("inf") && !t.eq_ignore_ascii_case("nan")
@@ -261,6 +269,21 @@ mod tests {
         assert_eq!(infer_value("42"), json!(42));
         assert_eq!(infer_value("007"), json!("007"));
         assert_eq!(infer_value("1.5"), json!(1.5));
+        // Above i64::MAX but within u64: exact number.
+        assert_eq!(
+            infer_value("9223372036854775809"),
+            json!(9223372036854775809u64)
+        );
+        // Beyond u64 / below i64::MIN: kept as text, never rounded.
+        assert_eq!(
+            infer_value("18446744073709551616"),
+            json!("18446744073709551616")
+        );
+        assert_eq!(
+            infer_value("-9223372036854775809"),
+            json!("-9223372036854775809")
+        );
+        assert_eq!(infer_value("1e3"), json!(1000.0));
         assert_eq!(infer_value(""), Value::Null);
     }
 }
