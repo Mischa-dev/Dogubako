@@ -81,3 +81,11 @@ instead of a broken player.
 Any static host works: run `website/scripts/trailer.sh`, then serve the `website/` folder as the web root. For GitHub
 Pages, publish `website/` (for example with `actions/upload-pages-artifact` and
 `actions/deploy-pages`) and keep `CNAME` so the domain stays `dogubako.app`.
+
+## Prerelease review
+
+The hero and platform cards identify this as a prerelease. No public GitHub release existed at review time on November 2, 2026. Keep the status and source-build wording until a release is approved and real installer assets exist. The docs links currently use repository documents while PR #4 remains undeployed.
+
+The browser demo uses simpler implementations than the native app. Engines are installed separately; models download on request. Network tools make outbound requests. The Japanese name uses a self-hosted three-glyph Noto Sans JP subset, with its OFL in `fonts/noto-sans-jp-LICENSE.txt`.
+
+Review screenshots and interaction checks used Chromium at 1440×900, 390×844 and 320×740 in light/dark themes. This does not establish Safari/iOS, native desktop packaging, touch, screen-reader or real-device behavior. PR #2's `web/` sources are untouched.
