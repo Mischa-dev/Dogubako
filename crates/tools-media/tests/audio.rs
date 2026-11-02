@@ -31,10 +31,19 @@ async fn convert_compress() {
         ("aiff", "pcm_s16be"),
         ("alac", "alac"),
     ] {
-        let out = h
+        let out = match h
             .run("audio.convert", json!({"input": [s(&t)], "format": fmt}))
             .await
-            .unwrap();
+        {
+            Ok(o) => o,
+            // FFmpeg builds differ (e.g. Homebrew ships without libvorbis):
+            // the tool must say so clearly rather than fail obscurely.
+            Err(e) if e.code() == "unsupported" && !common::has_encoder_for(fmt) => {
+                assert!(e.to_string().contains("encoder"), "{fmt}: {e}");
+                continue;
+            }
+            Err(e) => panic!("{fmt}: {e}"),
+        };
         assert_eq!(
             codec(&out.artifacts[0].path, "audio").as_deref(),
             Some(codec_name),
@@ -384,22 +393,24 @@ async fn visuals_info_tags() {
         .unwrap();
     assert_eq!(out.data["has_cover"], false);
     assert_eq!(out.data["tags"]["artist"], "Me");
-    let ogg = gen(
-        &h,
-        "song.ogg",
-        &["-f", "lavfi", "-i", "sine=d=1", "-c:a", "libvorbis"],
-    );
-    let out = h
-        .run(
-            "audio.tags",
-            json!({"input": s(&ogg), "album": "Ogg Album"}),
-        )
-        .await
-        .unwrap();
-    assert_eq!(out.data["tags"]["album"], "Ogg Album");
-    let e = h
-        .run("audio.tags", json!({"input": s(&ogg), "cover": s(&cover)}))
-        .await
-        .unwrap_err();
-    assert_eq!(e.code(), "invalid_input");
+    if common::has_encoder("libvorbis") {
+        let ogg = gen(
+            &h,
+            "song.ogg",
+            &["-f", "lavfi", "-i", "sine=d=1", "-c:a", "libvorbis"],
+        );
+        let out = h
+            .run(
+                "audio.tags",
+                json!({"input": s(&ogg), "album": "Ogg Album"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.data["tags"]["album"], "Ogg Album");
+        let e = h
+            .run("audio.tags", json!({"input": s(&ogg), "cover": s(&cover)}))
+            .await
+            .unwrap_err();
+        assert_eq!(e.code(), "invalid_input");
+    }
 }

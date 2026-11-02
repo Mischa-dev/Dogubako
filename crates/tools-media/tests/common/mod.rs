@@ -122,3 +122,27 @@ pub fn codec(p: &std::path::Path, kind: &str) -> Option<String> {
 pub fn s(p: &std::path::Path) -> String {
     p.to_string_lossy().to_string()
 }
+
+/// Whether this FFmpeg build has the named encoder.
+pub fn has_encoder(name: &str) -> bool {
+    Command::new("ffmpeg")
+        .args(["-hide_banner", "-encoders"])
+        .output()
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .any(|l| l.split_whitespace().nth(1) == Some(name))
+        })
+        .unwrap_or(false)
+}
+
+/// Whether the encoder normally used for an output format is available.
+pub fn has_encoder_for(fmt: &str) -> bool {
+    match fmt {
+        "mp3" => has_encoder("libmp3lame"),
+        "ogg" => has_encoder("libvorbis"),
+        "opus" => has_encoder("libopus") || has_encoder("opus"),
+        "m4a" | "aac" => has_encoder("aac") || has_encoder("libfdk_aac"),
+        _ => true,
+    }
+}
