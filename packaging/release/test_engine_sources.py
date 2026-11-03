@@ -168,10 +168,16 @@ class SourceTests(unittest.TestCase):
         stale = self.root/'out/engine-sources'
         stale.mkdir(parents=True)
         (stale/'old.tar.gz').write_bytes(b'stale')
-        with patch.object(sources, 'get', return_value=self.data), patch.object(sources, 'fetch_recipe'):
+        def recipe(name, bottle, review, stage):
+            (stage/'recipes').mkdir(exist_ok=True)
+            (stage/'recipes'/f'{name}.rb').write_text('recipe')
+            (stage/'.transient-download').write_bytes(b'partial')
+        with patch.object(sources, 'get', return_value=self.data), patch.object(sources, 'fetch_recipe', side_effect=recipe):
             self.assertEqual(self.invoke(lp, ip), 0)
         with tarfile.open(self.root/'out/engine-sources-test.tar') as t:
             self.assertFalse(any('old.tar.gz' in n for n in t.getnames()))
+            self.assertFalse(any('.transient-download' in n for n in t.getnames()))
+            self.assertEqual(len(t.getnames()), 5)
             self.assertEqual(t.extractfile('engine-sources-test/engines.lock.json').read(), lp.read_bytes())
             self.assertIn('engine-sources-test/source-inputs.json', t.getnames())
 

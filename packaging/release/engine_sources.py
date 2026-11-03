@@ -160,6 +160,7 @@ def main() -> int:
         "|---|---|---|---|---|---|---|",
     ]
     missing = []
+    collected = []
     for f, b in sorted(wanted.items()):
         fname, digest, note = "", "", ""
         src = b.get("source")
@@ -169,8 +170,10 @@ def main() -> int:
             try:
                 fname, digest, note = fetch_source(f, b["version"], src, stage)
                 fetch_recipe(f, b, reviews[f], stage)
+                collected.extend([stage / fname, stage / "recipes" / f"{f}.rb"])
                 for number, extra in enumerate(reviews[f]["inputs"]):
                     extra_file, extra_digest, _ = fetch_source(f"{f}-input-{number}", b["version"], extra, stage)
+                    collected.append(stage / extra_file)
                     index.append(f"| {f} input {number} | {b['version']} | see recipe | {f} | {extra_file} | {extra_digest} | {extra['url']} |")
             except Exception as exc:  # recorded and reported, never silently dropped
                 fname = ""
@@ -197,9 +200,10 @@ def main() -> int:
     # Do not create or overwrite a release-shaped archive on failure.
     pending = stage / "complete.tar"
     with tarfile.open(pending, "w") as t:
-        for p in sorted(stage.iterdir()):
-            if p != pending:
-                t.add(p, arcname=f"engine-sources-{a.version}/{p.name}")
+        # Only index explicitly verified outputs. Filesystem helpers may create
+        # transient files even in a fresh directory; never recurse over those.
+        for p in sorted(collected + [stage / n for n in ("SOURCES.md", "engines.lock.json", "source-inputs.json")]):
+            t.add(p, arcname=f"engine-sources-{a.version}/{p.relative_to(stage)}", recursive=False)
     pending.replace(tar)
     work.cleanup()
     print(f"wrote {tar}")
