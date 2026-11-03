@@ -4,7 +4,8 @@
 The macOS app ships (or downloads) Homebrew-built engines. For the GPL, LGPL,
 AGPL and MPL parts, a release offering the binaries for download must offer
 the source from the same place. This script downloads the upstream source of
-each such component at the pinned version and writes one tar to attach to the
+each such component exactly as pinned in engines.lock.json (tarball URL and
+SHA-256, or git commit, recorded by lock.py) and writes one tar to attach to the
 GitHub release, with a SOURCES.md index inside.
 
   python3 -I packaging/release/engine_sources.py --version 0.1.0-alpha.1
@@ -19,8 +20,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
 import tarfile
+import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -35,32 +38,40 @@ def get(url: str, timeout: int = 60) -> bytes:
         return r.read()
 
 
-def source_url(formula: str, pinned: str) -> tuple[str | None, str]:
-    """Return (url, note) for the formula's source at the pinned version."""
-    d = json.loads(get(f"https://formulae.brew.sh/api/formula/{formula}.json"))
-    stable = d.get("urls", {}).get("stable", {})
-    url, rev = stable.get("url"), stable.get("revision")
-    current = d.get("versions", {}).get("stable", "")
-    base = pinned.split("_")[0]
-    if url and url.endswith(".git"):
-        # Git sources (e.g. x264): GitLab and GitHub both serve archives by revision.
-        repo = url.removesuffix(".git")
-        name = repo.rsplit("/", 1)[-1]
-        if current != base:
-            return None, f"git {url}; pinned {base} but Homebrew is at {current}: fetch by hand"
-        if "github.com" in repo:
-            return f"{repo}/archive/{rev}.tar.gz", f"git {url} @ {rev}"
-        return f"{repo}/-/archive/{rev}/{name}-{rev}.tar.gz", f"git {url} @ {rev}"
-    if url and current != base:
-        url = url.replace(current, base)
-        return url, f"version adjusted from Homebrew's current {current}"
-    return url, ""
+def fetch_source(name: str, version: str, src: dict, stage: Path) -> tuple[str, str, str]:
+    """Download the source pinned in the lock. Returns (file, sha256, note)."""
+    if src.get("url"):
+        url = src["url"]
+        data = get(url, timeout=300)
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != src["sha256"]:
+            raise RuntimeError(f"checksum mismatch for {url}: got {digest}, lock has {src['sha256']}")
+        fname = f"{name}-{version}-" + url.rsplit("/", 1)[-1]
+        (stage / fname).write_bytes(data)
+        return fname, digest, ""
+    # Git sources (e.g. x264): the commit hash is the pin. Fetch exactly that
+    # commit and archive it, so the content is verified by git itself.
+    repo, rev = src["git"], src["revision"]
+    fname = f"{name}-{version}-{rev[:12]}.tar.gz"
+    with tempfile.TemporaryDirectory() as tmp:
+        git = ["git", "-C", tmp]
+        subprocess.run([*git, "init", "-q"], check=True)
+        if subprocess.run([*git, "fetch", "-q", "--depth", "1", repo, rev]).returncode != 0:
+            # Servers that refuse fetching by commit: fetch everything, then pick it.
+            subprocess.run([*git, "fetch", "-q", repo, "+refs/*:refs/remotes/src/*"], check=True)
+        subprocess.run(
+            [*git, "archive", "--format=tar.gz", f"--prefix={name}-{rev[:12]}/", "-o", str(stage / fname), rev],
+            check=True,
+        )
+    digest = hashlib.sha256((stage / fname).read_bytes()).hexdigest()
+    return fname, digest, f"git {repo} @ {rev}"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", required=True, help="Dogubako version, for the file name")
     ap.add_argument("--out", default=str(ROOT / "build" / "release"))
+    ap.add_argument("--only", nargs="*", help="only these formulae (for testing)")
     a = ap.parse_args()
 
     lock = json.loads(LOCK.read_text())
@@ -70,10 +81,14 @@ def main() -> int:
             continue
         for f in e.get("formulae", []):
             b = lock["bottles"].get(f, {})
+            if a.only and f not in a.only:
+                continue
             if any(c in (b.get("license") or "") for c in COPYLEFT):
                 wanted.setdefault(f, {**b, "engines": []})["engines"].append(eid)
 
-    out = Path(a.out)
+    # Absolute: git archive runs in a temporary repository and would resolve a
+    # relative output path there.
+    out = Path(a.out).resolve()
     stage = out / "engine-sources"
     stage.mkdir(parents=True, exist_ok=True)
     index = [
@@ -88,16 +103,15 @@ def main() -> int:
     ]
     missing = []
     for f, b in sorted(wanted.items()):
-        url, note = source_url(f, b["version"])
-        fname, digest = "", ""
-        if url:
+        fname, digest, note = "", "", ""
+        src = b.get("source")
+        if not src:
+            note = "no source pinned in engines.lock.json (re-run packaging/engines/lock.py)"
+        else:
             try:
-                data = get(url, timeout=300)
-                fname = f"{f}-{b['version']}-" + url.rsplit("/", 1)[-1]
-                (stage / fname).write_bytes(data)
-                digest = hashlib.sha256(data).hexdigest()
+                fname, digest, note = fetch_source(f, b["version"], src, stage)
             except Exception as exc:  # recorded and reported, never silently dropped
-                note = f"{note}; download failed ({exc}) from {url}".lstrip("; ")
+                note = f"download failed ({exc})"
         if not fname:
             missing.append(f)
         index.append(f"| {f} | {b['version']} | {b['license']} | {', '.join(b['engines'])} | {fname} | {digest} | {note} |")

@@ -6,7 +6,11 @@ exact version, download URL, SHA-256 and size.
     python3 -I packaging/engines/lock.py --check    # fail if the lock is stale vs engines.toml
 
 Homebrew bottles are content-addressed on ghcr.io by their SHA-256, so a
-locked bottle stays downloadable after Homebrew moves on. Runs on any OS;
+locked bottle stays downloadable after Homebrew moves on. Each bottle also
+records the exact upstream source it was built from (tarball URL + SHA-256,
+or git repository + commit), which the release's corresponding-source tar
+uses (packaging/release/engine_sources.py), so that never depends on what
+Homebrew's API says later. Runs on any OS;
 only `assemble.py` needs a Mac.
 """
 
@@ -68,6 +72,21 @@ def pick_bottle(formula: dict, tags: list[str]) -> tuple[str, dict]:
     raise SystemExit(f"{formula['name']}: no bottle for {tags} (has {sorted(files)})")
 
 
+def formula_source(formula: dict) -> dict:
+    """The upstream source Homebrew builds this formula version from."""
+    stable = formula.get("urls", {}).get("stable", {})
+    url = stable.get("url")
+    if not url:
+        raise SystemExit(f"{formula['name']}: Homebrew lists no source URL")
+    if stable.get("using") == "git" or url.endswith(".git"):
+        if not stable.get("revision"):
+            raise SystemExit(f"{formula['name']}: git source without a pinned revision")
+        return {"git": url, "revision": stable["revision"], "tag": stable.get("tag")}
+    if not stable.get("checksum"):
+        raise SystemExit(f"{formula['name']}: source {url} has no checksum")
+    return {"url": url, "sha256": stable["checksum"]}
+
+
 def resolve_closure(root: str, tags: list[str], cache: dict[str, dict]) -> list[str]:
     """Runtime dependency closure in dependency-first order."""
     order: list[str] = []
@@ -111,6 +130,7 @@ def build_lock(manifest: dict) -> dict:
                     "url": b["url"],
                     "sha256": b["sha256"],
                     "size": blob_size(b["url"]),
+                    "source": formula_source(f),
                 }
                 print(f"  {name:<22} {version:<14} {tag:<14} {bottles[name]['size'] or '?':>10}", file=sys.stderr)
             engines[eid] = {
@@ -177,6 +197,10 @@ def stale(manifest: dict, lock: dict) -> list[str]:
             problems.append(f"{eid}: upstream url changed")
         elif locked and e.get("source") == "upstream" and not locked.get("sha256"):
             problems.append(f"{eid}: upstream sha256 not pinned (run fetch.py --pin-upstream)")
+    for name, b in lock.get("bottles", {}).items():
+        src = b.get("source") or {}
+        if not ((src.get("url") and src.get("sha256")) or (src.get("git") and src.get("revision"))):
+            problems.append(f"{name}: source not pinned (re-run lock.py)")
     return problems
 
 

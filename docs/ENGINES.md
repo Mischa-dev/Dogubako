@@ -176,9 +176,11 @@ separate programs, so bundling them is aggregation, not linking. Notes:
 
 * **GPL engines** (FFmpeg as built by Homebrew, Poppler, Pandoc, Piper via
   espeak-ng) and **AGPL Ghostscript**: compatible with Dogubako's AGPL. Each
-  release must offer the corresponding source; `source_url` per engine in
-  `engines.toml` lists where. Mirroring the exact source tarballs next to the
-  engine packs is the safest way to satisfy this.
+  release must offer the corresponding source. `lock.py` records, for every
+  bottle, the exact upstream source it was built from (tarball URL and
+  SHA-256, or git repository and commit), and the release workflow's
+  `packaging/release/engine_sources.py` downloads exactly those, verifies them
+  and attaches one `engine-sources-<version>.tar` to the release.
 * **7-Zip**: LGPL plus the unRAR restriction (the RAR code is freeware: it may
   not be used to recreate a RAR compressor). We only extract, and shipping it
   as a separate program is fine.
