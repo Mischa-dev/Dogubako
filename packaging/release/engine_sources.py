@@ -86,7 +86,9 @@ def main() -> int:
             if any(c in (b.get("license") or "") for c in COPYLEFT):
                 wanted.setdefault(f, {**b, "engines": []})["engines"].append(eid)
 
-    out = Path(a.out)
+    # Absolute: git archive runs in a temporary repository and would resolve a
+    # relative output path there.
+    out = Path(a.out).resolve()
     stage = out / "engine-sources"
     stage.mkdir(parents=True, exist_ok=True)
     index = [
