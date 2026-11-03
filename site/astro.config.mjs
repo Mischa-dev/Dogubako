@@ -72,6 +72,7 @@ export default defineConfig({
           items: [
             'self-hosting/overview',
             'self-hosting/docker',
+            'self-hosting/podman',
             'self-hosting/native',
             'self-hosting/networking',
             'self-hosting/accounts-and-agents',
