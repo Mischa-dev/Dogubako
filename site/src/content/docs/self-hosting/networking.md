@@ -53,6 +53,16 @@ through the tailnet.
 tailscale serve --bg 8420
 ```
 
+That takes the machine's HTTPS port 443. If `tailscale serve status` shows
+something there already, Tailscale replaces it without asking, so use another
+port instead and open `https://<machine>.<tailnet>.ts.net:8443`:
+
+```sh
+tailscale serve --bg --https=8443 8420
+```
+
+Set `DOGUBAKO_PUBLIC_URL` to the address you end up with, port included.
+
 Tailscale ACLs make a good outer layer: for example, only your devices and
 your agents' machines may reach the server. Dogubako's accounts and agent
 policies still apply inside.
