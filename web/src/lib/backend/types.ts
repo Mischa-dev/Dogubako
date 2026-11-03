@@ -59,7 +59,7 @@ export interface Backend {
   /** Remove a run's output files as well as its history entry (server: deleteJob already does). */
   discardRun(id: string): Promise<void>;
 
-  deps(): Promise<{ dependencies: DepInfo[]; platform?: string }>;
+  deps(): Promise<{ dependencies: DepInfo[]; platform?: string; docker_image?: boolean }>;
   models(): Promise<{ models: ModelInfo[]; downloads: ModelDownload[] }>;
   modelDownload(id: string): Promise<void>;
   modelRemove(id: string): Promise<void>;

@@ -118,7 +118,8 @@ USER dogubako
 ENV DOGUBAKO_BIND=0.0.0.0:8420 \
     DOGUBAKO_DATA_DIR=/data \
     DOGUBAKO_SECURE_COOKIES=false \
-    DOGUBAKO_ENGINES=system
+    DOGUBAKO_ENGINES=system \
+    DOGUBAKO_DOCKER_IMAGE=1
 VOLUME ["/data"]
 EXPOSE 8420
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD ["dogubako", "server", "health"]

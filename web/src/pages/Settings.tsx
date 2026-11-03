@@ -131,7 +131,7 @@ interface EngineBackend {
 
 function Dependencies() {
   const { backend, isAdmin, isServer, toolMap } = useApp();
-  const [data, setData] = useState<{ dependencies: DepInfo[]; platform?: string } | null>(null);
+  const [data, setData] = useState<{ dependencies: DepInfo[]; platform?: string; docker_image?: boolean } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [os, setOs] = useState<(typeof OS_KEYS)[number]['key'] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -150,6 +150,9 @@ function Dependencies() {
   };
   useEffect(() => { void load(); }, [load]);
   const osKey = os ?? defaultOs(data?.platform);
+  // The Docker image's programs come only from the image: no package-manager
+  // commands, the server's hint names the build option instead.
+  const inImage = !!data?.docker_image;
   const sorted = useMemo(() => [...(data?.dependencies ?? [])].sort((a, b) => Number(a.found) - Number(b.found) || (b.used_by?.length ?? 0) - (a.used_by?.length ?? 0)), [data]);
   const missing = sorted.filter((d) => !d.found).length;
   const refresh = async () => {
@@ -159,7 +162,7 @@ function Dependencies() {
   return (
     <Section
       title="Dependencies"
-      description={isServer ? 'External programs installed on the server. Tools that need a missing program stay visible but can’t run.' : 'Optional programs that unlock more tools. Install them, then recheck.'}
+      description={inImage ? 'External programs built into this Docker image. Tools that need a missing program stay visible but can’t run.' : isServer ? 'External programs installed on the server. Tools that need a missing program stay visible but can’t run.' : 'Optional programs that unlock more tools. Install them, then recheck.'}
       actions={(!isServer || isAdmin) && <Button size="sm" variant="ghost" icon={RefreshCw} onClick={refresh}>Recheck</Button>}
     >
       {err && <Callout tone="danger">{err}</Callout>}
@@ -168,11 +171,11 @@ function Dependencies() {
         <>
           <div className="deps-toolbar">
             <span className="muted small">{sorted.length - missing} of {sorted.length} found</span>
-            <Segmented size="sm" label="Install commands for" value={osKey} onChange={setOs} options={OS_KEYS.map((o) => ({ value: o.key, label: o.label.split(' ')[0], title: o.label }))} />
+            {!inImage && <Segmented size="sm" label="Install commands for" value={osKey} onChange={setOs} options={OS_KEYS.map((o) => ({ value: o.key, label: o.label.split(' ')[0], title: o.label }))} />}
           </div>
           <ul className="dep-list">
             {sorted.map((d) => {
-              const cmd = d.install?.[osKey];
+              const cmd = inImage ? undefined : d.install?.[osKey];
               const isOpen = open === d.id;
               const tools = d.used_by ?? [];
               return (
