@@ -207,7 +207,8 @@ license = "MPL-2.0"
 bundling = "ok"
 license_note = "License allows it, but it's a ~700 MB .app. Candidate for on-demand later by unpacking the official DMG into the engines folder."
 debian = ["libreoffice-core-nogui", "libreoffice-writer-nogui", "libreoffice-calc-nogui", "libreoffice-impress-nogui"]
-docker_optional = true
+# Only in images built with DOGUBAKO_WITH_OFFICE=1 (docker-packages-office-<arch>.txt).
+docker_option = "office"
 reason = "Office conversion; too large to manage for the first test build."
 
 [engine.rembg]
@@ -216,7 +217,10 @@ deps = ["rembg"]
 license = "MIT"
 bundling = "blocked-technically"
 license_note = "License is fine, but it's a Python app with onnxruntime; not relocatable as a single engine. Better replaced by an in-process ONNX model later."
-debian = []
+# The Docker image installs rembg from PyPI into a venv (rembg-requirements.txt);
+# these are only the Python runtime it needs. DOGUBAKO_WITH_REMBG=1.
+debian = ["python3", "python3-venv"]
+docker_option = "rembg"
 reason = "1 tool (background removal)."
 
 [engine.bwrap]

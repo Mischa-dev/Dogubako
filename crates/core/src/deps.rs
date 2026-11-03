@@ -656,6 +656,7 @@ pub fn docker_build_option(id: &str) -> Option<&'static str> {
         "libreoffice" => Some("DOGUBAKO_WITH_OFFICE"),
         "whisper" => Some("DOGUBAKO_WITH_WHISPER"),
         "piper" => Some("DOGUBAKO_WITH_PIPER"),
+        "rembg" => Some("DOGUBAKO_WITH_REMBG"),
         _ => None,
     }
 }
@@ -694,9 +695,9 @@ mod docker_tests {
     fn docker_hint_names_the_build_option_or_says_not_included() {
         let office = docker_image_hint(dep_spec("libreoffice").unwrap());
         assert!(office.contains("DOGUBAKO_WITH_OFFICE=1"), "{office}");
-        let rembg = docker_image_hint(dep_spec("rembg").unwrap());
-        assert_eq!(rembg, "rembg isn't part of the Docker image");
-        for id in ["whisper", "piper"] {
+        let esrgan = docker_image_hint(dep_spec("realesrgan").unwrap());
+        assert_eq!(esrgan, "Real-ESRGAN (ncnn) isn't part of the Docker image");
+        for id in ["whisper", "piper", "rembg"] {
             assert!(docker_build_option(id).is_some(), "{id}");
         }
     }

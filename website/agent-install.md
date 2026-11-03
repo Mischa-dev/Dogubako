@@ -98,6 +98,7 @@ cp .env.example .env
 | `DOGUBAKO_WITH_OFFICE` | `0` | `1` adds LibreOffice for Office to PDF conversion (about 500 MB) |
 | `DOGUBAKO_WITH_WHISPER` | `1` | whisper.cpp speech recognition (models are downloaded in the app) |
 | `DOGUBAKO_WITH_PIPER` | `1` | Piper text-to-speech (voices are downloaded in the app) |
+| `DOGUBAKO_WITH_REMBG` | `0` | `1` adds rembg background removal (about 600 MB; models are downloaded in the app) |
 | `DOGUBAKO_ASSISTANT_ENABLED` | `true` | Allow plain-words mode |
 | `DOGUBAKO_ASSISTANT_BASE_URL` | empty | Shared model for everyone, any OpenAI-compatible endpoint with tool calling |
 | `DOGUBAKO_ASSISTANT_MODEL` | empty | Model id for that endpoint |
