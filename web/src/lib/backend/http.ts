@@ -235,7 +235,7 @@ export class HttpBackend implements Backend {
   async discardRun(id: string) { await this.deleteJob(id); }
 
   // ---------------------------------------------------------------- deps/models
-  deps() { return this.get<{ dependencies: DepInfo[]; platform?: string }>('/deps'); }
+  deps() { return this.get<{ dependencies: DepInfo[]; platform?: string; docker_image?: boolean }>('/deps'); }
   models() { return this.get<{ models: ModelInfo[]; downloads: ModelDownload[] }>('/models'); }
   async modelDownload(id: string) { await this.post(`/models/${encodeURIComponent(id)}/download`); }
   async modelRemove(id: string) { await this.del(`/models/${encodeURIComponent(id)}`); }

@@ -535,6 +535,11 @@ impl DepRegistry {
                 install_hint(spec),
             ),
         };
+        let install_hint = if path.is_none() && in_docker_image() {
+            docker_image_hint(spec)
+        } else {
+            install_hint
+        };
         DepStatus {
             id: spec.id.to_string(),
             name: spec.name.to_string(),
@@ -638,6 +643,32 @@ fn probe_version(path: &Path, spec: &DepSpec) -> Option<String> {
         .map(|m| m.as_str().trim_end_matches(',').to_string())
 }
 
+/// Running in the Docker image (the Dockerfile sets `DOGUBAKO_DOCKER_IMAGE=1`).
+/// Its programs come only from the image, so a package manager can't add one;
+/// a rebuild with a build option can.
+pub fn in_docker_image() -> bool {
+    std::env::var_os("DOGUBAKO_DOCKER_IMAGE").is_some_and(|v| v == "1")
+}
+
+/// The `.env` build option that adds a dependency to the Docker image.
+pub fn docker_build_option(id: &str) -> Option<&'static str> {
+    match id {
+        "libreoffice" => Some("DOGUBAKO_WITH_OFFICE"),
+        "whisper" => Some("DOGUBAKO_WITH_WHISPER"),
+        "piper" => Some("DOGUBAKO_WITH_PIPER"),
+        _ => None,
+    }
+}
+
+fn docker_image_hint(spec: &DepSpec) -> String {
+    match docker_build_option(spec.id) {
+        Some(opt) => format!(
+            "Not in this Docker image. Set {opt}=1 in .env, then rebuild: docker compose up -d --build"
+        ),
+        None => format!("{} isn't part of the Docker image", spec.name),
+    }
+}
+
 pub fn install_hint(spec: &DepSpec) -> String {
     let h = &spec.install;
     let os_hint = if cfg!(target_os = "macos") {
@@ -652,6 +683,22 @@ pub fn install_hint(spec: &DepSpec) -> String {
     match os_hint {
         Some(cmd) => format!("Install {} ({cmd}) or see {}", spec.name, h.url),
         None => format!("Install {} from {}", spec.name, h.url),
+    }
+}
+
+#[cfg(test)]
+mod docker_tests {
+    use super::*;
+
+    #[test]
+    fn docker_hint_names_the_build_option_or_says_not_included() {
+        let office = docker_image_hint(dep_spec("libreoffice").unwrap());
+        assert!(office.contains("DOGUBAKO_WITH_OFFICE=1"), "{office}");
+        let rembg = docker_image_hint(dep_spec("rembg").unwrap());
+        assert_eq!(rembg, "rembg isn't part of the Docker image");
+        for id in ["whisper", "piper"] {
+            assert!(docker_build_option(id).is_some(), "{id}");
+        }
     }
 }
 

@@ -1038,7 +1038,11 @@ async fn deps(State(s): State<AppState>, _p: Principal) -> Json<Value> {
             v
         })
         .collect();
-    Json(json!({"dependencies": list, "platform": dogubako_core::spec::Platform::current()}))
+    Json(json!({
+        "dependencies": list,
+        "platform": dogubako_core::spec::Platform::current(),
+        "docker_image": dogubako_core::deps::in_docker_image(),
+    }))
 }
 
 async fn deps_refresh(State(s): State<AppState>, Admin(_): Admin) -> Json<Value> {
