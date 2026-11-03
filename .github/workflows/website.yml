@@ -42,6 +42,13 @@ jobs:
       RELEASE: ${{ inputs.release }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Test catalog search in Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/website-tests" --no-package-lock --no-save playwright@1.62.1
+          node "$RUNNER_TEMP/website-tests/node_modules/playwright/cli.js" install --with-deps chromium
+          NODE_PATH="$RUNNER_TEMP/website-tests/node_modules" node --test website/scripts/test-tools-search.mjs
       - name: Assemble _site
         run: |
           set -eu
