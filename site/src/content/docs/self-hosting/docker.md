@@ -145,7 +145,8 @@ docker build --build-arg EXTRA_PACKAGES="tesseract-ocr-deu tesseract-ocr-fra" -t
 
 Set `image:` in the compose file to the tag you built.
 
-The engine versions are pinned in `packaging/engines/docker-packages.txt`.
+The engine versions are pinned in `packaging/engines/docker-packages-<arch>.txt`
+(amd64 and arm64).
 Pinning trades automatic security updates for reproducibility, so the
 snapshot is bumped regularly; [Operations](/self-hosting/operations/#upgrading)
 explains upgrading. Engine versions can differ from the macOS app (for
