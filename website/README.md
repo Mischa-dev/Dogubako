@@ -68,7 +68,11 @@ docs' heading slugs.
 The trailer lives once in `trailer/dist` (about 24 MB), so it isn't committed
 here. `scripts/trailer.sh` copies the video and poster into `website/trailer/`
 (git-ignored), and only if `trailer/dist/review-status.json` says the cut is
-reviewed and its checksums match. The home page checks for
+`reviewed`, identifies the published release linked on `download/`, and contains
+matching SHA-256 values for both the video and poster. An `in-development` cut
+is not eligible for deployment. Publishing the release does not approve the
+trailer. No review manifest is currently committed, so the trailer stays absent.
+The home page checks for
 `trailer/dogubako-alpha-trailer.mp4` with a HEAD request: if it's there, the
 player takes the trailer frame and the hero shows "Watch the trailer"; if not,
 the frame shows a "trailer is on its way" card.
@@ -107,3 +111,20 @@ Any static host works: run `website/scripts/trailer.sh`, then serve the
 example with `actions/upload-pages-artifact` and `actions/deploy-pages`) and
 keep `CNAME` so the domain stays `dogubako.app`. `scripts/` and this README
 don't need to be published.
+
+## Integration review for PR #8
+
+The current homepage replaces the original interactive design. Its sample-file animation is labeled as a walkthrough, and its keyboard controls remain real buttons. The original browser file-processing demo is retained under `design/website-concepts/classic/`, with multi-file selection, engine disclosures, initial roving tab stops and the Japanese font subset. Design concepts are not deployed.
+
+The website links to live documentation. Keep the published Apple silicon DMG and alpha wording from PR #12. Windows and Linux desktop installers are still unavailable; their CLI binaries are separate assets on the tagged release page. Source builds use main and the documented build prerequisites.
+
+The three-glyph Japanese font subset and its SIL OFL are in `assets/fonts/`.
+
+Run trailer validation regressions with `python3 -m unittest discover -s website/scripts -p 'test_*.py'`. The copy step removes old copied trailer assets before validation, so a failed check leaves the placeholder. Review trailer content separately, then record its release and exact asset hashes in `trailer/dist/review-status.json` before copying. Do not infer review from publication alone.
+
+For browser regressions, install Playwright with Chromium, then run
+`node website/scripts/test-interactions.cjs`. It starts a local server and checks
+all website pages and the archived file demo at 1440, 390 and 320 pixels in
+light and dark mode with reduced motion, plus normal-motion chapter controls
+at desktop and mobile sizes.
+`BASE_URL` and `CHROME_PATH` can select another server or Chromium executable.

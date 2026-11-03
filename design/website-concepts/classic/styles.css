@@ -1,3 +1,4 @@
+@font-face { font-family: 'Dogubako Japanese'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/noto-jp-5177-7bb1-9053.woff') format('woff'); unicode-range: U+5177,U+7BB1,U+9053; }
 /* Dogubako website. Tokens mirror web/src/styles/tokens.css so the site and the
    app read as one thing: warm paper ground, ink for actions, frosted glass only
    on floating surfaces, and vermilion only in the mark. */
@@ -188,7 +189,7 @@ p { margin: 0; text-wrap: pretty; }
 /* ---------------------------------------------------------------- hero */
 .hero { width: min(var(--page), 100% - 2 * var(--gutter)); margin: 0 auto; padding: 150px 0 40px; }
 .eyebrow { font: 500 12.5px/1.2 var(--font-mono); color: var(--text-3); letter-spacing: 0.02em; margin-bottom: 18px; }
-.eyebrow .kanji { font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; font-size: 15px; color: var(--text); letter-spacing: 0.12em; }
+.eyebrow .kanji { font-family: "Dogubako Japanese", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; font-size: 15px; color: var(--text); letter-spacing: 0.12em; }
 .eyebrow .dot { margin: 0 4px; }
 .hero h1 { font-size: clamp(38px, 6.4vw, 76px); font-weight: 600; letter-spacing: -0.035em; line-height: 1.02; max-width: 18ch; }
 .lede { margin-top: 24px; font-size: clamp(17px, 1.7vw, 20px); color: var(--text-2); max-width: 58ch; }

@@ -10,7 +10,7 @@ name: Website
 #   release   the published release tag: point downloads at its assets
 on:
   pull_request:
-    paths: ["website/**", "deploy/website/**", "packaging/release/website_links.py", ".github/workflows/website.yml"]
+    paths: ["design/website-concepts/classic/**", "website/**", "deploy/website/**", "packaging/release/website_links.py", ".github/workflows/website.yml"]
   workflow_dispatch:
     inputs:
       docs_live:
@@ -42,6 +42,8 @@ jobs:
       RELEASE: ${{ inputs.release }}
     steps:
       - uses: actions/checkout@v4
+      - name: Test trailer review gate
+        run: python3 -m unittest discover -s website/scripts -p 'test_*.py'
       - name: Assemble _site
         run: |
           set -eu

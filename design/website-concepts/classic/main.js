@@ -131,7 +131,7 @@
     [[0xd0, 0xcf, 0x11, 0xe0], 0, 'Old Office document (DOC, XLS, PPT)', 'application/x-ole-storage'],
   ];
   const head = async (file, n) => new Uint8Array(await file.slice(0, n).arrayBuffer());
-  const tooBig = (file, max, what) => { if (file.size > max) throw new Error(`That file is ${formatBytes(file.size)}. This page ${what} up to ${formatBytes(max)}; the app has no such limit.`); };
+  const tooBig = (file, max, what) => { if (file.size > max) throw new Error(`That file is ${formatBytes(file.size)}. This page ${what} up to ${formatBytes(max)}; the app has separate resource limits.`); };
 
   function parseCsv(text, delim) {
     const rows = []; let row = []; let cell = ''; let q = false;
@@ -288,11 +288,11 @@
 
   function showApp(id, name) {
     const box = h('div', 'out-app');
-    box.append(h('p', null, 'This one runs in the app, which bundles the engines it needs. From a terminal it’s:'));
+    box.append(h('p', null, 'This one runs in the app. The Mac alpha bundles core engines, offers optional engine downloads and uses some system-installed extras. Models download on request; dogubako deps shows requirements. From a terminal it’s:'));
     const pre = h('pre', 'code code-sm');
     pre.innerHTML = `<code><span class="p">$</span> ${esc(cliName(id))} ${esc(shellQuote(name))}${esc(EXTRA_ARGS[id] || '')}</code>`;
     box.append(pre);
-    const a = h('a', 'link-arrow', 'Get the app'); a.href = '#download';
+    const a = h('a', 'link-arrow', 'Download alpha and source'); a.href = '#download';
     box.append(a);
     out.replaceChildren(box);
   }
@@ -637,6 +637,7 @@
   function tabs(container) {
     const ts = $$('[role="tab"]', container);
     const pick = (tab) => ts.forEach((t) => { const on = t === tab; t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; });
+    pick(ts.find((t) => t.getAttribute('aria-selected') === 'true') || ts[0]);
     ts.forEach((t, i) => {
       t.addEventListener('click', () => pick(t));
       t.addEventListener('keydown', (e) => {
@@ -671,7 +672,7 @@
     if (card) {
       card.classList.add('is-yours');
       card.parentElement.prepend(card);
-      $('#hero-download').textContent = 'Get it for ' + $('.dl-os', card).textContent;
+      $('#hero-download').textContent = 'Downloads for ' + $('.dl-os', card).textContent;
     }
   }
 })();

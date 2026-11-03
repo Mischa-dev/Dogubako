@@ -21,7 +21,7 @@
   <meta name="twitter:card" content="summary_large_image">
 
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="apple-touch-icon" href="../../../website/apple-touch-icon.png">
   <link rel="preload" href="fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
   <script>
@@ -64,7 +64,7 @@
     <section class="hero" id="top">
       <p class="eyebrow"><span class="kanji" lang="ja">道具箱</span> <span class="dot" aria-hidden="true">·</span> dōgu-bako, “toolbox”</p>
       <h1>249 small tools for your files, in one app.</h1>
-      <p class="lede">Dogubako replaces the single-purpose websites you use to convert an image, shrink a PDF or format some JSON. It runs on your computer, or on a server you host, so your files stay with you. Free and open source.</p>
+      <p class="lede">Dogubako replaces the single-purpose websites you use to convert an image, shrink a PDF or format some JSON. It runs on your computer, or on a server you host, so your files stay with you. Free and open source. Some tools need optional engines or downloaded models.</p>
       <div class="hero-cta">
         <a class="btn btn-ink" href="#download" id="hero-download">Get Dogubako</a>
         <a class="btn btn-glass" href="https://github.com/Mischa-dev/Dogubako">View on GitHub</a>
@@ -73,14 +73,14 @@
       <!-- The drop demo: mirrors the app's home screen. Files never leave the browser. -->
       <div class="drop-demo" id="drop-demo">
         <label class="drop-input" for="demo-file">
-          <span class="drop-placeholder">Drop a file, or say what you need</span>
+          <span class="drop-placeholder">Drop a file to try the demo</span>
           <span class="drop-actions">
             <span class="btn btn-paper btn-sm">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
               Choose files
             </span>
           </span>
-          <input type="file" id="demo-file" class="sr-only">
+          <input type="file" id="demo-file" class="sr-only" multiple>
         </label>
 
         <div class="demo-body">
@@ -137,7 +137,7 @@
               <li><span class="n">4</span><span><b>Remove Image Metadata</b><span class="d">Strip EXIF, GPS location and comments</span></span></li>
             </ol>
             <div class="intent-out" id="intent-out" aria-live="polite"></div>
-            <p class="intent-note">Some of these really run, right in this tab: compress or convert a photo, format JSON, hash any file. Nothing is uploaded. The app runs all 249 the same way, on your machine.</p>
+            <p class="intent-note">Some of these really run, right in this tab: compress or convert a photo, format JSON, hash any file. Nothing is uploaded. The app catalog has 249 tools. Availability depends on engines, models and platform support. This browser demo uses simpler implementations.</p>
           </div>
         </div>
       </div>
@@ -380,7 +380,7 @@
         <h2 id="trust-title">Privacy and security</h2>
       </header>
       <div class="trust">
-        <article><h3>Nothing leaves your machine</h3><p>The desktop app needs no account and sends nothing anywhere. Self-host it and your files only travel to a machine you own.</p></article>
+        <article><h3>Local file processing</h3><p>File processing runs locally, or on a server you choose. Network tools make outbound requests. Optional engines and models may need downloads. AI assistance sends requests and file names to the service you connect when enabled.</p></article>
         <article><h3>No shell</h3><p>External programs run directly, with timeouts, resource limits and optional bubblewrap sandboxing.</p></article>
         <article><h3>Owner-checked files</h3><p>Files are addressed by id and checked against their owner on every request. Archives are guarded against bombs and path tricks.</p></article>
         <article><h3>Guarded network tools</h3><p>On a shared server, tools that fetch URLs refuse to reach into your private network by default, and every action is written to an audit log.</p></article>
@@ -393,19 +393,19 @@
     <section class="section" id="download" aria-labelledby="download-title">
       <header class="section-head">
         <h2 id="download-title">Download</h2>
-        <p class="section-lede">Installers come with the first alpha release. Until then, you can build it from source.</p>
+        <p class="section-lede">The first alpha, 0.1.0-alpha.1, is published for Apple silicon on macOS 15 or newer. Windows and Linux desktop installers are not published yet. You can also build from source.</p>
       </header>
 
       <div class="downloads">
-        <!-- PLACEHOLDER: point these at the release assets once the alpha is published. -->
-        <a class="dl glass" data-os="mac" href="https://github.com/Mischa-dev/Dogubako/releases">
-          <span class="dl-os">macOS</span><span class="dl-sub mono">.dmg</span><span class="dl-state">Not released yet</span>
+        <!-- Desktop installer status; CLI binaries are listed on the release page. -->
+        <a class="dl glass" data-os="mac" href="https://github.com/Mischa-dev/Dogubako/releases/download/v0.1.0-alpha.1/Dogubako_0.1.0-alpha.1_aarch64.dmg">
+          <span class="dl-os">macOS</span><span class="dl-sub mono">.dmg</span><span class="dl-state">Unsigned alpha</span>
         </a>
         <a class="dl glass" data-os="windows" href="https://github.com/Mischa-dev/Dogubako/releases">
-          <span class="dl-os">Windows</span><span class="dl-sub mono">.msi · .exe</span><span class="dl-state">Not released yet</span>
+          <span class="dl-os">Windows</span><span class="dl-sub mono">.msi · .exe</span><span class="dl-state">Build desktop from source</span>
         </a>
         <a class="dl glass" data-os="linux" href="https://github.com/Mischa-dev/Dogubako/releases">
-          <span class="dl-os">Linux</span><span class="dl-sub mono">AppImage · .deb · .rpm</span><span class="dl-state">Not released yet</span>
+          <span class="dl-os">Linux</span><span class="dl-sub mono">AppImage · .deb · .rpm</span><span class="dl-state">Build desktop from source</span>
         </a>
       </div>
 
@@ -413,11 +413,12 @@
 <pre class="code"><code><span class="c"># build the desktop app</span>
 <span class="p">$</span> git clone https://github.com/Mischa-dev/Dogubako &amp;&amp; cd Dogubako
 <span class="p">$</span> (cd web &amp;&amp; npm ci &amp;&amp; npm run build)
+<span class="p">$</span> cargo install tauri-cli --version '^2'
 <span class="p">$</span> (cd apps/desktop/src-tauri &amp;&amp; cargo tauri build)
 
 <span class="c"># or just the CLI</span>
 <span class="p">$</span> cargo install --path crates/cli</code></pre>
-        <p>Optional engines unlock more tools. <code class="mono">dogubako deps</code> lists what’s missing and the command to install it on your system.</p>
+        <p>Source builds need Rust 1.95+, Node.js 20+, a C compiler and the <a href="https://docs.dogubako.app/develop/building/">Tauri system prerequisites</a>. Optional engines unlock more tools. <code class="mono">dogubako deps</code> lists what’s missing and the command to install it on your system.</p>
       </div>
     </section>
   </main>

@@ -8,6 +8,9 @@
 @font-face { font-family: "DM Mono"; src: url("../fonts/dm-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "DM Mono"; src: url("../fonts/dm-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
 
+@font-face { font-family: "Dogubako Japanese"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/noto-jp-5177-7bb1-9053.woff") format("woff"); unicode-range: U+5177,U+7BB1,U+9053; }
+[lang="ja"] { font-family: "Dogubako Japanese", "Hiragino Sans", "Yu Gothic", sans-serif; }
+
 :root {
   --font-sans: "Instrument Sans Variable", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "DM Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
