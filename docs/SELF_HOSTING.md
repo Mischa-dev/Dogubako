@@ -36,7 +36,9 @@ TS_AUTHKEY=tskey-auth-… docker compose -f docker-compose.yml -f deploy/docker-
 
 The sidecar joins your tailnet as `dogubako` and serves HTTPS via `tailscale serve`
 (`https://dogubako.<tailnet>.ts.net`). Alternatively run Tailscale on the host
-and `tailscale serve --bg 8420`. Tailscale ACLs are a good outer layer; Dogubako
+and `tailscale serve --bg 8420` (it takes port 443 and silently replaces whatever is
+served there; check `tailscale serve status` first and use `--https=<port>` if 443
+is taken). Tailscale ACLs are a good outer layer; Dogubako
 accounts and agent policies still apply inside.
 
 ### Reverse proxy (Caddy example)

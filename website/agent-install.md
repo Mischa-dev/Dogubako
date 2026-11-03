@@ -148,12 +148,31 @@ Check: `curl -fsS http://127.0.0.1:8420/api/v1/status` now shows
 Ask first (see the top of this page). The recommended way is Tailscale: the
 person's own devices get HTTPS and no port is opened to the internet.
 
-Tailscale on the host, if the machine is already on the person's tailnet:
+Tailscale on the host, if the machine is already on the person's tailnet. First look
+at what it already serves:
+
+```sh
+tailscale serve status
+```
+
+If that shows nothing on port 443 (`https://<machine>.<tailnet>.ts.net` with no port),
+serve Dogubako there:
 
 ```sh
 tailscale serve --bg 8420
 tailscale serve status        # shows the https://<machine>.<tailnet>.ts.net address
 ```
+
+If port 443 is already in use, don't run that: Tailscale replaces the existing handler
+without asking and the service behind it goes offline. Pick an HTTPS port the status
+doesn't list, tell the person which one, and serve there instead. The address is
+then `https://<machine>.<tailnet>.ts.net:<port>`:
+
+```sh
+tailscale serve --bg --https=<port> 8420
+```
+
+Never turn off or replace something that is already served.
 
 Or as a sidecar container. The person supplies the auth key:
 
@@ -169,7 +188,7 @@ later `docker compose` command.
 Then tell the server its address. In `docker-compose.yml`, uncomment and fill in:
 
 ```yaml
-      DOGUBAKO_PUBLIC_URL: "https://<machine>.<tailnet>.ts.net"
+      DOGUBAKO_PUBLIC_URL: "https://<machine>.<tailnet>.ts.net"   # add :<port> if you used one
       DOGUBAKO_SECURE_COOKIES: "true"
 ```
 
