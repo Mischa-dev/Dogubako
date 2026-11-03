@@ -1,16 +1,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Clock, CornerDownLeft, Folder, History, House, Moon, Search, Settings, Shield, Pin, Sun, Package, KeyRound, type LucideIcon,
+  Clock, CornerDownLeft, Folder, History, House, Moon, Search, Settings, Shield, Pin, Sun, Package, KeyRound, Sparkles, type LucideIcon,
 } from 'lucide-react';
 import { useApp } from '../lib/app';
 import { navigate, href } from '../lib/router';
 import { search, fuzzyMatch } from '../lib/search';
+import { matchIntent } from '../lib/intent';
 import { cycleTheme, favorites as favStore, recents as recStore, resolvedTheme, useStore } from '../lib/store';
 import { categoryIcon } from '../lib/icons';
 import type { ToolInfo } from '../lib/types';
-import { Highlight, Kbd, cx } from './ui';
+import { Highlight, Kbd, cx, modKey } from './ui';
 import { unavailableLabel } from './ToolRow';
+import { looksLikeRequest, useAssistant } from '../lib/assistant/useAssistant';
 
 interface Item {
   key: string;
@@ -29,6 +31,7 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
   const { docs, toolMap, categories, isServer, isAdmin, categoryLabel } = useApp();
   const favs = useStore(favStore);
   const recs = useStore(recStore);
+  const assistant = useAssistant();
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -97,6 +100,13 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
       boost: (id) => (favSet.has(id) ? 6 : 0) + (recentIds.has(id) ? Math.max(0, 8 - recentIds.get(id)!) : 0),
     });
     const tools = hits.map((h) => toolItem(h.item, h.ranges, 'Tools'));
+    // Home invites "say what you need": understand plain words ("make this smaller",
+    // "no location") that name no tool, and offer what they usually mean.
+    const found = new Set(hits.map((h) => h.item.id));
+    const meant = matchIntent(docs.map((d) => d.item).filter((t) => t.permitted !== false), docs, query)
+      .filter((t) => !found.has(t.id))
+      .slice(0, Math.max(0, 8 - tools.length))
+      .map((t) => toolItem(t, [], 'Suggested'));
     const ql = query.toLowerCase();
     const cats: Item[] = categories
       .filter((c) => c.label.toLowerCase().includes(ql) || c.id.startsWith(ql))
@@ -110,8 +120,25 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
       .sort((x, y) => y.m!.score - x.m!.score)
       .slice(0, 4)
       .map(({ a, m }) => ({ ...a, ranges: toRanges(m!.positions) }));
-    return [...tools, ...cats, ...acts];
-  }, [q, docs, recs, favs, toolMap, actions, categories, categoryLabel]);
+    // Natural-language mode: carry out the words themselves. A sentence
+    // goes first; a word or two stays below the tools it names.
+    const sentence = looksLikeRequest(query);
+    const doIt: Item[] = assistant.on
+      ? [{
+        key: 'a:do', kind: 'action', label: `Do it: “${query}”`, ranges: [], icon: Sparkles,
+        sub: assistant.missing ? `${assistant.missing} first` : `With ${assistant.label}`, hint: `${modKey} ↵`,
+        section: 'In plain words', run: () => navigate(href.do(query)),
+      }]
+      : sentence && !tools.length
+        ? [{
+          key: 'a:do-setup', kind: 'action', label: 'Do this in plain words…', ranges: [], icon: Sparkles,
+          sub: 'Set up a model to run requests like this for you', section: 'In plain words', run: () => navigate(href.do(query)),
+        }]
+        : [];
+    return sentence || !tools.length
+      ? [...doIt, ...tools, ...meant, ...cats, ...acts]
+      : [...tools, ...doIt, ...meant, ...cats, ...acts];
+  }, [q, docs, recs, favs, toolMap, actions, categories, categoryLabel, assistant.on, assistant.missing, assistant.label]);
 
   useEffect(() => { setActive(0); }, [q]);
   useEffect(() => {
@@ -131,6 +158,7 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(0, a - 1)); }
     else if (e.key === 'PageDown') { e.preventDefault(); setActive((a) => Math.min(items.length - 1, a + 8)); }
     else if (e.key === 'PageUp') { e.preventDefault(); setActive((a) => Math.max(0, a - 8)); }
+    else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && assistant.on && q.trim()) { e.preventDefault(); onClose(); navigate(href.do(q.trim())); }
     else if (e.key === 'Enter') { e.preventDefault(); choose(items[active]); }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); }
     else if (e.key === 'Tab') e.preventDefault();
@@ -147,7 +175,7 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
             className="palette-input"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search tools and actions…"
+            placeholder={assistant.on ? 'Search tools, or say what you want done…' : 'Search tools and actions…'}
             role="combobox"
             aria-expanded="true"
             aria-controls="palette-list"
@@ -193,6 +221,7 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
         <div className="palette-foot" aria-hidden>
           <span><Kbd>↑</Kbd><Kbd>↓</Kbd> navigate</span>
           <span><Kbd>↵</Kbd> open</span>
+          {assistant.on && <span><Kbd>{modKey} ↵</Kbd> do it</span>}
           <span><Kbd>Esc</Kbd> close</span>
         </div>
       </div>

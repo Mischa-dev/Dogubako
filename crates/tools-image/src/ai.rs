@@ -218,13 +218,15 @@ fn remove_background() -> Arc<dyn Tool> {
                 if p.bool("mask_only") { "mask" } else { "nobg" },
                 Some("png"),
             ));
-            // rembg downloads its model on first use.
-            let mut cmd = ctx
-                .command("rembg")?
-                .arg("i")
-                .arg("-m")
-                .arg(&model)
-                .allow_network();
+            let mut cmd = ctx.command("rembg")?.arg("i").arg("-m").arg(&model);
+            // A model downloaded in Settings → Models is read from there (rembg
+            // finds <model>.onnx in U2NET_HOME). Otherwise rembg downloads it,
+            // into this job's temporary home, on every run.
+            cmd = if ctx.models().is_installed(&format!("rembg-{model}")) {
+                cmd.env("U2NET_HOME", ctx.models_dir())
+            } else {
+                cmd.allow_network()
+            };
             if p.bool("alpha_matting") {
                 cmd = cmd.arg("-a");
             }
@@ -285,7 +287,17 @@ fn upscale() -> Arc<dyn Tool> {
             let tmp_out = ctx.temp_path(&format!("up-{}.png", dogubako_core::util::random_id(4)));
             let pct = Arc::new(AtomicU32::new(0));
             let (c2, pct2, base) = (ctx.clone(), pct.clone(), i as f32 / n as f32);
+            // Models shipped next to the binary (the app-managed engine pack
+            // and the upstream release both have bin/models).
+            let model_dir: Vec<std::ffi::OsString> = ctx
+                .deps()
+                .path("realesrgan")
+                .and_then(|p| p.parent().map(|d| d.join("models")))
+                .filter(|d| d.is_dir())
+                .map(|d| vec!["-m".into(), arg_path(&d)])
+                .unwrap_or_default();
             ctx.command("realesrgan")?
+                .args(model_dir)
                 .arg("-i")
                 .arg(arg_path(&png))
                 .arg("-o")

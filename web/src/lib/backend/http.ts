@@ -2,7 +2,7 @@ import type {
   AdminConfig, Artifact, AuditRow, Category, DepInfo, FileView, JobView, Me, ModelDownload, ModelInfo,
   NewToken, Policy, Role, Status, ToolInfo, TokenRow, UserRow,
 } from '../types';
-import { ApiError, type Backend, type FileRef, type RunHandle, type RunOptions } from './types';
+import { ApiError, type AssistantInfo, type AssistantTarget, type Backend, type FileRef, type RunHandle, type RunOptions } from './types';
 
 const TERMINAL = new Set(['succeeded', 'failed', 'cancelled']);
 export const isTerminal = (s: string) => TERMINAL.has(s);
@@ -231,13 +231,41 @@ export class HttpBackend implements Backend {
     return r.jobs;
   }
   async deleteJob(id: string) { await this.del(`/jobs/${encodeURIComponent(id)}`); }
+  /** Deleting a job also deletes its output files on the server. */
+  async discardRun(id: string) { await this.deleteJob(id); }
 
   // ---------------------------------------------------------------- deps/models
-  deps() { return this.get<{ dependencies: DepInfo[]; platform?: string }>('/deps'); }
+  deps() { return this.get<{ dependencies: DepInfo[]; platform?: string; docker_image?: boolean }>('/deps'); }
   models() { return this.get<{ models: ModelInfo[]; downloads: ModelDownload[] }>('/models'); }
   async modelDownload(id: string) { await this.post(`/models/${encodeURIComponent(id)}/download`); }
   async modelRemove(id: string) { await this.del(`/models/${encodeURIComponent(id)}`); }
   async depsRefresh() { await this.post('/deps/refresh'); }
+
+  // ---------------------------------------------------------------- assistant
+  async assistantInfo(): Promise<AssistantInfo> {
+    try {
+      return await this.get<AssistantInfo>('/assistant/config');
+    } catch (e) {
+      // Older servers have no assistant routes.
+      if (e instanceof ApiError && (e.status === 404 || e.status === 405)) return { enabled: false, server_provider: null, private_network: false };
+      throw e;
+    }
+  }
+  async assistantChat(target: AssistantTarget, body: Record<string, unknown>, signal?: AbortSignal) {
+    const headers: Record<string, string> = { Accept: 'application/json', 'Content-Type': 'application/json' };
+    if (this.csrf) headers['X-CSRF-Token'] = this.csrf;
+    let res: Response;
+    try {
+      res = await fetch(this.url('/assistant/chat'), { method: 'POST', headers, credentials: 'same-origin', body: JSON.stringify({ ...target, body }), signal });
+    } catch (e) {
+      if ((e as Error)?.name === 'AbortError') throw e;
+      throw new ApiError(0, 'network', 'Could not reach the server. Check your connection.');
+    }
+    return this.parse<any>(res);
+  }
+  async assistantModels(target: AssistantTarget) {
+    return (await this.post<{ models: { id: string; owned_by?: string }[] }>('/assistant/models', target)).models;
+  }
 
   // ---------------------------------------------------------------- auth
   async login(username: string, password: string) {

@@ -74,6 +74,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/admin/audit", get(admin_audit))
         .route("/admin/config", get(admin_config))
         .route("/openapi.json", get(openapi))
+        .merge(crate::assistant::router())
 }
 
 // ---------------------------------------------------------------- status & auth
@@ -89,6 +90,7 @@ async fn status(State(s): State<AppState>) -> Json<Value> {
         "tools": s.engine.registry.len(),
         "mode": "server",
         "max_upload_mb": s.cfg.max_upload_mb,
+        "assistant": s.cfg.assistant_enabled,
     }))
 }
 
@@ -107,10 +109,10 @@ async fn setup(
     if !s.login_limiter.check(&format!("setup:{ip}")) {
         return Err(ApiError::too_many("too many attempts; try again later"));
     }
-    let expected = s
-        .setup_token
-        .lock()
-        .unwrap()
+    // Hold the lock until the owner exists, so two concurrent requests with
+    // the token cannot both create an owner account.
+    let mut token = s.setup_token.lock().unwrap();
+    let expected = token
         .clone()
         .ok_or_else(|| ApiError::conflict("setup already completed"))?;
     if !auth::constant_time_eq(r.setup_token.trim(), &expected) {
@@ -131,7 +133,8 @@ async fn setup(
         &Policy::for_role(Role::Owner),
         "Instance owner",
     )?;
-    *s.setup_token.lock().unwrap() = None;
+    *token = None;
+    drop(token);
     s.db.audit(
         &r.username,
         "setup",
@@ -1035,7 +1038,11 @@ async fn deps(State(s): State<AppState>, _p: Principal) -> Json<Value> {
             v
         })
         .collect();
-    Json(json!({"dependencies": list, "platform": dogubako_core::spec::Platform::current()}))
+    Json(json!({
+        "dependencies": list,
+        "platform": dogubako_core::spec::Platform::current(),
+        "docker_image": dogubako_core::deps::in_docker_image(),
+    }))
 }
 
 async fn deps_refresh(State(s): State<AppState>, Admin(_): Admin) -> Json<Value> {

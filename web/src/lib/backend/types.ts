@@ -56,11 +56,35 @@ export interface Backend {
 
   listJobs(limit?: number): Promise<JobView[]>;
   deleteJob(id: string): Promise<void>;
+  /** Remove a run's output files as well as its history entry (server: deleteJob already does). */
+  discardRun(id: string): Promise<void>;
 
-  deps(): Promise<{ dependencies: DepInfo[]; platform?: string }>;
+  deps(): Promise<{ dependencies: DepInfo[]; platform?: string; docker_image?: boolean }>;
   models(): Promise<{ models: ModelInfo[]; downloads: ModelDownload[] }>;
   modelDownload(id: string): Promise<void>;
   modelRemove(id: string): Promise<void>;
+
+  /** Natural-language assistant: what this host offers (relay, server provider). */
+  assistantInfo(): Promise<AssistantInfo>;
+  /** Relay one OpenAI-compatible chat completion; resolves with the endpoint's JSON. */
+  assistantChat(target: AssistantTarget, body: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
+  /** The endpoint's model ids, for the model picker. */
+  assistantModels(target: AssistantTarget): Promise<{ id: string; owned_by?: string }[]>;
+}
+
+/** Where assistant requests go. `provider: 'server'` uses the server's own endpoint and key. */
+export interface AssistantTarget {
+  provider?: 'server';
+  base_url?: string;
+  api_key?: string;
+}
+
+export interface AssistantInfo {
+  enabled: boolean;
+  /** Set when the server administrator configured a shared endpoint. */
+  server_provider: { model?: string | null } | null;
+  /** Whether the relay may reach loopback/LAN endpoints (always true on desktop). */
+  private_network: boolean;
 }
 
 /** Thrown for non-2xx API responses. */

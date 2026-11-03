@@ -8,9 +8,16 @@ as a desktop app, a self-hosted web service, a CLI, an HTTP API and an MCP serve
 
 ---
 
+> **Status: alpha.** The first alpha, `v0.1.0-alpha.1`, is for testers. The
+> desktop build is macOS on Apple silicon (macOS 15+) only, and expect rough
+> edges. See the [release notes](docs/releases/v0.1.0-alpha.1.md) and
+> [CHANGELOG](CHANGELOG.md).
+
 Dogubako replaces the dozens of single-purpose utility websites and small apps
 you reach for every week. Open it, find the tool (⌘K), drop in a file, done.
-Nothing leaves your machine unless you host it yourself.
+With the desktop app, files are processed on your machine. With a hosted
+Dogubako, they go to that server and are processed there. Network tools reach
+the targets you give them, and optional model downloads need a connection.
 
 * **Free and open source** (AGPL-3.0-or-later). No accounts for desktop use, no telemetry, no paywalls.
 * **Built on mature open-source engines** — FFmpeg, ImageMagick, libvips, ExifTool, qpdf, Poppler, Ghostscript, Tesseract, whisper.cpp, Piper, LibreOffice, Pandoc, 7-Zip — plus fast native Rust implementations for everything that doesn't need them.
@@ -51,16 +58,24 @@ The full, generated list with dependencies and platforms is in
 
 ## Quick start
 
-### Desktop (macOS, Windows, Linux)
+### Desktop
 
-Download the installer from Releases, or build it (see [docs/BUILD.md](docs/BUILD.md)):
+**macOS (Apple silicon, macOS 15+):** download `Dogubako_0.1.0-alpha.1_aarch64.dmg`
+from [Releases](https://github.com/Mischa-dev/Dogubako/releases). The core engines
+(FFmpeg, qpdf, Poppler, ExifTool, 7-Zip) are inside the app. Heavier ones
+(ImageMagick, Tesseract, Ghostscript, Pandoc, whisper.cpp, Real-ESRGAN) download
+into the app's own folder the first time a tool needs them. See
+[docs/ENGINES.md](docs/ENGINES.md).
+
+**Windows, Linux, Intel Macs:** no installer in this alpha yet. Build from source
+(see [docs/BUILD.md](docs/BUILD.md)):
 
 ```sh
 cd web && npm ci && npm run build && cd ..
 cd apps/desktop/src-tauri && cargo tauri build
 ```
 
-Install whichever engines you need (`dogubako deps` or **Settings → Dependencies** shows exact commands):
+Source builds use the engines installed on your system (`dogubako deps` or **Settings → Dependencies** shows exact commands):
 `brew install ffmpeg qpdf poppler tesseract exiftool` · `sudo apt install ffmpeg qpdf poppler-utils tesseract-ocr libimage-exiftool-perl` · `winget install Gyan.FFmpeg QPDF.QPDF`.
 
 ### CLI
@@ -101,6 +116,9 @@ See [docs/MCP.md](docs/MCP.md) and [docs/API.md](docs/API.md).
 
 ## Documentation
 
+The full guide lives at **[docs.dogubako.app](https://docs.dogubako.app)**. The
+same material, as plain files in this repository:
+
 | | |
 |---|---|
 | [Architecture](docs/ARCHITECTURE.md) | Crates, execution flow, one-implementation design |
@@ -135,4 +153,6 @@ docs                 documentation
 ## License
 
 Dogubako is free software under the [GNU AGPL v3.0 or later](LICENSE).
-Third-party components keep their own licenses; see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+Third-party components keep their own licenses: see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for every bundled engine, crate and
+package, and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the background.

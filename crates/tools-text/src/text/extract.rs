@@ -166,6 +166,8 @@ struct XmlRules<'a> {
     skip: &'a [&'a str],
     /// When set, only text inside these elements is kept.
     text_in: Option<&'a [&'a str]>,
+    /// ODF `<text:s text:c="N"/>` repeated spaces (ODF only).
+    spaces: bool,
 }
 
 fn local(name: &str) -> String {
@@ -217,7 +219,7 @@ fn xml_text(xml: &str, r: &XmlRules) -> ToolResult<String> {
                     out.push('\n');
                 } else if r.tab.contains(&n.as_str()) {
                     out.push('\t');
-                } else if n == "s" {
+                } else if r.spaces && n == "s" {
                     // ODF repeated spaces: <text:s text:c="3"/>
                     let c = e
                         .attributes()
@@ -226,6 +228,8 @@ fn xml_text(xml: &str, r: &XmlRules) -> ToolResult<String> {
                         .and_then(|a| a.value.parse::<usize>().ok())
                         .unwrap_or(1)
                         .min(1000);
+                    // Each tiny element expands up to 1000x: bound the total.
+                    check_generated_size((out.len() + c) as u128)?;
                     out.push_str(&" ".repeat(c));
                 } else if r.para.contains(&n.as_str()) {
                     out.push('\n');
@@ -269,6 +273,7 @@ fn docx<R: Read + Seek>(z: &mut zip::ZipArchive<R>, mut budget: u64) -> ToolResu
         tab: &["tab"],
         skip: &["instrText", "delText"],
         text_in: Some(&["t"]),
+        spaces: false,
     };
     let doc = read_part(z, "word/document.xml", &mut budget)?
         .ok_or_else(|| ToolError::invalid("file", "word/document.xml missing"))?;
@@ -323,6 +328,7 @@ fn pptx<R: Read + Seek>(z: &mut zip::ZipArchive<R>, mut budget: u64) -> ToolResu
         tab: &[],
         skip: &[],
         text_in: Some(&["t"]),
+        spaces: false,
     };
     let mut out = String::new();
     for (num, name) in slides {
@@ -413,6 +419,7 @@ fn odf<R: Read + Seek>(z: &mut zip::ZipArchive<R>, mut budget: u64) -> ToolResul
             "forms",
         ],
         text_in: Some(&["p", "h"]),
+        spaces: true,
     };
     Ok(tidy(&xml_text(&x, &rules)?))
 }
@@ -801,6 +808,19 @@ mod tests {
                 .text
                 .unwrap(),
             "Title\na  b\n"
+        );
+        // Repeated-space elements expand 1000x each: the total is bounded.
+        let spaces = format!(
+            r#"<office:document-content xmlns:office="o" xmlns:text="t"><office:body><text:p>{}</text:p></office:body></office:document-content>"#,
+            r#"x<text:s text:c="1000"/>"#.repeat(300_000)
+        );
+        let f = h.write("c.odt", &make_zip(&[("content.xml", &spaces)]));
+        assert_eq!(
+            h.run("text.extract", json!({"file": f.to_str().unwrap()}))
+                .await
+                .unwrap_err()
+                .code(),
+            "limit_exceeded"
         );
         let pptx = make_zip(&[
             (

@@ -7,7 +7,17 @@ use dogubako_core::tool::ToolOutput;
 use dogubako_core::util::human_size;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde_json::{json, Value};
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
+
+/// writeln! that ignores I/O errors (e.g. a closed pipe).
+macro_rules! wln {
+    ($w:expr) => {{
+        let _ = writeln!($w);
+    }};
+    ($w:expr, $($t:tt)*) => {{
+        let _ = writeln!($w, $($t)*);
+    }};
+}
 use std::path::PathBuf;
 
 pub struct Out {
@@ -69,6 +79,28 @@ pub fn print_output(
     duration_ms: u64,
     out: &Out,
 ) {
+    // With `-o -` an artifact was streamed to stdout, so every report goes
+    // to stderr (or nowhere with -q) to keep piped output clean.
+    let stdout_taken = saved.iter().any(|p| p.as_os_str() == "-");
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    let w: &mut dyn Write = if stdout_taken {
+        &mut stderr
+    } else {
+        &mut stdout
+    };
+    write_output(w, spec, o, saved, duration_ms, out, stdout_taken);
+}
+
+pub(crate) fn write_output(
+    w: &mut dyn Write,
+    spec: &ToolSpec,
+    o: &ToolOutput,
+    saved: &[PathBuf],
+    duration_ms: u64,
+    out: &Out,
+    stdout_taken: bool,
+) {
     if out.json {
         let artifacts: Vec<Value> = o
             .artifacts
@@ -76,7 +108,8 @@ pub fn print_output(
             .zip(saved.iter())
             .map(|(a, p)| json!({"name": a.name, "path": p, "mime": a.mime, "size": a.size, "label": a.label}))
             .collect();
-        println!(
+        wln!(
+            w,
             "{}",
             serde_json::to_string_pretty(&json!({
                 "ok": true, "tool": spec.id, "text": o.text, "text_mime": o.text_mime,
@@ -86,13 +119,15 @@ pub fn print_output(
         );
         return;
     }
-    if let Some(t) = &o.text {
-        print!("{t}");
+    if stdout_taken && out.quiet {
+        // nothing but the artifact on stdout
+    } else if let Some(t) = &o.text {
+        let _ = write!(w, "{t}");
         if !t.ends_with('\n') {
-            println!();
+            wln!(w);
         }
     } else if !o.data.is_null() && o.data != json!({}) {
-        print_data(&o.data);
+        print_data(w, &o.data);
     }
     for w in &o.warnings {
         out.info(&format!("warning: {w}"));
@@ -104,9 +139,9 @@ pub fn print_output(
     }
 }
 
-fn print_data(d: &Value) {
+fn print_data(w: &mut dyn Write, d: &Value) {
     if let Some(t) = d.get("table") {
-        print_table(t);
+        print_table(w, t);
         let rest: serde_json::Map<String, Value> = d
             .as_object()
             .map(|o| {
@@ -117,12 +152,12 @@ fn print_data(d: &Value) {
             })
             .unwrap_or_default();
         if !rest.is_empty() {
-            println!();
-            print_kv(&Value::Object(rest), 0);
+            wln!(w);
+            print_kv(w, &Value::Object(rest), 0);
         }
         return;
     }
-    print_kv(d, 0);
+    print_kv(w, d, 0);
 }
 
 fn scalar(v: &Value) -> String {
@@ -133,47 +168,48 @@ fn scalar(v: &Value) -> String {
     }
 }
 
-fn print_kv(v: &Value, indent: usize) {
+fn print_kv(w: &mut dyn Write, v: &Value, indent: usize) {
     let pad = " ".repeat(indent);
     match v {
         Value::Object(o) => {
-            let w = o.keys().map(|k| k.len()).max().unwrap_or(0);
+            let kw = o.keys().map(|k| k.len()).max().unwrap_or(0);
             for (k, val) in o {
                 match val {
                     Value::Object(_) => {
-                        println!("{pad}{k}:");
-                        print_kv(val, indent + 2);
+                        wln!(w, "{pad}{k}:");
+                        print_kv(w, val, indent + 2);
                     }
                     Value::Array(a) if a.iter().any(|x| x.is_object() || x.is_array()) => {
-                        println!("{pad}{k}:");
+                        wln!(w, "{pad}{k}:");
                         for item in a {
                             match item {
                                 Value::Object(_) => {
-                                    println!("{pad}  -");
-                                    print_kv(item, indent + 4);
+                                    wln!(w, "{pad}  -");
+                                    print_kv(w, item, indent + 4);
                                 }
-                                _ => println!("{pad}  - {}", scalar(item)),
+                                _ => wln!(w, "{pad}  - {}", scalar(item)),
                             }
                         }
                     }
-                    Value::Array(a) => println!(
-                        "{pad}{k:w$}  {}",
+                    Value::Array(a) => wln!(
+                        w,
+                        "{pad}{k:kw$}  {}",
                         a.iter().map(scalar).collect::<Vec<_>>().join(", ")
                     ),
-                    _ => println!("{pad}{k:w$}  {}", scalar(val)),
+                    _ => wln!(w, "{pad}{k:kw$}  {}", scalar(val)),
                 }
             }
         }
         Value::Array(a) => {
             for item in a {
-                print_kv(item, indent);
+                print_kv(w, item, indent);
             }
         }
-        other => println!("{pad}{}", scalar(other)),
+        other => wln!(w, "{pad}{}", scalar(other)),
     }
 }
 
-fn print_table(t: &Value) {
+fn print_table(w: &mut dyn Write, t: &Value) {
     let cols: Vec<String> = t
         .get("columns")
         .and_then(|c| c.as_array())
@@ -217,8 +253,9 @@ fn print_table(t: &Value) {
             .to_string()
     };
     if !cols.is_empty() {
-        println!("{}", fmt_row(&cols));
-        println!(
+        wln!(w, "{}", fmt_row(&cols));
+        wln!(
+            w,
             "{}",
             widths
                 .iter()
@@ -228,7 +265,7 @@ fn print_table(t: &Value) {
         );
     }
     for r in &rows {
-        println!("{}", fmt_row(r));
+        wln!(w, "{}", fmt_row(r));
     }
 }
 

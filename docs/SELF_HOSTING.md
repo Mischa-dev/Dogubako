@@ -13,7 +13,13 @@ docker compose logs dogubako | grep "Setup token"
 
 Open <http://localhost:8420>, enter the setup token and create the owner account.
 
-The image includes FFmpeg, ImageMagick, libvips, ExifTool, qpdf, Poppler,
+Podman works with the same compose file (`podman compose up -d --build`). Run every
+`podman` command either with `sudo` (rootful) or without (rootless), never mixed: the two
+keep separate images. Rootless, prepare `./data` with `podman unshare chown 10001:10001 data`. To start at boot,
+enable `podman-restart.service`, or run it as a systemd service with the Quadlet unit
+[`deploy/dogubako.container`](../deploy/dogubako.container).
+
+The image includes FFmpeg, ImageMagick, ExifTool, qpdf, Poppler,
 Ghostscript, Tesseract (English), 7-Zip and bubblewrap. Options:
 
 * `docker build --build-arg WITH_WHISPER=1 .` also compiles whisper.cpp (offline speech recognition). Download a model afterwards in **Settings → Models** or `docker compose exec dogubako dogubako models download whisper-base` (with `DOGUBAKO_MODELS_DIR=/data/models`).
@@ -36,7 +42,9 @@ TS_AUTHKEY=tskey-auth-… docker compose -f docker-compose.yml -f deploy/docker-
 
 The sidecar joins your tailnet as `dogubako` and serves HTTPS via `tailscale serve`
 (`https://dogubako.<tailnet>.ts.net`). Alternatively run Tailscale on the host
-and `tailscale serve --bg 8420`. Tailscale ACLs are a good outer layer; Dogubako
+and `tailscale serve --bg 8420` (it takes port 443 and silently replaces whatever is
+served there; check `tailscale serve status` first and use `--https=<port>` if 443
+is taken). Tailscale ACLs are a good outer layer; Dogubako
 accounts and agent policies still apply inside.
 
 ### Reverse proxy (Caddy example)
@@ -96,6 +104,9 @@ environment variables and CLI flags. `dogubako server config` prints the effecti
 | `DOGUBAKO_FS_ROOTS` | — | Comma-separated host folders available to folder tools |
 | `DOGUBAKO_ALLOW_PRIVATE_NETWORK` | `false` | Let network tools reach private addresses |
 | `DOGUBAKO_MCP_ENABLED` | `true` | Enable `/mcp` |
+| `DOGUBAKO_ASSISTANT_ENABLED` | `true` | Allow plain-words mode (relays model requests users configure; see [ASSISTANT.md](ASSISTANT.md)) |
+| `DOGUBAKO_ASSISTANT_ALLOW_PRIVATE` | `false` | Let that relay reach loopback/LAN model servers (e.g. Ollama on this host) |
+| `DOGUBAKO_ASSISTANT_BASE_URL` / `_API_KEY` / `_MODEL` | — | Optional shared model offered to every user as “This server”; the key is never sent to browsers |
 | `DOGUBAKO_MCP_DISCOVERY` | `full` | `full` or `compact` |
 | `DOGUBAKO_ALLOWED_ORIGINS` | — | Extra allowed Origins (browser MCP clients) |
 | `DOGUBAKO_MODELS_DIR` | `<data>/models` | Model storage |

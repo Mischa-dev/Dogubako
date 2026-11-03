@@ -179,14 +179,17 @@ pub fn resize_image(
             if s.no_upscale {
                 k = k.min(1.0);
             }
-            let (nw, nh) = (
-                (w0 * k).round().max(1.0) as u32,
-                (h0 * k).round().max(1.0) as u32,
-            );
-            let r = img.resize_exact(nw, nh, s.filter);
-            let cw = tw.min(nw);
-            let ch = th.min(nh);
-            r.crop_imm((nw - cw) / 2, (nh - ch) / 2, cw, ch)
+            // Crop the source to the visible region first, then scale only
+            // that: scaling the whole image can need an intermediate far
+            // larger than the output (10000x1 covering 1x10000 would be
+            // 100000000x10000 pixels).
+            let cw = (tw as f64).min((w0 * k).round().max(1.0));
+            let ch = (th as f64).min((h0 * k).round().max(1.0));
+            let sw = (cw / k).round().clamp(1.0, w0);
+            let sh = (ch / k).round().clamp(1.0, h0);
+            let (sx, sy) = (((w0 - sw) / 2.0) as u32, ((h0 - sh) / 2.0) as u32);
+            img.crop_imm(sx, sy, sw as u32, sh as u32)
+                .resize_exact(cw as u32, ch as u32, s.filter)
         }
     })
 }

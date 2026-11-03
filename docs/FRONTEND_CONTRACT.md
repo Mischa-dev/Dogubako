@@ -19,6 +19,7 @@ The React app in `web/` runs in two hosts with one codebase:
 - Admin: `GET/POST /admin/users` (`{username, password?, role: owner|admin|user|agent, policy?, description}`; agents have no password), `PATCH /admin/users/{id} {role?, policy?, disabled?, description?}`, `DELETE /admin/users/{id}`, `POST /admin/users/{id}/password {password}`, `GET/POST /admin/tokens` (`{user_id, name, expires_days?, scope?}`), `GET /admin/audit?limit=&before=`, `GET /admin/config` → `{config, running_jobs, uptime_secs, permissions:[{id,description}]}`, `GET /extensions`.
 - `Policy = {allow: string[] (patterns "*", "image.*", "video.compress", "category:pdf"), deny: string[], permissions: ("network"|"host_fs_read"|"host_fs_write"|"system_info"|"process_info")[], max_concurrent_jobs?, quota_mb?, max_upload_mb?, mcp_discovery?: "full"|"compact"}`
 - `GET /api/v1/openapi.json` – generated OpenAPI document.
+- Plain-words mode (see `docs/ASSISTANT.md`): `GET /assistant/config` → `{enabled, server_provider: {model}|null, private_network}`; `POST /assistant/chat {provider?: "server", base_url?, api_key?, body}` relays one non-streaming OpenAI chat completion and returns the endpoint's JSON (errors: `assistant_invalid` 400, `assistant_unreachable`/`assistant_upstream`/`assistant_bad_response` 502); `POST /assistant/models {provider?, base_url?, api_key?}` → `{models:[{id, owned_by?}]}`.
 
 ## Desktop mode (Tauri commands; `invoke` from `@tauri-apps/api/core`)
 - `app_info()` → `{version, platform, tools, output_dir, data_dir}`
@@ -29,6 +30,7 @@ The React app in `web/` runs in two hosts with one codebase:
 - `file_info({path})` → `{path, name, size, mime}`
 - `save_artifact({src, dest})` — copy an output to a user-chosen destination (dest from `@tauri-apps/plugin-dialog` `save()`).
 - `reveal_path({path})` — show in file manager.
+- `assistant_chat({baseUrl, apiKey?, body})` / `assistant_models({baseUrl, apiKey?})` — same relay as the server routes (loopback/LAN allowed); errors are `{kind, status, message}`.
 - `deps_status()` → same shape as server `dependencies`; `models_list()` → same as server `models`; `model_download({id})` (progress event `dogubako://model-progress` `{id, done, total}`), `model_remove({id})`.
 - Native file picking: `@tauri-apps/plugin-dialog` `open({multiple, filters})` → paths. OS drag & drop: `getCurrentWebview().onDragDropEvent(e => e.payload.type === 'drop' && e.payload.paths)` from `@tauri-apps/api/webview`.
 - Previews: `convertFileSrc(path)` from `@tauri-apps/api/core` (asset protocol is enabled for the output dir and user-picked files).

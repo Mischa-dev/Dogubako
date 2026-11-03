@@ -395,6 +395,31 @@ async fn compress_linearize_repair_flatten() {
 }
 
 #[tokio::test]
+async fn compress_grayscale_keeps_the_conversion() {
+    let h = harness();
+    if !h.available("pdf.compress") {
+        return;
+    }
+    let a = h.path("a.pdf");
+    make_pdf(&a, 2, Some("GRAY ME"));
+    // Lossless + grayscale: the Ghostscript rewrite may be larger than the
+    // qpdf-only or original file, but it is the only one that is grayscale.
+    let out = h
+        .run(
+            "pdf.compress",
+            json!({"input": [s(&a)], "preset": "lossless", "grayscale": true}),
+        )
+        .await
+        .unwrap();
+    let method = out.data["table"]["rows"][0][4]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(method.starts_with("ghostscript"), "method was {method}");
+    assert_eq!(pages(&out.artifacts[0].path), 2);
+}
+
+#[tokio::test]
 async fn text_images_info() {
     let h = harness();
     if !h.available("pdf.extract_text") {
@@ -671,6 +696,29 @@ async fn metadata() {
     ] {
         let out = h.run("pdf.metadata_edit", params).await.unwrap();
         assert!(!contains_marker(&out.artifacts[0].path));
+    }
+    // An indirect Info value must be gone once the field is removed or
+    // replaced, not left behind as an orphaned object.
+    let ind = h.path("indirect.pdf");
+    let mut d = Document::load(&a).unwrap();
+    let author = d.add_object(Object::string_literal("SECRET-NAME"));
+    let info = d.add_object(dictionary! { "Author" => Object::Reference(author) });
+    d.trailer.set("Info", Object::Reference(info));
+    d.save(&ind).unwrap();
+    let has_name = |path: &Path| {
+        let doc = Document::load(path).unwrap();
+        doc.objects.values().any(|o| match o {
+            Object::String(b, _) => b.windows(11).any(|w| w == b"SECRET-NAME"),
+            _ => false,
+        })
+    };
+    assert!(has_name(&ind));
+    for params in [
+        json!({"input": [s(&ind)], "author": "-"}),
+        json!({"input": [s(&ind)], "author": "Someone else"}),
+    ] {
+        let out = h.run("pdf.metadata_edit", params).await.unwrap();
+        assert!(!has_name(&out.artifacts[0].path));
     }
     let err = h
         .run("pdf.metadata_edit", json!({"input": [s(&a)]}))

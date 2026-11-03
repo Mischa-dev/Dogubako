@@ -107,9 +107,15 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(registry: Registry, config: EngineConfig, extra_bin_dirs: Vec<PathBuf>) -> Self {
+        Self::with_deps(registry, config, DepRegistry::new(extra_bin_dirs))
+    }
+
+    /// With a prepared dependency registry, e.g. one that uses the app's own
+    /// engines ([`DepRegistry::with_managed`]).
+    pub fn with_deps(registry: Registry, config: EngineConfig, deps: DepRegistry) -> Self {
         Engine {
             registry: Arc::new(registry),
-            deps: Arc::new(DepRegistry::new(extra_bin_dirs)),
+            deps: Arc::new(deps),
             models: Arc::new(ModelRegistry::new(config.models_dir.clone())),
             config,
         }

@@ -47,6 +47,11 @@ cargo tauri build      # .dmg/.app, .msi/.exe, .deb/.rpm/.AppImage
 The desktop crate is a separate Cargo workspace so that building the server
 never requires GTK/WebKit.
 
+A plain build uses whatever engines are installed on the machine. To ship the
+pinned engines inside the macOS app (and let it download the on-demand ones),
+assemble them first and add `--config tauri.engines.conf.json`; see
+[ENGINES.md](ENGINES.md#building-the-engines).
+
 ## Tests
 
 ```sh
@@ -55,7 +60,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cd web && npm test
 ```
 
-Integration tests use FFmpeg, ImageMagick, libvips, ExifTool, qpdf, Poppler,
+Integration tests use FFmpeg, ImageMagick, ExifTool, qpdf, Poppler,
 Ghostscript, Tesseract and 7-Zip when installed (CI installs them on Linux).
 Optional: `DOGUBAKO_TEST_MODELS=<dir>` with model files enables model-based tests.
 

@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dogubako for AI agents: MCP, HTTP API and CLI</title>
+<meta name="description" content="Give AI agents and scripts Dogubako’s 249 tools over MCP, an HTTP API or the command line. Each agent gets its own account and token, and can only run the tools you allow.">
+<link rel="canonical" href="https://dogubako.app/agents/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Dogubako">
+<meta property="og:title" content="Dogubako for agents and automation">
+<meta property="og:description" content="Give AI agents and scripts Dogubako’s 249 tools over MCP, an HTTP API or the command line. Each agent gets its own account and token, and can only run the tools you allow.">
+<meta property="og:url" content="https://dogubako.app/agents/">
+<meta property="og:image" content="https://dogubako.app/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f7f6f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151412" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preload" href="../assets/fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/dm-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script>try{var t=localStorage.getItem('dgb-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="../assets/css/site.css">
+<link rel="stylesheet" href="../assets/css/pages.css">
+</head>
+<body class="pg pg-agents">
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- Icons (Lucide, ISC) and the logo mark. -->
+<svg class="sprite" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="logo" viewBox="0 0 100 100"><rect x="10" y="24" width="80" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="8"/><line x1="10" y1="46" x2="90" y2="46" stroke="currentColor" stroke-width="8"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></symbol><symbol id="github" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M12 .5a11.5 11.5 0 0 0-3.64 22.4c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.7 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></symbol><symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol><symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol><symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol><symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol><symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol><symbol id="i-play" viewBox="0 0 24 24"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></symbol><symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol><symbol id="i-clapperboard" viewBox="0 0 24 24"><path d="m12.296 3.464 3.02 3.956"/><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m6.18 5.276 3.1 3.899"/></symbol><symbol id="i-audio-lines" viewBox="0 0 24 24"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></symbol><symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></symbol><symbol id="i-file-text" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol><symbol id="i-folder-archive" viewBox="0 0 24 24"><circle cx="15" cy="19" r="2"/><path d="M20.9 19.8A2 2 0 0 0 22 18V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h5.1"/><path d="M15 11v-1"/><path d="M15 17v-2"/></symbol><symbol id="i-type" viewBox="0 0 24 24"><path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/></symbol><symbol id="i-code-xml" viewBox="0 0 24 24"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></symbol><symbol id="i-sheet" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/><line x1="9" x2="9" y1="9" y2="21"/><line x1="15" x2="15" y1="9" y2="21"/></symbol><symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol><symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></symbol><symbol id="i-cpu" viewBox="0 0 24 24"><path d="M12 20v2"/><path d="M12 2v2"/><path d="M17 20v2"/><path d="M17 2v2"/><path d="M2 12h2"/><path d="M2 17h2"/><path d="M2 7h2"/><path d="M20 12h2"/><path d="M20 17h2"/><path d="M20 7h2"/><path d="M7 20v2"/><path d="M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol><symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></symbol><symbol id="i-smartphone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></symbol><symbol id="i-laptop" viewBox="0 0 24 24"><path d="M18 5a2 2 0 0 1 2 2v8.526a2 2 0 0 0 .212.897l1.068 2.127a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45l1.068-2.127A2 2 0 0 0 4 15.526V7a2 2 0 0 1 2-2z"/><path d="M20.054 15.987H3.946"/></symbol><symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></symbol><symbol id="i-key-round" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></symbol><symbol id="i-shield-check" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></symbol><symbol id="i-file-up" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M12 12v6"/><path d="m15 15-3-3-3 3"/></symbol><symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol><symbol id="i-terminal" viewBox="0 0 24 24"><path d="M12 19h8"/><path d="m4 17 6-6-6-6"/></symbol><symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></symbol><symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol><symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-circle-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="i-sliders-horizontal" viewBox="0 0 24 24"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></symbol><symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></symbol><symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol><symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></symbol>
+</svg>
+
+<header class="nav" id="nav">
+  <div class="nav-in">
+    <a class="brand" href="../" aria-label="Dogubako home"><svg class="mark" aria-hidden="true"><use href="#logo"/></svg><span>Dogubako</span></a>
+    <nav class="nav-links" id="navLinks" aria-label="Main">
+      <a href="../tools/">Tools</a>
+      <a href="../self-hosting/">Self-hosting</a>
+      <a href="../agents/" aria-current="page">Agents</a>
+      <a href="https://docs.dogubako.app">Docs</a>
+      <a class="nav-only-phone" href="https://github.com/Mischa-dev/Dogubako">GitHub</a>
+    </nav>
+    <div class="nav-acts">
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch to dark theme"><svg class="i i-moon" aria-hidden="true"><use href="#i-moon"/></svg><svg class="i i-sun" aria-hidden="true"><use href="#i-sun"/></svg></button>
+      <a class="icon-btn nav-gh" href="https://github.com/Mischa-dev/Dogubako" aria-label="Dogubako on GitHub"><svg class="i i-fill" aria-hidden="true"><use href="#github"/></svg></a>
+      <a class="btn btn-ink btn-sm nav-dl" href="../download/"><span class="nav-dl-long">Download alpha release</span><span class="nav-dl-short">Download</span></a>
+      <button class="icon-btn nav-menu" id="navMenu" type="button" aria-expanded="false" aria-controls="navLinks" aria-label="Menu"><svg class="i nm-open" aria-hidden="true"><use href="#i-menu"/></svg><svg class="i nm-close" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<!-- ============================================================ HERO -->
+<section class="pg-hero" aria-labelledby="pg-title">
+  <div class="wrap pg-hero-in">
+    <div class="pg-hero-copy">
+      <h1 id="pg-title" class="pg-title">Give your agents tools, not a shell.</h1>
+      <p class="lede">Dogubako’s 249 tools are also an MCP server, an HTTP API and a command line. Run it on your own machine for one agent, or on a server for many. Each agent gets its own account, its own token and a list of the tools it may run.</p>
+      <div class="cta-row">
+        <a class="btn btn-ink" href="#connect">Connect an agent</a>
+        <a class="btn btn-line" href="https://docs.dogubako.app/agents/overview/">Agent docs <svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a>
+      </div>
+      <p class="pg-meta">MCP over stdio or HTTP · OpenAPI 3.1 · a CLI with <code class="nw">--json</code></p>
+    </div>
+
+    <figure class="show" id="agShow">
+      <div class="show-stage ag-stage" aria-hidden="true">
+        <div class="ag-win">
+          <div class="ag-bar"><svg class="i"><use href="#i-bot"/></svg><b>Agent</b><span class="ag-srv mono">MCP · tools.example.ts.net · media-bot</span></div>
+          <div class="ag-body" id="agBody">
+            <div class="ag-msg ag-user" id="agU">Make subtitles for interview.m4a.</div>
+            <div class="ag-call" id="agS">
+              <div class="ag-call-h"><svg class="i"><use href="#i-search"/></svg><span class="ag-fn">dogubako_search_tools</span><span class="ag-arg">{"query": "transcribe"}</span><span class="ag-st"><i class="ag-spin" id="agSSpin"></i><svg class="i ag-ok" id="agSOk"><use href="#i-check"/></svg></span></div>
+              <div class="ag-res" id="agSR">- speech.transcribe — Offline speech-to-text with whisper.cpp: transcribe or translate audio and video to text, SRT, WebVTT…</div>
+            </div>
+            <div class="ag-call" id="agP">
+              <div class="ag-call-h"><svg class="i"><use href="#i-upload"/></svg><span class="ag-fn">dogubako_upload_file</span><span class="ag-arg">{"name": "interview.m4a", …}</span><span class="ag-st"><i class="ag-spin" id="agPSpin"></i><svg class="i ag-ok" id="agPOk"><use href="#i-check"/></svg></span></div>
+              <div class="ag-res" id="agPR">Uploaded 'interview.m4a' as f_3b9e…</div>
+            </div>
+            <div class="ag-call ag-call-run" id="agR">
+              <div class="ag-call-h"><svg class="i"><use href="#i-play"/></svg><span class="ag-fn">dogubako_run_tool</span><span class="ag-st ag-st-t"><span id="agRSt">running</span><i class="ag-spin" id="agRSpin"></i><svg class="i ag-ok" id="agROk"><use href="#i-check"/></svg></span></div>
+              <div class="ag-json">{
+  <i>"tool"</i>: <s>"speech.transcribe"</s>,
+  <i>"arguments"</i>: {
+    <i>"input"</i>: [<s>"f_3b9e…"</s>],
+    <i>"formats"</i>: [<s>"srt"</s>]
+  }
+}</div>
+              <div class="ag-prog"><i id="agBar"></i></div>
+              <div class="ag-file" id="agFile"><svg class="i"><use href="#i-file-text"/></svg><span><b>interview.srt</b><span>dogubako://files/f_8c2a…</span></span></div>
+            </div>
+            <div class="ag-msg ag-bot" id="agB">Done. interview.srt is saved next to the recording.</div>
+          </div>
+        </div>
+      </div>
+      <figcaption class="show-ui">
+        <p class="sr-only">An animation of an agent using Dogubako over MCP: it searches the tools for “transcribe”, uploads interview.m4a, runs speech.transcribe with SRT output, and gets interview.srt back as a file.</p>
+        <div class="show-bar">
+          <button class="show-play" type="button" aria-pressed="false" aria-label="Pause the animation"><svg class="i i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="i i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+          <ol class="show-pips" aria-label="Steps"></ol>
+        </div>
+        <p class="show-cap" aria-hidden="true"></p>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============================================================ CONNECT -->
+<section class="sec" id="connect" aria-labelledby="connect-title">
+  <div class="wrap">
+    <header class="sec-head">
+      <h2 id="connect-title" class="h2">On your machine, or on a shared server.</h2>
+      <p class="sec-lede">Dogubako speaks MCP over two transports. Same tools, same checks; what changes is where the work runs and how files get there.</p>
+    </header>
+    <div class="duo">
+      <article class="duo-card rv">
+        <div class="duo-top"><svg class="i" aria-hidden="true"><use href="#i-laptop"/></svg><h3 class="h3">Local, over stdio</h3></div>
+        <p>Your agent starts <code>dogubako mcp serve</code> itself. File parameters take local paths and results land in a folder you choose. Narrow it with <code class="nw">--allow</code>, <code class="nw">--deny</code>, <code class="nw">--permissions</code> and <code class="nw">--fs-root</code>.</p>
+        <div class="cmd">
+<pre class="code"><code><span class="c-p">$</span> claude mcp add dogubako -- \
+    dogubako mcp serve --discovery compact</code></pre>
+          <button class="copy-btn" type="button" data-copy="claude mcp add dogubako -- dogubako mcp serve --discovery compact"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button>
+        </div>
+      </article>
+      <article class="duo-card rv">
+        <div class="duo-top"><svg class="i" aria-hidden="true"><use href="#i-server"/></svg><h3 class="h3">Shared, over HTTP</h3></div>
+        <p>Many agents on different machines use one <a class="link" href="../self-hosting/">self-hosted server</a> and its engines, so none of them needs FFmpeg or Tesseract. Each connects to <code>/mcp</code> with its own bearer token; files go up once and are passed by id.</p>
+        <div class="cmd">
+<pre class="code"><code><span class="c-p">$</span> claude mcp add --transport http dogubako \
+    https://tools.example.ts.net/mcp \
+    --header "Authorization: Bearer dgb_…"</code></pre>
+          <button class="copy-btn" type="button" data-copy="claude mcp add --transport http dogubako https://tools.example.ts.net/mcp --header &quot;Authorization: Bearer dgb_…&quot;"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button>
+        </div>
+      </article>
+    </div>
+    <p class="pg-note">Other clients work too: the docs have the JSON config for Claude Desktop and similar apps, and a bridge for clients that only speak stdio. Agents with their own shell can keep using local programs; MCP is an option, not a requirement.</p>
+  </div>
+</section>
+
+<!-- ============================================================ DISCOVERY -->
+<section class="sec" aria-labelledby="disc-title">
+  <div class="wrap disc-wrap">
+    <div class="disc-copy">
+      <h2 id="disc-title" class="h2">249 tools, without filling the context.</h2>
+      <p class="sec-lede">Listing every tool with its full schema would use up a good part of an agent’s context before it has done anything. In compact mode the agent sees eight small meta-tools instead. It searches when it needs something, reads one tool’s schema, and runs it by id.</p>
+      <dl class="facts">
+        <div><dt>Choose it</dt><dd>Per server (<code>DOGUBAKO_MCP_DISCOVERY</code>), per agent, per token, or per connection with <code>/mcp?discovery=compact</code>.</dd></div>
+        <div><dt>Long jobs</dt><dd><code>dogubako_run_tool</code> waits up to <code>wait_seconds</code>, then hands back a job id to poll with <code>dogubako_job_status</code>.</dd></div>
+        <div><dt>Not a permission</dt><dd>Discovery only decides what is listed. A tool the agent never saw is still checked, and refused if it isn’t allowed.</dd></div>
+      </dl>
+    </div>
+    <div class="disc rv" id="disc">
+      <div class="disc-head">
+        <div class="seg" role="group" aria-label="Discovery mode">
+          <button type="button" class="seg-b" data-m="full" aria-pressed="false">Full</button>
+          <button type="button" class="seg-b" data-m="compact" aria-pressed="true">Compact</button>
+        </div>
+        <p class="disc-n mono"><span class="disc-k">tools/list</span> → <b id="discN">8</b> definitions</p>
+      </div>
+      <ul class="disc-meta mono">
+        <li><b>dogubako_search_tools</b><span>keywords → ids</span></li>
+        <li><b>dogubako_describe_tool</b><span>one tool’s schema</span></li>
+        <li><b>dogubako_run_tool</b><span>run any allowed tool</span></li>
+        <li><b>dogubako_job_status</b><span>poll a long job</span></li>
+        <li><b>dogubako_job_cancel</b><span>stop it</span></li>
+        <li><b>dogubako_list_categories</b><span>what’s allowed, by category</span></li>
+        <li><b>dogubako_upload_file</b><span>send a file (HTTP)</span></li>
+        <li><b>dogubako_list_files</b><span>your files and outputs</span></li>
+      </ul>
+      <div class="disc-wall mono" id="discWall" aria-hidden="true"></div>
+      <p class="disc-foot">Counted for an agent allowed to use every tool, on a server.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ POLICY -->
+<section class="sec" aria-labelledby="pol-title">
+  <div class="wrap ag-pol">
+    <div class="ag-pol-copy">
+      <h2 id="pol-title" class="h2">One account per agent, and a list of what it may run.</h2>
+      <p class="sec-lede">Agents start with no tools and no capabilities. Allow what each one needs, by category or by tool, and every call is checked against that list in the engine, whether it arrives over MCP, the HTTP API or as a tool name the agent only guessed.</p>
+      <div class="cmd">
+<pre class="code"><code><span class="c-p">$</span> dogubako users create media-bot --role agent \
+    --allow 'video.*' --allow 'speech.*'
+<span class="c-p">$</span> dogubako tokens create --user media-bot --name laptop-agent
+<span class="c-dim">dgb_…</span></code></pre>
+        <button class="copy-btn" type="button" data-copy="dogubako users create media-bot --role agent --allow 'video.*' --allow 'speech.*'&#10;dogubako tokens create --user media-bot --name laptop-agent"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button>
+      </div>
+      <p class="pg-note">Run these on the server host, with <code>docker compose exec dogubako</code> in front for Docker, or use <b>Admin → Users &amp; agents</b>. <a class="link" href="https://docs.dogubako.app/reference/permissions-and-policies/">Permissions and policies</a></p>
+    </div>
+    <div class="ag-pol-side">
+      <div class="policy rv" id="policy">
+        <div class="pol-head"><span class="pol-av" aria-hidden="true">m</span><span><b>media-bot</b><span class="mono">agent · video.*, speech.*</span></span><button class="show-play pol-play" type="button" aria-pressed="false" aria-label="Pause the policy log animation"><svg class="i i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="i i-play" aria-hidden="true"><use href="#i-play"/></svg></button></div>
+        <ol class="pol-log" id="polLog" aria-label="Example calls from the media-bot agent">
+          <li><span class="mono">video.compress <span class="pol-via">mcp</span></span><span class="pol-st ok">allowed</span></li>
+          <li><span class="mono">speech.transcribe <span class="pol-via">mcp</span></span><span class="pol-st ok">allowed</span></li>
+          <li><span class="mono">pdf.merge <span class="pol-via">mcp</span></span><span class="pol-st no">denied</span></li>
+          <li><span class="mono">video.to_gif <span class="pol-via">api</span></span><span class="pol-st ok">allowed</span></li>
+          <li><span class="mono">system.processes <span class="pol-via">mcp</span></span><span class="pol-st no">denied</span></li>
+          <li><span class="mono">network.http_headers <span class="pol-via">api</span></span><span class="pol-st no">denied</span></li>
+        </ol>
+        <p class="pol-note">Refused calls go to the audit log, like every run.</p>
+      </div>
+      <dl class="facts facts-tight">
+        <div><dt>Tokens</dt><dd><code>dgb_</code> plus 256 random bits, shown once, stored as a hash. Revocable, with an optional expiry.</dd></div>
+        <div><dt>Scopes</dt><dd>A token can narrow its owner’s policy further, never widen it. Tokens can’t create tokens.</dd></div>
+        <div><dt>Files</dt><dd>An agent sees only its own uploads and outputs. Everyone else’s files are a 404.</dd></div>
+        <div><dt>Sessions</dt><dd>MCP sessions are bound to the token that opened them. Revoke the token and they stop.</dd></div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ HTTP + CLI -->
+<section class="sec" aria-labelledby="http-title">
+  <div class="wrap">
+    <header class="sec-head">
+      <h2 id="http-title" class="h2">Or skip MCP: HTTP and the command line.</h2>
+      <p class="sec-lede">Every tool is described once. The app’s form, the CLI flags, the HTTP endpoint and the MCP tool are all generated from that description, and the same engine runs them.</p>
+    </header>
+    <div class="duo">
+      <article class="duo-card rv">
+        <div class="duo-top"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><h3 class="h3">HTTP API</h3></div>
+        <p>Upload, run, fetch the result. Each tool has a typed request schema in the OpenAPI 3.1 document, generated from the live tool registry: <code>GET /api/v1/openapi.json</code>, or <code>dogubako api openapi</code>.</p>
+<pre class="code"><code><span class="c-k">PUT</span>  /api/v1/files/raw?name=talk.mov        <span class="c-dim">→ {"id": "f_…"}</span>
+<span class="c-k">POST</span> /api/v1/tools/video.compress/run
+     {"params": {"input": ["f_…"]}, "wait_seconds": 60}
+<span class="c-k">GET</span>  /api/v1/files/f_…/content              <span class="c-dim">→ the file</span></code></pre>
+      </article>
+      <article class="duo-card rv">
+        <div class="duo-top"><svg class="i" aria-hidden="true"><use href="#i-terminal"/></svg><h3 class="h3">CLI, for scripts and CI</h3></div>
+        <p>Every tool is a command: inputs as arguments, every option as a flag, <code class="nw">--json</code> for machine-readable output and exit codes you can branch on.</p>
+<pre class="code"><code><span class="c-p">$</span> dogubako image compress shot.png -o shot-small.png
+<span class="c-p">$</span> dogubako pdf merge a.pdf b.pdf -o merged.pdf --json
+<span class="c-p">$</span> echo '{"b":1}' | dogubako dev json
+<span class="c-dim"># exit codes: 0 ok · 1 failed · 2 bad input · 3 missing engine
+#             4 not permitted · 5 timeout or limit · 130 cancelled</span></code></pre>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ AGENT INSTALL -->
+<section class="sec" id="agent" aria-labelledby="agent-title">
+  <div class="wrap">
+    <div class="prompt-card rv">
+      <div class="prompt-copy">
+        <h2 id="agent-title" class="h2 h2-sm">Have your agent set it up.</h2>
+        <p class="sec-lede">A coding agent can install the server for you and connect itself. The page it follows is written for agents: build it with Docker, keep it on your tailnet, create a scoped agent account and token, add the MCP server, and ask you before touching ports or the firewall.</p>
+        <p class="prompt-more"><a class="link" href="../agent-install.md">Read agent-install.md <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></a></p>
+      </div>
+      <div class="prompt-box">
+        <p class="prompt-label" id="promptLabel">Prompt</p>
+        <p class="prompt-text" id="agentPrompt">Install Dogubako on this server and connect it to me over MCP. Follow the instructions at https://dogubako.app/agent-install.md and ask me before any step that opens ports or changes the firewall.</p>
+        <textarea class="prompt-fallback" id="agentPromptFallback" readonly hidden aria-labelledby="promptLabel" rows="4"></textarea>
+        <button class="btn btn-ink copy-btn copy-btn-lg" type="button" data-copy-from="#agentPrompt" data-fallback="#agentPromptFallback"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy prompt for your AI agent</span></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ DOCS -->
+<section class="sec" aria-labelledby="docs-title">
+  <div class="wrap">
+    <h2 id="docs-title" class="h3 docs-h">The how-to lives in the docs</h2>
+    <ul class="doc-links">
+      <li><a href="https://docs.dogubako.app/agents/overview/"><b>Agents overview</b><span>MCP transports, discovery, results</span><svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a></li>
+      <li><a href="https://docs.dogubako.app/agents/local/"><b>Local agents</b><span>stdio, allow lists, folders</span><svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a></li>
+      <li><a href="https://docs.dogubako.app/agents/remote/"><b>Remote agents</b><span>Client config, uploads, a worked example</span><svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a></li>
+      <li><a href="https://docs.dogubako.app/reference/http-api/"><b>HTTP API</b><span>Endpoints, jobs, errors, OpenAPI</span><svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a></li>
+      <li><a href="https://docs.dogubako.app/cli/overview/"><b>CLI</b><span>Commands, conventions, exit codes</span><svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></a></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ END -->
+<section class="pg-end" aria-label="More">
+  <div class="wrap pg-end-in">
+    <a class="end-card" href="../"><svg class="i" aria-hidden="true"><use href="#i-arrow-left"/></svg><span><b>Home</b><span>What Dogubako is, and the app in motion</span></span></a>
+    <a class="end-card end-card-r" href="../download/"><span><b>Download</b><span>Alpha status, the Mac app, building from source</span></span><svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="foot-brand"><a class="brand" href="../"><svg class="mark" aria-hidden="true"><use href="#logo"/></svg><span>Dogubako</span></a><p>A local-first, open-source toolbox.</p></div>
+    <nav class="foot-cols" aria-label="Footer">
+      <div><h2 class="foot-h">Product</h2><a href="../tools/">Tools</a><a href="../download/">Download</a><a href="../self-hosting/">Self-hosting</a><a href="../agents/">Agents</a></div>
+      <div><h2 class="foot-h">Docs</h2><a href="https://docs.dogubako.app/">Documentation</a><a href="https://docs.dogubako.app/cli/overview/">CLI</a><a href="https://docs.dogubako.app/reference/http-api/">HTTP API</a><a href="https://docs.dogubako.app/agents/overview/">MCP</a><a href="https://docs.dogubako.app/project/security/">Security</a></div>
+      <div><h2 class="foot-h">Project</h2><a href="https://github.com/Mischa-dev/Dogubako">Source code</a><a href="https://github.com/Mischa-dev/Dogubako/releases">Releases</a><a href="https://github.com/Mischa-dev/Dogubako/issues">Report a problem</a></div>
+      <div><h2 class="foot-h">License</h2><a href="https://github.com/Mischa-dev/Dogubako/blob/main/LICENSE">AGPL-3.0-or-later</a><a href="https://docs.dogubako.app/project/licensing/">Third-party licenses</a></div>
+    </nav>
+  </div>
+  <div class="wrap foot-base mono"><span>dogubako.app</span><span>Set in Instrument Sans and DM Mono (SIL OFL). Icons from Lucide (ISC).</span></div>
+</footer>
+
+<script src="../assets/js/site.js" defer></script>
+<script src="../assets/js/tools-data.js" defer></script>
+<script src="../assets/js/timeline.js" defer></script>
+<script src="../assets/js/pages/pages.js" defer></script>
+<script src="../assets/js/pages/agents.js" defer></script>
+</body>
+</html>

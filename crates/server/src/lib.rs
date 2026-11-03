@@ -5,6 +5,7 @@
 //! job management, access-controlled storage and cleanup.
 
 pub mod api;
+pub mod assistant;
 pub mod auth;
 pub mod authz;
 pub mod config;

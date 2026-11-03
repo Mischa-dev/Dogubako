@@ -60,7 +60,7 @@ impl Table {
         }
         names.iter().map(|c| self.col(c)).collect()
     }
-    fn normalize(&mut self) {
+    fn normalize(&mut self) -> ToolResult<()> {
         let w = self
             .rows
             .iter()
@@ -68,6 +68,16 @@ impl Table {
             .max()
             .unwrap_or(0)
             .max(self.headers.len());
+        // Ragged rows are padded to the widest one: a wide header over many
+        // short records could otherwise need billions of empty cells.
+        let have: u128 = self.rows.iter().map(|r| r.len() as u128).sum();
+        let added = (w as u128 * self.rows.len() as u128).saturating_sub(have);
+        if added > MAX_PADDED_CELLS {
+            return Err(ToolError::limit(format!(
+                "the table is too ragged: making all {} rows {w} columns wide would add {added} empty cells (max {MAX_PADDED_CELLS})",
+                self.rows.len()
+            )));
+        }
         // Generated names must not collide with existing headers
         // (e.g. a header row `column2` with two-field records).
         let mut used: HashSet<String> = self.headers.iter().cloned().collect();
@@ -85,6 +95,7 @@ impl Table {
         for r in &mut self.rows {
             r.resize(w, String::new());
         }
+        Ok(())
     }
     pub fn preview(&self, offset: usize, limit: usize) -> Value {
         let rows: Vec<Vec<Value>> = self
@@ -97,6 +108,9 @@ impl Table {
         table_owned(&self.headers, rows)
     }
 }
+
+/// Most empty cells `Table::normalize` may add when padding ragged rows.
+const MAX_PADDED_CELLS: u128 = 20_000_000;
 
 pub fn split_list(s: &str) -> Vec<String> {
     s.split(',')
@@ -175,7 +189,7 @@ pub fn parse_csv(text: &str, delim: u8, has_header: bool) -> ToolResult<Table> {
             rows,
         }
     };
-    t.normalize();
+    t.normalize()?;
     Ok(t)
 }
 
@@ -268,8 +282,15 @@ pub fn write_csv_style(
     String::from_utf8(w.into_inner().ctx("writing CSV")?).ctx("CSV output")
 }
 
-pub fn rows_to_objects(t: &Table, infer: bool) -> Value {
-    Value::Array(
+/// One object per row, keyed by the headers. Every object repeats every
+/// header, so long headers over many rows are sized before building.
+pub fn rows_to_objects(t: &Table, infer: bool) -> ToolResult<Value> {
+    // Nominal per-entry overhead, as in `render_table`.
+    const ENTRY: u128 = 8;
+    let names: u128 = t.headers.iter().map(|h| h.len() as u128 + ENTRY).sum();
+    let cells: u128 = t.rows.iter().flatten().map(|c| c.len() as u128).sum();
+    crate::util::check_generated_size(cells + names * t.rows.len() as u128)?;
+    Ok(Value::Array(
         t.rows
             .iter()
             .map(|r| {
@@ -280,11 +301,11 @@ pub fn rows_to_objects(t: &Table, infer: bool) -> Value {
                 Value::Object(m)
             })
             .collect(),
-    )
+    ))
 }
 
 /// Flatten JSON records into columns using dotted keys.
-pub fn flatten_records(items: &[Value], sep: &str) -> (Vec<String>, Vec<Vec<String>>) {
+pub fn flatten_records(items: &[Value], sep: &str) -> ToolResult<(Vec<String>, Vec<Vec<String>>)> {
     flatten_records_with(items, sep, "index")
 }
 
@@ -292,46 +313,70 @@ pub fn flatten_records_with(
     items: &[Value],
     sep: &str,
     arrays: &str,
-) -> (Vec<String>, Vec<Vec<String>>) {
+) -> ToolResult<(Vec<String>, Vec<Vec<String>>)> {
     // Columns are identified by their structural path (the key segments),
     // not by the joined name: {"a":{"b":1}} and {"a.b":2} are different
     // fields even though both display as "a.b".
     type Path = Vec<String>;
-    fn walk(path: &mut Path, v: &Value, arrays: &str, out: &mut Vec<(Path, String)>) {
+    // Every leaf copies its whole path, so a long key over many array items
+    // multiplies: charge each copy before making it.
+    fn walk(
+        path: &mut Path,
+        v: &Value,
+        arrays: &str,
+        out: &mut Vec<(Path, String)>,
+        budget: &mut crate::util::OutputBudget,
+    ) -> ToolResult<()> {
+        let mut leaf = |path: &Path, cell: String| -> ToolResult<()> {
+            budget.add(path.iter().map(|s| s.len() + 24).sum::<usize>() + cell.len())?;
+            out.push((path.clone(), cell));
+            Ok(())
+        };
         match v {
             Value::Object(m) if !m.is_empty() => {
                 for (k, x) in m {
                     path.push(k.clone());
-                    walk(path, x, arrays, out);
+                    walk(path, x, arrays, out, budget)?;
                     path.pop();
                 }
             }
             Value::Array(a) if !a.is_empty() => match arrays {
-                "join" if a.iter().all(|x| !x.is_object() && !x.is_array()) => out.push((
-                    path.clone(),
+                "join" if a.iter().all(|x| !x.is_object() && !x.is_array()) => leaf(
+                    path,
                     a.iter().map(cell_string).collect::<Vec<_>>().join("; "),
-                )),
-                "json" => out.push((path.clone(), serde_json::to_string(v).unwrap_or_default())),
+                )?,
+                "json" => leaf(path, serde_json::to_string(v).unwrap_or_default())?,
                 _ => {
                     for (i, x) in a.iter().enumerate() {
                         path.push(i.to_string());
-                        walk(path, x, arrays, out);
+                        walk(path, x, arrays, out, budget)?;
                         path.pop();
                     }
                 }
             },
-            Value::Object(_) => out.push((path.clone(), "{}".into())),
-            Value::Array(_) => out.push((path.clone(), "[]".into())),
-            other => out.push((path.clone(), cell_string(other))),
+            Value::Object(_) => leaf(path, "{}".into())?,
+            Value::Array(_) => leaf(path, "[]".into())?,
+            other => leaf(path, cell_string(other))?,
         }
+        Ok(())
     }
     let mut cols: Vec<String> = vec![];
     let mut used: HashSet<String> = HashSet::new();
     let mut idx: HashMap<Path, usize> = HashMap::new();
     let mut flat_rows = vec![];
+    // Column names repeat the separator once per nesting level.
+    let mut budget = crate::util::OutputBudget::default();
     for it in items {
         let mut pairs = vec![];
-        walk(&mut vec![], it, arrays, &mut pairs);
+        // Per record: once its columns are indexed, only the column number
+        // is kept, so the path copies are dropped before the next record.
+        walk(
+            &mut vec![],
+            it,
+            arrays,
+            &mut pairs,
+            &mut crate::util::OutputBudget::default(),
+        )?;
         for (path, _) in &pairs {
             if idx.contains_key(path) {
                 continue;
@@ -341,6 +386,7 @@ pub fn flatten_records_with(
             let base = if path.is_empty() {
                 "value".to_string()
             } else {
+                budget.add(path.iter().map(|s| s.len()).sum::<usize>() + path.len() * sep.len())?;
                 path.join(sep)
             };
             let mut name = base.clone();
@@ -353,19 +399,35 @@ pub fn flatten_records_with(
             idx.insert(path.clone(), cols.len());
             cols.push(name);
         }
-        flat_rows.push(pairs);
+        flat_rows.push(
+            pairs
+                .into_iter()
+                .map(|(path, v)| (idx[&path], v))
+                .collect::<Vec<_>>(),
+        );
+    }
+    // Rows are built full width: objects with disjoint keys make a sparse
+    // table whose empty cells can outnumber the input many times over.
+    let have: u128 = flat_rows.iter().map(|p| p.len() as u128).sum();
+    let added = (cols.len() as u128 * flat_rows.len() as u128).saturating_sub(have);
+    if added > MAX_PADDED_CELLS {
+        return Err(ToolError::limit(format!(
+            "{} records with {} distinct fields would need {added} empty cells (max {MAX_PADDED_CELLS})",
+            flat_rows.len(),
+            cols.len()
+        )));
     }
     let rows = flat_rows
         .into_iter()
         .map(|pairs| {
             let mut r = vec![String::new(); cols.len()];
             for (k, v) in pairs {
-                r[idx[&k]] = v;
+                r[k] = v;
             }
             r
         })
         .collect();
-    (cols, rows)
+    Ok((cols, rows))
 }
 
 fn delim_param(name: &str, auto: bool) -> ParamSpec {
@@ -435,7 +497,7 @@ pub fn load_table(p: &Params) -> ToolResult<(Table, String)> {
                         .map(|r| r.iter().map(crate::sheet::cell_text).collect())
                         .collect(),
                     header_mode != "no",
-                ),
+                )?,
                 f.name.clone(),
             ));
         }
@@ -485,7 +547,7 @@ fn parse_text_table(text: &str, p: &Params, header_mode: &str, tsv: bool) -> Too
     parse_csv(text, delim, header)
 }
 
-fn table_from_cells(mut rows: Vec<Vec<String>>, header: bool) -> Table {
+fn table_from_cells(mut rows: Vec<Vec<String>>, header: bool) -> ToolResult<Table> {
     let mut t = if header && !rows.is_empty() {
         let h = rows.remove(0);
         Table {
@@ -498,8 +560,8 @@ fn table_from_cells(mut rows: Vec<Vec<String>>, header: bool) -> Table {
             rows,
         }
     };
-    t.normalize();
-    t
+    t.normalize()?;
+    Ok(t)
 }
 
 /// Whether a JSON number survives conversion to an f64 spreadsheet cell.
@@ -554,9 +616,9 @@ pub fn json_table(text: &str, header: bool) -> ToolResult<Table> {
             .iter()
             .map(|r| r.as_array().unwrap().iter().map(cell_string).collect())
             .collect();
-        return Ok(table_from_cells(rows, header));
+        return table_from_cells(rows, header);
     }
-    let (headers, rows) = flatten_records(&items, ".");
+    let (headers, rows) = flatten_records(&items, ".")?;
     Ok(Table { headers, rows })
 }
 
@@ -864,14 +926,7 @@ fn csv_filter_sort() -> Arc<dyn Tool> {
         }
         if let Some(c) = p.opt_str("columns") {
             let idx = t.cols(c)?;
-            t = Table {
-                headers: idx.iter().map(|i| t.headers[*i].clone()).collect(),
-                rows: t
-                    .rows
-                    .iter()
-                    .map(|r| idx.iter().map(|i| r[*i].clone()).collect())
-                    .collect(),
-            };
+            t = project(&t, &idx)?;
         }
         let removed = before - t.rows.len();
         emit_table(
@@ -924,7 +979,7 @@ fn csv_to_json() -> Arc<dyn Tool> {
                 )
             }
             "ndjson" => {
-                let objs = rows_to_objects(&t, infer);
+                let objs = rows_to_objects(&t, infer)?;
                 (
                     objs.as_array()
                         .unwrap()
@@ -938,7 +993,7 @@ fn csv_to_json() -> Arc<dyn Tool> {
                 )
             }
             _ => {
-                let v = rows_to_objects(&t, infer);
+                let v = rows_to_objects(&t, infer)?;
                 (
                     if p.bool("pretty") {
                         serde_json::to_string_pretty(&v)?
@@ -1017,7 +1072,7 @@ fn json_to_csv() -> Arc<dyn Tool> {
             &items,
             p.str_or("separator", "."),
             p.str_or("arrays", "index"),
-        );
+        )?;
         let t = Table { headers, rows };
         let name = input_name(p, "file", "data.json");
         emit_table(ctx, p, &t, &name, "converted", out_delim(p), json!({}))
@@ -1093,6 +1148,19 @@ fn spreadsheet() -> Arc<dyn Tool> {
                 } else {
                     vec![]
                 };
+                if header {
+                    // Every object repeats its keys: size them before building.
+                    let mut prefix = vec![0u128];
+                    for h in &headers {
+                        prefix.push(prefix.last().unwrap() + h.len() as u128 + 8);
+                    }
+                    let keys = |n: usize| -> u128 {
+                        let named = n.min(headers.len());
+                        prefix[named] + (n - named) as u128 * 24
+                    };
+                    let total: u128 = rows.iter().map(|r| keys(r.len())).sum();
+                    crate::util::check_generated_size(total)?;
+                }
                 let v: Vec<Value> = rows
                     .iter()
                     .map(|r| {
@@ -1146,7 +1214,7 @@ fn spreadsheet() -> Arc<dyn Tool> {
                         .map(|r| r.iter().map(crate::sheet::cell_text).collect())
                         .collect(),
                     header,
-                );
+                )?;
                 let offset = p.int_or("offset", 0).max(0) as usize;
                 let limit = (p.int_or("limit", 100).max(1) as usize).min(PREVIEW_ROWS);
                 let mut out = ToolOutput::data(
@@ -1266,17 +1334,32 @@ fn columns() -> Arc<dyn Tool> {
             "drop" => {
                 let idx: HashSet<usize> = need_cols()?.into_iter().collect();
                 let keep: Vec<usize> = (0..t.headers.len()).filter(|i| !idx.contains(i)).collect();
-                t = project(&t, &keep);
+                t = project(&t, &keep)?;
             }
             "select" => {
                 let idx = need_cols()?;
-                t = project(&t, &idx);
+                t = project(&t, &idx)?;
             }
             "split" => {
                 let idx = need_cols()?;
                 let i = idx[0];
                 let sep = p.text("separator");
                 let sep = if sep.is_empty() { " " } else { sep };
+                // Every row grows to the widest split: one cell with many
+                // separators times many rows is a huge rectangle.
+                let widest = t
+                    .rows
+                    .iter()
+                    .map(|r| r[i].matches(sep).count() + 1)
+                    .max()
+                    .unwrap_or(1);
+                let added = (widest as u128) * (t.rows.len() as u128);
+                if added > MAX_PADDED_CELLS {
+                    return Err(ToolError::limit(format!(
+                        "splitting would create {widest} columns for {} rows ({added} cells, max {MAX_PADDED_CELLS})",
+                        t.rows.len()
+                    )));
+                }
                 let parts: Vec<Vec<String>> = t
                     .rows
                     .iter()
@@ -1284,6 +1367,9 @@ fn columns() -> Arc<dyn Tool> {
                     .collect();
                 let n = parts.iter().map(|v| v.len()).max().unwrap_or(1);
                 let names: Vec<String> = split_list(p.text("new_names"));
+                // Unnamed parts are called `<column>_<k>`, repeating the name.
+                let unnamed = n.saturating_sub(names.len()) as u128;
+                crate::util::check_generated_size(unnamed * (t.headers[i].len() as u128 + 21))?;
                 let new_headers: Vec<String> = (0..n)
                     .map(|k| {
                         names
@@ -1314,15 +1400,26 @@ fn columns() -> Arc<dyn Tool> {
             "merge" => {
                 let idx = need_cols()?;
                 let sep = p.text("separator");
-                let new_name = p
-                    .opt_str("new_names")
-                    .map(|s| s.trim().to_string())
-                    .unwrap_or_else(|| {
+                let mut budget = crate::util::OutputBudget::default();
+                let new_name = match p.opt_str("new_names") {
+                    Some(s) => s.trim().to_string(),
+                    None => {
+                        // The default name joins every selected header, and
+                        // a column may be selected many times.
+                        for i in &idx {
+                            budget.add(t.headers[*i].len() + 1)?;
+                        }
                         idx.iter()
-                            .map(|i| t.headers[*i].clone())
+                            .map(|i| t.headers[*i].as_str())
                             .collect::<Vec<_>>()
                             .join("_")
-                    });
+                    }
+                };
+                for r in &t.rows {
+                    for i in &idx {
+                        budget.add(r[*i].len() + sep.len())?;
+                    }
+                }
                 let merged: Vec<String> = t
                     .rows
                     .iter()
@@ -1366,7 +1463,13 @@ fn columns() -> Arc<dyn Tool> {
                 }
             }
             "upper" | "lower" | "title" | "trim" | "replace" => {
-                let idx = need_cols()?;
+                let mut idx = need_cols()?;
+                if op != "replace" {
+                    // These are idempotent: a repeated column would only
+                    // redo the same work.
+                    let mut seen = HashSet::new();
+                    idx.retain(|i| seen.insert(*i));
+                }
                 let re = if op == "replace" {
                     let find = p
                         .opt_str("find")
@@ -1385,6 +1488,7 @@ fn columns() -> Arc<dyn Tool> {
                 };
                 let rep = p.text("replace");
                 let regex_mode = p.bool("regex");
+                let mut budget = crate::util::OutputBudget::default();
                 for r in &mut t.rows {
                     for i in &idx {
                         let c = &r[*i];
@@ -1395,15 +1499,15 @@ fn columns() -> Arc<dyn Tool> {
                             // Leading/trailing only; collapsing inner whitespace
                             // is data.clean's separate operation.
                             "trim" => c.trim().to_string(),
-                            _ if regex_mode => {
-                                re.as_ref().unwrap().replace_all(c, rep).into_owned()
-                            }
                             // Literal mode: `$1` etc. in the replacement are text.
-                            _ => re
-                                .as_ref()
-                                .unwrap()
-                                .replace_all(c, regex::NoExpand(rep))
-                                .into_owned(),
+                            _ => crate::util::replace_budgeted(
+                                re.as_ref().unwrap(),
+                                c,
+                                rep,
+                                regex_mode,
+                                0,
+                                &mut budget,
+                            )?,
                         };
                     }
                 }
@@ -1426,15 +1530,33 @@ fn columns() -> Arc<dyn Tool> {
     })
 }
 
-fn project(t: &Table, idx: &[usize]) -> Table {
-    Table {
+/// Copy the listed columns, in order. A column may be listed many times,
+/// so size the copy (bytes plus a per-cell overhead) before making it.
+fn project(t: &Table, idx: &[usize]) -> ToolResult<Table> {
+    let mut col_bytes = vec![0u128; t.headers.len()];
+    for r in &t.rows {
+        for (b, c) in col_bytes.iter_mut().zip(r) {
+            *b += c.len() as u128;
+        }
+    }
+    // A nominal 8 bytes per cell, as in `render_table`, so a full-size
+    // one-column input still fits while repeated columns do not.
+    let slot = 8u128;
+    let bytes: u128 = idx
+        .iter()
+        .map(|i| col_bytes[*i] + t.headers[*i].len() as u128)
+        .sum();
+    crate::util::check_generated_size(
+        bytes + slot * idx.len() as u128 * (t.rows.len() as u128 + 1),
+    )?;
+    Ok(Table {
         headers: idx.iter().map(|i| t.headers[*i].clone()).collect(),
         rows: t
             .rows
             .iter()
             .map(|r| idx.iter().map(|i| r[*i].clone()).collect())
             .collect(),
-    }
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1552,6 +1674,24 @@ fn validate() -> Arc<dyn Tool> {
                 ),
                 None => None,
             };
+            // Up to 1000 errors repeat the column and rule text: keep those
+            // short so a huge rule can't multiply into gigabytes.
+            let clip = |s: &str| -> String {
+                if s.chars().count() <= 200 {
+                    s.to_string()
+                } else {
+                    format!("{}…", s.chars().take(200).collect::<String>())
+                }
+            };
+            let col_label = clip(col);
+            let kind_msg = rule
+                .kind
+                .as_deref()
+                .map(|k| format!("not a valid {}", clip(k)));
+            let values_msg = rule
+                .values
+                .as_ref()
+                .map(|vals| format!("not one of: {}", clip(&vals.join(", "))));
             let mut seen: HashMap<&str, usize> = HashMap::new();
             for (n, row) in t.rows.iter().enumerate() {
                 let v = row[i].as_str();
@@ -1559,7 +1699,7 @@ fn validate() -> Arc<dyn Tool> {
                 let mut push = |msg: String| {
                     total_errors += 1;
                     if errors.len() < 1000 {
-                        errors.push(vec![json!(line), json!(col), json!(v), json!(msg)]);
+                        errors.push(vec![json!(line), json!(col_label), json!(v), json!(msg)]);
                     }
                 };
                 if v.trim().is_empty() {
@@ -1570,7 +1710,7 @@ fn validate() -> Arc<dyn Tool> {
                 }
                 if let Some(k) = &rule.kind {
                     if !check_type(k, v) {
-                        push(format!("not a valid {k}"));
+                        push(kind_msg.clone().unwrap_or_default());
                     }
                 }
                 if let Some(re) = &re {
@@ -1593,7 +1733,7 @@ fn validate() -> Arc<dyn Tool> {
                 }
                 if let Some(vals) = &rule.values {
                     if !vals.iter().any(|a| a == v) {
-                        push(format!("not one of: {}", vals.join(", ")));
+                        push(values_msg.clone().unwrap_or_default());
                     }
                 }
                 if let Some(ml) = rule.max_length {
@@ -1639,10 +1779,14 @@ fn duplicates() -> Arc<dyn Tool> {
         .output(OutputKind::Data);
     sync_tool(spec, |ctx, p| {
         let (t, name) = load_table(p)?;
-        let idx: Vec<usize> = match p.opt_str("columns") {
+        let mut idx: Vec<usize> = match p.opt_str("columns") {
             Some(c) => t.cols(c)?,
             None => (0..t.headers.len()).collect(),
         };
+        // A repeated column adds nothing to the comparison but would be
+        // copied into every key once per repeat.
+        let mut seen = HashSet::new();
+        idx.retain(|i| seen.insert(*i));
         let (ic, tr) = (p.bool("ignore_case"), p.bool("trim"));
         let key = |r: &Vec<String>| -> Vec<String> {
             idx.iter()
@@ -1907,7 +2051,7 @@ fn clean() -> Arc<dyn Tool> {
             let keep: Vec<usize> = (0..t.headers.len())
                 .filter(|i| t.rows.iter().any(|r| !r[*i].trim().is_empty()))
                 .collect();
-            t = project(&t, &keep);
+            t = project(&t, &keep)?;
         }
         if ops.contains("headers") {
             t.headers = dedupe_headers(
@@ -1943,6 +2087,21 @@ fn sql_value(s: &str, infer: bool) -> String {
 
 pub fn render_table(t: &Table, to: &str, opts: &Params) -> ToolResult<(Vec<u8>, &'static str)> {
     let infer = opts.bool("infer_types");
+    // Some formats repeat text on every row (JSON/YAML keys, the SQL table
+    // name and column list): long names times many rows can dwarf the input.
+    let cells: u128 = t
+        .rows
+        .iter()
+        .flat_map(|r| r.iter())
+        .map(|c| c.len() as u128 + 8)
+        .sum();
+    let names: u128 = t.headers.iter().map(|h| h.len() as u128 + 8).sum();
+    let per_row = match to {
+        "json" | "ndjson" | "yaml" => names,
+        "sql" => names + opts.str_or("table_name", "data").len() as u128 + 32,
+        _ => 0,
+    };
+    crate::util::check_generated_size(cells + names + per_row * t.rows.len() as u128)?;
     Ok(match to {
         "csv" => (
             write_csv(&t.headers, &t.rows, b',', false)?.into_bytes(),
@@ -1953,11 +2112,11 @@ pub fn render_table(t: &Table, to: &str, opts: &Params) -> ToolResult<(Vec<u8>, 
             "tsv",
         ),
         "json" => (
-            serde_json::to_string_pretty(&rows_to_objects(t, infer))?.into_bytes(),
+            serde_json::to_string_pretty(&rows_to_objects(t, infer)?)?.into_bytes(),
             "json",
         ),
         "ndjson" => (
-            (rows_to_objects(t, infer)
+            (rows_to_objects(t, infer)?
                 .as_array()
                 .unwrap()
                 .iter()
@@ -1969,7 +2128,7 @@ pub fn render_table(t: &Table, to: &str, opts: &Params) -> ToolResult<(Vec<u8>, 
             "ndjson",
         ),
         "yaml" => (
-            crate::dev::formatters::to_yaml(&rows_to_objects(t, infer))?.into_bytes(),
+            crate::dev::formatters::to_yaml(&rows_to_objects(t, infer)?)?.into_bytes(),
             "yaml",
         ),
         "markdown" => {
@@ -2366,6 +2525,44 @@ mod tests {
         let j: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&out.artifacts[0].path).unwrap()).unwrap();
         assert_eq!(j[0]["age"], 30);
+        // Two cells at opposite corners must not fill in 17 billion cells.
+        let corners = {
+            let mut wb = rust_xlsxwriter::Workbook::new();
+            let ws = wb.add_worksheet();
+            ws.write_string(0, 0, "a").unwrap();
+            ws.write_string(1_048_575, 16_383, "z").unwrap();
+            let p = std::env::temp_dir().join(format!("corners-{}.xlsx", std::process::id()));
+            wb.save(&p).unwrap();
+            p
+        };
+        assert_eq!(
+            h.run(
+                "data.spreadsheet",
+                json!({"file": corners.to_str().unwrap()})
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            "limit_exceeded"
+        );
+        let _ = std::fs::remove_file(&corners);
+        // A long header repeated as the key of every record is bounded.
+        let csv = format!("{}\n{}", "k".repeat(30_000), "1\n".repeat(100_000));
+        let out = h
+            .run("data.convert", json!({"text": csv, "to": "xlsx"}))
+            .await
+            .unwrap();
+        let wide = out.artifacts[0].path.clone();
+        assert_eq!(
+            h.run(
+                "data.spreadsheet",
+                json!({"file": wide.to_str().unwrap(), "action": "json"})
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            "limit_exceeded"
+        );
         assert_eq!(
             h.run(
                 "data.spreadsheet",

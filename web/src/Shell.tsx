@@ -15,6 +15,7 @@ import { NotFound } from './pages/NotFound';
 
 const ToolPage = lazy(() => import('./tools/ToolPage'));
 const IntentPage = lazy(() => import('./pages/Intent'));
+const DoPage = lazy(() => import('./pages/Do'));
 const HistoryPage = lazy(() => import('./pages/History'));
 const FilesPage = lazy(() => import('./pages/Files'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
@@ -24,6 +25,9 @@ const AdminPage = lazy(() => import('./pages/admin/Admin'));
 function PageFallback() {
   return <div className="page-loading" aria-busy="true"><Spinner size={18} /></div>;
 }
+
+/** A dialog or popover other than the Tools menu is open (Customize, Layout, a confirm). */
+export const otherDialogOpen = () => !!document.querySelector('[role="dialog"]:not(.tools-menu), [role="alertdialog"]');
 
 export function Shell() {
   const route = useRoute();
@@ -57,7 +61,7 @@ export function Shell() {
         e.preventDefault();
         setQuery('');
         setPalette(true);
-      } else if (e.key.toLowerCase() === 't' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && !palette) {
+      } else if (e.key.toLowerCase() === 't' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && !palette && !otherDialogOpen()) {
         e.preventDefault();
         setToolsOpen((o) => !o);
       } else if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[1-9]$/.test(e.code)) {
@@ -96,6 +100,7 @@ export function Shell() {
   switch (p0) {
     case undefined: page = <HomePage onSearch={openPalette} />; break;
     case 'open': page = <IntentPage key={route.query.get('v') ?? ''} />; break;
+    case 'do': page = <DoPage key={route.query.get('t') ?? ''} request={route.query.get('q') ?? ''} withFiles={route.query.get('files') === '1'} runKey={route.query.get('t') ?? ''} />; break;
     case 'tool': page = <ToolPage key={p1} toolId={p1} />; break;
     case 'category': page = <CategoryPage key={p1} categoryId={p1} />; break;
     case 'favorites': page = <FavoritesPage />; break;

@@ -1,0 +1,29 @@
+{
+  "name": "dogubako-docs",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "gen:tools": "node scripts/gen-tools.mjs",
+    "gen:screenshots": "node scripts/copy-screenshots.mjs",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name dogubako-docs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.8",
+    "@fontsource-variable/instrument-sans": "5.3.0",
+    "@fontsource/dm-mono": "5.3.0",
+    "astro": "7.4.4",
+    "sharp": "0.35.5",
+    "starlight-links-validator": "0.27.0"
+  },
+  "devDependencies": {
+    "github-slugger": "2.0.0",
+    "wrangler": "4.156.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

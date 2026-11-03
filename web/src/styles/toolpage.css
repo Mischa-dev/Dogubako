@@ -80,6 +80,9 @@
 .stage-fig { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .stage-frame { position: relative; height: clamp(220px, 42vh, 440px); display: grid; place-items: center; overflow: hidden; border-radius: 6px; background: var(--surface-sunken); }
 .stage-frame.is-empty { background: transparent; border: 1px dashed var(--border-strong); }
+/* Documents, sheets and text: a drawing says enough, so keep the frame short and the result close. */
+.stage.is-compact .stage-frame { height: 168px; }
+.stage.is-compact .stage-thing .bo-thing { transform: scale(.8); }
 .stage-img, .stage-video { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; box-shadow: var(--shadow-object); }
 .stage-thing .bo-thing, .stage-audio .bo-thing { height: auto; transform: scale(1.25); }
 .stage-audio { display: flex; flex-direction: column; align-items: center; gap: 28px; }
@@ -123,6 +126,7 @@
   .place-left:not(.has-stage) .tool-output, .place-right:not(.has-stage) .tool-output { grid-row: 1; position: sticky; top: 16px; }
   .place-left:not(.has-stage) .tool-output:empty, .place-right:not(.has-stage) .tool-output:empty { display: block; }
   .place-left.has-stage .stage-frame, .place-right.has-stage .stage-frame { height: clamp(240px, 48vh, 520px); }
+  .place-left.has-stage .stage.is-compact .stage-frame, .place-right.has-stage .stage.is-compact .stage-frame { height: 200px; }
 }
 /* live tools with nothing to preview: type on the left, see it on the right */
 @media (min-width: 1180px) {
@@ -145,8 +149,15 @@
   .layout-wrap { margin-left: auto; }
   .tool-row-gap { display: none; }
   .tool-search { display: none; } /* the phone top bar already has search */
-  .stage.is-side { grid-template-columns: minmax(0, 1fr); }
+  /* Keep original and result side by side, smaller, so the settings and Run stay close. */
+  .stage { gap: 10px; }
   .stage-frame { height: clamp(180px, 34vh, 320px); }
+  .stage.is-side .stage-frame { height: clamp(130px, 24vh, 220px); }
+  .stage.is-side .stage-cap { flex-wrap: wrap; gap: 0 8px; }
   .tool-work .tool-controls { padding: 16px; }
+  /* Long settings on a phone: keep Run in reach at the bottom of the screen. */
+  .tool-work .run-bar { position: sticky; bottom: 10px; z-index: 3; margin: 0 -8px; padding: 8px;
+    background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: var(--r-lg); box-shadow: var(--shadow-pop);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
   .layout-pop { position: fixed; left: 16px; right: 16px; top: 64px; width: auto; }
 }

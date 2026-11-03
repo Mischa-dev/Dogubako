@@ -791,6 +791,7 @@ fn replace() -> Arc<dyn Tool> {
         let mut out = String::with_capacity(text.len());
         let mut last = 0;
         let mut n = 0;
+        let mut budget = crate::util::OutputBudget::default();
         for m in re.find_iter(text) {
             if whole {
                 let before = text[..m.start()].chars().next_back();
@@ -803,6 +804,7 @@ fn replace() -> Arc<dyn Tool> {
                     continue;
                 }
             }
+            budget.add(m.start() - last + rep.len())?;
             out.push_str(&text[last..m.start()]);
             out.push_str(rep);
             last = m.end();
@@ -861,14 +863,16 @@ fn regex_replace() -> Arc<dyn Tool> {
         let limit = p.int_or("limit", 0).max(0) as usize;
         let total = re.find_iter(text).count();
         let rep = p.text("replacement");
-        let out = if p.bool("literal") {
-            re.replacen(text, limit, regex::NoExpand(rep))
-        } else {
-            re.replacen(text, limit, rep)
-        };
+        let out = crate::util::replace_budgeted(
+            &re,
+            text,
+            rep,
+            !p.bool("literal"),
+            limit,
+            &mut crate::util::OutputBudget::default(),
+        )?;
         let n = if limit == 0 { total } else { total.min(limit) };
-        Ok(ToolOutput::text(out.into_owned())
-            .with_data(json!({"matches": total, "replacements": n})))
+        Ok(ToolOutput::text(out).with_data(json!({"matches": total, "replacements": n})))
     })
 }
 

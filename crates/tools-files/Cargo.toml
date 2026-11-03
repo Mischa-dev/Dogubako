@@ -16,7 +16,9 @@ globset = "0.4.21"
 goblin = "0.10.7"
 hex = "0.4.3"
 infer = "0.22.0"
-liblzma = "0.4.9"
+# Static: built from the vendored xz source, so release binaries never link
+# a Homebrew or system liblzma that users may not have.
+liblzma = { version = "0.4.9", features = ["static"] }
 md-5 = "0.11.0"
 mime_guess = "2.0.5"
 regex = "1.13.1"

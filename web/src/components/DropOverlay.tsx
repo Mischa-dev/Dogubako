@@ -51,6 +51,7 @@ export async function pickAndOpen() {
   el.multiple = true;
   el.style.display = 'none';
   el.addEventListener('change', () => { void uploadAndOpen(Array.from(el.files ?? [])); el.remove(); }, { once: true });
+  el.addEventListener('cancel', () => el.remove(), { once: true }); // picker closed without a choice
   document.body.appendChild(el);
   el.click();
 }

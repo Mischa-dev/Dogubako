@@ -669,7 +669,8 @@ fn barcode_generate() -> Arc<dyn Tool> {
             m.h as u32 * mw
         };
         let label = (one_d && p.bool("show_text"))
-            .then(|| render_text(text, (mw as f32 * 6.0).clamp(12.0, 64.0), fg));
+            .then(|| render_text(ctx, text, (mw as f32 * 6.0).clamp(12.0, 64.0), fg))
+            .transpose()?;
         let w = (m.w as u32 + 2 * qm) * mw;
         let vpad = if one_d { mw * 4 } else { qm * mw };
         let label_h = label.as_ref().map(|l| l.height() + mw * 2).unwrap_or(0);

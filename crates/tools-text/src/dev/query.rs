@@ -58,18 +58,105 @@ fn jsonpath() -> Arc<dyn Tool> {
         let q = p.str("query")?;
         let path = serde_json_path::JsonPath::parse(q)
             .map_err(|e| ToolError::invalid("query", e.to_string()))?;
+        check_match_fanout(q, &doc)?;
         let located = path.query_located(&doc);
-        let nodes: Vec<(String, Value)> = located
-            .into_iter()
-            .map(|n| (n.location().to_string(), n.node().clone()))
-            .collect();
-        let values: Vec<Value> = nodes.iter().map(|(_, v)| v.clone()).collect();
-        let paths: Vec<Value> = nodes.iter().map(|(l, _)| json!(l)).collect();
+        // Recursive queries match every ancestor of a large value, so the
+        // copies can dwarf the document: size the result before cloning.
+        // Each location repeats its ancestors' keys, so a long key over many
+        // array items multiplies too; one location is at most a few times
+        // the document, so charging each as it is built keeps the total
+        // within the budget.
+        let mut budget = OutputBudget::default();
+        let mut paths: Vec<Value> = Vec::with_capacity(located.len());
+        for n in located.iter() {
+            budget.add(usize::try_from(json_pretty_size(n.node(), 2)).unwrap_or(usize::MAX))?;
+            let loc = n.location().to_string();
+            budget.add(loc.len())?;
+            paths.push(Value::String(loc));
+        }
+        let values: Vec<Value> = located.into_iter().map(|n| n.node().clone()).collect();
         Ok(
             ToolOutput::text_as(serde_json::to_string_pretty(&values)?, "application/json")
                 .with_data(json!({"count": values.len(), "paths": paths})),
         )
     })
+}
+
+/// JSONPath keeps duplicate selections, so `[0,0]` repeated n times makes
+/// 2^n matches of a tiny document, all collected before any output check.
+/// Bound the worst case from the query's shape: each segment's selector
+/// count multiplies how often a node can be matched, and every descendant
+/// segment after the first multiplies it by the document depth (a node is
+/// reached once per matched ancestor). Without duplication the matches are
+/// at most the document's nodes, which is always allowed.
+fn check_match_fanout(query: &str, doc: &Value) -> ToolResult<()> {
+    const MAX_MATCHES: f64 = 4_000_000.0;
+    fn size(v: &Value, depth: usize, nodes: &mut f64, max_depth: &mut usize) {
+        *nodes += 1.0;
+        *max_depth = (*max_depth).max(depth);
+        match v {
+            Value::Array(a) => a.iter().for_each(|x| size(x, depth + 1, nodes, max_depth)),
+            Value::Object(m) => m
+                .values()
+                .for_each(|x| size(x, depth + 1, nodes, max_depth)),
+            _ => {}
+        }
+    }
+    // Scan the query's top level: string literals and filter parentheses
+    // are skipped, `..` marks a descendant segment, and the commas directly
+    // inside a top-level `[...]` separate its selectors.
+    let mut factor = 1.0f64;
+    let mut descendants = 0usize;
+    let (mut bracket, mut paren) = (0usize, 0usize);
+    let mut selectors = 1usize;
+    let mut quote: Option<char> = None;
+    let chars: Vec<char> = query.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if let Some(q) = quote {
+            if c == '\\' {
+                i += 1;
+            } else if c == q {
+                quote = None;
+            }
+        } else {
+            match c {
+                '\'' | '"' => quote = Some(c),
+                '(' => paren += 1,
+                ')' => paren = paren.saturating_sub(1),
+                '[' => {
+                    if bracket == 0 {
+                        selectors = 1;
+                    }
+                    bracket += 1;
+                }
+                ']' => {
+                    bracket = bracket.saturating_sub(1);
+                    if bracket == 0 {
+                        factor *= selectors as f64;
+                    }
+                }
+                ',' if bracket == 1 && paren == 0 => selectors += 1,
+                '.' if bracket == 0 && chars.get(i + 1) == Some(&'.') => {
+                    descendants += 1;
+                    i += 1;
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    let (mut nodes, mut depth) = (0.0, 0usize);
+    size(doc, 1, &mut nodes, &mut depth);
+    factor *= (depth as f64).powi(descendants.saturating_sub(1) as i32);
+    if factor > 1.0 && nodes * factor > MAX_MATCHES {
+        return Err(ToolError::limit(format!(
+            "this query can repeat matches up to {factor:.0} times over {nodes:.0} values; \
+             remove repeated selectors or descendant (..) steps"
+        )));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +326,20 @@ pub(crate) fn schema_validate(schema: &Value, instance: &Value) -> ToolResult<To
         .map_err(|e| ToolError::invalid("schema", format!("invalid schema: {e}")))?;
     let mut rows = vec![];
     let mut total = 0usize;
+    // Up to 1000 kept errors each repeat their paths (and the message can
+    // quote the value): clip each so long keys can't multiply into gigabytes.
+    // Errors are produced lazily, so only the kept text accumulates.
+    fn clip(s: String) -> String {
+        const MAX: usize = 1000;
+        if s.len() <= MAX {
+            return s;
+        }
+        let mut end = MAX;
+        while !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}…", &s[..end])
+    }
     for e in validator.iter_errors(instance) {
         total += 1;
         if rows.len() < 1000 {
@@ -247,10 +348,10 @@ pub(crate) fn schema_validate(schema: &Value, instance: &Value) -> ToolResult<To
                 json!(if path.is_empty() {
                     "/".to_string()
                 } else {
-                    path
+                    clip(path)
                 }),
-                json!(e.to_string()),
-                json!(e.schema_path().to_string()),
+                json!(clip(e.to_string())),
+                json!(clip(e.schema_path().to_string())),
             ]);
         }
     }
@@ -326,24 +427,40 @@ fn diff_values(
     b: &Value,
     array_by_index: bool,
     out: &mut Vec<(String, &'static str, Value, Value)>,
-) {
+    budget: &mut OutputBudget,
+) -> ToolResult<()> {
+    // Every difference keeps its full pointer, so a long key over many
+    // differing items multiplies: charge each one as it is recorded.
+    fn push(
+        out: &mut Vec<(String, &'static str, Value, Value)>,
+        budget: &mut OutputBudget,
+        e: (String, &'static str, Value, Value),
+    ) -> ToolResult<()> {
+        budget.add(e.0.len() + 32)?;
+        out.push(e);
+        Ok(())
+    }
     match (a, b) {
         (Value::Object(x), Value::Object(y)) => {
             for (k, va) in x {
                 let p = format!("{path}/{}", ptr_escape(k));
                 match y.get(k) {
-                    Some(vb) => diff_values(&p, va, vb, array_by_index, out),
-                    None => out.push((p, "removed", va.clone(), Value::Null)),
+                    Some(vb) => diff_values(&p, va, vb, array_by_index, out, budget)?,
+                    None => push(out, budget, (p, "removed", va.clone(), Value::Null))?,
                 }
             }
             for (k, vb) in y {
                 if !x.contains_key(k) {
-                    out.push((
-                        format!("{path}/{}", ptr_escape(k)),
-                        "added",
-                        Value::Null,
-                        vb.clone(),
-                    ));
+                    push(
+                        out,
+                        budget,
+                        (
+                            format!("{path}/{}", ptr_escape(k)),
+                            "added",
+                            Value::Null,
+                            vb.clone(),
+                        ),
+                    )?;
                 }
             }
         }
@@ -351,9 +468,9 @@ fn diff_values(
             for i in 0..x.len().max(y.len()) {
                 let p = format!("{path}/{i}");
                 match (x.get(i), y.get(i)) {
-                    (Some(va), Some(vb)) => diff_values(&p, va, vb, array_by_index, out),
-                    (Some(va), None) => out.push((p, "removed", va.clone(), Value::Null)),
-                    (None, Some(vb)) => out.push((p, "added", Value::Null, vb.clone())),
+                    (Some(va), Some(vb)) => diff_values(&p, va, vb, array_by_index, out, budget)?,
+                    (Some(va), None) => push(out, budget, (p, "removed", va.clone(), Value::Null))?,
+                    (None, Some(vb)) => push(out, budget, (p, "added", Value::Null, vb.clone()))?,
                     _ => {}
                 }
             }
@@ -369,28 +486,41 @@ fn diff_values(
             for va in x {
                 match left.get_mut(unordered_key(va).as_str()) {
                     Some(n) if *n > 0 => *n -= 1,
-                    _ => out.push((format!("{path}/-"), "removed", va.clone(), Value::Null)),
+                    _ => push(
+                        out,
+                        budget,
+                        (format!("{path}/-"), "removed", va.clone(), Value::Null),
+                    )?,
                 }
             }
             for (vb, k) in y.iter().zip(&keys_y) {
                 if let Some(n) = left.get_mut(k.as_str()).filter(|n| **n > 0) {
                     *n -= 1;
-                    out.push((format!("{path}/-"), "added", Value::Null, vb.clone()));
+                    push(
+                        out,
+                        budget,
+                        (format!("{path}/-"), "added", Value::Null, vb.clone()),
+                    )?;
                 }
             }
         }
         _ if a == b => {}
-        _ => out.push((
-            if path.is_empty() {
-                "/".into()
-            } else {
-                path.to_string()
-            },
-            "changed",
-            a.clone(),
-            b.clone(),
-        )),
+        _ => push(
+            out,
+            budget,
+            (
+                if path.is_empty() {
+                    "/".into()
+                } else {
+                    path.to_string()
+                },
+                "changed",
+                a.clone(),
+                b.clone(),
+            ),
+        )?,
     }
+    Ok(())
 }
 
 fn diff_json() -> Arc<dyn Tool> {
@@ -421,7 +551,14 @@ fn diff_json() -> Arc<dyn Tool> {
         let a = parse("original")?;
         let b = parse("changed")?;
         let mut diffs = vec![];
-        diff_values("", &a, &b, !p.bool("ignore_array_order"), &mut diffs);
+        diff_values(
+            "",
+            &a,
+            &b,
+            !p.bool("ignore_array_order"),
+            &mut diffs,
+            &mut OutputBudget::default(),
+        )?;
         let count = |k: &str| diffs.iter().filter(|d| d.1 == k).count();
         let (added, removed, changed) = (count("added"), count("removed"), count("changed"));
         let show = |v: &Value| {

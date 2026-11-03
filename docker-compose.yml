@@ -1,8 +1,18 @@
 # Dogubako — self-hosted. Start with:  docker compose up -d
 # First run: `docker compose logs dogubako` shows the one-time setup token.
+# Settings that differ per install (API keys, optional engines) go in a .env
+# file next to this one; see .env.example.
 services:
   dogubako:
-    build: .
+    build:
+      context: .
+      args:
+        # Every engine is baked into the image at pinned versions
+        # (docs/ENGINES.md). LibreOffice is opt-in because it adds ~500 MB.
+        WITH_OFFICE: ${DOGUBAKO_WITH_OFFICE:-0}
+        WITH_WHISPER: ${DOGUBAKO_WITH_WHISPER:-1}
+        WITH_PIPER: ${DOGUBAKO_WITH_PIPER:-1}
+        WITH_REMBG: ${DOGUBAKO_WITH_REMBG:-0}
     image: dogubako:latest
     container_name: dogubako
     restart: unless-stopped
@@ -11,7 +21,9 @@ services:
     ports:
       - "127.0.0.1:8420:8420"
     volumes:
-      - ./data:/data
+      # :z lets the container use the folder under SELinux (Fedora, RHEL);
+      # Docker ignores it on hosts without SELinux.
+      - ./data:/data:z
     environment:
       DOGUBAKO_INSTANCE_NAME: "Dogubako"
       # DOGUBAKO_PUBLIC_URL: "https://tools.example.ts.net"
@@ -24,6 +36,15 @@ services:
       DOGUBAKO_EXEC_MEMORY_MB: "4096"
       DOGUBAKO_MAX_JOB_SECONDS: "3600"
       DOGUBAKO_MCP_ENABLED: "true"
+      # Plain-words mode. Users can bring their own model; these optionally
+      # offer one shared model to everyone ("This server"). Empty = unset.
+      # The API key stays on the server and is never sent to browsers.
+      DOGUBAKO_ASSISTANT_ENABLED: ${DOGUBAKO_ASSISTANT_ENABLED:-true}
+      DOGUBAKO_ASSISTANT_BASE_URL: ${DOGUBAKO_ASSISTANT_BASE_URL:-}
+      DOGUBAKO_ASSISTANT_MODEL: ${DOGUBAKO_ASSISTANT_MODEL:-}
+      DOGUBAKO_ASSISTANT_API_KEY: ${DOGUBAKO_ASSISTANT_API_KEY:-}
+      # Needed when the model runs on this machine or your LAN (Ollama, LM Studio).
+      DOGUBAKO_ASSISTANT_ALLOW_PRIVATE: ${DOGUBAKO_ASSISTANT_ALLOW_PRIVATE:-false}
       # Host folders tools may read (mount them read-only below):
       # DOGUBAKO_FS_ROOTS: "/media"
     # volumes for FS_ROOTS, e.g.:  - /srv/media:/media:ro
@@ -40,3 +61,22 @@ services:
           cpus: "4"
           memory: 8g
           pids: 512
+    # The image's HEALTHCHECK, repeated because Podman builds OCI images by
+    # default and those drop it.
+    healthcheck:
+      test: ["CMD", "dogubako", "server", "health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+
+  # Optional local model for plain-words mode:
+  #   docker compose --profile local-model up -d
+  # then set DOGUBAKO_ASSISTANT_BASE_URL=http://ollama:11434/v1,
+  # DOGUBAKO_ASSISTANT_MODEL=<a model you pulled> and
+  # DOGUBAKO_ASSISTANT_ALLOW_PRIVATE=true in .env.
+  ollama:
+    image: ollama/ollama:0.12.6
+    profiles: ["local-model"]
+    restart: unless-stopped
+    volumes:
+      - ./data/ollama:/root/.ollama:z

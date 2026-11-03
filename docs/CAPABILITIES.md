@@ -1,6 +1,6 @@
 # Capability matrix
 
-Generated from the tool registry by `dogubako tools matrix` (Dogubako 0.1.0). 249 tools.
+Generated from the tool registry by `dogubako tools matrix` (Dogubako 0.1.0-alpha.1). 249 tools.
 
 Legend — Engine: **native** = built into Dogubako (no external programs), **external** = invokes the listed program(s), **model** = needs a downloadable local model, **network** = makes outbound requests. Platforms: L = Linux, M = macOS, W = Windows.
 

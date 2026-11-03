@@ -1,0 +1,28 @@
+# Cloudflare Pages redirects (https://developers.cloudflare.com/pages/configuration/redirects/)
+# Short links
+/install            /start/install/              302
+/quickstart         /start/quick-start/          302
+/cli                /cli/overview/               302
+/api                /reference/http-api/         302
+/mcp                /agents/overview/            302
+/agents             /agents/overview/            302
+/self-host          /self-hosting/overview/      302
+/docker             /self-hosting/docker/        302
+/config             /reference/configuration/    302
+/errors             /reference/errors/           302
+/security           /project/security/           302
+/shortcuts          /app/keyboard-shortcuts/     302
+
+# Names of the Markdown files in the repository's docs/ folder
+/API                /reference/http-api/         301
+/ARCHITECTURE       /develop/architecture/       301
+/BUILD              /develop/building/           301
+/CAPABILITIES       /reference/capabilities/     301
+/CLI                /reference/cli/              301
+/DEPENDENCIES       /project/licensing/          301
+/FRONTEND_CONTRACT  /develop/frontend/           301
+/MCP                /agents/overview/            301
+/PERFORMANCE        /project/performance/        301
+/SECURITY           /project/security/           301
+/SELF_HOSTING       /self-hosting/overview/      301
+/TOOL_DEVELOPMENT   /develop/writing-tools/      301

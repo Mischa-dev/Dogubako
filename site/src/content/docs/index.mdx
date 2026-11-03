@@ -1,0 +1,86 @@
+---
+title: Dogubako
+description: A local-first, open-source utility toolbox. 249 tools for images, video, audio, speech, PDFs, files, text, developers, data, networks, design and system info.
+template: splash
+hero:
+  title: The toolbox for everything you do to files
+  tagline: Dogubako (道具箱) gathers 249 everyday tools for images, video, audio, speech, PDFs, files, text, data and more into one app. Run it on your own computer, or host it once for your household, team or AI agents.
+  image:
+    alt: The Dogubako mark, a toolbox drawn as one line with a small vermilion latch
+    light: ../../assets/logo-light.svg
+    dark: ../../assets/logo-dark.svg
+  actions:
+    - text: Get started
+      link: /start/introduction/
+      icon: right-arrow
+    - text: Browse the tools
+      link: /tools/
+      variant: minimal
+    - text: dogubako.app
+      link: https://dogubako.app
+      icon: external
+      variant: minimal
+    - text: View on GitHub
+      link: https://github.com/mischa-dev/dogubako
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import home from '../../assets/screenshots/home-light.png';
+import drop from '../../assets/screenshots/drop-screen-light.png';
+import compress from '../../assets/screenshots/tool-image-result-dark.png';
+import json from '../../assets/screenshots/tool-live-json-dark.png';
+
+<div class="dgb-shots">
+  <Image src={home} alt="Home: a big input, the files you worked on lately on a shelf, and recent runs" />
+  <Image src={drop} alt="After dropping a photo, Dogubako asks what should happen to it and numbers the likeliest tools" />
+  <Image src={compress} alt="Compressing a photo: the original and the result side by side with the size change" />
+  <Image src={json} alt="The JSON formatter re-runs as you type, with the formatted output beside the input" />
+</div>
+
+## One toolbox, every way you work
+
+<CardGrid>
+  <Card title="Desktop app" icon="laptop">
+    A native app for macOS (Apple silicon) with the common engines built in. Drop a file in, pick what should happen, done. No account, no server, no telemetry.
+  </Card>
+  <Card title="Self-hosted web app" icon="seti:docker">
+    Run one server at home or on a VPS with all the heavy engines installed, and use it from any browser, including your phone.
+  </Card>
+  <Card title="Command line" icon="seti:shell">
+    Every tool is a `dogubako` command with typed options, piping, JSON output and meaningful exit codes.
+  </Card>
+  <Card title="HTTP API and MCP" icon="puzzle">
+    Automate with a generated OpenAPI document, or give each AI agent its own scoped token and a curated set of tools.
+  </Card>
+</CardGrid>
+
+## Why Dogubako
+
+<CardGrid>
+  <Card title="Your files, your machine" icon="approve-check">
+    Files are processed by the app on your computer, or by a server you run. Dogubako itself uploads nothing to anyone else.
+  </Card>
+  <Card title="Built on mature engines" icon="rocket">
+    FFmpeg, ImageMagick, ExifTool, qpdf, Poppler, Ghostscript, Tesseract, whisper.cpp and more, managed for you by the app, plus fast native Rust tools for everything that doesn't need them.
+  </Card>
+  <Card title="One implementation" icon="random">
+    Each tool is described once. The app, CLI, API, OpenAPI schema and MCP tools are all generated from that description and run through the same engine.
+  </Card>
+  <Card title="Secure by construction" icon="warning">
+    No shell is ever used, external programs run with time and resource limits, files are owner-checked and network tools are SSRF-guarded.
+  </Card>
+</CardGrid>
+
+## Where to go next
+
+<CardGrid>
+  <LinkCard title="Install Dogubako" description="Desktop app, CLI, Docker or from source." href="/start/install/" />
+  <LinkCard title="Try the alpha" description="What's in 0.1.0-alpha.1 and how to open the unsigned app." href="/start/alpha/" />
+  <LinkCard title="Use plain words" description="Say what you want done and let a model you choose pick the tools." href="/app/plain-words/" />
+  <LinkCard title="Take the app tour" description="The bench, the drop screen and the tool page." href="/app/tour/" />
+  <LinkCard title="Self-host for your household or team" description="Docker Compose, Tailscale, accounts and backups." href="/self-hosting/overview/" />
+  <LinkCard title="Connect an AI agent" description="Local stdio or a shared server with per-agent tokens." href="/agents/overview/" />
+</CardGrid>

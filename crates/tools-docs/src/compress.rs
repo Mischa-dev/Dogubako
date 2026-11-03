@@ -100,13 +100,24 @@ fn compress() -> Arc<dyn Tool> {
                     )),
                 }
             }
-            ctx.progress(
-                base + span * 0.7,
-                format!("{}: qpdf object streams", f.name),
-            );
-            let q = work.join("q.pdf");
-            optimize(&ctx, &f.path, &q, lin).await?;
-            candidates.push(("qpdf".into(), q));
+            if gray {
+                // Only Ghostscript output is grayscale; a smaller colour file
+                // would silently ignore the request.
+                if candidates.is_empty() {
+                    return Err(ToolError::failed(format!(
+                        "{}: grayscale conversion needs Ghostscript, which did not produce output",
+                        f.name
+                    )));
+                }
+            } else {
+                ctx.progress(
+                    base + span * 0.7,
+                    format!("{}: qpdf object streams", f.name),
+                );
+                let q = work.join("q.pdf");
+                optimize(&ctx, &f.path, &q, lin).await?;
+                candidates.push(("qpdf".into(), q));
+            }
 
             let (method, best) = candidates
                 .iter()
@@ -121,7 +132,7 @@ fn compress() -> Arc<dyn Tool> {
                 .ok_or_else(|| ToolError::failed("compression produced no output"))?;
             let best_size = std::fs::metadata(&best)?.len();
             let out = ctx.output_path(&suffixed(&f.name, "compressed", Some("pdf")));
-            let (used, after) = if best_size < before {
+            let (used, after) = if gray || best_size < before {
                 std::fs::copy(&best, &out)?;
                 (method, best_size)
             } else {

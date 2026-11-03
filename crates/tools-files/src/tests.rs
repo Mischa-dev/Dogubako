@@ -994,6 +994,16 @@ async fn batch_rename_preview_apply_collisions() {
         std::fs::read_to_string(d.join("photo-002.JPG")).unwrap(),
         "2"
     );
+    // Templates and replacements are short: a long one repeated per
+    // placeholder or match per file could otherwise need gigabytes.
+    let err = h
+        .run(
+            "files.batch_rename",
+            json!({"path": s(&d), "filter": "*.jpg", "template": "{name}".repeat(1000)}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "invalid_input");
     // Collision: two files → same name; apply refuses and changes nothing.
     let out = h
         .run(

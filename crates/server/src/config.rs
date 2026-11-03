@@ -62,6 +62,19 @@ pub struct ServerConfig {
     pub models_dir: Option<PathBuf>,
     /// Pre-set setup token (otherwise random, printed at startup).
     pub setup_token: Option<String>,
+    /// Natural-language assistant: relay chat requests to OpenAI-compatible
+    /// endpoints that users configure in their browser.
+    pub assistant_enabled: bool,
+    /// Let the assistant relay reach loopback/private addresses (e.g. Ollama
+    /// on this host) even when network tools may not.
+    pub assistant_allow_private: bool,
+    /// Optional endpoint offered to every user as the "This server" provider.
+    pub assistant_base_url: Option<String>,
+    /// API key for `assistant_base_url`. Never sent to clients.
+    #[serde(skip_serializing)]
+    pub assistant_api_key: Option<String>,
+    /// Default model id for `assistant_base_url`.
+    pub assistant_model: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -97,6 +110,11 @@ impl Default for ServerConfig {
             extensions_dir: None,
             models_dir: None,
             setup_token: None,
+            assistant_enabled: true,
+            assistant_allow_private: false,
+            assistant_base_url: None,
+            assistant_api_key: None,
+            assistant_model: None,
         }
     }
 }
@@ -235,6 +253,21 @@ impl ServerConfig {
         if let Some(v) = env("SETUP_TOKEN") {
             cfg.setup_token = Some(v);
         }
+        if let Some(v) = env_bool("ASSISTANT_ENABLED") {
+            cfg.assistant_enabled = v;
+        }
+        if let Some(v) = env_bool("ASSISTANT_ALLOW_PRIVATE") {
+            cfg.assistant_allow_private = v;
+        }
+        if let Some(v) = env("ASSISTANT_BASE_URL") {
+            cfg.assistant_base_url = Some(v);
+        }
+        if let Some(v) = env("ASSISTANT_API_KEY") {
+            cfg.assistant_api_key = Some(v);
+        }
+        if let Some(v) = env("ASSISTANT_MODEL") {
+            cfg.assistant_model = Some(v);
+        }
         Ok(cfg)
     }
 
@@ -254,6 +287,24 @@ impl ServerConfig {
             ));
         }
         Ok(())
+    }
+
+    /// The network policy for the assistant relay.
+    pub fn assistant_net_policy(&self) -> dogubako_core::policy::NetPolicy {
+        if self.allow_private_network || self.assistant_allow_private {
+            dogubako_core::policy::NetPolicy::default()
+        } else {
+            dogubako_core::policy::NetPolicy::public_only()
+        }
+    }
+
+    /// The server-provided assistant endpoint, when configured.
+    pub fn assistant_server_endpoint(&self) -> Option<dogubako_core::llm::Endpoint> {
+        let base = self.assistant_base_url.as_deref()?.trim();
+        (!base.is_empty()).then(|| dogubako_core::llm::Endpoint {
+            base_url: base.to_string(),
+            api_key: self.assistant_api_key.clone(),
+        })
     }
 
     pub fn models_dir(&self) -> PathBuf {

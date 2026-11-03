@@ -288,11 +288,11 @@
 
   function showApp(id, name) {
     const box = h('div', 'out-app');
-    box.append(h('p', null, 'This one runs in the app. Some tools need separately installed engines or downloaded models; dogubako deps shows requirements. From a terminal it’s:'));
+    box.append(h('p', null, 'This one runs in the app. The Mac alpha bundles core engines, offers optional engine downloads and uses some system-installed extras. Models download on request; dogubako deps shows requirements. From a terminal it’s:'));
     const pre = h('pre', 'code code-sm');
     pre.innerHTML = `<code><span class="p">$</span> ${esc(cliName(id))} ${esc(shellQuote(name))}${esc(EXTRA_ARGS[id] || '')}</code>`;
     box.append(pre);
-    const a = h('a', 'link-arrow', 'Alpha status and source'); a.href = '#download';
+    const a = h('a', 'link-arrow', 'Download alpha and source'); a.href = '#download';
     box.append(a);
     out.replaceChildren(box);
   }
@@ -672,7 +672,7 @@
     if (card) {
       card.classList.add('is-yours');
       card.parentElement.prepend(card);
-      $('#hero-download').textContent = 'Alpha status for ' + $('.dl-os', card).textContent;
+      $('#hero-download').textContent = 'Downloads for ' + $('.dl-os', card).textContent;
     }
   }
 })();
