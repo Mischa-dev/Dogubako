@@ -13,6 +13,11 @@ docker compose logs dogubako | grep "Setup token"
 
 Open <http://localhost:8420>, enter the setup token and create the owner account.
 
+Podman works with the same compose file (`podman compose up -d --build`). Rootless,
+prepare `./data` with `podman unshare chown 10001:10001 data`. To start at boot,
+enable `podman-restart.service`, or run it as a systemd service with the Quadlet unit
+[`deploy/dogubako.container`](../deploy/dogubako.container).
+
 The image includes FFmpeg, ImageMagick, ExifTool, qpdf, Poppler,
 Ghostscript, Tesseract (English), 7-Zip and bubblewrap. Options:
 

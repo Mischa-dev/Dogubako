@@ -1,7 +1,7 @@
 # Install Dogubako on a server (instructions for AI agents)
 
 You are an AI coding agent running on a Linux machine. A person asked you to install
-Dogubako here with Docker and, usually, to connect yourself to it over MCP. Follow
+Dogubako here with Docker (or Podman) and, usually, to connect yourself to it over MCP. Follow
 these steps in order. Each step ends with a check; do not continue until it passes.
 
 Dogubako is an open-source toolbox (AGPL-3.0-or-later): 249 tools for images, video,
@@ -13,7 +13,8 @@ from a browser, an HTTP API, a CLI or MCP. Source: https://github.com/Mischa-dev
 Stop and ask before you do any of these. Do not decide them yourself.
 
 - Installing system packages (Docker, Git, Tailscale) or running anything with `sudo`.
-  The only `sudo` this guide needs is `chown` on the new `data` folder in step 3.
+  The only `sudo` this guide needs is `chown` on the new `data` folder in step 3
+  (with Podman, also turning on start at boot in step 5).
 - Opening ports, changing the port mapping in `docker-compose.yml`, or changing a
   firewall. By default Dogubako only listens on `127.0.0.1:8420` and nothing outside
   the machine can reach it. Never publish port 8420 to the internet.
@@ -37,6 +38,14 @@ df -h .                  # leave several GB free
 
 Check: all commands succeed and Compose is v2. If Docker or Compose is missing,
 ask the person before installing it.
+
+**Podman instead of Docker.** If `docker` is missing but `podman` is installed
+(Fedora, RHEL, CentOS Stream), use Podman and don't install Docker. Check
+`podman --version` and `podman compose version` (it needs `podman-compose` or
+`docker-compose` installed). Then read every `docker` in this guide as `podman`:
+`podman compose up -d --build`, `podman compose logs dogubako`,
+`podman compose exec dogubako dogubako …`. Note whether you run it as root
+(rootful) or as a normal user (rootless); steps 3 and 5 differ.
 
 Plan for an image of about 1.5 GB (about 2 GB with LibreOffice), plus room for
 uploads. The first build compiles Dogubako from source and can take a long time on a
@@ -65,7 +74,14 @@ cannot write to it.
 mkdir -p data && sudo chown 10001 data
 ```
 
-Check: `ls -ldn data` shows owner `10001`.
+With rootless Podman, use this instead (no `sudo`; the container's user 10001 maps
+to a different user on the host):
+
+```sh
+mkdir -p data && podman unshare chown 10001:10001 data
+```
+
+Check: `ls -ldn data` shows owner `10001` (rootless Podman: `podman unshare ls -ldn data`).
 
 ## 4. Optional settings (.env)
 
@@ -113,6 +129,15 @@ curl -fsS http://127.0.0.1:8420/api/v1/status      # JSON with "setup_required":
 ```
 
 `docker compose exec dogubako dogubako deps` lists the engines the image found.
+
+With Podman there is no daemon, so the container does not come back after a reboot
+on its own. Ask the person, then turn on Podman's restart service. It starts the
+containers whose restart policy says so, not ones that were stopped by hand:
+
+```sh
+sudo systemctl enable podman-restart.service                                    # rootful
+systemctl --user enable podman-restart.service && loginctl enable-linger "$USER"  # rootless
+```
 
 ## 6. Get the setup token
 

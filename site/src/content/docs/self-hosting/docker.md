@@ -5,7 +5,8 @@ sidebar:
   order: 2
 ---
 
-Docker Compose is the recommended way to self-host. The homelab image bakes
+Docker Compose is the recommended way to self-host ([Podman](/self-hosting/podman/)
+works too, with the same compose file). The homelab image bakes
 in **every engine** at exact versions from a fixed Debian 13 (trixie)
 snapshot: FFmpeg, ImageMagick, ExifTool, qpdf, Poppler, Ghostscript,
 Tesseract (English), Pandoc, 7-Zip and bubblewrap, plus whisper.cpp and Piper.
@@ -71,6 +72,7 @@ The bundled `docker-compose.yml` is safe by default:
 - It limits the container to 4 CPUs, 8 GB of memory and 512 processes, and
   runs at most 4 jobs at once (2 per account).
 - A health check runs `dogubako server health` every 30 seconds.
+- `./data` is mounted with `:z`, so it also works with SELinux enforcing.
 
 Because the container is read-only, it never downloads and runs engines the
 way the macOS app does. Everything it runs was in the image when it was built.

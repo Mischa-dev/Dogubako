@@ -20,7 +20,9 @@ services:
     ports:
       - "127.0.0.1:8420:8420"
     volumes:
-      - ./data:/data
+      # :z lets the container use the folder under SELinux (Fedora, RHEL);
+      # Docker ignores it on hosts without SELinux.
+      - ./data:/data:z
     environment:
       DOGUBAKO_INSTANCE_NAME: "Dogubako"
       # DOGUBAKO_PUBLIC_URL: "https://tools.example.ts.net"
@@ -58,6 +60,13 @@ services:
           cpus: "4"
           memory: 8g
           pids: 512
+    # The image's HEALTHCHECK, repeated because Podman builds OCI images by
+    # default and those drop it.
+    healthcheck:
+      test: ["CMD", "dogubako", "server", "health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
 
   # Optional local model for plain-words mode:
   #   docker compose --profile local-model up -d
@@ -69,4 +78,4 @@ services:
     profiles: ["local-model"]
     restart: unless-stopped
     volumes:
-      - ./data/ollama:/root/.ollama
+      - ./data/ollama:/root/.ollama:z

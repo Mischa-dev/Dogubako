@@ -1,0 +1,48 @@
+# Podman Quadlet unit: the same container as docker-compose.yml, run by systemd
+# without compose (Podman 5). See the Podman page of the self-hosting docs.
+#   podman build -t dogubako .
+#   sudo cp deploy/dogubako.container /etc/containers/systemd/      # rootless: ~/.config/containers/systemd/
+#   (set Volume= below to your data folder, owned by uid 10001)
+#   sudo systemctl daemon-reload && sudo systemctl start dogubako   # rootless: systemctl --user …
+# Quadlet units start at boot through [Install]; there is no `systemctl enable`.
+[Unit]
+Description=Dogubako utility toolbox server
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=localhost/dogubako:latest
+ContainerName=dogubako
+# Only reachable from this machine; see the networking docs for Tailscale.
+PublishPort=127.0.0.1:8420:8420
+# An absolute path. Rootless: podman unshare chown 10001:10001 <folder>.
+Volume=/opt/dogubako/data:/data:z
+Environment=DOGUBAKO_INSTANCE_NAME=Dogubako
+# Environment=DOGUBAKO_PUBLIC_URL=https://tools.example.ts.net
+# Environment=DOGUBAKO_SECURE_COOKIES=true
+Environment=DOGUBAKO_MAX_UPLOAD_MB=2048
+Environment=DOGUBAKO_USER_QUOTA_MB=10240
+Environment=DOGUBAKO_FILE_RETENTION_HOURS=24
+Environment=DOGUBAKO_MAX_CONCURRENT_JOBS=4
+Environment=DOGUBAKO_PER_USER_CONCURRENCY=2
+Environment=DOGUBAKO_EXEC_MEMORY_MB=4096
+Environment=DOGUBAKO_MAX_JOB_SECONDS=3600
+Environment=DOGUBAKO_MCP_ENABLED=true
+# Plain-words settings and other secrets (DOGUBAKO_ASSISTANT_*), as plain
+# KEY=value lines without trailing comments:
+# EnvironmentFile=/etc/dogubako.env
+ReadOnly=true
+Tmpfs=/tmp:size=2g
+NoNewPrivileges=true
+DropCapability=all
+PodmanArgs=--cpus=4 --memory=8g --pids-limit=512
+HealthCmd=["dogubako", "server", "health"]
+HealthInterval=30s
+HealthTimeout=5s
+HealthStartPeriod=10s
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target default.target
