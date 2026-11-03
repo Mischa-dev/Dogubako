@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import tomllib
 import urllib.error
@@ -79,10 +80,10 @@ def formula_source(formula: dict) -> dict:
     if not url:
         raise SystemExit(f"{formula['name']}: Homebrew lists no source URL")
     if stable.get("using") == "git" or url.endswith(".git"):
-        if not stable.get("revision"):
+        if not re.fullmatch(r"[0-9a-f]{40}", stable.get("revision") or ""):
             raise SystemExit(f"{formula['name']}: git source without a pinned revision")
         return {"git": url, "revision": stable["revision"], "tag": stable.get("tag")}
-    if not stable.get("checksum"):
+    if not re.fullmatch(r"[0-9a-f]{64}", stable.get("checksum") or ""):
         raise SystemExit(f"{formula['name']}: source {url} has no checksum")
     return {"url": url, "sha256": stable["checksum"]}
 
@@ -199,7 +200,8 @@ def stale(manifest: dict, lock: dict) -> list[str]:
             problems.append(f"{eid}: upstream sha256 not pinned (run fetch.py --pin-upstream)")
     for name, b in lock.get("bottles", {}).items():
         src = b.get("source") or {}
-        if not ((src.get("url") and src.get("sha256")) or (src.get("git") and src.get("revision"))):
+        if not ((src.get("url") and re.fullmatch(r"[0-9a-f]{64}", src.get("sha256") or ""))
+                or (src.get("git") and re.fullmatch(r"[0-9a-f]{40}", src.get("revision") or ""))):
             problems.append(f"{name}: source not pinned (re-run lock.py)")
     return problems
 
