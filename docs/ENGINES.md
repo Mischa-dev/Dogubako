@@ -143,8 +143,9 @@ output is unsigned there and only runs after signing on a Mac.
 The Docker image bakes **every** engine in, installed from a fixed Debian
 snapshot at exact versions (`docker-packages-<arch>.txt`, one list per
 architecture because the dependency closure differs), plus whisper.cpp (pinned
-tag) and Piper (checksum-pinned release). LibreOffice is opt-in
-(`DOGUBAKO_WITH_OFFICE=1`, about 500 MB). The same engines as the desktop, from
+tag) and Piper (checksum-pinned release). LibreOffice and rembg are opt-in
+(`DOGUBAKO_WITH_OFFICE=1`, about 500 MB; `DOGUBAKO_WITH_REMBG=1`, about 600 MB,
+from PyPI at the versions in `rembg-requirements.txt`). The same engines as the desktop, from
 Debian's builds.
 
 Why not the on-demand flow on a server:

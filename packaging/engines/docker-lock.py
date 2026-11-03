@@ -21,6 +21,7 @@ Bump = change [docker].snapshot, re-run this, rebuild, run the image's
 from __future__ import annotations
 
 import argparse
+import difflib
 import re
 import shutil
 import subprocess
@@ -94,11 +95,14 @@ def main() -> None:
     m = tomllib.loads(MANIFEST.read_text())
     d = m["docker"]
     image = f"debian:{d['debian_suite']}-slim@{d['base_digest']}"
-    core, optional = list(BASE), []
+    # Engines with docker_option = "<name>" only go into images built with
+    # DOGUBAKO_WITH_<NAME>=1, from their own list.
+    core, options = list(BASE), {}
     for e in m["engine"].values():
         if e["tier"] == "dropped":
             continue
-        (optional if e.get("docker_optional") else core).extend(e.get("debian", []))
+        option = e.get("docker_option")
+        (options.setdefault(option, []) if option else core).extend(e.get("debian", []))
     runtime = container_runtime()
     stale = []
     for arch in args.arch or ARCHES:
@@ -107,14 +111,20 @@ def main() -> None:
             f"# snapshot {d['snapshot']} ({d['debian_suite']}, {arch})\n"
         )
         lists = {f"docker-packages-{arch}.txt": core}
-        if optional:
-            lists[f"docker-packages-office-{arch}.txt"] = optional
+        for option, packages in sorted(options.items()):
+            lists[f"docker-packages-{option}-{arch}.txt"] = packages
         for name, packages in lists.items():
             text = render(header, resolve(runtime, image, arch, d["snapshot"], d["debian_suite"], packages))
             path = HERE / name
             if args.check:
-                if not path.exists() or path.read_text() != text:
+                old = path.read_text() if path.exists() else ""
+                if old != text:
                     stale.append(name)
+                    # Printed so a list for an architecture you can't run is
+                    # one copy away from CI's output.
+                    sys.stdout.writelines(
+                        difflib.unified_diff(old.splitlines(True), text.splitlines(True), name, name)
+                    )
                 continue
             path.write_text(text)
             print(f"wrote {name} ({text.count(chr(10)) - 2} packages)", file=sys.stderr)

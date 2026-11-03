@@ -48,6 +48,7 @@ Everything is optional; copy `.env.example` to start.
 | `DOGUBAKO_WITH_OFFICE` | `0` | `1` adds LibreOffice for Office → PDF conversion (about 500 MB). Rebuild after changing |
 | `DOGUBAKO_WITH_WHISPER` | `1` | The speech recognition engine. Models are downloaded in the app. Rebuild after changing |
 | `DOGUBAKO_WITH_PIPER` | `1` | The text to speech engine. Voices are downloaded in the app. Rebuild after changing |
+| `DOGUBAKO_WITH_REMBG` | `0` | `1` adds rembg for background removal (about 600 MB). Models are downloaded in the app. Rebuild after changing |
 | `DOGUBAKO_ASSISTANT_ENABLED` | `true` | Allow [plain words](/app/plain-words/) on this server |
 | `DOGUBAKO_ASSISTANT_BASE_URL` | — | A shared model for everyone ("This server"), for example `https://api.openai.com/v1` or `http://ollama:11434/v1` |
 | `DOGUBAKO_ASSISTANT_MODEL` | — | Its model id, for example `gpt-6-luna` |
@@ -125,6 +126,10 @@ docker compose exec dogubako dogubako models download whisper-base
 
 Models are stored in `/data/models` inside the container, which is
 `./data/models` on the host.
+
+With `DOGUBAKO_WITH_REMBG=1`, the background removal models are in the same
+place (group **rembg**). A model downloaded there is used offline; one that
+isn't is downloaded again by rembg each time the tool runs.
 
 ## Build options
 

@@ -50,6 +50,31 @@ macro_rules! whisper {
     };
 }
 
+/// rembg's models, as published by rembg. The file names are the ones rembg
+/// looks for in `U2NET_HOME`, so the tool can point it at the models folder.
+macro_rules! rembg {
+    ($model:expr, $name:expr, $desc:expr, $size:expr, $sha256:expr, $license:expr) => {
+        ModelSpec {
+            id: concat!("rembg-", $model),
+            group: "rembg",
+            name: $name,
+            description: $desc,
+            url: concat!(
+                "https://github.com/danielgatis/rembg/releases/download/v0.0.0/",
+                $model,
+                ".onnx"
+            ),
+            extra: &[],
+            file_name: concat!($model, ".onnx"),
+            size_bytes: $size,
+            sha1: None,
+            sha256: Some($sha256),
+            license: $license,
+            languages: "",
+        }
+    };
+}
+
 pub static KNOWN_MODELS: &[ModelSpec] = &[
     whisper!("whisper-tiny", "ggml-tiny.bin", "Whisper tiny", "Fastest, lowest accuracy (75 MiB)", 77_691_713, "bd577a113a864445d4c299885e0cb97d4ba92b5f", "multilingual"),
     whisper!("whisper-tiny.en", "ggml-tiny.en.bin", "Whisper tiny (English)", "Fastest English-only model (75 MiB)", 77_704_715, "c78c86eb1a8faa21b369bcd33207cc90d64ae9df", "en"),
@@ -130,6 +155,54 @@ pub static KNOWN_MODELS: &[ModelSpec] = &[
         license: "CC0 (see voice card)",
         languages: "de-DE",
     },
+    rembg!(
+        "u2net",
+        "U²-Net (general)",
+        "General-purpose background removal (168 MiB)",
+        175_997_641,
+        "8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491",
+        "Apache-2.0"
+    ),
+    rembg!(
+        "u2netp",
+        "U²-Net lite",
+        "Small, fast background removal (4.4 MiB)",
+        4_574_861,
+        "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8",
+        "Apache-2.0"
+    ),
+    rembg!(
+        "u2net_human_seg",
+        "U²-Net human segmentation",
+        "Cuts out people (168 MiB)",
+        175_997_641,
+        "01eb6a29a5c4d8edb30b56adad9bb3a2a0535338e480724a213e0acfd2d1c73c",
+        "Apache-2.0"
+    ),
+    rembg!(
+        "isnet-general-use",
+        "IS-Net (general)",
+        "Sharper general-purpose background removal (170 MiB)",
+        178_648_008,
+        "60920e99c45464f2ba57bee2ad08c919a52bbf852739e96947fbb4358c0d964a",
+        "Apache-2.0"
+    ),
+    rembg!(
+        "isnet-anime",
+        "IS-Net anime",
+        "Background removal for anime and illustrations (168 MiB)",
+        176_069_933,
+        "f15622d853e8260172812b657053460e20806f04b9e05147d49af7bed31a6e99",
+        "Apache-2.0"
+    ),
+    rembg!(
+        "silueta",
+        "Silueta",
+        "Compact U²-Net variant (42 MiB)",
+        44_173_029,
+        "75da6c8d2f8096ec743d071951be73b4a8bc7b3e51d9a6625d63644f90ffeedb",
+        "see rembg"
+    ),
 ];
 
 #[allow(dead_code)]

@@ -12,6 +12,7 @@ services:
         WITH_OFFICE: ${DOGUBAKO_WITH_OFFICE:-0}
         WITH_WHISPER: ${DOGUBAKO_WITH_WHISPER:-1}
         WITH_PIPER: ${DOGUBAKO_WITH_PIPER:-1}
+        WITH_REMBG: ${DOGUBAKO_WITH_REMBG:-0}
     image: dogubako:latest
     container_name: dogubako
     restart: unless-stopped

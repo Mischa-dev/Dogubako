@@ -4,6 +4,7 @@
 #
 #   docker build -t dogubako .
 #   docker build --build-arg WITH_OFFICE=1 -t dogubako:office .   # + LibreOffice (~500 MB)
+#   docker build --build-arg WITH_REMBG=1 -t dogubako:rembg .     # + rembg background removal (~600 MB)
 #   docker build --build-arg WITH_WHISPER=0 --build-arg WITH_PIPER=0 -t dogubako:slim .
 #
 # Engines come from a fixed Debian snapshot with exact package versions
@@ -96,6 +97,7 @@ RUN mkdir -p /opt/piper && if [ "$WITH_PIPER" = "1" ]; then \
 
 FROM pinned
 ARG WITH_OFFICE=0
+ARG WITH_REMBG=0
 ARG EXTRA_PACKAGES=""
 # One list per architecture: the dependency closure and binNMU versions differ.
 COPY packaging/engines/docker-packages-*.txt /tmp/engines/
@@ -106,6 +108,7 @@ RUN set -eu; \
     fi; \
     pkgs="$(grep -v '^#' "/tmp/engines/docker-packages-$arch.txt")"; \
     if [ "$WITH_OFFICE" = "1" ]; then pkgs="$pkgs $(grep -v '^#' "/tmp/engines/docker-packages-office-$arch.txt")"; fi; \
+    if [ "$WITH_REMBG" = "1" ]; then pkgs="$pkgs $(grep -v '^#' "/tmp/engines/docker-packages-rembg-$arch.txt")"; fi; \
     apt-get update && apt-get install -y --no-install-recommends $pkgs $EXTRA_PACKAGES \
     && rm -rf /var/lib/apt/lists/* /tmp/engines \
     && useradd --system --create-home --home-dir /home/dogubako --uid 10001 dogubako \
@@ -114,6 +117,16 @@ COPY --from=build /dogubako /usr/local/bin/dogubako
 COPY --from=whisper /out/ /usr/local/bin/
 COPY --from=piper /opt/piper /opt/piper
 RUN if [ -x /opt/piper/piper ]; then ln -s /opt/piper/piper /usr/local/bin/piper; else rmdir /opt/piper; fi
+# rembg (background removal) from PyPI at pinned versions, prebuilt wheels only.
+# Its models are downloaded in the app (Settings → Models).
+COPY packaging/engines/rembg-requirements.txt packaging/engines/rembg-cli.py /tmp/rembg/
+RUN if [ "$WITH_REMBG" = "1" ]; then \
+      python3 -m venv /opt/rembg \
+      && /opt/rembg/bin/pip install --no-cache-dir --no-deps --only-binary=:all: -r /tmp/rembg/rembg-requirements.txt \
+      && install -m 755 /tmp/rembg/rembg-cli.py /usr/local/bin/rembg \
+      && rembg --version; \
+    fi; \
+    rm -rf /tmp/rembg
 USER dogubako
 ENV DOGUBAKO_BIND=0.0.0.0:8420 \
     DOGUBAKO_DATA_DIR=/data \
