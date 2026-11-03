@@ -30,12 +30,18 @@ Data lives in `./data` next to the compose file: the database, uploads and
 outputs, models, extensions and the optional config file.
 
 :::tip[Prebuilt image]
-Releases publish the image as `ghcr.io/mischa-dev/dogubako:<version>`
-(linux/amd64), starting with `0.1.0-alpha.1`. The package is private during the
-alpha, so build it as above for now. Once it's public, set
-`image: ghcr.io/mischa-dev/dogubako:0.1.0-alpha.1` in the compose file and
-start with `docker compose up -d --no-build`. To load an image tarball from
-a test build instead, see [Try the alpha](/start/alpha/#test-builds-from-ci).
+The existing `0.1.0-alpha.1` image is amd64-only and the GHCR package is
+private, so build from source as above for now. Future releases use native
+amd64 and arm64 builds and publish a single multiarchitecture version tag.
+Docker and Podman automatically select the matching image when pulling it.
+This does not change the existing alpha image or make the package public.
+
+After a new release is approved and the package is accessible, set
+`image: ghcr.io/mischa-dev/dogubako:<new-version>` in the compose file and run
+`docker compose up -d --no-build`. Published images contain the standard engine
+set; LibreOffice and rembg still require a local build with their build options.
+To load an image tarball from a test build instead, see
+[Try the alpha](/start/alpha/#test-builds-from-ci).
 :::
 
 ## Settings in `.env`
