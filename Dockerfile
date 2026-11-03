@@ -120,11 +120,13 @@ RUN if [ -x /opt/piper/piper ]; then ln -s /opt/piper/piper /usr/local/bin/piper
 # rembg (background removal) from PyPI at pinned versions, prebuilt wheels only.
 # Its models are downloaded in the app (Settings → Models).
 COPY packaging/engines/rembg-requirements.txt packaging/engines/rembg-cli.py /tmp/rembg/
-RUN if [ "$WITH_REMBG" = "1" ]; then \
-      python3 -m venv /opt/rembg \
-      && /opt/rembg/bin/pip install --no-cache-dir --no-deps --only-binary=:all: -r /tmp/rembg/rembg-requirements.txt \
-      && install -m 755 /tmp/rembg/rembg-cli.py /usr/local/bin/rembg \
-      && rembg --version; \
+# Separate commands under set -e: a failure inside an && chain wouldn't stop it.
+RUN set -eu; \
+    if [ "$WITH_REMBG" = "1" ]; then \
+      python3 -m venv /opt/rembg; \
+      /opt/rembg/bin/pip install --no-cache-dir --no-deps --only-binary=:all: -r /tmp/rembg/rembg-requirements.txt; \
+      install -m 755 /tmp/rembg/rembg-cli.py /usr/local/bin/rembg; \
+      rembg --version; \
     fi; \
     rm -rf /tmp/rembg
 USER dogubako
