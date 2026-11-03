@@ -12,24 +12,33 @@ is different.
 
 ## Start it
 
+Rootful and rootless Podman keep separate image and container storage, so pick
+one and run every `podman` command that way. An image built without `sudo`
+can't be seen by `sudo podman`, and the other way round.
+
+**Rootful** (system-wide, like Docker):
+
 ```sh
 git clone https://github.com/mischa-dev/dogubako && cd dogubako
-mkdir -p data && sudo chown 10001 data     # rootful (as root or with sudo)
+mkdir -p data && sudo chown 10001 data
+sudo podman compose up -d --build
+sudo podman compose logs dogubako | grep "Setup token"
+```
+
+**Rootless** (as a normal user). The container's user 10001 maps to a
+different user on the host, so give the folder to it with `podman unshare`
+instead of `sudo chown`:
+
+```sh
+git clone https://github.com/mischa-dev/dogubako && cd dogubako
+mkdir -p data && podman unshare chown 10001:10001 data
 podman compose up -d --build
 podman compose logs dogubako | grep "Setup token"
 ```
 
 `podman compose` hands the compose file to `podman-compose` or
 `docker-compose`, whichever is installed. Everything on the Docker page works
-with `podman` in place of `docker`.
-
-**Rootless.** Run as a normal user, the container's user 10001 maps to a
-different user on the host, so give the folder to it with `podman unshare`
-instead of `sudo chown`:
-
-```sh
-mkdir -p data && podman unshare chown 10001:10001 data
-```
+with `podman` (or `sudo podman`) in place of `docker`.
 
 ## SELinux
 
@@ -63,15 +72,16 @@ systemctl --user enable podman-restart.service && loginctl enable-linger "$USER"
 without compose, with the same port, limits, hardening and health check:
 
 ```sh
-podman build -t dogubako .
+sudo podman build -t dogubako .
 sudo cp deploy/dogubako.container /etc/containers/systemd/
 sudoedit /etc/containers/systemd/dogubako.container   # set Volume= to your data folder
 sudo systemctl daemon-reload
 sudo systemctl start dogubako
 ```
 
-Rootless, put it in `~/.config/containers/systemd/`, use `systemctl --user`
-and run `loginctl enable-linger "$USER"` once. Quadlet units start at boot
+Rootless, build with plain `podman build -t dogubako .`, put the unit in
+`~/.config/containers/systemd/`, use `systemctl --user` and run
+`loginctl enable-linger "$USER"` once. Quadlet units start at boot
 through their `[Install]` section; `systemctl enable` doesn't apply to them.
 
 Settings are `Environment=` lines in the unit. Put secrets such as
@@ -83,9 +93,10 @@ value.
 
 ```sh
 git pull
-podman compose up -d --build
+sudo podman compose up -d --build      # rootless: without sudo
 ```
 
-With Quadlet: `git pull`, `podman build -t dogubako .`, then
-`sudo systemctl restart dogubako`. See
+With Quadlet: `git pull`, `sudo podman build -t dogubako .`, then
+`sudo systemctl restart dogubako` (rootless: `podman build` and
+`systemctl --user restart dogubako`). See
 [Operations](/self-hosting/operations/#upgrading) for backups first.

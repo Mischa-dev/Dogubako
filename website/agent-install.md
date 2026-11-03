@@ -44,8 +44,10 @@ ask the person before installing it.
 `podman --version` and `podman compose version` (it needs `podman-compose` or
 `docker-compose` installed). Then read every `docker` in this guide as `podman`:
 `podman compose up -d --build`, `podman compose logs dogubako`,
-`podman compose exec dogubako dogubako …`. Note whether you run it as root
-(rootful) or as a normal user (rootless); steps 3 and 5 differ.
+`podman compose exec dogubako dogubako …`. Decide once whether it runs as root
+(rootful: every `podman` command as root or with `sudo`) or as a normal user
+(rootless: never with `sudo`), and don't mix them: the two keep separate images
+and containers. Steps 3 and 5 differ.
 
 Plan for an image of about 1.5 GB (about 2 GB with LibreOffice), plus room for
 uploads. The first build compiles Dogubako from source and can take a long time on a
@@ -291,7 +293,7 @@ Tell them, briefly:
 
 | Symptom | Fix |
 |---|---|
-| Container keeps restarting; logs mention permission denied on `/data` | Step 3: `sudo chown 10001 data` (ask first), then `docker compose up -d`. |
+| Container keeps restarting; logs mention permission denied on `/data` | Step 3: `sudo chown 10001 data` (ask first; rootless Podman: `podman unshare chown 10001:10001 data`), then `docker compose up -d`. |
 | `docker compose` is unknown | Compose v2 is missing. Ask the person before installing the Docker Compose plugin. |
 | Build stops with exit code 137 | The machine ran out of memory while compiling. Ask the person; add swap or build on a larger machine. |
 | Build fails downloading packages | Retry `docker compose up -d --build`. Check the machine's internet access and proxy. |

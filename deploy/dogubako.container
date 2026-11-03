@@ -1,6 +1,6 @@
 # Podman Quadlet unit: the same container as docker-compose.yml, run by systemd
 # without compose (Podman 5). See the Podman page of the self-hosting docs.
-#   podman build -t dogubako .
+#   sudo podman build -t dogubako .                                 # rootless: podman build (same user as the service)
 #   sudo cp deploy/dogubako.container /etc/containers/systemd/      # rootless: ~/.config/containers/systemd/
 #   (set Volume= below to your data folder, owned by uid 10001)
 #   sudo systemctl daemon-reload && sudo systemctl start dogubako   # rootless: systemctl --user …
