@@ -141,7 +141,8 @@ output is unsigned there and only runs after signing on a Mac.
 ## Homelab
 
 The Docker image bakes **every** engine in, installed from a fixed Debian
-snapshot at exact versions (`docker-packages.txt`), plus whisper.cpp (pinned
+snapshot at exact versions (`docker-packages-<arch>.txt`, one list per
+architecture because the dependency closure differs), plus whisper.cpp (pinned
 tag) and Piper (checksum-pinned release). LibreOffice is opt-in
 (`DOGUBAKO_WITH_OFFICE=1`, about 500 MB). The same engines as the desktop, from
 Debian's builds.
@@ -156,7 +157,8 @@ Why not the on-demand flow on a server:
 * The desktop packs are macOS binaries; Debian already builds, patches and
   ships these engines for Linux.
 
-Bump the snapshot in `engines.toml`, run `docker-lock.py`, rebuild, check
+Bump the snapshot in `engines.toml`, run `docker-lock.py` (it needs QEMU for
+the architecture you are not on, or run `--arch` on each), rebuild, check
 `docker run --rm dogubako deps`, commit. Pinning trades automatic security
 updates for reproducibility, so bump it regularly (monthly is a good default).
 

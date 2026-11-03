@@ -7,7 +7,7 @@
 #   docker build --build-arg WITH_WHISPER=0 --build-arg WITH_PIPER=0 -t dogubako:slim .
 #
 # Engines come from a fixed Debian snapshot with exact package versions
-# (packaging/engines/docker-packages*.txt), so the same Dockerfile always
+# (packaging/engines/docker-packages*-<arch>.txt), so the same Dockerfile always
 # builds the same tested engine set. Bump with packaging/engines/docker-lock.py.
 
 ARG RUST_VERSION=1.95
@@ -97,10 +97,15 @@ RUN mkdir -p /opt/piper && if [ "$WITH_PIPER" = "1" ]; then \
 FROM pinned
 ARG WITH_OFFICE=0
 ARG EXTRA_PACKAGES=""
-COPY packaging/engines/docker-packages.txt packaging/engines/docker-packages-office.txt /tmp/engines/
+# One list per architecture: the dependency closure and binNMU versions differ.
+COPY packaging/engines/docker-packages-*.txt /tmp/engines/
 RUN set -eu; \
-    pkgs="$(grep -v '^#' /tmp/engines/docker-packages.txt)"; \
-    if [ "$WITH_OFFICE" = "1" ]; then pkgs="$pkgs $(grep -v '^#' /tmp/engines/docker-packages-office.txt)"; fi; \
+    arch="$(dpkg --print-architecture)"; \
+    if [ ! -f "/tmp/engines/docker-packages-$arch.txt" ]; then \
+      echo "No pinned package list for $arch; run packaging/engines/docker-lock.py --arch $arch" >&2; exit 1; \
+    fi; \
+    pkgs="$(grep -v '^#' "/tmp/engines/docker-packages-$arch.txt")"; \
+    if [ "$WITH_OFFICE" = "1" ]; then pkgs="$pkgs $(grep -v '^#' "/tmp/engines/docker-packages-office-$arch.txt")"; fi; \
     apt-get update && apt-get install -y --no-install-recommends $pkgs $EXTRA_PACKAGES \
     && rm -rf /var/lib/apt/lists/* /tmp/engines \
     && useradd --system --create-home --home-dir /home/dogubako --uid 10001 dogubako \
