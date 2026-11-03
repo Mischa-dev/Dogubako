@@ -93,6 +93,11 @@ compare binary records as well as recording the original embedded lock ID.
 
 ## Public release repair proposal, awaiting approval
 
+The prepared complete archive is 371,916,800 bytes. Its SHA-256 is
+`35c0b34ca7ee6ce6339fae723fcb5e73ff12d75765b92b2ce51e03763905ecde`.
+All 116 members were checked: 66 indexed source/input files, 47 exact recipes,
+and the index plus two pin files. Every indexed file matches its SHA-256.
+
 Preserve the published tag, publication status, all 14 existing asset IDs and
 bytes, and the existing `SHA256SUMS.txt`. Do not rerun the tag workflow: its
 upload steps use `--clobber` and can replace assets.

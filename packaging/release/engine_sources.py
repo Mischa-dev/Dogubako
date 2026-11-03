@@ -147,7 +147,7 @@ def main() -> int:
     out = Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     # A fresh stage prevents old files surviving --only or a failed retry.
-    work = tempfile.TemporaryDirectory(prefix="engine-sources-", dir=out)
+    work = tempfile.TemporaryDirectory(prefix="engine-sources-", dir=out, ignore_cleanup_errors=True)
     stage = Path(work.name)
     index = [
         f"# Engine sources for Dogubako {a.version}",
