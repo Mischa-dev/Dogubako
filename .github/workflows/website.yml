@@ -51,13 +51,15 @@ jobs:
             echo "NO_SITE=1" >> "$GITHUB_ENV"
             exit 0
           fi
-          # The trailer is copied only when its review manifest allows it
-          # (website/scripts/trailer.sh); otherwise the page shows its placeholder.
-          if [ -f website/scripts/trailer.sh ]; then
-            sh website/scripts/trailer.sh || echo "::warning::Trailer not copied; the page shows its placeholder."
-          fi
           mkdir _site
           cp -R website/. _site/
+          # The trailer lives once in trailer/dist; without it the page shows its placeholder.
+          if [ -f trailer/dist/dogubako-alpha-trailer.mp4 ] && [ -f trailer/dist/poster.jpg ]; then
+            mkdir -p _site/trailer
+            cp trailer/dist/dogubako-alpha-trailer.mp4 trailer/dist/poster.jpg _site/trailer/
+          else
+            echo "::warning::Trailer not found in trailer/dist; the page shows its placeholder."
+          fi
           # Build scripts, notes and review material don't belong on the public site.
           rm -rf _site/concepts _site/review _site/scripts _site/README.md _site/NOTES.md _site/.gitignore
           cp deploy/website/_headers _site/_headers
@@ -67,7 +69,9 @@ jobs:
           args=""
           [ -n "$DOCS_LIVE" ] && args="$args --docs"
           [ -n "$RELEASE" ] && args="$args --release $RELEASE"
-          if [ -n "$args" ]; then python3 -I packaging/release/website_links.py _site $args; fi
+          # Always version the CSS and script links, so a browser that still has the
+          # previous files cached never pairs them with the new pages.
+          python3 -I packaging/release/website_links.py _site ${args:---stamp}
           echo "### Still pointing at branches or saying prerelease" >> "$GITHUB_STEP_SUMMARY"
           python3 -I packaging/release/website_links.py _site --check | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Check local references resolve

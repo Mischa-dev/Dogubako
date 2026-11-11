@@ -10,6 +10,12 @@ in-repo pages keep their prerelease wording until a release is approved:
   python3 -I packaging/release/website_links.py _site --release v0.1.0-alpha.1
   python3 -I packaging/release/website_links.py _site --check       # report what still points at branches
 
+Every run that rewrites also versions the links to the site's own CSS and
+scripts (site.css -> site.css?v=<hash of the file>). Cloudflare lets browsers
+keep those files for hours but fetches the pages fresh, so without this a
+returning visitor gets a new page with the old styles after a deploy. --stamp
+does only that.
+
 --release points the macOS download at the DMG on that release. It leaves
 the "prerelease" wording in place. Replacing that copy is an editorial step
 on the chosen concept (see docs/releases/LAUNCH.md), and --check lists it.
@@ -18,6 +24,7 @@ on the chosen concept (see docs/releases/LAUNCH.md), and --check lists it.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -91,12 +98,50 @@ def rewrite(text: str, docs: bool, release: str | None) -> tuple[str, int]:
     return text, n
 
 
+ASSET_REF = re.compile(r'''(?P<attr>\b(?:href|src)=")(?P<ref>[^"#?:]+\.(?:css|js))(?:\?v=[0-9a-f]+)?(?=")''')
+
+
+def stamp(site: Path) -> int:
+    """Add ?v=<content hash> to every local stylesheet and script link.
+
+    A link to a file that is not in the folder is an error: a page would ship
+    without its styles.
+    """
+    digests: dict[Path, str] = {}
+    missing: list[str] = []
+    total = 0
+    for page in sorted(site.rglob("*.html")):
+        src = page.read_text(encoding="utf-8")
+
+        def one(m: re.Match) -> str:
+            nonlocal total
+            ref = m.group("ref")
+            target = (site / ref.lstrip("/")) if ref.startswith("/") else (page.parent / ref)
+            target = target.resolve()
+            if not target.is_file():
+                missing.append(f"{page.relative_to(site)} -> {ref}")
+                return m.group(0)
+            if target not in digests:
+                digests[target] = hashlib.sha256(target.read_bytes()).hexdigest()[:10]
+            total += 1
+            return f"{m.group('attr')}{ref}?v={digests[target]}"
+
+        new = ASSET_REF.sub(one, src)
+        if new != src:
+            page.write_text(new, encoding="utf-8")
+    if missing:
+        print("missing asset  " + "\nmissing asset  ".join(missing), file=sys.stderr)
+        raise SystemExit(1)
+    return total
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("site", type=Path, help="the folder being published (a copy, not website/)")
     ap.add_argument("--docs", action="store_true", help="docs.dogubako.app is live")
     ap.add_argument("--release", help="published release tag, e.g. v0.1.0-alpha.1")
     ap.add_argument("--check", action="store_true", help="only report")
+    ap.add_argument("--stamp", action="store_true", help="only version the CSS and script links")
     a = ap.parse_args()
     files = [p for p in a.site.rglob("*") if p.suffix in (".html", ".js") and p.is_file()]
     total = 0
@@ -115,7 +160,9 @@ def main() -> int:
             if phrase in src:
                 print(f"prerelease   {p.relative_to(a.site)}: \"{phrase}\"")
     if not a.check:
-        print(f"rewrote {total} links in {len(files)} files")
+        if not a.stamp:
+            print(f"rewrote {total} links in {len(files)} files")
+        print(f"versioned {stamp(a.site)} stylesheet and script links")
     return 0
 
 
