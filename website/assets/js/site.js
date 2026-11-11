@@ -13,12 +13,23 @@
   const themeBtn = $('#themeBtn');
   if (themeBtn) {
     const label = () => themeBtn.setAttribute('aria-label', isDark() ? 'Switch to light theme' : 'Switch to dark theme');
-    themeBtn.addEventListener('click', () => {
-      const next = isDark() ? 'light' : 'dark';
+    const apply = (next) => {
       root.dataset.theme = next;
       try { localStorage.setItem('dgb-theme', next); } catch (e) { /* private mode */ }
       label();
       document.dispatchEvent(new CustomEvent('dgb:theme', { detail: next }));
+    };
+    themeBtn.addEventListener('click', () => {
+      const next = isDark() ? 'light' : 'dark';
+      if (still || !document.startViewTransition) { apply(next); return; }
+      // the new theme opens in a circle from the button
+      const r = themeBtn.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      root.style.setProperty('--wipe-x', x + 'px');
+      root.style.setProperty('--wipe-y', y + 'px');
+      root.style.setProperty('--wipe-r', Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y)) + 'px');
+      root.classList.add('theme-wipe');
+      const vt = document.startViewTransition(() => apply(next));
+      vt.finished.finally(() => root.classList.remove('theme-wipe'));
     });
     if (mq.addEventListener) mq.addEventListener('change', label);
     label();
@@ -53,6 +64,18 @@
     const wide = window.matchMedia('(min-width: 861px)');
     const onWide = () => { if (wide.matches) set(false); };
     if (wide.addEventListener) wide.addEventListener('change', onWide);
+  }
+
+  /* ---------------- cards: a soft light follows the pointer (the CSS reads --mx / --my on hover) */
+  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    const LIT = '.tile, .way, .pw, .teaser, .step, .end-card, .duo-card, .disc, .choose-card, .plat, .doc-links a';
+    document.addEventListener('pointermove', (e) => {
+      const el = e.target.closest && e.target.closest(LIT);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      el.style.setProperty('--mx', (e.clientX - r.left).toFixed(0) + 'px');
+      el.style.setProperty('--my', (e.clientY - r.top).toFixed(0) + 'px');
+    }, { passive: true });
   }
 
   /* ---------------- reveals: anything with class "rv" fades up once, the first time it is in view */

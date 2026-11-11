@@ -17,6 +17,7 @@
 .hero-copy { max-width: 680px; }
 .hero .h1 { font-size: clamp(44px, 7vw, 84px); }
 .hero .lede { max-width: 560px; }
+.hero-facts { margin-top: 18px; font-size: 13.5px; line-height: 1.5; color: var(--text-3); text-wrap: balance; }
 .hero-slot { display: none; }
 .trailer-link { display: inline-flex; align-items: center; gap: 10px; margin-top: 22px; padding: 4px 14px 4px 4px; border-radius: 999px; font-size: 14.5px; font-weight: 550; color: var(--text-2); transition: color var(--dur) var(--ease), background var(--dur) var(--ease); }
 .trailer-link[hidden] { display: none; }
@@ -35,7 +36,8 @@
 .js .hero-copy > .h1 { animation-duration: 1100ms; }
 .js .hero-copy > .lede { animation-delay: 140ms; }
 .js .hero-copy > .cta-row { animation-delay: 240ms; }
-.js .hero-copy > .trailer-link { animation-delay: 320ms; }
+.js .hero-copy > .hero-facts { animation-delay: 300ms; }
+.js .hero-copy > .trailer-link { animation-delay: 360ms; }
 @keyframes rise { to { opacity: 1; transform: none; } }
 
 /* "See it work": a real button at the foot of the hero */
@@ -157,8 +159,7 @@ html:not(.js) .demo-stage { display: none; }
 .tp-bl { left: 36px; bottom: 44px; border-left-width: 1.5px; border-bottom-width: 1.5px; }
 .tp-br { right: 36px; bottom: 44px; border-right-width: 1.5px; border-bottom-width: 1.5px; }
 .tp-body { display: flex; flex-direction: column; align-items: center; max-width: 34ch; }
-.tp-mark { width: 64px; height: 64px; margin-bottom: 22px; color: #edeae4; overflow: visible; }
-.tp-lid { transform-origin: 10px 46px; transform: rotate(-14deg) translateY(-2px); }
+.tp-mark { width: 64px; height: 64px; font-size: 64px; margin: 0 auto 22px; color: #edeae4; }
 .tp-title { font-size: clamp(22px, 3vw, 36px); font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; text-wrap: balance; }
 .tp-line { margin-top: 12px; font-size: 15.5px; line-height: 1.5; color: #b9b4ab; text-wrap: balance; }
 .tp-meta { position: absolute; left: 66px; right: 66px; bottom: 50px; display: flex; justify-content: space-between; font-size: 11.5px; color: #8f8a81; }
@@ -491,7 +492,7 @@ html:not(.js) .demo-stage { display: none; }
   .trailer-ph { padding: 20px; }
   .trailer-ph::before { top: 8px; } .trailer-ph::after { bottom: 8px; }
   .tp-corner { display: none; }
-  .tp-mark { width: 40px; height: 40px; margin-bottom: 10px; }
+  .tp-mark { width: 40px; height: 40px; font-size: 40px; margin-bottom: 10px; }
   .tp-title { font-size: 19px; }
   .tp-line { margin-top: 6px; font-size: 13px; }
   .tp-meta { display: none; }

@@ -195,6 +195,12 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2
 .nav-links a[aria-current="page"] { color: var(--text); background: var(--accent-soft); }
 .nav-links .nav-only-phone { display: none; }
 .nav-acts { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.nav-search { display: inline-flex; align-items: center; gap: 8px; height: 34px; margin-right: 6px; padding: 0 8px 0 11px; border-radius: 10px; font-size: 13.5px; color: var(--text-3); background: var(--hover); box-shadow: inset 0 0 0 1px var(--divider); transition: color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.nav-search:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.nav-search .i { width: 15px; height: 15px; }
+.nav-search span { padding-right: 18px; }
+.nav-search kbd, .cmdk kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 5px; font: 500 10.5px/1 var(--font-mono); color: var(--text-3); background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); }
+html:not(.js) .nav-search { display: none; }
 .nav-acts .btn { margin-left: 8px; }
 .nav-dl-short { display: none; }
 .nav-menu { display: none; }
@@ -258,12 +264,19 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2
 .pol-st.no { color: var(--danger); background: var(--danger-soft); }
 .pol-note { font-size: 12.5px; color: var(--text-3); padding-top: 10px; border-top: 1px solid var(--divider); }
 
+/* the logo as a box whose lid opens backwards: hinged along the back edge, so from the front the
+ * lid lifts, leans away and gets a little smaller. Body and lid are separate SVGs so the lid can
+ * turn in 3D (transforms inside one SVG are flat). Sized in em: set font-size to the mark's width. */
+.boxmark { position: relative; display: block; flex: none; perspective: 1.2em; perspective-origin: 50% 20%; --box-open: translate3d(0, -0.13em, -0.18em) rotateX(34deg); }
+.boxmark svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.box-lid { transform-origin: 50% 46%; transition: transform 800ms var(--ease-out); will-change: transform; }
+.boxmark.is-open .box-lid { transform: var(--box-open); }
+
 /* the download card: the logo's lid opens */
 .dl { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: clamp(48px, 7vw, 80px) clamp(20px, 5vw, 64px); border-radius: 32px; background: var(--surface); box-shadow: var(--tile-shadow); overflow: hidden; isolation: isolate; }
 .dl::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: var(--ambient-opacity); background: radial-gradient(50% 60% at 20% 0%, #c9a58f, transparent 70%), radial-gradient(40% 50% at 85% 10%, #9fa7c9, transparent 70%); }
-.dl-mark { width: 80px; height: 80px; margin-bottom: 26px; color: var(--text); overflow: visible; }
-.dl-lid { transform-origin: 10px 46px; transition: transform 700ms var(--ease-out); }
-.dl:hover .dl-lid, .dl.open .dl-lid { transform: rotate(-16deg) translateY(-2px); }
+.dl-mark { width: 80px; height: 80px; font-size: 80px; margin-bottom: 26px; color: var(--text); }
+.dl:hover .box-lid, .dl.open .box-lid { transform: var(--box-open); }
 .dl .sec-lede { margin-left: auto; margin-right: auto; }
 .dl-plats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: min(760px, 100%); margin-top: 34px; }
 .dl-plats li { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--divider); text-align: left; }
@@ -321,7 +334,59 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2
 }
 
 /* ---------------------------------------------------------------- reduced motion */
+/* ---------------------------------------------------------------- command palette (palette.js) */
+.cmdk { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: min(16vh, 140px) 16px 16px; border: 0; background: transparent; color: var(--text); overflow: hidden; }
+.cmdk:not([open]) { display: none; }
+.cmdk::backdrop { background: rgba(12, 10, 8, 0.42); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.cmdk-box { display: flex; flex-direction: column; width: min(640px, 100%); max-height: min(560px, 100%); margin: 0 auto; border-radius: 20px; background: var(--glass-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border); box-shadow: var(--shadow-pop), 0 50px 120px -40px rgba(0, 0, 0, 0.5); overflow: hidden; }
+.cmdk[open] .cmdk-box { animation: cmdk-in 220ms var(--ease-out) both; }
+.cmdk[open]::backdrop { animation: cmdk-fade 200ms var(--ease) both; }
+@keyframes cmdk-in { from { opacity: 0; transform: translateY(-8px) scale(0.98); } }
+@keyframes cmdk-fade { from { opacity: 0; } }
+.cmdk-in { flex: none; display: flex; align-items: center; gap: 12px; height: 58px; padding: 0 16px 0 18px; border-bottom: 1px solid var(--divider); color: var(--text-3); cursor: text; }
+.cmdk-in .i { width: 18px; height: 18px; flex: none; }
+.cmdk-in input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; outline: none; font: inherit; font-size: 17px; letter-spacing: -0.01em; color: var(--text); }
+.cmdk-in input::placeholder { color: var(--text-3); }
+.cmdk-list { flex: 1; min-height: 0; padding: 6px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.cmdk-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 12px; border-radius: 10px; cursor: pointer; scroll-margin: 6px; }
+.cmdk-row[aria-selected="true"] { background: var(--accent-soft); }
+.cmdk-ic { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; background: var(--surface-sunken); color: var(--text-2); flex: none; }
+.cmdk-ic .i { width: 16px; height: 16px; }
+.cmdk-row[aria-selected="true"] .cmdk-ic { background: var(--surface); color: var(--text); }
+.cmdk-t { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.cmdk-n { font-weight: 550; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmdk-n mark { background: transparent; padding: 0; font-weight: 700; color: var(--text); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; text-decoration-color: var(--border-strong); }
+.cmdk-d { font-size: 12.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmdk-row[aria-selected="true"] .cmdk-d, .cmdk-row[aria-selected="true"] .cmdk-id { color: var(--text-2); }
+.cmdk-id { flex: none; font: 400 11.5px/1 var(--font-mono); color: var(--text-3); }
+.cmdk-empty { padding: 36px 16px; text-align: center; font-size: 14.5px; color: var(--text-3); }
+.cmdk-foot { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--divider); font-size: 12px; color: var(--text-3); }
+.cmdk-keys { display: inline-flex; align-items: center; gap: 5px; }
+.cmdk-keys kbd:nth-of-type(3) { margin-left: 8px; }
+@media (max-width: 1100px) { .nav-search span { display: none; } .nav-search { padding: 0 8px 0 10px; } }
+@media (max-width: 860px) { .nav-search { width: 36px; height: 36px; margin-right: 0; padding: 0; justify-content: center; background: transparent; box-shadow: none; color: var(--text-2); } .nav-search kbd { display: none; } .nav-search .i { width: 18px; height: 18px; } }
+@media (max-width: 680px) { .cmdk { padding: 10px; } .cmdk-id, .cmdk-keys { display: none; } .cmdk-in input { font-size: 16px; } }
+
+/* cards pick up a soft warm light under the pointer (site.js sets --mx / --my) */
+@media (hover: hover) and (pointer: fine) {
+  .tile:hover, .way:hover, .pw:hover, .teaser:hover, .step:hover, .end-card:hover, .duo-card:hover, .disc:hover, .choose-card:hover, .plat:hover, .doc-links a:hover {
+    background-image: radial-gradient(520px circle at var(--mx, 50%) var(--my, 0%), color-mix(in srgb, #c9a58f 13%, transparent), transparent 62%);
+  }
+}
+
+/* the theme toggle wipes the new theme in from the button (site.js) */
+.theme-wipe::view-transition-old(root), .theme-wipe::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+.theme-wipe::view-transition-new(root) { animation: theme-wipe 520ms var(--ease-out) both; }
+@keyframes theme-wipe { from { clip-path: circle(0 at var(--wipe-x, 100%) var(--wipe-y, 0)); } to { clip-path: circle(var(--wipe-r, 150vmax) at var(--wipe-x, 100%) var(--wipe-y, 0)); } }
+
+/* moving between pages cross-fades where the browser supports it */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .js .rv { opacity: 1; transform: none; transition: none; }
-  .dl-lid, .btn, .link .i { transition: none; }
+  .box-lid, .btn, .link .i { transition: none; }
+  .cmdk[open] .cmdk-box, .cmdk[open]::backdrop { animation: none; }
 }

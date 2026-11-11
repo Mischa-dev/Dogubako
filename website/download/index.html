@@ -45,6 +45,7 @@
       <a class="nav-only-phone" href="https://github.com/Mischa-dev/Dogubako">GitHub</a>
     </nav>
     <div class="nav-acts">
+      <button class="nav-search" type="button" data-palette aria-label="Search tools and pages"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span>Search</span><kbd class="mono">⌘K</kbd></button>
       <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch to dark theme"><svg class="i i-moon" aria-hidden="true"><use href="#i-moon"/></svg><svg class="i i-sun" aria-hidden="true"><use href="#i-sun"/></svg></button>
       <a class="icon-btn nav-gh" href="https://github.com/Mischa-dev/Dogubako" aria-label="Dogubako on GitHub"><svg class="i i-fill" aria-hidden="true"><use href="#github"/></svg></a>
       <a class="btn btn-ink btn-sm nav-dl" href="../download/" aria-current="page"><span class="nav-dl-long">Download alpha release</span><span class="nav-dl-short">Download</span></a>
@@ -57,10 +58,7 @@
 <!-- ============================================================ HERO -->
 <section class="pg-hero pg-hero-1 dl-hero" aria-labelledby="pg-title">
   <div class="wrap">
-    <svg class="lid-mark" viewBox="0 0 100 100" aria-hidden="true">
-      <g><path d="M10 46 V72 a10 10 0 0 0 10 10 H80 a10 10 0 0 0 10-10 V46" fill="none" stroke="currentColor" stroke-width="8"/></g>
-      <g class="lid-lid"><path d="M10 46 V34 a10 10 0 0 1 10-10 H80 a10 10 0 0 1 10 10 V46 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></g>
-    </svg>
+    <span class="boxmark lid-mark" aria-hidden="true"><svg class="box-body" viewBox="0 0 100 100"><path d="M10 46 V72 a10 10 0 0 0 10 10 H80 a10 10 0 0 0 10-10 V46" fill="none" stroke="currentColor" stroke-width="8"/></svg><svg class="box-lid" viewBox="0 0 100 100"><path d="M10 46 V34 a10 10 0 0 1 10-10 H80 a10 10 0 0 1 10 10 V46 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></svg></span>
     <h1 id="pg-title" class="pg-title">The first alpha is out.</h1>
     <p class="lede">Version 0.1.0-alpha.1 is a Mac app for Apple silicon, and a Docker setup for a home server or a team. It’s an alpha, so expect rough edges. Pick the one you’re after.</p>
 
@@ -91,7 +89,7 @@
       <li><a class="plat" data-os="mac" href="https://github.com/Mischa-dev/Dogubako/releases/download/v0.1.0-alpha.1/Dogubako_0.1.0-alpha.1_aarch64.dmg">
         <span class="plat-top"><svg class="i" aria-hidden="true"><use href="#i-laptop"/></svg><b>macOS</b><span class="plat-you">Your system</span></span>
         <span class="plat-sub">Apple silicon, macOS 15 or newer</span>
-        <span class="plat-foot"><span class="plat-fmt mono">.dmg</span><span class="plat-st">Alpha</span></span>
+        <span class="plat-foot"><span class="plat-fmt mono">.dmg · alpha</span><span class="plat-get"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Download</span></span>
       </a></li>
       <li><a class="plat plat-off" data-os="windows" href="#source">
         <span class="plat-top"><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg><b>Windows</b><span class="plat-you">Your system</span></span>
@@ -270,6 +268,7 @@
 </footer>
 
 <script src="../assets/js/site.js" defer></script>
+<script src="../assets/js/palette.js" defer></script>
 <script src="../assets/js/timeline.js" defer></script>
 <script src="../assets/js/pages/pages.js" defer></script>
 <script src="../assets/js/pages/download.js" defer></script>

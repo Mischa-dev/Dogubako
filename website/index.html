@@ -19,6 +19,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#f7f6f3" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#151412" media="(prefers-color-scheme: dark)">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Dogubako","url":"https://dogubako.app/","description":"249 free, open-source tools for images, video, audio, PDFs, text and data, in one app. Runs on your computer or on your own server.","applicationCategory":"UtilitiesApplication","operatingSystem":"macOS 15 or later (Apple silicon); Linux server with Docker","softwareVersion":"0.1.0-alpha.1","license":"https://www.gnu.org/licenses/agpl-3.0.html","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"downloadUrl":"https://dogubako.app/download/","codeRepository":"https://github.com/Mischa-dev/Dogubako","image":"https://dogubako.app/og.png"}</script>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preload" href="assets/fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -141,6 +142,7 @@
       <a class="nav-only-phone" href="https://github.com/Mischa-dev/Dogubako">GitHub</a>
     </nav>
     <div class="nav-acts">
+      <button class="nav-search" type="button" data-palette aria-label="Search tools and pages"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span>Search</span><kbd class="mono">⌘K</kbd></button>
       <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch to dark theme"><svg class="i i-moon" aria-hidden="true"><use href="#i-moon"/></svg><svg class="i i-sun" aria-hidden="true"><use href="#i-sun"/></svg></button>
       <a class="icon-btn nav-gh" href="https://github.com/Mischa-dev/Dogubako" aria-label="Dogubako on GitHub"><svg class="i i-fill" aria-hidden="true"><use href="#github"/></svg></a>
       <a class="btn btn-ink btn-sm nav-dl" href="download/"><span class="nav-dl-long">Download alpha release</span><span class="nav-dl-short">Download</span></a>
@@ -160,6 +162,7 @@
         <a class="btn btn-ink" href="download/">Download alpha release</a>
         <a class="btn btn-line" href="https://github.com/Mischa-dev/Dogubako"><svg class="i i-fill" aria-hidden="true"><use href="#github"/></svg>Source on GitHub</a>
       </div>
+      <p class="hero-facts">Free and open source. No account. For Macs with Apple silicon today, and any Linux server.</p>
       <a class="trailer-link" id="trailerLink" href="#trailer" hidden><span class="tl-play" aria-hidden="true"><svg class="i i-fill"><use href="#i-play"/></svg></span><span>Watch the trailer</span></a>
     </div>
     <div class="hero-slot" id="heroSlot" aria-hidden="true"></div>
@@ -409,7 +412,7 @@
       <div class="trailer-ph" id="trailerPh">
         <span class="tp-corner tp-tl" aria-hidden="true"></span><span class="tp-corner tp-tr" aria-hidden="true"></span><span class="tp-corner tp-bl" aria-hidden="true"></span><span class="tp-corner tp-br" aria-hidden="true"></span>
         <div class="tp-body">
-          <svg class="tp-mark" viewBox="0 0 100 100" aria-hidden="true"><g class="tp-lid"><path d="M10 46 V34 a10 10 0 0 1 10-10 H80 a10 10 0 0 1 10 10 V46 Z" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></g><path d="M10 46 V72 a10 10 0 0 0 10 10 H80 a10 10 0 0 0 10-10 V46" fill="none" stroke="currentColor" stroke-width="7"/></svg>
+          <span class="boxmark tp-mark is-open" aria-hidden="true"><svg class="box-body" viewBox="0 0 100 100"><path d="M10 46 V72 a10 10 0 0 0 10 10 H80 a10 10 0 0 0 10-10 V46" fill="none" stroke="currentColor" stroke-width="7"/></svg><svg class="box-lid" viewBox="0 0 100 100"><path d="M10 46 V34 a10 10 0 0 1 10-10 H80 a10 10 0 0 1 10 10 V46 Z" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></svg></span>
           <p class="tp-title">The launch trailer is on its way.</p>
           <p class="tp-line">It will play right here, in this frame, as soon as it’s ready.</p>
         </div>
@@ -720,14 +723,11 @@
 <section class="sec sec-dl" id="download" aria-labelledby="dl-title">
   <div class="wrap">
     <div class="dl rv" id="dlCard">
-      <svg class="dl-mark" viewBox="0 0 100 100" aria-hidden="true">
-        <g class="dl-body"><path d="M10 46 V72 a10 10 0 0 0 10 10 H80 a10 10 0 0 0 10-10 V46" fill="none" stroke="currentColor" stroke-width="8"/></g>
-        <g class="dl-lid"><path d="M10 46 V34 a10 10 0 0 1 10-10 H80 a10 10 0 0 1 10 10 V46 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></g>
-      </svg>
+      <span class="boxmark dl-mark" aria-hidden="true"><svg class="box-body" viewBox="0 0 100 100"><path d="M10 46 V72 a10 10 0 0 0 10 10 H80 a10 10 0 0 0 10-10 V46" fill="none" stroke="currentColor" stroke-width="8"/></svg><svg class="box-lid" viewBox="0 0 100 100"><path d="M10 46 V34 a10 10 0 0 1 10-10 H80 a10 10 0 0 1 10 10 V46 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/><rect x="41" y="39" width="18" height="14" rx="2" fill="#e0533d"/></svg></span>
       <h2 id="dl-title" class="h2">The first alpha is out.</h2>
       <p class="sec-lede">The first release, 0.1.0-alpha.1, is for Macs with Apple silicon on macOS 15 or later. Windows and Linux builds come after it. You can also build Dogubako from source, or run it on a Linux server with Docker Compose.</p>
       <ul class="dl-plats">
-        <li class="is-first"><svg class="i" aria-hidden="true"><use href="#i-laptop"/></svg><span><b>macOS</b><span>Apple silicon, out now</span></span></li>
+        <li class="is-first"><svg class="i" aria-hidden="true"><use href="#i-laptop"/></svg><span><b>macOS</b><span>Apple silicon</span></span></li>
         <li><svg class="i" aria-hidden="true"><use href="#i-monitor"/></svg><span><b>Windows</b><span>After the alpha</span></span></li>
         <li><svg class="i" aria-hidden="true"><use href="#i-laptop"/></svg><span><b>Linux desktop</b><span>After the alpha</span></span></li>
         <li><svg class="i" aria-hidden="true"><use href="#i-server"/></svg><span><b>Server</b><span>Docker, from source</span></span></li>
@@ -761,6 +761,7 @@
 <script src="assets/js/tools-data.js"></script>
 <script src="assets/js/timeline.js"></script>
 <script src="assets/js/site.js"></script>
+<script src="assets/js/palette.js"></script>
 <script src="assets/js/demo.js"></script>
 <script src="assets/js/bento.js"></script>
 <script src="assets/js/finder.js"></script>
