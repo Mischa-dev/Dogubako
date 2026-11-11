@@ -75,12 +75,12 @@ docs' heading slugs.
 ## Trailer
 
 The trailer lives once in `trailer/dist` (about 24 MB), so it isn't committed
-here. `scripts/trailer.sh` copies the video and poster into `website/trailer/`
-(git-ignored), and only if `trailer/dist/review-status.json` says the cut is
-reviewed and its checksums match. The home page checks for
-`trailer/dogubako-alpha-trailer.mp4` with a HEAD request: if it's there, the
-player takes the trailer frame and the hero shows "Watch the trailer"; if not,
-the frame shows a "trailer is on its way" card.
+here. A deploy copies `dogubako-alpha-trailer.mp4` and `poster.jpg` from there
+into the published `trailer/` folder (`website/trailer/` is git-ignored, for
+local previews). The home page checks for `trailer/dogubako-alpha-trailer.mp4`
+with a HEAD request: if it's there, the player takes the trailer frame and the
+hero shows "Watch the trailer"; if not, the frame shows a "trailer is on its
+way" card.
 
 ## Release day
 
@@ -111,8 +111,9 @@ The scripts need Pillow (`pip install pillow`) and Playwright with Chromium
 
 ## Deploying
 
-Any static host works: run `website/scripts/trailer.sh`, then serve the
-`website/` folder as the web root. For GitHub Pages, publish `website/` (for
-example with `actions/upload-pages-artifact` and `actions/deploy-pages`) and
-keep `CNAME` so the domain stays `dogubako.app`. `scripts/` and this README
-don't need to be published.
+`.github/workflows/website.yml` shows the steps: copy `website/` (without
+`scripts/` and this README), add the trailer and `deploy/website/_headers`, then
+run `packaging/release/website_links.py` on the copy. That last step matters on
+every deploy: it adds `?v=<hash>` to the CSS and script links. Cloudflare lets
+browsers keep those files for four hours but fetches pages fresh, so without
+the version a returning visitor gets the new pages with the old styles.
