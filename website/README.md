@@ -56,6 +56,21 @@ python3 -m http.server --directory website 8000
 # open http://localhost:8000
 ```
 
+## Search regression test
+
+The browser test starts a local server and checks the real catalog at desktop
+and mobile widths, with and without reduced motion. It checks rendered rows,
+category visibility and counts, empty results, clearing, URL initialization,
+and arrow-key navigation. The Website workflow runs it before assembling the site.
+
+```sh
+npm install --prefix /tmp/dgb-website-tests --no-package-lock --no-save playwright@1.62.1
+node /tmp/dgb-website-tests/node_modules/playwright/cli.js install chromium
+NODE_PATH=/tmp/dgb-website-tests/node_modules node --test website/scripts/test-tools-search.mjs
+```
+
+Set `CHROMIUM_PATH` to use an existing Chromium executable instead.
+
 ## When tools change
 
 `assets/js/tools-data.js` feeds the home finder and the tools page search, and
