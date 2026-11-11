@@ -28,6 +28,11 @@ export default defineConfig({
         { tag: 'meta', attrs: { property: 'og:image', content: 'https://docs.dogubako.app/og.png' } },
       ],
       social: [{ icon: 'github', label: 'GitHub', href: repo }],
+      // The way back to the website: the logo and the header links go to dogubako.app.
+      components: {
+        SiteTitle: './src/components/SiteTitle.astro',
+        SocialIcons: './src/components/SocialIcons.astro',
+      },
       editLink: { baseUrl: `${repo}/edit/main/site/` },
       lastUpdated: true,
       customCss: [
@@ -38,6 +43,7 @@ export default defineConfig({
       ],
       plugins: [starlightLinksValidator({ errorOnLocalLinks: false })],
       sidebar: [
+        { label: '← Back to dogubako.app', link: 'https://dogubako.app/', attrs: { class: 'back-to-site' } },
         {
           label: 'Start here',
           items: [
@@ -129,7 +135,6 @@ export default defineConfig({
             'project/performance',
             'project/troubleshooting',
             'project/faq',
-            { label: 'dogubako.app', link: 'https://dogubako.app', attrs: { rel: 'noopener' } },
           ],
         },
       ],

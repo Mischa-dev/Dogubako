@@ -377,10 +377,9 @@
 
 /* ---------------------------------------------------------------- download page */
 .dl-hero { text-align: left; }
-.lid-mark { width: 72px; height: 72px; margin-bottom: 26px; color: var(--text); overflow: visible; }
-.lid-lid { transform-origin: 10px 46px; transition: transform 900ms var(--ease-out); }
-.dl-hero .lid-mark.open .lid-lid { transform: rotate(-14deg) translateY(-2px); }
-.dl-hero .lid-mark:hover .lid-lid { transform: rotate(-22deg) translateY(-3px); }
+.lid-mark { width: 72px; height: 72px; font-size: 72px; margin-bottom: 26px; color: var(--text); }
+.dl-hero .lid-mark.open .box-lid { transform: var(--box-open); }
+.dl-hero .lid-mark:hover .box-lid { transform: translate3d(0, -0.16em, -0.22em) rotateX(42deg); }
 .choose { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 40px; }
 .choose-card { position: relative; display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 18px 22px 18px 18px; border-radius: 24px; background: var(--pg-card); box-shadow: var(--tile-shadow); transition: transform 300ms var(--ease-out), box-shadow var(--dur) var(--ease); }
 .choose-card:hover { transform: translateY(-3px); box-shadow: 0 0 0 1px var(--border-strong), var(--shadow-pop); }
@@ -417,6 +416,8 @@
 .plat-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 14px; }
 .plat-fmt { font-size: 12px; color: var(--text-3); }
 .plat-st { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 99px; font-size: 12px; font-weight: 550; white-space: nowrap; color: var(--warn); background: var(--warn-soft); }
+.plat-get { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; border-radius: 99px; font-size: 13px; font-weight: 600; white-space: nowrap; color: var(--text-inverse); background: var(--accent); }
+.plat-get .i { width: 14px; height: 14px; }
 .plat-off .plat-st { color: var(--text-3); background: var(--accent-soft); }
 .plat-you { display: none; margin-left: auto; padding: 2px 8px; border-radius: 99px; font: 500 11px/1.5 var(--font-mono); color: var(--text-inverse); background: var(--accent); }
 .plat.is-you { box-shadow: 0 0 0 2px var(--text), var(--shadow-pop); }
@@ -551,7 +552,7 @@ html:not(.js) .watch-menu { display: none; }
 /* ---------------------------------------------------------------- reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .net.is-on .net-out, .net.is-on .net-back, .net.is-on .net-eng li[style] { animation: none; }
-  .lid-lid, .choose-card, .ci-win, .plat, .end-card, .end-card .i, .doc-links a, .disc-wall, .choose-go { transition: none; }
+  .choose-card, .ci-win, .plat, .end-card, .end-card .i, .doc-links a, .disc-wall, .choose-go { transition: none; }
   .js .audit-log.is-live li { transition: none; }
   .tl-i.is-new { animation: none; }
 }

@@ -415,8 +415,14 @@
   setPaused(true);
   if (still) started = true;
 
-  // pause when off screen, and start the first time it is properly in view (when it doesn't fly)
-  new IntersectionObserver((es) => { for (const e of es) player.setVisible(e.isIntersecting); }).observe(win);
+  // pause when off screen or back up in the hero, and start the first time it is properly in view
+  // (when it doesn't fly)
+  let onScreen = true, inHero = false;
+  const syncVisible = () => player.setVisible(onScreen && !inHero);
+  // Scrolling back to the top carries the window back into the hero: it holds its frame there
+  // and picks up where it left off once it has landed again.
+  function setInHero(v) { if (v !== inHero) { inHero = v; syncVisible(); } }
+  new IntersectionObserver((es) => { for (const e of es) onScreen = e.isIntersecting; syncVisible(); }).observe(win);
   new IntersectionObserver((es) => {
     for (const e of es) if (e.intersectionRatio >= 0.55 && !flyOn) startDemo();
   }, { threshold: [0, 0.55, 0.8] }).observe(stage);
@@ -434,7 +440,8 @@
     const hx = hs.left + hs.width / 2, hy = hs.top + sy + hs.height / 2; // the slot's centre in the hero
     M = { k: hs.width / W, nx, ny, hx, hy, end: Math.max(1, sc.top + sy) }; // end: scroll position where the demo section reaches the top
     // tilted, the window projects larger and off centre: shrink it until its projection fits the slot, then centre that
-    const prev = fly.style.transform;
+    const prev = fly.style.transform, lx = lean.x, ly = lean.y;
+    lean.x = lean.y = 0; // measured at rest
     for (let i = 0; i < 2; i++) {
       fly.style.transform = tf(0, 0, M.k, 1);
       const r = fly.getBoundingClientRect();
@@ -442,18 +449,23 @@
       else { M.hx = hx - (r.left + r.width / 2 - nx); M.hy = hy - (r.top + sy + r.height / 2 - ny); }
     }
     fly.style.transform = prev;
+    lean.x = lx; lean.y = ly;
   }
-  const tf = (dx, dy, k, r) => `translate3d(${dx.toFixed(2)}px, ${dy.toFixed(2)}px, 0) scale(${k.toFixed(4)}) perspective(${TILT.persp}px) rotateX(${(TILT.rx * r).toFixed(3)}deg) rotateY(${(TILT.ry * r).toFixed(3)}deg) rotateZ(${(TILT.rz * r).toFixed(3)}deg)`;
+  // lean: while it is tilted, the window turns a few degrees toward the pointer (-1..1 on each axis)
+  const lean = { x: 0, y: 0, tx: 0, ty: 0, raf: 0 };
+  const tf = (dx, dy, k, r) => `translate3d(${dx.toFixed(2)}px, ${dy.toFixed(2)}px, 0) scale(${k.toFixed(4)}) perspective(${TILT.persp}px) rotateX(${((TILT.rx - lean.y * 3) * r).toFixed(3)}deg) rotateY(${((TILT.ry + lean.x * 5) * r).toFixed(3)}deg) rotateZ(${(TILT.rz * r).toFixed(3)}deg)`;
   function place() {
     ticking = false;
-    if (!M) { fly.style.transform = ''; fly.classList.remove('is-tilted'); sec.style.removeProperty('--land'); cue.classList.remove('is-away'); return; }
+    if (!M) { fly.style.transform = ''; fly.classList.remove('is-tilted'); sec.style.removeProperty('--land'); cue.classList.remove('is-away'); setInHero(false); return; }
     const sy = Math.max(0, window.scrollY);
     if (sy >= M.end - 0.5) {
       if (fly.style.transform) { fly.style.transform = ''; fly.classList.remove('is-tilted'); fly.style.setProperty('--tilt', '0'); sec.style.setProperty('--land', '1'); cue.classList.add('is-away'); }
+      setInHero(false);
       startDemo();
       return;
     }
     const p = sy / M.end;
+    if (p < 0.72) setInHero(true); // a small scroll above the landing doesn't stop it; leaving does
     const e = EASE.inOut(p);
     const r = 1 - EASE.inOut(clamp(p / 0.86, 0, 1)); // flattens a little before it lands
     const cx = lerp(M.hx, M.nx, EASE.inOut(clamp((p - 0.2) / 0.8, 0, 1))); // it drops first, then crosses once the hero text has gone
@@ -467,6 +479,23 @@
     cue.classList.toggle('is-away', p > 0.3);
   }
   const onScroll = () => { if (!ticking && M) { ticking = true; requestAnimationFrame(place); } };
+  function leanStep() {
+    lean.raf = 0;
+    const dx = lean.tx - lean.x, dy = lean.ty - lean.y;
+    if (Math.abs(dx) < 0.002 && Math.abs(dy) < 0.002) { lean.x = lean.tx; lean.y = lean.ty; place(); return; }
+    lean.x += dx * 0.09; lean.y += dy * 0.09;
+    place();
+    lean.raf = requestAnimationFrame(leanStep);
+  }
+  if (window.matchMedia('(pointer: fine)').matches) {
+    window.addEventListener('pointermove', (e) => {
+      if (!M || window.scrollY >= M.end) return; // only while it is in the air
+      lean.tx = clamp((e.clientX / window.innerWidth) * 2 - 1, -1, 1);
+      lean.ty = clamp((e.clientY / window.innerHeight) * 2 - 1, -1, 1);
+      if (!lean.raf) lean.raf = requestAnimationFrame(leanStep);
+    }, { passive: true });
+    document.documentElement.addEventListener('pointerleave', () => { lean.tx = lean.ty = 0; if (M && !lean.raf) lean.raf = requestAnimationFrame(leanStep); });
+  }
   window.addEventListener('scroll', onScroll, { passive: true });
   function relayout() {
     flyOn = flyMq.matches;

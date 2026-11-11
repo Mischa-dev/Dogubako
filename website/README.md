@@ -22,6 +22,8 @@ from a sub-folder.
 | `download/` | Release status, "Use the app" and "Host it on a server", and the copy-prompt for an AI agent |
 | `agent-install.md` | Step-by-step server install written for AI agents (the download page's prompt points here) |
 | `llms.txt` | The short index for language models |
+| `404.html` | The not-found page. It is served for any missing path, so its links start at `/` |
+| `robots.txt`, `sitemap.xml` | For search engines. Add new pages to the sitemap |
 
 ## Files
 
@@ -30,7 +32,8 @@ from a sub-folder.
 | `assets/css/site.css` | Shared: tokens, type, buttons, nav, footer, sections, reveals |
 | `assets/css/home.css`, `app.css` | Home only; `app.css` draws the app window in the demo |
 | `assets/css/pages.css` | The four sub-pages |
-| `assets/js/site.js` | Shared: theme toggle, phone menu, reveals |
+| `assets/js/site.js` | Shared: theme toggle (the new theme wipes in from the button), phone menu, reveals, the light that follows the pointer on cards |
+| `assets/js/palette.js` | Shared: the command palette. ⌘K / Ctrl+K or the nav's search button, on every page. Searches pages, actions and every tool (a tool opens its docs entry); loads `tools-data.js` on first use |
 | `assets/js/timeline.js` | The small animation engine every demo uses (`render(t)`, pauses offscreen and with reduced motion) |
 | `assets/js/demo.js`, `home.js`, `bento.js`, `finder.js` | The home page's demo, sections, tool tiles and finder |
 | `assets/js/pages/*.js` | The sub-pages' demos, the tools search and the copy buttons |
@@ -39,6 +42,12 @@ from a sub-folder.
 | `screenshots/` | WebP copies of `docs/screenshots`, made by `scripts/screenshots.py` |
 | `scripts/` | Tool list generators, screenshot capture, the trailer copy |
 | `CNAME` | The domain, for GitHub Pages |
+
+## The box mark
+
+The logo with a lid that opens (`.boxmark` in `site.css`) is two SVGs, body and lid, so the lid
+can turn in 3D: it is hinged along the back edge and opens backwards, away from the viewer. Set
+`font-size` to the mark's width; add `is-open` (or `open` on the download marks) to open it.
 
 ## Preview
 
