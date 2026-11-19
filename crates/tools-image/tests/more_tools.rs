@@ -681,6 +681,78 @@ async fn face_detection_with_model() {
     }
 }
 
+#[test]
+fn face_threshold_minimum_is_positive() {
+    for t in dogubako_tools_image::tools() {
+        let sp = t.spec();
+        if !matches!(sp.id.as_str(), "image.face_detect" | "image.face_blur") {
+            continue;
+        }
+        let p = sp.params.iter().find(|p| p.name == "threshold").unwrap();
+        match &p.kind {
+            dogubako_core::spec::ParamKind::Number { min: Some(m), .. } => {
+                assert!(*m > 0.0, "{}: threshold minimum {m}", sp.id)
+            }
+            k => panic!("{}: unexpected threshold kind {k:?}", sp.id),
+        }
+    }
+}
+
+#[tokio::test]
+async fn face_tools_reject_zero_threshold() {
+    let Some(models) = std::env::var_os("DOGUBAKO_TEST_MODELS")
+        .map(std::path::PathBuf::from)
+        .filter(|d| d.join("seeta_fd_frontal_v1.0.bin").is_file())
+    else {
+        eprintln!("skipping: set DOGUBAKO_TEST_MODELS to a dir with seeta_fd_frontal_v1.0.bin");
+        return;
+    };
+    let h = harness();
+    assert!(h.engine.models.dir() == models.as_path());
+    if !h.available("image.face_detect") {
+        return;
+    }
+    let a = save(&h, "scene.png", &pattern(320, 240, false));
+    for threshold in [json!(0), json!(0.0), json!("0"), json!(-1)] {
+        let err = h
+            .run(
+                "image.face_detect",
+                json!({"input": s(&a), "threshold": threshold}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "invalid_input", "{err}");
+        assert!(err.to_string().contains("threshold"), "{err}");
+        let err = h
+            .run(
+                "image.face_blur",
+                json!({"input": [s(&a)], "threshold": threshold}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "invalid_input", "{err}");
+        assert!(err.to_string().contains("threshold"), "{err}");
+    }
+    for threshold in [0.1, 2.0] {
+        let out = h
+            .run(
+                "image.face_detect",
+                json!({"input": s(&a), "threshold": threshold}),
+            )
+            .await
+            .unwrap();
+        assert!(out.data["regions"].is_array());
+        let out = h
+            .run(
+                "image.face_blur",
+                json!({"input": [s(&a)], "threshold": threshold}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out.artifacts.len(), 1);
+    }
+}
+
 #[tokio::test]
 async fn ocr_with_tesseract() {
     let h = harness();
