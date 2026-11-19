@@ -14,7 +14,7 @@ them.
 |---|---|---|
 | macOS app | `Dogubako_0.1.0-alpha.1_aarch64.dmg` | Apple silicon, macOS 15 (Sequoia) or newer |
 | Homelab / server | `ghcr.io/mischa-dev/dogubako:0.1.0-alpha.1` | Docker, linux/amd64, every engine included. Private for now: [build it yourself](/self-hosting/docker/) |
-| CLI | `dogubako-<target>` for Linux x86-64, macOS Apple silicon and Windows x86-64 | Uses the engines installed on the system |
+| CLI | `dogubako-<target>` for Linux x86-64, macOS Apple silicon and Windows x86-64 | Uses the engines installed on the system. Linux needs glibc 2.28+ (Debian 10+, Ubuntu 20.04+, RHEL 8+) from 0.1.0-alpha.2; the alpha.1 build needs glibc 2.43 |
 | Checksums | `SHA256SUMS.txt` | |
 | Engine sources | `engine-sources-0.1.0-alpha.1.tar` | Corresponding source for the GPL, LGPL, AGPL and MPL engines |
 

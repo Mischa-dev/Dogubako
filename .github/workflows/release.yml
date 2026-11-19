@@ -99,8 +99,17 @@ jobs:
       - run: npm ci && npm run build
         working-directory: web
       - uses: dtolnay/rust-toolchain@stable
+        if: runner.os != 'Linux'
         with: { targets: "${{ matrix.target }}" }
-      - run: cargo build --release --locked -p dogubako-cli --target ${{ matrix.target }}
+      - if: runner.os != 'Linux'
+        run: cargo build --release --locked -p dogubako-cli --target ${{ matrix.target }}
+      # Built in a glibc 2.28 container so it runs on older distros than the
+      # runner, then checked on the oldest and a current stable distro.
+      - name: Build and check (Linux, glibc 2.28+)
+        if: runner.os == 'Linux'
+        run: |
+          bin="$(packaging/release/build-linux-cli.sh)"
+          packaging/release/check-linux-cli.sh "$bin"
       - name: Attach to the release
         shell: bash
         run: |
