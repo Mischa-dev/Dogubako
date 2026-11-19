@@ -3,8 +3,10 @@ import { ParamForm } from '../../form/ParamForm';
 import { useToolForm } from '../useToolForm';
 import { useLiveRun, useToolShortcuts } from '../GenericTool';
 import { ResultView } from '../../results/ResultView';
-import { RunBar } from '../RunBar';
-import { Spinner } from '../../components/ui';
+import { ResetButton, RunBar } from '../RunBar';
+import { Spinner, cx } from '../../components/ui';
+import { StaleNotice } from '../../results/Stale';
+
 
 /** Color tools: live swatches as you pick (file-based tools run on demand). */
 export default function ColorTool({ tool, jobId }: { tool: ToolInfo; jobId?: string | null }) {
@@ -20,10 +22,11 @@ export default function ColorTool({ tool, jobId }: { tool: ToolInfo; jobId?: str
   return (
     <div className="tool-body tool-live special special-color">
       <div className="tool-input">
-        <ParamForm params={tool.params} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="color" />
-        {hasFile && <RunBar form={form} label="Analyze" disabled={!tool.availability.available} />}
+        <ParamForm resetKey={form.resetKey} params={tool.params} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="color" />
+        {hasFile ? <RunBar form={form} label="Analyze" disabled={!tool.availability.available} /> : <ResetButton form={form} />}
       </div>
-      <div className="tool-output">
+      <div className={cx('tool-output', form.stale && 'is-stale')}>
+        <StaleNotice stale={form.stale} />
         {contrast && (
           <div className="contrast-card" style={{ background: bg, color: fg }}>
             <span className="contrast-ratio">{data!.ratio_text ?? `${data!.ratio}:1`}</span>

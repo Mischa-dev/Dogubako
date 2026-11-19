@@ -9,6 +9,9 @@ import { DataTable, KeyValue } from '../../results/DataViews';
 import { ErrorView } from '../../results/ErrorView';
 import { Warnings } from '../../results/Warnings';
 import { CopyButton, Spinner, cx } from '../../components/ui';
+import { ResetButton } from '../RunBar';
+import { StaleNotice } from '../../results/Stale';
+
 
 /** Regex tester: highlights matches live under the test-text editor. */
 export default function Regex({ tool, jobId }: { tool: ToolInfo; jobId?: string | null }) {
@@ -16,7 +19,8 @@ export default function Regex({ tool, jobId }: { tool: ToolInfo; jobId?: string 
   useToolShortcuts(form);
   useLiveRun(form, tool.availability.available, 200);
   const job = form.job.job;
-  const data = (job?.status === 'succeeded' ? job.result?.data : null) as Record<string, any> | null;
+  // Matches from earlier, now-invalid settings would highlight the wrong text.
+  const data = (job?.status === 'succeeded' && !form.stale ? job.result?.data : null) as Record<string, any> | null;
   const matches: Match[] = Array.isArray(data?.matches) ? data!.matches : [];
   const text = String(form.values.text ?? '');
   const textParam = tool.params.find((p) => p.name === 'text');
@@ -44,7 +48,7 @@ export default function Regex({ tool, jobId }: { tool: ToolInfo; jobId?: string 
     <div className="tool-body tool-live special special-regex">
       <div className="tool-input">
         {patternParam && <Field param={patternParam} value={form.values.pattern} error={form.shownErrors.pattern} onChange={form.setValue} mono />}
-        <ParamForm params={tool.params} exclude={['pattern', 'text']} values={form.values} errors={form.shownErrors} onChange={form.setValue} mono idPrefix="regex" />
+        <ParamForm resetKey={form.resetKey} params={tool.params} exclude={['pattern', 'text']} values={form.values} errors={form.shownErrors} onChange={form.setValue} mono idPrefix="regex" />
         {textParam && (
           <div className={cx('field', form.shownErrors.text && 'has-error')} data-param="text">
             <div className="field-head">
@@ -68,8 +72,10 @@ export default function Regex({ tool, jobId }: { tool: ToolInfo; jobId?: string 
             </div>
           </div>
         )}
+        <ResetButton form={form} />
       </div>
-      <div className="tool-output">
+      <div className={cx('tool-output', form.stale && 'is-stale')}>
+        <StaleNotice stale={form.stale} />
         {job?.status === 'failed' && <ErrorView error={job.error ?? { code: 'failed' }} />}
         {job?.status === 'succeeded' && <Warnings warnings={job.result?.warnings} />}
         {data && typeof data.replaced === 'string' && (

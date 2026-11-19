@@ -6,7 +6,9 @@ import { useToolForm } from '../useToolForm';
 import { DataTable, KeyValue, fmtNum } from '../../results/DataViews';
 import { ErrorView } from '../../results/ErrorView';
 import { Warnings } from '../../results/Warnings';
-import { Button, Meter, Segmented, Spinner } from '../../components/ui';
+import { Button, Meter, Segmented, Spinner, cx } from '../../components/ui';
+import { ResetButton } from '../RunBar';
+import { StaleNotice } from '../../results/Stale';
 import { humanizeKey, formatRelative } from '../../lib/format';
 import { isTable } from '../../lib/renderers';
 
@@ -120,7 +122,7 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
     <div className="tool-body special special-system">
       {tool.params.length > 0 && (
         <div className="tool-input">
-          <ParamForm params={tool.params} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="sys" />
+          <ParamForm resetKey={form.resetKey} params={tool.params} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="sys" />
         </div>
       )}
       <div className="dash-toolbar">
@@ -132,10 +134,14 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
         <span className="muted small dash-updated" aria-live="off">
           {form.job.running && <Spinner size={11} />} {updated ? (paused ? 'Paused · ' : 'Live · ') + `updated ${formatRelative(updated)}` : 'Loading…'}
         </span>
+        <ResetButton form={form} />
       </div>
-      {job?.status === 'failed' && <ErrorView error={job.error ?? { code: 'failed' }} />}
-      {job?.status === 'succeeded' && <Warnings warnings={job.result?.warnings} />}
-      {lastGood && Object.keys(lastGood).length > 0 ? <Dashboard data={lastGood} /> : text ? <pre className="code-view mono">{text}</pre> : null}
+      <div className={cx('dash-output', form.stale && 'is-stale')}>
+        <StaleNotice stale={form.stale} />
+        {job?.status === 'failed' && <ErrorView error={job.error ?? { code: 'failed' }} />}
+        {job?.status === 'succeeded' && <Warnings warnings={job.result?.warnings} />}
+        {lastGood && Object.keys(lastGood).length > 0 ? <Dashboard data={lastGood} /> : text ? <pre className="code-view mono">{text}</pre> : null}
+      </div>
     </div>
   );
 }
