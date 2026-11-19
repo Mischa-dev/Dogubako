@@ -1,0 +1,120 @@
+name: Native container images
+
+on:
+  workflow_call:
+    inputs:
+      publish:
+        description: Push verified images and assemble the version tag (release tags only)
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: Native image (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, os: ubuntu-24.04 }
+          - { arch: arm64, os: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check container verification tests
+        run: python3 -I -m unittest discover -s packaging/containers -p 'test_*.py'
+      - name: Pinned package lists match engines.toml
+        run: python3 -I packaging/engines/docker-lock.py --check --arch ${{ matrix.arch }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build standard image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          load: true
+          tags: dogubako:check
+          cache-from: type=gha,scope=docker-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=docker-${{ matrix.arch }}
+      - name: Verify standard packages, engines and server
+        run: python3 -I packaging/containers/check_image.py dogubako:check --arch ${{ matrix.arch }}
+      - name: Build LibreOffice image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          build-args: WITH_OFFICE=1
+          push: false
+          load: true
+          tags: dogubako:office-check
+          cache-from: type=gha,scope=docker-${{ matrix.arch }}
+      - name: Verify LibreOffice packages, engines and server
+        run: python3 -I packaging/containers/check_image.py dogubako:office-check --arch ${{ matrix.arch }} --office
+      - name: Check publication context
+        if: inputs.publish
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          test "$EVENT" = push
+          test "$REF_TYPE" = tag
+          [[ "$REF_NAME" =~ ^v[0-9][0-9A-Za-z.+-]*$ ]]
+      - uses: docker/login-action@v3
+        if: inputs.publish
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push the tested standard image and record its digest
+        if: inputs.publish
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          image=ghcr.io/mischa-dev/dogubako
+          staging="$image:build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$ARCH"
+          docker tag dogubako:check "$staging"
+          docker push "$staging"
+          digest="$(docker image inspect "$staging" --format '{{index .RepoDigests 0}}')"
+          [[ "$digest" =~ ^$image@sha256:[0-9a-f]{64}$ ]]
+          mkdir -p digests
+          printf '%s\n' "$digest" > "digests/$ARCH"
+      - uses: actions/upload-artifact@v4
+        if: inputs.publish
+        with:
+          name: container-digest-${{ matrix.arch }}
+          path: digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  manifest:
+    name: Assemble verified multiarchitecture image
+    if: inputs.publish
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: container-digest-*
+          path: digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate index before assigning the release tag
+        run: |
+          amd64="$(cat digests/amd64)"
+          arm64="$(cat digests/arm64)"
+          docker buildx imagetools create --dry-run "$amd64" "$arm64" > index.json
+          python3 -I packaging/containers/check_index.py index.json "$amd64" "$arm64"
+      # New GHCR packages remain private until their owner changes visibility.
+      # This publishes only the standard image. Optional engines remain build options.
+      - name: Publish and verify the version tag
+        run: |
+          image="ghcr.io/mischa-dev/dogubako:${GITHUB_REF_NAME#v}"
+          docker buildx imagetools create --tag "$image" "$(cat digests/amd64)" "$(cat digests/arm64)"
+          docker buildx imagetools inspect --raw "$image" > published-index.json
+          python3 -I packaging/containers/check_index.py published-index.json "$(cat digests/amd64)" "$(cat digests/arm64)"
