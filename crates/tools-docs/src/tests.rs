@@ -484,6 +484,16 @@ async fn text_images_info() {
         img.pixels().any(|p| p[3] > 0),
         "page text should still be drawn"
     );
+    let out = h
+        .run(
+            "pdf.to_images",
+            json!({"input": [s(&a)], "dpi": 36, "pages": "1", "transparent": true, "grayscale": true}),
+        )
+        .await
+        .unwrap();
+    let img = image::open(&out.artifacts[0].path).unwrap();
+    assert_eq!(img.color(), image::ColorType::La8);
+    assert_eq!(img.to_luma_alpha8().get_pixel(0, 0)[1], 0);
     let img = image::open(
         &h.run(
             "pdf.to_images",

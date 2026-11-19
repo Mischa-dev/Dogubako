@@ -380,6 +380,12 @@ fn to_images() -> Arc<dyn Tool> {
                 .filter_map(|e| e.ok().map(|e| e.path()))
                 .find(|p| p.is_file())
                 .ok_or_else(|| ToolError::failed("Poppler produced no image"))?;
+            if transparent && p.bool("grayscale") {
+                // pdftocairo ignores -gray when -transp is set.
+                image::open(&produced)
+                    .and_then(|img| img.to_luma_alpha8().save(&produced))
+                    .map_err(|e| ToolError::failed(format!("grayscale conversion failed: {e}")))?;
+            }
             let width = counts[fi].to_string().len().max(2);
             let out = ctx.output_path(&format!(
                 "{}-p{:0width$}.{ext}",
