@@ -47,6 +47,38 @@ const FORMATS: &[(&str, &str)] = &[
     ("ac3", "AC-3 (Dolby Digital)"),
 ];
 
+/// Bitrates (kbit/s) libvorbis accepts for a sample rate and channel count, or
+/// `None` when it has no fixed-bitrate mode at that rate (outside 8-50 kHz,
+/// 8-70 kHz for 5.1). Mirrors the bitrate tables of libvorbis' setup modes,
+/// which are per channel.
+fn vorbis_kbps_range(rate: u32, channels: u32) -> Option<(u32, u32)> {
+    // (coupling channels or 0 for any, min rate, max rate, min/max bit/s per channel)
+    const MODES: &[(u32, u32, u32, f64, f64)] = &[
+        (2, 40000, 50000, 22500.0, 250001.0),
+        (6, 40000, 70000, 14000.0, 240001.0),
+        (0, 40000, 50000, 32000.0, 240001.0),
+        (2, 26000, 40000, 18000.0, 190000.0),
+        (0, 26000, 40000, 30000.0, 190000.0),
+        (2, 19000, 26000, 15000.0, 86000.0),
+        (0, 19000, 26000, 16000.0, 90000.0),
+        (2, 15000, 19000, 12000.0, 86000.0),
+        (0, 15000, 19000, 16000.0, 100000.0),
+        (2, 9000, 15000, 8000.0, 44000.0),
+        (0, 9000, 15000, 12000.0, 50000.0),
+        (2, 8000, 9000, 6000.0, 32000.0),
+        (0, 8000, 9000, 8000.0, 42000.0),
+    ];
+    let ch = channels.max(1);
+    let (lo, hi) = MODES
+        .iter()
+        .filter(|m| (m.0 == 0 || m.0 == ch) && (m.1..=m.2).contains(&rate))
+        .fold(None, |acc: Option<(f64, f64)>, m| {
+            Some(acc.map_or((m.3, m.4), |(l, h)| (l.min(m.3), h.max(m.4))))
+        })?;
+    let f = ch as f64 / 1000.0;
+    Some(((lo * f).ceil() as u32, (hi * f).floor() as u32))
+}
+
 /// (extension, encoder, codec args) for a target format.
 fn format_args(
     fmt: &str,
@@ -239,20 +271,56 @@ fn convert() -> Arc<dyn Tool> {
         );
         need_encoder(&ctx, enc).await?;
         let files = p.files("input").to_vec();
+        let want_rate = p.str_or("sample_rate", "keep").parse::<u32>().ok();
+        let want_ch = p.str_or("channels", "keep").parse::<u32>().ok();
+        let vorbis_cbr = fmt == "ogg" && p.opt_int("vbr_quality").is_none();
+        if vorbis_cbr && want_rate.is_some_and(|r| vorbis_kbps_range(r, 2).is_none()) {
+            return Err(ToolError::invalid(
+                "sample_rate",
+                "Ogg Vorbis at a fixed bitrate supports sample rates from 8 to 48 kHz; pick one of those or set a VBR quality",
+            ));
+        }
         let mut rep = Report::files(&["Codec"]);
         for (i, f) in files.iter().enumerate() {
             let pr = probe_audio(&ctx, f).await?;
             let out = out_path(&ctx, f, "converted", ext);
+            let mut args = args.clone();
+            let mut rate = want_rate;
+            if vorbis_cbr {
+                let src = pr.sample_rate().unwrap_or(44100);
+                let ch = want_ch.or(pr.channels()).unwrap_or(2);
+                if rate.is_none() && vorbis_kbps_range(src, ch).is_none() {
+                    // libvorbis has no fixed-bitrate mode above 50 kHz (or below 8 kHz).
+                    rate = Some(if src > 48000 { 48000 } else { 8000 });
+                }
+                let r = rate.unwrap_or(src);
+                if let Some((lo, hi)) = vorbis_kbps_range(r, ch) {
+                    let k = kbps.clamp(lo, hi);
+                    if k != kbps {
+                        rep.warnings.push(format!(
+                            "{}: Ogg Vorbis allows {lo}-{hi} kbit/s for {} kHz {}; encoded at {k} kbit/s instead of {kbps}",
+                            f.name,
+                            r as f64 / 1000.0,
+                            match ch {
+                                1 => "mono".to_string(),
+                                2 => "stereo".to_string(),
+                                n => format!("{n}-channel audio"),
+                            },
+                        ));
+                        args = format_args(&fmt, k, None, "keep").2;
+                    }
+                }
+            }
             let mut ff = Ff::new()
                 .input(&f.path)
                 .args(audio_maps(&pr, ext))
                 .args(&args);
-            if let Ok(sr) = p.str_or("sample_rate", "keep").parse::<u32>() {
+            if let Some(sr) = rate {
                 ff = ff.args(["-ar", &sr.to_string()]);
             } else if fmt == "opus" {
                 // libopus only accepts 48/24/16/12/8 kHz; FFmpeg resamples automatically.
             }
-            if let Ok(ch) = p.str_or("channels", "keep").parse::<u32>() {
+            if let Some(ch) = want_ch {
                 ff = ff.args(["-ac", &ch.to_string()]);
             } else if (fmt == "ac3" || fmt == "wma") && pr.channels().unwrap_or(2) > 6 {
                 ff = ff.args(["-ac", "6"]);
@@ -2001,6 +2069,19 @@ fn reverse() -> Arc<dyn Tool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vorbis_bitrate_ranges() {
+        assert_eq!(vorbis_kbps_range(16000, 1), Some((16, 100)));
+        assert_eq!(vorbis_kbps_range(16000, 2), Some((24, 200)));
+        assert_eq!(vorbis_kbps_range(44100, 1), Some((32, 240)));
+        assert_eq!(vorbis_kbps_range(48000, 2), Some((45, 500)));
+        assert_eq!(vorbis_kbps_range(48000, 6), Some((84, 1440)));
+        assert_eq!(vorbis_kbps_range(8000, 1), Some((8, 42)));
+        assert_eq!(vorbis_kbps_range(96000, 2), None);
+        assert_eq!(vorbis_kbps_range(64000, 6), Some((84, 1440)));
+        assert_eq!(vorbis_kbps_range(6000, 1), None);
+    }
 
     #[test]
     fn silences() {
