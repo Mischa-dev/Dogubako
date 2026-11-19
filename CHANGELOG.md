@@ -43,6 +43,11 @@ campaign are added here as they merge.
 - The install guide no longer lets `tailscale serve` replace a service that
   already uses HTTPS port 443 on the host.
 - Website tools search no longer shows rows it hid.
+- Downloading the `whisper-small.en-tdrz` model (speaker turns) no longer
+  fails with 404: it now comes from `akashmjn/tinydiarize-whisper.cpp` on
+  Hugging Face, and its pinned size is corrected.
+- Detect Faces and Blur Faces reject a threshold below 0.1 with an
+  `invalid_input` error instead of panicking at 0.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 

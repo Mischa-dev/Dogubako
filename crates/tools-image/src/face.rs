@@ -39,6 +39,13 @@ pub fn detect_faces(
     min_face: u32,
     threshold: f64,
 ) -> ToolResult<Vec<Face>> {
+    // rustface panics on a threshold <= 0, so reject it before loading the detector.
+    if !(threshold.is_finite() && threshold >= MIN_THRESHOLD) {
+        return Err(ToolError::invalid(
+            "threshold",
+            format!("must be at least {MIN_THRESHOLD}"),
+        ));
+    }
     let path = model_path(ctx)?;
     let mut det = rustface::create_detector(&path.to_string_lossy())
         .map_err(|e| ToolError::failed(format!("could not load face model: {e}")))?;
@@ -90,6 +97,8 @@ pub fn detect_faces(
         .collect())
 }
 
+const MIN_THRESHOLD: f64 = 0.1;
+
 fn detection_params() -> Vec<ParamSpec> {
     vec![
         ParamSpec::integer("min_face_size")
@@ -99,7 +108,7 @@ fn detection_params() -> Vec<ParamSpec> {
             .advanced(),
         ParamSpec::number("threshold")
             .describe("Detection score threshold (higher = fewer false positives)")
-            .range(0.0, 20.0)
+            .range(MIN_THRESHOLD, 20.0)
             .default_num(2.0)
             .advanced(),
     ]
