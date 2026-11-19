@@ -629,7 +629,7 @@ Also found by: face, detect, faces, find faces, privacy, people
 |---|---|---|---|---|
 | `input` *(required)* | positional | file |  | Image. Accepts image/\*, .png .jpg .jpeg .webp .gif .bmp +31 more. |
 | `min_face_size` | `--min-face-size` | integer 20–2000 | `40` | Smallest face to look for, in pixels. *Advanced.* |
-| `threshold` | `--threshold` | number 0–20 | `2` | Detection score threshold (higher = fewer false positives). *Advanced.* |
+| `threshold` | `--threshold` | number 0.1–20 | `2` | Detection score threshold (higher = fewer false positives). *Advanced.* |
 
 ## Blur Faces
 
@@ -654,7 +654,7 @@ Also found by: blur faces, anonymize, privacy, pixelate faces, censor, gdpr, red
 | `padding` | `--padding` | number 0–100 | `20` | Grow each face box by this percentage. |
 | `extra_regions` | `--extra-regions` | JSON |  | Additional {x, y, width, height} rectangles to redact (first image). *Advanced.* |
 | `min_face_size` | `--min-face-size` | integer 20–2000 | `40` | Smallest face to look for, in pixels. *Advanced.* |
-| `threshold` | `--threshold` | number 0–20 | `2` | Detection score threshold (higher = fewer false positives). *Advanced.* |
+| `threshold` | `--threshold` | number 0.1–20 | `2` | Detection score threshold (higher = fewer false positives). *Advanced.* |
 | `quality` | `--quality` | integer 1–100 | `92` | Quality for lossy formats (JPEG, WebP, AVIF), 1–100. *Advanced.* |
 
 ## Extract Text (OCR)
