@@ -103,7 +103,8 @@ offer) next to its `LICENSE`.
 
 | Model | License | Verification |
 |---|---|---|
-| Whisper ggml (tiny … large-v3-turbo, tinydiarize) | MIT (OpenAI Whisper weights) | SHA-1 published by whisper.cpp |
+| Whisper ggml (tiny … large-v3-turbo) | MIT (OpenAI Whisper weights) | SHA-1 published by whisper.cpp |
+| Whisper small.en + tinydiarize (ggml, from [akashmjn/tinydiarize-whisper.cpp](https://huggingface.co/akashmjn/tinydiarize-whisper.cpp)) | MIT (OpenAI Whisper weights) | SHA-1 pinned |
 | Silero VAD (ggml) | MIT | No upstream checksum; local SHA-256 recorded |
 | SeetaFace frontal detector | BSD-2-Clause | SHA-256 pinned |
 | Piper voices | Per voice (CC0 / CC BY / CC BY-SA …) | No upstream checksum; local SHA-256 recorded |

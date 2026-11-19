@@ -82,7 +82,21 @@ pub static KNOWN_MODELS: &[ModelSpec] = &[
     whisper!("whisper-base.en", "ggml-base.en.bin", "Whisper base (English)", "English-only base model (142 MiB)", 147_964_211, "137c40403d78fd54d454da0f9bd998f78703390c", "en"),
     whisper!("whisper-small", "ggml-small.bin", "Whisper small", "Higher accuracy, slower (466 MiB)", 487_601_967, "55356645c2b361a969dfd0ef2c5a50d530afd8d5", "multilingual"),
     whisper!("whisper-small.en", "ggml-small.en.bin", "Whisper small (English)", "English-only small model (466 MiB)", 487_614_201, "db8a495a91d927739e50b3fc1cc4c6b8f6c2d022", "en"),
-    whisper!("whisper-small.en-tdrz", "ggml-small.en-tdrz.bin", "Whisper small + tinydiarize", "English model that marks speaker turns (465 MiB)", 487_601_967, "b6c6e7e89af1a35c08e6de56b66ca6a02a2fdfa1", "en"),
+    // tinydiarize is published by its author, not in ggerganov/whisper.cpp.
+    ModelSpec {
+        id: "whisper-small.en-tdrz",
+        group: "whisper",
+        name: "Whisper small + tinydiarize",
+        description: "English model that marks speaker turns (465 MiB)",
+        url: "https://huggingface.co/akashmjn/tinydiarize-whisper.cpp/resolve/main/ggml-small.en-tdrz.bin",
+        extra: &[],
+        file_name: "ggml-small.en-tdrz.bin",
+        size_bytes: 487_614_184,
+        sha1: Some("b6c6e7e89af1a35c08e6de56b66ca6a02a2fdfa1"),
+        sha256: None,
+        license: "MIT (OpenAI Whisper weights)",
+        languages: "en",
+    },
     whisper!("whisper-large-v3-turbo-q5_0", "ggml-large-v3-turbo-q5_0.bin", "Whisper large-v3 turbo (q5)", "Best accuracy per MiB, quantized (547 MiB)", 574_041_195, "e050f7970618a659205450ad97eb95a18d69c9ee", "multilingual"),
     whisper!("whisper-large-v3-turbo", "ggml-large-v3-turbo.bin", "Whisper large-v3 turbo", "Highest accuracy (1.5 GiB)", 1_624_555_275, "4af2b29d7ec73d781377bfd1758ca957a807e941", "multilingual"),
     ModelSpec {
@@ -390,5 +404,36 @@ impl ModelRegistry {
             std::fs::rename(&part, self.dir.join(file_name))?;
         }
         Ok(self.file_path(spec))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tinydiarize_model_comes_from_its_own_repo() {
+        let spec = model_spec("whisper-small.en-tdrz").unwrap();
+        assert_eq!(
+            spec.url,
+            "https://huggingface.co/akashmjn/tinydiarize-whisper.cpp/resolve/main/ggml-small.en-tdrz.bin"
+        );
+        assert_eq!(spec.size_bytes, 487_614_184);
+        assert_eq!(spec.sha1, Some("b6c6e7e89af1a35c08e6de56b66ca6a02a2fdfa1"));
+    }
+
+    #[test]
+    fn other_whisper_models_stay_on_whisper_cpp() {
+        for spec in KNOWN_MODELS
+            .iter()
+            .filter(|m| m.group == "whisper" && m.id != "whisper-small.en-tdrz")
+        {
+            assert_eq!(
+                spec.url,
+                format!("{HF_WHISPER}{}", spec.file_name),
+                "{}",
+                spec.id
+            );
+        }
     }
 }
