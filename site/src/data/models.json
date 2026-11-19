@@ -58,7 +58,7 @@
     "group": "whisper",
     "name": "Whisper small + tinydiarize",
     "description": "English model that marks speaker turns (465 MiB)",
-    "size_bytes": 487601967,
+    "size_bytes": 487614184,
     "license": "MIT (OpenAI Whisper weights)",
     "languages": "en"
   },
