@@ -1232,17 +1232,39 @@ fn diff_words_ignoring_all_ws(a: &str, b: &str, timeout: std::time::Duration) ->
         new.changed[t] = group_edited[root(&mut parent, base + t)];
     }
     // Emit each word the first time the op sequence reaches one of its
-    // characters; unchanged words and all whitespace come from the new side.
-    let mut chunks = vec![];
+    // characters; unchanged words and the whitespace around them come from
+    // the new side. A deleted word follows the new side's pending whitespace
+    // and keeps its own surrounding spaces so it never runs into its
+    // neighbours.
+    let mut chunks: Vec<(&'static str, String)> = vec![];
     let (mut old_seen, mut next_new) = (None::<usize>, 0usize);
-    let touch_old = |chunks: &mut Vec<_>, seen: &mut Option<usize>, i: usize| {
+    let is_ws = |t: &str| t.starts_with(char::is_whitespace);
+    let touch_old = |chunks: &mut Vec<_>, seen: &mut Option<usize>, next: &mut usize, i: usize| {
         let t = old.chars[i].0;
-        if *seen != Some(t) {
-            *seen = Some(t);
-            if old.changed[t] {
-                push_chunk(chunks, "delete", old.toks[t]);
-            }
+        if *seen == Some(t) {
+            return;
         }
+        *seen = Some(t);
+        if !old.changed[t] {
+            return;
+        }
+        while *next < new.toks.len() && is_ws(new.toks[*next]) {
+            push_chunk(chunks, "equal", new.toks[*next]);
+            *next += 1;
+        }
+        let mut text = String::new();
+        let ends_in_word = chunks
+            .last()
+            .is_some_and(|(_, s): &(&str, String)| !s.ends_with(char::is_whitespace));
+        if ends_in_word && t > 0 && is_ws(old.toks[t - 1]) {
+            text.push_str(old.toks[t - 1]);
+        }
+        text.push_str(old.toks[t]);
+        match old.toks.get(t + 1) {
+            Some(w) if is_ws(w) && !w.contains('\n') && *next < new.toks.len() => text.push_str(w),
+            _ => {}
+        }
+        push_chunk(chunks, "delete", &text);
     };
     let touch_new = |chunks: &mut Vec<_>, next: &mut usize, i: usize| {
         let t = new.chars[i].0;
@@ -1259,12 +1281,12 @@ fn diff_words_ignoring_all_ws(a: &str, b: &str, timeout: std::time::Duration) ->
     for (tag, o, n) in ops.iter().cloned() {
         if tag == DiffTag::Equal {
             for (i, j) in o.zip(n) {
-                touch_old(&mut chunks, &mut old_seen, i);
+                touch_old(&mut chunks, &mut old_seen, &mut next_new, i);
                 touch_new(&mut chunks, &mut next_new, j);
             }
         } else {
             for i in o {
-                touch_old(&mut chunks, &mut old_seen, i);
+                touch_old(&mut chunks, &mut old_seen, &mut next_new, i);
             }
             for j in n {
                 touch_new(&mut chunks, &mut next_new, j);
@@ -1729,6 +1751,50 @@ mod tests {
             );
             assert_eq!(side(&d, "insert"), no_ws(a), "{a:?} -> {b:?}");
             assert_eq!(side(&d, "delete"), no_ws(b), "{a:?} -> {b:?}");
+        }
+        // Deleted words keep their spacing in the rendered diff.
+        let render = |d: &serde_json::Value| -> Vec<(String, String)> {
+            d["diff"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|c| {
+                    (
+                        c["tag"].as_str().unwrap().to_string(),
+                        c["text"].as_str().unwrap().to_string(),
+                    )
+                })
+                .collect()
+        };
+        let chunks = |v: &[(&str, &str)]| -> Vec<(String, String)> {
+            v.iter()
+                .map(|(t, s)| (t.to_string(), s.to_string()))
+                .collect()
+        };
+        for (a, b, want) in [
+            (
+                "the cat sat",
+                "the cats sat",
+                &[
+                    ("equal", "the "),
+                    ("delete", "cat "),
+                    ("insert", "cats"),
+                    ("equal", " sat"),
+                ][..],
+            ),
+            (
+                "the cat sat",
+                "the sat",
+                &[("equal", "the "), ("delete", "cat "), ("equal", "sat")][..],
+            ),
+            (
+                "the cat",
+                "the",
+                &[("equal", "the"), ("delete", " cat")][..],
+            ),
+        ] {
+            let d = run(a, b, "word", "all").await;
+            assert_eq!(render(&d), chunks(want), "{a:?} -> {b:?}");
         }
         // Real edits are still reported next to ignored whitespace.
         let d = run("the quick  fox ", "the slow fox", "word", "changes").await;
