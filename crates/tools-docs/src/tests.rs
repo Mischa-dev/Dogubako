@@ -467,6 +467,41 @@ async fn text_images_info() {
     assert_eq!(out.artifacts.len(), 1);
     assert!(out.artifacts[0].name.ends_with(".jpg"));
 
+    let out = h
+        .run(
+            "pdf.to_images",
+            json!({"input": [s(&a)], "dpi": 36, "pages": "1", "transparent": true}),
+        )
+        .await
+        .unwrap();
+    let img = image::open(&out.artifacts[0].path).unwrap().to_rgba8();
+    assert_eq!(
+        img.get_pixel(0, 0)[3],
+        0,
+        "background should be transparent"
+    );
+    assert!(
+        img.pixels().any(|p| p[3] > 0),
+        "page text should still be drawn"
+    );
+    let img = image::open(
+        &h.run(
+            "pdf.to_images",
+            json!({"input": [s(&a)], "dpi": 36, "pages": "1"}),
+        )
+        .await
+        .unwrap()
+        .artifacts[0]
+            .path,
+    )
+    .unwrap()
+    .to_rgba8();
+    assert_eq!(
+        img.get_pixel(0, 0)[3],
+        255,
+        "default background stays opaque"
+    );
+
     let out = h.run("pdf.info", json!({"input": s(&a)})).await.unwrap();
     assert_eq!(out.data["pages"], 3);
     assert_eq!(out.data["title"], "Original");
