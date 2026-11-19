@@ -6,6 +6,12 @@ All notable changes to Dogubako are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Downloading the `whisper-small.en-tdrz` model (speaker turns) no longer
+  fails with 404: it now comes from `akashmjn/tinydiarize-whisper.cpp` on
+  Hugging Face, and its pinned size is corrected.
+
 ## [0.1.0-alpha.1] - unreleased
 
 The first public alpha. Full notes: [docs/releases/v0.1.0-alpha.1.md](docs/releases/v0.1.0-alpha.1.md).
