@@ -32,6 +32,7 @@ export default function Qr({ tool, jobId }: { tool: ToolInfo; jobId?: string | n
     im.onload = () => setShown(url);
     im.src = url;
   }, [url]);
+  useEffect(() => setShown(null), [form.resetKey]);
   const textSvg = job?.result?.text_mime === 'image/svg+xml' ? job.result.text : null;
 
   return (
