@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import type { JobView } from '../lib/types';
 import { tool } from './fixtures';
 
@@ -24,6 +24,7 @@ vi.mock('../results/ResultView', () => ({
 }));
 
 const { GenericTool } = await import('../tools/GenericTool');
+const { useToolForm } = await import('../tools/useToolForm');
 
 const counter = tool({
   id: 'text.repeat', name: 'Repeat',
@@ -91,5 +92,14 @@ describe('tool form validation', () => {
     expect(screen.queryByRole('button', { name: 'Reset' })).toBeNull();
     fireEvent.change(countInput(), { target: { value: '5' } });
     expect(screen.getByRole('button', { name: 'Reset' })).toBeTruthy();
+  });
+
+  it('does not validate params the page supplies at run time', async () => {
+    const redact = tool({ id: 'image.redact', name: 'Redact', params: [{ name: 'regions', label: 'Regions', type: 'json', required: true }] });
+    const { result } = renderHook(() => useToolForm(redact, { provided: ['regions'] }));
+    expect(result.current.valid).toBe(true);
+    await act(async () => { await result.current.run({ overrides: { regions: [[0, 0, 1, 1]] } }); });
+    expect(result.current.stale).toBe(false);
+    expect(Object.keys(result.current.shownErrors)).toEqual([]);
   });
 });

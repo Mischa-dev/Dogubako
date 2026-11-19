@@ -98,6 +98,7 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
   const [lastGood, setLastGood] = useState<Record<string, any> | null>(null);
   const formRef = useRef(form);
   formRef.current = form;
+  useEffect(() => { setLastGood(null); setUpdated(null); }, [form.resetKey]);
 
   useEffect(() => {
     let alive = true;

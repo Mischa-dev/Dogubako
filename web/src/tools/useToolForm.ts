@@ -64,7 +64,8 @@ function initialValues(tool: ToolInfo): FormValues {
   return base;
 }
 
-export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null } = {}): ToolForm {
+/** `provided`: params the tool page supplies itself at run time (via `run` overrides), so they are never validated as form fields. */
+export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null; provided?: readonly string[] } = {}): ToolForm {
   const { backend } = useApp();
   const [values, setValues] = useState<FormValues>(() => initialValues(tool));
   const [attempted, setAttempted] = useState(false);
@@ -80,7 +81,12 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null } = {}
     setTouched((t) => (t.has(name) ? t : new Set(t).add(name)));
   }, []);
 
-  const errors = useMemo(() => validate(tool, values), [tool, values]);
+  const providedKey = (opts.provided ?? []).join('\n');
+  const errors = useMemo(() => {
+    const errs = validate(tool, values);
+    for (const k of providedKey ? providedKey.split('\n') : []) delete errs[k];
+    return errs;
+  }, [tool, values, providedKey]);
   const valid = Object.keys(errors).length === 0;
   const shownErrors = useMemo(() => {
     const client = attempted ? errors : Object.fromEntries(Object.entries(errors).filter(([k]) => touched.has(k)));

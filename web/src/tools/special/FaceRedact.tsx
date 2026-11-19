@@ -18,6 +18,9 @@ import { Button, Callout, IconButton, Spinner, cx } from '../../components/ui';
 import { describeError } from '../../lib/errors';
 import { BoxEditor } from './BoxEditor';
 
+/** Drawn on the image and passed to the run as overrides, not edited as form fields. */
+const REGION_PARAMS = ['regions', 'extra_regions'];
+
 /** Image redaction editor: detect faces (optional) → edit boxes → image.redact. */
 export default function FaceRedact({ tool, jobId, head, meta }: SpecialProps) {
   const { toolMap, backend } = useApp();
@@ -27,7 +30,7 @@ export default function FaceRedact({ tool, jobId, head, meta }: SpecialProps) {
   const canDetect = !!detect && detect.availability.available && detect.permitted !== false;
   // The final step always uses image.redact (single image, explicit regions).
   const target = redact && redact.permitted !== false ? redact : tool;
-  const form = useToolForm(target, { jobId });
+  const form = useToolForm(target, { jobId, provided: REGION_PARAMS });
   useToolShortcuts(form, false);
   const detectJob = useJob(backend);
   const [boxes, setBoxes] = useState<Region[]>([]);
