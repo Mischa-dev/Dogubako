@@ -88,6 +88,9 @@ campaign are added here as they merge.
 - Compress Audio keeps M4A levels distinct on low-rate audio by scaling them
   under the AAC encoder's ceiling (with a warning), fixes the Voice label and
   caps MP3 at 320 kbit/s.
+- Convert Audio's Bitrate field stops at 320 kbit/s for MP3 (it accepted up
+  to 640 and failed at Run); numeric params can lower their maximum while
+  another param has a given value (`max_if`).
 - Number fields keep typed decimals and a minus sign on WebKitGTK (Linux
   desktop), and reject non-decimal text such as `0x3`.
 - Live system dashboards mark the last reading out of date when a setting is
