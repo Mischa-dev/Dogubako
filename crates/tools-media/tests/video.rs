@@ -545,6 +545,27 @@ async fn scene_mode_with_no_matches_reports_no_frames() {
             out.warnings
         );
     }
+
+    // Intact headers but unreadable frame data must still fail.
+    let good = video(&h, "good.mp4");
+    let mut bytes = std::fs::read(&good).unwrap();
+    let start = bytes.windows(4).position(|w| w == b"mdat").unwrap() + 204;
+    let mut x: u32 = 1;
+    for b in &mut bytes[start..] {
+        x = x.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+        *b = (x >> 16) as u8;
+    }
+    let corrupt = h.path("corrupt.mp4");
+    std::fs::write(&corrupt, bytes).unwrap();
+    for fmt in ["png", "jpg"] {
+        let res = h
+            .run(
+                "video.extract_frames",
+                json!({"input": [s(&corrupt)], "mode": "scene", "format": fmt}),
+            )
+            .await;
+        assert!(res.is_err(), "{fmt}: corrupt video reported success");
+    }
 }
 
 #[tokio::test]

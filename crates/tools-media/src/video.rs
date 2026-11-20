@@ -1747,13 +1747,21 @@ fn extract_frames() -> Arc<dyn Tool> {
                     .collect();
                 if let Err(e) = res {
                     // Encoders such as mjpeg and libwebp fail at EOF when the
-                    // scene filter passed no frames; that is an empty result.
-                    // "Stream mapping:" shows FFmpeg got past option parsing.
-                    let empty = mode == "scene"
+                    // scene filter passed no frames. Confirm the video decodes
+                    // with a null-output pass before calling it an empty result.
+                    let maybe_empty = mode == "scene"
                         && times.is_empty()
-                        && log.iter().any(|l| l.starts_with("Stream mapping:"))
                         && matches!(e, ToolError::External { .. })
                         && std::fs::read_dir(&dir)?.next().is_none();
+                    let empty = maybe_empty
+                        && Ff::new()
+                            .input(&f.path)
+                            .args(["-an", "-sn", "-vf", &vf.join(",")])
+                            .null_out()
+                            .no_progress()
+                            .run(&ctx)
+                            .await
+                            .is_ok();
                     if !empty {
                         return Err(e);
                     }
