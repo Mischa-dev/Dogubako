@@ -724,6 +724,9 @@ pub struct ToolSpec {
     /// Source: builtin or extension id.
     #[serde(default = "builtin")]
     pub source: String,
+    /// The tool can check its inputs before Run (`Engine::check`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub prechecks: bool,
 }
 
 fn builtin() -> String {
@@ -751,6 +754,7 @@ impl ToolSpec {
             ui: None,
             destructive: false,
             source: builtin(),
+            prechecks: false,
         }
     }
     pub fn describe(mut self, d: &str) -> Self {

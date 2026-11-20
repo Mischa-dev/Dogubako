@@ -145,6 +145,28 @@ async fn run_tool(app: AppHandle, state: State<'_, Desktop>, run_id: String, too
     Ok(view)
 }
 
+/// Pre-run check of a tool's inputs; `None` when they look fine.
+#[tauri::command]
+async fn check_tool(state: State<'_, Desktop>, tool_id: String, params: Map<String, Value>) -> Result<Option<ToolError>, String> {
+    let resolver = LocalFileResolver::unrestricted();
+    let res = state
+        .engine
+        .check(RunRequest {
+            tool_id: &tool_id,
+            params,
+            resolver: &resolver,
+            out_dir: state.output_dir.clone(),
+            permissions: PermissionSet::all(),
+            authorize: None,
+            progress: None,
+            cancel: Default::default(),
+            timeout: None,
+            fs: None,
+        })
+        .await;
+    Ok(res.err())
+}
+
 #[tauri::command]
 fn cancel_run(state: State<'_, Desktop>, run_id: String) {
     // The web app only cancels runs it has started, so a missing entry means
@@ -387,6 +409,7 @@ pub fn run() {
             app_info,
             list_tools,
             run_tool,
+            check_tool,
             cancel_run,
             stage_file,
             file_info,

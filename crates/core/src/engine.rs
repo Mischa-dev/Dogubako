@@ -12,7 +12,10 @@ use crate::params::{validate, FileResolver, Params};
 use crate::policy::{ExecLimits, FsPolicy, NetPolicy, PermissionSet};
 use crate::registry::Registry;
 use crate::spec::{ParamKind, Requirement, ToolSpec};
-use crate::tool::{ContextBuilder, Environment, ProgressFn, ToolOutput};
+use crate::tool::{ContextBuilder, Environment, ProgressFn, Tool, ToolContext, ToolOutput};
+
+/// Upper bound for a tool's pre-run [`Tool::check`].
+const CHECK_TIMEOUT_SECS: u64 = 30;
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::path::PathBuf;
@@ -231,9 +234,9 @@ impl Engine {
         self.registry.specs().map(|s| self.info(s)).collect()
     }
 
-    /// Run a tool. All checks happen here, regardless of the interface.
-    pub async fn run(&self, req: RunRequest<'_>) -> ToolResult<(ToolOutput, RunStats)> {
-        let started = Instant::now();
+    /// Checks shared by [`Engine::run`] and [`Engine::check`]: the tool,
+    /// authorization, platform, permissions, dependencies and params.
+    fn prepare(&self, req: &RunRequest<'_>) -> ToolResult<(Arc<dyn Tool>, Params, FsPolicy)> {
         let tool = self
             .registry
             .find(req.tool_id)
@@ -280,17 +283,20 @@ impl Engine {
         let fs = req.fs.clone().unwrap_or_else(|| self.config.fs.clone());
         let params = validate(&spec, &req.params, req.resolver, &fs)?;
         self.check_requirements(&spec, &params)?;
+        Ok((tool, params, fs))
+    }
 
-        std::fs::create_dir_all(&self.config.temp_root)?;
-        let work = tempfile::Builder::new()
-            .prefix("dgb-run-")
-            .tempdir_in(&self.config.temp_root)?;
-        std::fs::create_dir_all(&req.out_dir)?;
-        let out_dir = std::fs::canonicalize(&req.out_dir)?;
-
-        let ctx = ContextBuilder {
-            work_dir: work.path().to_path_buf(),
-            out_dir: out_dir.clone(),
+    fn context(
+        &self,
+        req: &RunRequest<'_>,
+        work_dir: PathBuf,
+        out_dir: PathBuf,
+        fs: FsPolicy,
+        params: &Params,
+    ) -> ToolContext {
+        ContextBuilder {
+            work_dir,
+            out_dir,
             models_dir: self.config.models_dir.clone(),
             cancel: req.cancel.clone(),
             progress: req.progress.clone(),
@@ -304,7 +310,52 @@ impl Engine {
             input_paths: params.all_files().map(|f| f.path.clone()).collect(),
             worker_exe: self.config.worker_exe.clone(),
         }
-        .build();
+        .build()
+    }
+
+    /// Check a tool's inputs before running it: everything [`Engine::run`]
+    /// rejects up front, plus the tool's own [`Tool::check`]. Writes nothing
+    /// but a scratch directory, removed afterwards.
+    pub async fn check(&self, req: RunRequest<'_>) -> ToolResult<()> {
+        let (tool, params, fs) = self.prepare(&req)?;
+        if !tool.spec().prechecks {
+            return Ok(());
+        }
+        std::fs::create_dir_all(&self.config.temp_root)?;
+        let work = tempfile::Builder::new()
+            .prefix("dgb-check-")
+            .tempdir_in(&self.config.temp_root)?;
+        let dir = work.path().to_path_buf();
+        let ctx = self.context(&req, dir.clone(), dir, fs, &params);
+        let timeout =
+            Duration::from_secs(CHECK_TIMEOUT_SECS).min(req.timeout.unwrap_or(Duration::MAX));
+        tokio::select! {
+            biased;
+            _ = req.cancel.cancelled() => Err(ToolError::Cancelled),
+            r = tool.check(ctx, params) => r,
+            _ = tokio::time::sleep(timeout) => Err(ToolError::Timeout { seconds: timeout.as_secs() }),
+        }
+    }
+
+    /// Run a tool. All checks happen here, regardless of the interface.
+    pub async fn run(&self, req: RunRequest<'_>) -> ToolResult<(ToolOutput, RunStats)> {
+        let started = Instant::now();
+        let (tool, params, fs) = self.prepare(&req)?;
+        let spec = tool.spec().clone();
+
+        std::fs::create_dir_all(&self.config.temp_root)?;
+        let work = tempfile::Builder::new()
+            .prefix("dgb-run-")
+            .tempdir_in(&self.config.temp_root)?;
+        std::fs::create_dir_all(&req.out_dir)?;
+        let out_dir = std::fs::canonicalize(&req.out_dir)?;
+        let ctx = self.context(
+            &req,
+            work.path().to_path_buf(),
+            out_dir.clone(),
+            fs,
+            &params,
+        );
 
         let mut timeout =
             Duration::from_secs(spec.timeout_secs.min(self.config.limits.max_timeout_secs));

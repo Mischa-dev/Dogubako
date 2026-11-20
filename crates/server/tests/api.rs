@@ -13,6 +13,19 @@ use tower::ServiceExt;
 
 fn test_tools() -> Vec<Arc<dyn Tool>> {
     vec![
+        checked_tool(
+            ToolSpec::new("text.checked", "Checked", Category::Text)
+                .describe("Rejects 'bad' before Run")
+                .param(ParamSpec::text("text").required())
+                .text_output("text/plain"),
+            |_c, p| async move {
+                if p.text("text") == "bad" {
+                    return Err(ToolError::invalid("text", "bad is not allowed"));
+                }
+                Ok(())
+            },
+            |_c, p| async move { Ok(ToolOutput::text(p.text("text"))) },
+        ),
         sync_tool(
             ToolSpec::new("text.upper", "Upper", Category::Text)
                 .describe("Uppercase text")
@@ -95,13 +108,18 @@ struct T {
 }
 
 fn setup(auth: AuthMode) -> T {
+    setup_with(auth, |_| {})
+}
+
+fn setup_with(auth: AuthMode, edit: impl FnOnce(&mut ServerConfig)) -> T {
     let dir = tempfile::tempdir().unwrap();
-    let cfg = ServerConfig {
+    let mut cfg = ServerConfig {
         data_dir: dir.path().to_path_buf(),
         auth,
         setup_token: Some("setup-secret".into()),
         ..Default::default()
     };
+    edit(&mut cfg);
     let mut reg = Registry::new();
     reg.register_all(test_tools());
     let state = AppState::build_with(cfg, reg, vec![]).unwrap();
@@ -205,7 +223,7 @@ async fn setup_login_and_csrf() {
     )
     .await;
     assert_eq!(r.status, StatusCode::OK);
-    assert_eq!(r.body["count"], 6);
+    assert_eq!(r.body["count"], 7);
     // POST without CSRF header is rejected
     let r = call(
         &t.app,
@@ -554,6 +572,93 @@ async fn files_isolated_between_principals() {
     // Path traversal in upload names is neutralized
     let f2 = upload(&t, &[("authorization", &ba)], "..%2F..%2Fevil.sh", b"x").await;
     assert_eq!(f2["name"], "evil.sh");
+}
+
+#[tokio::test]
+async fn precheck_reports_problems_before_run() {
+    let t = setup(AuthMode::None);
+    let tools = call(&t.app, Method::GET, "/api/v1/tools", &[], None).await;
+    let find = |id: &str| {
+        tools.body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["id"] == id)
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(find("text.checked")["prechecks"], true);
+    assert!(find("text.upper").get("prechecks").is_none());
+    let check = |id: &str, params: Value| {
+        let uri = format!("/api/v1/tools/{id}/check");
+        let app = t.app.clone();
+        async move {
+            call(
+                &app,
+                Method::POST,
+                &uri,
+                &[],
+                Some(json!({ "params": params })),
+            )
+            .await
+        }
+    };
+    let r = check("text.checked", json!({"text": "bad"})).await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.body["ok"], false);
+    assert_eq!(r.body["error"]["code"], "invalid_input");
+    assert_eq!(r.body["error"]["param"], "text");
+    let r = check("text.checked", json!({"text": "fine"})).await;
+    assert_eq!(r.body, json!({"ok": true}));
+    // Spec validation runs too, and tools without a check pass.
+    let r = check("text.checked", json!({})).await;
+    assert_eq!(r.body["error"]["code"], "invalid_input");
+    let r = check("text.upper", json!({"text": "x"})).await;
+    assert_eq!(r.body["ok"], true);
+    // Nothing ran.
+    let jobs = call(&t.app, Method::GET, "/api/v1/jobs", &[], None).await;
+    assert_eq!(jobs.body["jobs"], json!([]));
+}
+
+#[tokio::test]
+async fn precheck_waits_for_concurrency_permits() {
+    let t = setup_with(AuthMode::None, |c| c.max_concurrent_jobs = 1);
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/dev.sleep/run",
+        &[],
+        Some(json!({"params": {"seconds": 30}, "wait_seconds": 0})),
+    )
+    .await;
+    let id = r.body["id"].as_str().unwrap().to_string();
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let check = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/text.checked/check",
+        &[],
+        Some(json!({"params": {"text": "fine"}})),
+    );
+    tokio::pin!(check);
+    // The running job holds the only permit, so the check waits for it.
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(500), &mut check)
+            .await
+            .is_err()
+    );
+    call(
+        &t.app,
+        Method::POST,
+        &format!("/api/v1/jobs/{id}/cancel"),
+        &[],
+        None,
+    )
+    .await;
+    let r = tokio::time::timeout(std::time::Duration::from_secs(5), check)
+        .await
+        .unwrap();
+    assert_eq!(r.body, json!({"ok": true}));
 }
 
 #[tokio::test]

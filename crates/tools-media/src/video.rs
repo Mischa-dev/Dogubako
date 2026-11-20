@@ -1922,8 +1922,11 @@ pub(crate) async fn make_gif(
                 .args([
                     "-vf",
                     &format!(
-                        "{base},palettegen=max_colors={}:stats_mode={}",
-                        g.colors, g.stats
+                        "{base},palettegen=max_colors={}:reserve_transparent={}:stats_mode={}",
+                        g.colors,
+                        // FFmpeg refuses a transparent slot that would leave fewer than 2 colours.
+                        u8::from(g.colors > 2),
+                        g.stats
                     ),
                     "-frames:v",
                     "1",

@@ -38,6 +38,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/tools", get(list_tools))
         .route("/tools/{id}", get(get_tool))
         .route("/tools/{id}/run", post(run_tool))
+        .route("/tools/{id}/check", post(check_tool))
         .route("/categories", get(categories))
         .route("/jobs", get(list_jobs))
         .route("/jobs/{id}", get(get_job).delete(delete_job))
@@ -402,6 +403,25 @@ fn job_out(s: &AppState, mut j: JobView) -> Value {
         }
     }
     serde_json::to_value(j).unwrap_or_default()
+}
+
+#[derive(Deserialize)]
+struct CheckReq {
+    #[serde(default)]
+    params: Map<String, Value>,
+}
+
+/// Pre-run check of a tool's inputs: `{"ok": true}` or `{"ok": false, "error": ...}`.
+async fn check_tool(
+    State(s): State<AppState>,
+    p: Principal,
+    Path(id): Path<String>,
+    Json(r): Json<CheckReq>,
+) -> Json<Value> {
+    Json(match s.jobs.check(&p, &id, r.params).await {
+        Ok(()) => json!({"ok": true}),
+        Err(e) => json!({"ok": false, "error": e}),
+    })
 }
 
 async fn run_tool(

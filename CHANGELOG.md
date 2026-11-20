@@ -69,6 +69,9 @@ campaign are added here as they merge.
   `pdftocairo`, since `pdftoppm` has no `-transp` flag.
 - Add Subtitles rejects WebM output for sources WebM can't hold as-is (such
   as h264/aac) before running FFmpeg, instead of failing with `Error: external`.
+  The app shows the warning under Format as soon as WebM is picked, before Run:
+  tools can now check their inputs ahead of a run (`POST /tools/{id}/check`,
+  the desktop `check_tool` command).
 - Convert Audio rejects a sample rate the target encoder can't use (MP3 tops
   out at 48 kHz) as invalid input on `sample_rate`.
 - Create Archive and Compress check the compression level against the format
@@ -120,6 +123,12 @@ campaign are added here as they merge.
   error correction level's capacity before Run.
 - Extract Frames in scene mode reports "no frames matched" for JPEG/WebP
   instead of an FFmpeg encoder error.
+- Text to Speech splits long lines before Piper, so max-length text no longer
+  crashes it.
+- Compare Text rounds similarity to three decimals and labels change counts
+  with their unit (lines, tokens or characters).
+- Video to GIF accepts 2 colours, the field's minimum, instead of failing in
+  FFmpeg's palette generator.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 

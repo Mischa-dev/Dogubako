@@ -222,6 +222,30 @@ async fn video_subtitle_tools() {
         .await
         .unwrap_err();
     assert_eq!(e.code(), "invalid_input");
+    // UIs run the same check before Run, so the choice is flagged up front.
+    let e = h
+        .check(
+            "video.subtitles_add",
+            json!({"input": s(&v), "subtitles": [s(&srt)], "format": "webm"}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "invalid_input");
+    assert!(e.to_string().contains("WebM cannot hold h264 video"), "{e}");
+    h.check(
+        "video.subtitles_add",
+        json!({"input": s(&v), "subtitles": [s(&srt)], "format": "mkv"}),
+    )
+    .await
+    .unwrap();
+    assert!(
+        h.engine
+            .registry
+            .find("video.subtitles_add")
+            .unwrap()
+            .spec()
+            .prechecks
+    );
     let e = h
         .run(
             "video.subtitles_add",

@@ -82,6 +82,8 @@ export interface ToolInfo {
   ui?: string;
   destructive: boolean;
   source: string;
+  /** The tool checks its inputs before Run (`Backend.check`). */
+  prechecks?: boolean;
   availability: Availability;
   permitted?: boolean;
   missing_permissions?: string[];

@@ -507,6 +507,35 @@ async fn frames_thumbs_gif() {
 }
 
 #[tokio::test]
+async fn gif_palette_colors_down_to_two() {
+    let h = harness();
+    need!(h, "video.to_gif");
+    if !palettegen_allows_two_colors() {
+        return;
+    }
+    let v = video(&h, "in.mp4");
+    for colors in [2, 16] {
+        let out = h
+            .run(
+                "video.to_gif",
+                json!({"input": [s(&v)], "duration": "1", "width": 80, "fps": 5, "colors": colors}),
+            )
+            .await
+            .unwrap_or_else(|e| panic!("colors={colors}: {e:?}"));
+        let g = &out.artifacts[0];
+        assert_eq!(g.mime, "image/gif");
+        assert_eq!(dims(&g.path).0, 80);
+        let (_, _, px) = first_frame_rgb(&g.path);
+        let distinct: std::collections::HashSet<&[u8]> = px.chunks(3).collect();
+        assert!(
+            distinct.len() <= colors,
+            "colors={colors}: {} colours",
+            distinct.len()
+        );
+    }
+}
+
+#[tokio::test]
 async fn scene_mode_with_no_matches_reports_no_frames() {
     let h = harness();
     need!(h, "video.extract_frames");

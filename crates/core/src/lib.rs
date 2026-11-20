@@ -36,7 +36,7 @@ pub mod prelude {
         ToolSpec,
     };
     pub use crate::tool::{
-        async_tool, sync_tool, Artifact, Environment, Tool, ToolContext, ToolOutput,
+        async_tool, checked_tool, sync_tool, Artifact, Environment, Tool, ToolContext, ToolOutput,
     };
     pub use crate::util::{human_size, suffixed, with_extension};
     pub use serde_json::{json, Value};

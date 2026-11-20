@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import subprocess
 import sys
@@ -114,7 +115,7 @@ def rust_section() -> list[str]:
         if not manifest.exists():
             continue
         txt = sh(
-            "cargo", "tree", "--locked", "--manifest-path", str(manifest),
+            "cargo", "tree", "--locked", "--color", "never", "--manifest-path", str(manifest),
             "--workspace", "-e", "normal", "--prefix", "none",
             # The platforms this release ships: macOS app, Linux homelab image.
             "--target", "aarch64-apple-darwin", "--target", "x86_64-unknown-linux-gnu",
@@ -204,6 +205,8 @@ def main() -> int:
         strip = lambda s: [l.rsplit("|", 2)[0] if l.startswith("| ") and l.count("|") == 5 else l for l in s.splitlines()]
         if strip(out.read_text()) != strip(text):
             print(f"{out} is stale: run packaging/release/notices.py", file=sys.stderr)
+            diff = difflib.unified_diff(strip(out.read_text()), strip(text), "committed", "generated", lineterm="")
+            print("\n".join(list(diff)[:200]), file=sys.stderr)
             return 1
         return 0
     out.write_text(text)
