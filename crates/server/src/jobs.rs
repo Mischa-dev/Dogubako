@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokio::sync::{watch, Semaphore};
+use tokio::sync::{watch, OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 struct Live {
@@ -81,6 +81,28 @@ impl JobManager {
 
     /// The user's limit is one semaphore shared by all their sessions and
     /// tokens; a token scope with a narrower limit adds a second one.
+    /// The token, user and global concurrency permits a run holds;
+    /// `None` when cancelled while waiting.
+    async fn permits(
+        &self,
+        p: &Principal,
+        cancel: &CancellationToken,
+    ) -> Option<Vec<OwnedSemaphorePermit>> {
+        let (user_sem, token_sem) = self.user_sems(p);
+        tokio::select! {
+            r = async {
+                let mut held = vec![];
+                if let Some(s) = token_sem {
+                    held.extend(s.acquire_owned().await.ok());
+                }
+                held.extend(user_sem.acquire_owned().await.ok());
+                held.extend(self.global.clone().acquire_owned().await.ok());
+                held
+            } => Some(r),
+            _ = cancel.cancelled() => None,
+        }
+    }
+
     fn user_sems(&self, p: &Principal) -> (Arc<Semaphore>, Option<Arc<Semaphore>>) {
         let n = p.concurrency(self.per_user_default);
         let user = self.sem(format!("user:{}:{n}", p.user_id), n);
@@ -104,6 +126,10 @@ impl JobManager {
         tool_id: &str,
         params: Map<String, Value>,
     ) -> Result<(), ToolError> {
+        // Checks may probe files (ffprobe), so they wait for the same
+        // concurrency permits a run takes.
+        let cancel = CancellationToken::new();
+        let _permits = self.permits(p, &cancel).await;
         let resolver = self.storage.resolver(&p.user_id);
         let principal = p.clone();
         let authorize = move |s: &dogubako_core::spec::ToolSpec| principal.can_use(s);
@@ -121,7 +147,7 @@ impl JobManager {
                 permissions: p.permissions(self.host_fs_enabled),
                 authorize: Some(&authorize),
                 progress: None,
-                cancel: CancellationToken::new(),
+                cancel,
                 timeout: Some(self.max_job),
                 fs,
             })
@@ -215,19 +241,7 @@ impl JobManager {
         via: String,
         quota: u64,
     ) {
-        let (user_sem, token_sem) = self.user_sems(&p);
-        let permits = tokio::select! {
-            r = async {
-                let t = match token_sem {
-                    Some(s) => Some(s.acquire_owned().await),
-                    None => None,
-                };
-                let u = user_sem.acquire_owned().await;
-                let g = self.global.clone().acquire_owned().await;
-                (t, u, g)
-            } => Some(r),
-            _ = cancel.cancelled() => None,
-        };
+        let permits = self.permits(&p, &cancel).await;
         let mut view = tx.borrow().clone();
         if permits.is_none() {
             view.status = JobStatus::Cancelled;
