@@ -79,6 +79,41 @@ fn vorbis_kbps_range(rate: u32, channels: u32) -> Option<(u32, u32)> {
     Some(((lo * f).ceil() as u32, (hi * f).floor() as u32))
 }
 
+/// Sample rates (Hz) a format's encoder accepts among the offered choices, or
+/// `None` when it takes any of them. Ogg Vorbis is handled separately because
+/// its limit depends on the bitrate mode.
+fn encoder_rates(fmt: &str) -> Option<&'static [u32]> {
+    const UP_TO_48K: &[u32] = &[8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000];
+    match fmt {
+        "mp3" | "wma" => Some(UP_TO_48K),
+        "m4a" => Some(&[
+            8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000,
+        ]),
+        "opus" => Some(&[8000, 16000, 24000, 48000]),
+        "ac3" => Some(&[32000, 44100, 48000]),
+        _ => None,
+    }
+}
+
+/// Why `fmt` cannot encode at `rate`, or `None` when it can.
+fn unsupported_rate(fmt: &str, rate: u32) -> Option<String> {
+    let rates = encoder_rates(fmt)?;
+    if rates.contains(&rate) {
+        return None;
+    }
+    let khz = |r: u32| (r as f64 / 1000.0).to_string();
+    let name = FORMATS.iter().find(|f| f.0 == fmt).map_or(fmt, |f| f.1);
+    let list = rates.iter().map(|&r| khz(r)).collect::<Vec<_>>().join(", ");
+    let mut msg = format!(
+        "{name} cannot encode at {} kHz; it supports {list} kHz",
+        khz(rate)
+    );
+    if rates.last().is_some_and(|&max| rate > max) {
+        msg.push_str(". For higher rates pick FLAC, WAV, AIFF or Apple Lossless");
+    }
+    Some(msg)
+}
+
 /// (extension, encoder, codec args) for a target format.
 fn format_args(
     fmt: &str,
@@ -273,6 +308,9 @@ fn convert() -> Arc<dyn Tool> {
         let files = p.files("input").to_vec();
         let want_rate = p.str_or("sample_rate", "keep").parse::<u32>().ok();
         let want_ch = p.str_or("channels", "keep").parse::<u32>().ok();
+        if let Some(msg) = want_rate.and_then(|r| unsupported_rate(&fmt, r)) {
+            return Err(ToolError::invalid("sample_rate", msg));
+        }
         let vorbis_cbr = fmt == "ogg" && p.opt_int("vbr_quality").is_none();
         if vorbis_cbr && want_rate.is_some_and(|r| vorbis_kbps_range(r, 2).is_none()) {
             return Err(ToolError::invalid(
@@ -2081,6 +2119,31 @@ mod tests {
         assert_eq!(vorbis_kbps_range(96000, 2), None);
         assert_eq!(vorbis_kbps_range(64000, 6), Some((84, 1440)));
         assert_eq!(vorbis_kbps_range(6000, 1), None);
+    }
+
+    #[test]
+    fn mp3_rate_limits() {
+        assert_eq!(unsupported_rate("mp3", 48000), None);
+        assert_eq!(unsupported_rate("mp3", 8000), None);
+        for r in [88200, 96000, 192000] {
+            let msg = unsupported_rate("mp3", r).unwrap();
+            assert!(msg.starts_with("MP3 cannot encode at "), "{msg}");
+            assert!(
+                msg.contains("8, 11.025, 16, 22.05, 24, 32, 44.1, 48 kHz"),
+                "{msg}"
+            );
+            assert!(msg.contains("FLAC"), "{msg}");
+        }
+        assert_eq!(unsupported_rate("m4a", 96000), None);
+        assert!(unsupported_rate("m4a", 192000).is_some());
+        assert!(unsupported_rate("opus", 44100)
+            .unwrap()
+            .starts_with("Opus cannot encode at 44.1 kHz"));
+        assert!(!unsupported_rate("ac3", 8000)
+            .unwrap()
+            .contains("higher rates"));
+        assert_eq!(unsupported_rate("flac", 192000), None);
+        assert_eq!(unsupported_rate("ogg", 96000), None);
     }
 
     #[test]
