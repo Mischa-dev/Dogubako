@@ -143,6 +143,7 @@ mark.match.alt { background: var(--mark-2); box-shadow: 0 0 0 1px color-mix(in s
 .artifact-actions { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .preview { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .preview-toolbar { display: flex; justify-content: flex-start; }
+.preview-note { margin: 0; }
 .img-preview { display: grid; place-items: center; border-radius: var(--r-md); border: 1px solid var(--border); overflow: hidden; }
 .img-preview img { max-height: 520px; object-fit: contain; }
 .media { width: 100%; }

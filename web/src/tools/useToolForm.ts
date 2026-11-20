@@ -7,6 +7,7 @@ import {
 } from '../lib/schema';
 import { clearToolParams, loadToolParams, pendingInput, pendingParams, prefs, saveToolParams } from '../lib/store';
 import { acceptMatches } from '../form/FileField';
+import { stillFormat } from '../lib/stillImage';
 import type { Setter } from '../form/Field';
 import type { InputContext } from '../results/DataViews';
 import { useJob } from './useJob';
@@ -178,7 +179,7 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null; provi
     let imageUrl: string | undefined;
     for (const p of tool.params) {
       if (p.type !== 'file') continue;
-      const it = ((values[p.name] as FileItem[]) ?? []).find((i) => i.status === 'ready' && i.mime.startsWith('image/') && i.mime !== 'image/svg+xml');
+      const it = ((values[p.name] as FileItem[]) ?? []).find((i) => i.status === 'ready' && i.mime.startsWith('image/') && i.mime !== 'image/svg+xml' && !stillFormat(i.mime, i.name));
       if (it) {
         imageUrl = it.localUrl ?? backend.fileUrl({ ref: it.ref!, name: it.name, size: it.size, mime: it.mime });
         break;

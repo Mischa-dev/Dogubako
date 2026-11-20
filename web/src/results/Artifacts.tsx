@@ -6,6 +6,7 @@ import { asServer } from '../lib/backend';
 import { formatBytes } from '../lib/format';
 import { Button, IconButton, Segmented, Spinner, cx } from '../components/ui';
 import { fileKindIcon } from '../form/FileField';
+import { PlayableMedia, PREVIEW_UNSUPPORTED, useStillImage } from './MediaPreview';
 
 const TEXTY = /^(text\/|application\/(json|xml|x-subrip|yaml|toml|javascript|sql|x-ndjson))/;
 const MAX_TEXT_PREVIEW = 512 * 1024;
@@ -92,15 +93,15 @@ function Preview({ a, kind, url, inputImage }: { a: Artifact; kind: NonNullable<
               ]} />
             </div>
           )}
-          {mode === 'compare' && inputImage ? <BeforeAfter before={inputImage} after={url} /> : (
-            <div className="img-preview checker"><img src={url} alt={a.name} /></div>
+          {mode === 'compare' && inputImage ? <BeforeAfter before={inputImage} after={url} afterMime={a.mime} afterName={a.name} /> : (
+            <ResultImage url={url} a={a} />
           )}
         </div>
       );
     case 'audio':
-      return <div className="preview"><audio controls src={url} preload="metadata" className="media" aria-label={a.name} /></div>;
+      return <div className="preview"><PlayableMedia kind="audio" controls url={url} name={a.name} className="media" /></div>;
     case 'video':
-      return <div className="preview"><video controls src={url} preload="metadata" className="media media-video" aria-label={a.name} /></div>;
+      return <div className="preview"><PlayableMedia kind="video" controls url={url} name={a.name} className="media media-video" /></div>;
     case 'pdf':
       return (
         <div className="preview">
@@ -111,6 +112,14 @@ function Preview({ a, kind, url, inputImage }: { a: Artifact; kind: NonNullable<
     case 'text':
       return <TextFilePreview url={url} />;
   }
+}
+
+function ResultImage({ url, a }: { url: string; a: Artifact }) {
+  const { src, failed } = useStillImage(url, a.mime, a.name);
+  const [broken, setBroken] = useState<string | null>(null);
+  if (failed || (src && broken === src)) return <p className="muted small preview-note">{PREVIEW_UNSUPPORTED}</p>;
+  if (!src) return <Spinner />;
+  return <div className="img-preview checker"><img src={src} alt={a.name} onError={() => setBroken(src)} /></div>;
 }
 
 function TextFilePreview({ url }: { url: string }) {
@@ -130,7 +139,8 @@ function TextFilePreview({ url }: { url: string }) {
 }
 
 /** Draggable before/after comparison slider. */
-export function BeforeAfter({ before, after }: { before: string; after: string }) {
+export function BeforeAfter({ before, after, afterMime = '', afterName = '' }: { before: string; after: string; afterMime?: string; afterName?: string }) {
+  const shown = useStillImage(after, afterMime, afterName);
   const [pos, setPos] = useState(50);
   // Show both at the original's pixel size (never upscale beyond it) so quality differences are visible.
   const [maxW, setMaxW] = useState<number | undefined>(undefined);
@@ -150,7 +160,7 @@ export function BeforeAfter({ before, after }: { before: string; after: string }
       onPointerMove={(e) => drag.current && update(e.clientX)}
       onPointerUp={() => { drag.current = false; }}
     >
-      <img src={after} alt="After" className="ba-img" draggable={false} />
+      {shown.failed ? <p className="muted small preview-note ba-img">{PREVIEW_UNSUPPORTED}</p> : <img src={shown.src} alt="After" className="ba-img" draggable={false} />}
       <div className="ba-before" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
         <img src={before} alt="Before" className="ba-img" draggable={false} onLoad={(e) => setMaxW(e.currentTarget.naturalWidth || undefined)} />
       </div>

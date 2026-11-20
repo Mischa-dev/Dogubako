@@ -16,10 +16,11 @@ function guessMime(name: string): string {
   const map: Record<string, string> = {
     png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
     svg: 'image/svg+xml', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff', ico: 'image/x-icon',
+    tga: 'image/x-tga', qoi: 'image/qoi', pbm: 'image/x-portable-bitmap', pgm: 'image/x-portable-graymap', ppm: 'image/x-portable-pixmap', pnm: 'image/x-portable-anymap',
     mp4: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska', mov: 'video/quicktime',
-    mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', flac: 'audio/flac', m4a: 'audio/mp4', opus: 'audio/opus',
+    mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', flac: 'audio/flac', m4a: 'audio/mp4', opus: 'audio/ogg', aac: 'audio/aac',
     pdf: 'application/pdf', json: 'application/json', txt: 'text/plain', csv: 'text/csv', md: 'text/markdown',
-    html: 'text/html', zip: 'application/zip', vtt: 'text/vtt', srt: 'application/x-subrip',
+    html: 'text/html', zip: 'application/zip', vtt: 'text/vtt', srt: 'application/x-subrip', ass: 'text/x-ssa', ssa: 'text/x-ssa',
   };
   return map[ext] ?? 'application/octet-stream';
 }
