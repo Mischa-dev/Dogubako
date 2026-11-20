@@ -1,4 +1,4 @@
-import { memo, useId, useState } from 'react';
+import { memo, useEffect, useId, useRef, useState } from 'react';
 import { Eye, EyeOff, FolderOpen } from 'lucide-react';
 import type { ParamSpec } from '../lib/types';
 import { isSliderRange, type FileItem } from '../lib/schema';
@@ -59,6 +59,78 @@ function toHex6(v: string): string {
   if (/^[0-9a-f]{3,4}$/i.test(s)) s = s.slice(0, 3).split('').map((c) => c + c).join('');
   if (/^[0-9a-f]{8}$/i.test(s)) s = s.slice(0, 6);
   return /^[0-9a-f]{6}$/i.test(s) ? `#${s.toLowerCase()}` : '#000000';
+}
+
+const COMPLETE_NUM = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
+
+function decimals(n: number): number {
+  const m = String(n).match(/\.(\d+)$/);
+  return m ? m[1].length : 0;
+}
+
+/**
+ * A text input for numbers. `type="number"` lets the engine sanitize partial
+ * input such as `1.` or `-` to an empty value (WebKitGTK does, which loses the
+ * keystroke), so the typed text is kept as-is and only complete numbers are
+ * committed as numbers; anything else is committed as text for validation.
+ */
+function NumberInput({ common, integer, min, max, step, value, placeholder, onChange }: {
+  common: Record<string, unknown>; integer: boolean; min?: number; max?: number; step: number;
+  value: unknown; placeholder?: string; onChange: (v: unknown) => void;
+}) {
+  const shown = value === '' || value == null ? '' : String(value);
+  const [draft, setDraft] = useState(shown);
+  const committed = useRef<unknown>(value);
+  useEffect(() => {
+    if (!Object.is(value, committed.current)) {
+      committed.current = value;
+      setDraft(shown);
+    }
+  }, [value, shown]);
+
+  const commit = (s: string) => {
+    const t = s.trim();
+    const v = t === '' ? '' : COMPLETE_NUM.test(t) ? Number(t) : s;
+    committed.current = v;
+    onChange(v);
+  };
+  const type = (s: string) => { setDraft(s); commit(s); };
+  const stepBy = (dir: 1 | -1) => {
+    const cur = Number(draft.trim());
+    const base = draft.trim() !== '' && Number.isFinite(cur) ? cur : min ?? 0;
+    let next = Number((base + dir * step).toFixed(Math.max(decimals(step), decimals(base))));
+    if (min != null && next < min) next = min;
+    if (max != null && next > max) next = max;
+    type(String(next));
+  };
+
+  return (
+    <input
+      {...common}
+      className="input input-num"
+      type="text"
+      role="spinbutton"
+      inputMode={integer ? 'numeric' : 'decimal'}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={typeof value === 'number' ? value : undefined}
+      autoComplete="off"
+      spellCheck={false}
+      value={draft}
+      placeholder={placeholder}
+      onChange={(e) => type(e.target.value)}
+      onBlur={() => {
+        const t = draft.trim();
+        if (COMPLETE_NUM.test(t) && String(Number(t)) !== draft) setDraft(String(Number(t)));
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          stepBy(e.key === 'ArrowUp' ? 1 : -1);
+        }
+      }}
+    />
+  );
 }
 
 export const Field = memo(function Field({ param: p, value, error, onChange, mono }: FieldProps) {
@@ -126,7 +198,6 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
       const span = (p.max ?? 100) - (p.min ?? 0);
       const step = p.type === 'integer' ? 1 : p.type === 'number' && p.step ? p.step : span <= 2 ? 0.01 : span <= 20 ? 0.1 : 1;
       const num = value === '' || value == null ? '' : String(value);
-      const onNum = (s: string) => set(s === '' ? '' : s.match(/^-?\d*\.?\d*(e-?\d+)?$/i) && !isNaN(Number(s)) ? Number(s) : s);
       const placeholder = p.min != null && p.max != null ? `${p.min}–${p.max}` : p.min != null ? `≥ ${p.min}` : p.max != null ? `≤ ${p.max}` : undefined;
       return (
         <FieldShell param={p} id={id} error={error} descId={descId}>
@@ -145,17 +216,15 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
                 style={{ ['--pct' as any]: `${(((Number(num || p.min) - p.min!) / span) * 100).toFixed(1)}%` }}
               />
             )}
-            <input
-              {...common}
-              className="input input-num"
-              type="number"
-              inputMode={p.type === 'integer' ? 'numeric' : 'decimal'}
+            <NumberInput
+              common={common}
+              integer={p.type === 'integer'}
               min={p.min}
               max={p.max}
               step={step}
-              value={num}
+              value={value}
               placeholder={placeholder}
-              onChange={(e) => onNum(e.target.value)}
+              onChange={set}
             />
           </div>
         </FieldShell>
