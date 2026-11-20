@@ -1030,7 +1030,7 @@ pub(crate) async fn burn_subtitles(
     let ext = out_ext_hint.unwrap_or(re.ext);
     let out = out_path(ctx, f, "burned", ext);
     let mut ff = Ff::new().input(&f.path).cwd(&dir);
-    let bitmap_stream = stream.and_then(|k| {
+    let bitmap_stream = stream.filter(|_| sub_file.is_none()).and_then(|k| {
         let s = pr
             .subtitle_streams()
             .get(k)
