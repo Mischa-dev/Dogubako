@@ -1161,21 +1161,8 @@ fn diff_words_ignoring_all_ws(a: &str, b: &str, timeout: std::time::Duration) ->
         start..end
     };
     let deadline = std::time::Instant::now() + timeout;
-    // Whole words are matched first so exact words anchor the alignment; the
-    // characters are only diffed inside the regions between those anchors,
-    // which still lets "helloworld" match "hello world".
-    let okeys: Vec<&str> = ow.iter().map(|w| old.toks[w.0]).collect();
-    let nkeys: Vec<&str> = nw.iter().map(|w| new.toks[w.0]).collect();
-    let mut ops = vec![];
-    for op in
-        similar::capture_diff_slices_deadline(Algorithm::Myers, &okeys, &nkeys, Some(deadline))
-    {
-        let (tag, o, n) = op.as_tag_tuple();
-        let (oc, nc) = (span(&ow, ok.len(), o), span(&nw, nk.len(), n));
-        if tag == DiffTag::Equal {
-            ops.push((tag, oc, nc));
-            continue;
-        }
+    type Ops = Vec<(DiffTag, std::ops::Range<usize>, std::ops::Range<usize>)>;
+    let char_ops = |oc: std::ops::Range<usize>, nc: std::ops::Range<usize>, ops: &mut Ops| {
         for sub in similar::capture_diff_slices_deadline(
             Algorithm::Myers,
             &ok[oc.clone()],
@@ -1189,48 +1176,81 @@ fn diff_words_ignoring_all_ws(a: &str, b: &str, timeout: std::time::Duration) ->
                 sn.start + nc.start..sn.end + nc.start,
             ));
         }
+    };
+    // Two alignments: one anchored on whole words (so "cat" -> "cats" does
+    // not drift into neighbouring words) and a plain character alignment (so
+    // "a aa" -> "aa a" stays equal); the one marking fewer words wins.
+    let okeys: Vec<&str> = ow.iter().map(|w| old.toks[w.0]).collect();
+    let nkeys: Vec<&str> = nw.iter().map(|w| new.toks[w.0]).collect();
+    let mut anchored: Ops = vec![];
+    for op in
+        similar::capture_diff_slices_deadline(Algorithm::Myers, &okeys, &nkeys, Some(deadline))
+    {
+        let (tag, o, n) = op.as_tag_tuple();
+        let (oc, nc) = (span(&ow, ok.len(), o), span(&nw, nk.len(), n));
+        if tag == DiffTag::Equal {
+            anchored.push((tag, oc, nc));
+        } else {
+            char_ops(oc, nc, &mut anchored);
+        }
     }
+    let mut plain: Ops = vec![];
+    char_ops(0..ok.len(), 0..nk.len(), &mut plain);
     // Words linked by matching characters form one group (old words are nodes
     // 0..n, new words follow). A group with any edited character is replaced
     // as a whole on both sides, so partial in-word edits stay consistent.
-    let base = old.toks.len();
-    let mut parent: Vec<usize> = (0..base + new.toks.len()).collect();
-    fn root(parent: &mut [usize], mut x: usize) -> usize {
-        while parent[x] != x {
-            parent[x] = parent[parent[x]];
-            x = parent[x];
+    let mark = |ops: &Ops| -> (Vec<bool>, Vec<bool>) {
+        fn root(parent: &mut [usize], mut x: usize) -> usize {
+            while parent[x] != x {
+                parent[x] = parent[parent[x]];
+                x = parent[x];
+            }
+            x
         }
-        x
-    }
-    let mut edited = vec![false; parent.len()];
-    for (tag, o, n) in ops.iter().cloned() {
-        if tag == DiffTag::Equal {
-            for (i, j) in o.zip(n) {
-                let (x, y) = (
-                    root(&mut parent, old.chars[i].0),
-                    root(&mut parent, base + new.chars[j].0),
-                );
-                parent[x] = y;
-            }
-        } else {
-            for i in o {
-                edited[old.chars[i].0] = true;
-            }
-            for j in n {
-                edited[base + new.chars[j].0] = true;
+        let base = old.toks.len();
+        let mut parent: Vec<usize> = (0..base + new.toks.len()).collect();
+        let mut edited = vec![false; parent.len()];
+        for (tag, o, n) in ops.iter().cloned() {
+            if tag == DiffTag::Equal {
+                for (i, j) in o.zip(n) {
+                    let (x, y) = (
+                        root(&mut parent, old.chars[i].0),
+                        root(&mut parent, base + new.chars[j].0),
+                    );
+                    parent[x] = y;
+                }
+            } else {
+                for i in o {
+                    edited[old.chars[i].0] = true;
+                }
+                for j in n {
+                    edited[base + new.chars[j].0] = true;
+                }
             }
         }
-    }
-    let mut group_edited = vec![false; parent.len()];
-    for (x, _) in edited.iter().enumerate().filter(|(_, &e)| e) {
-        group_edited[root(&mut parent, x)] = true;
-    }
-    for t in 0..old.toks.len() {
-        old.changed[t] = group_edited[root(&mut parent, t)];
-    }
-    for t in 0..new.toks.len() {
-        new.changed[t] = group_edited[root(&mut parent, base + t)];
-    }
+        let mut group_edited = vec![false; parent.len()];
+        for (x, _) in edited.iter().enumerate().filter(|(_, &e)| e) {
+            group_edited[root(&mut parent, x)] = true;
+        }
+        let side = |parent: &mut Vec<usize>, off: usize, len: usize| {
+            (0..len)
+                .map(|t| group_edited[root(parent, off + t)])
+                .collect::<Vec<_>>()
+        };
+        (
+            side(&mut parent, 0, base),
+            side(&mut parent, base, new.toks.len()),
+        )
+    };
+    let changed_words = |m: &(Vec<bool>, Vec<bool>)| m.0.iter().chain(&m.1).filter(|&&c| c).count();
+    let (am, pm) = (mark(&anchored), mark(&plain));
+    let (ops, (oc, nc)) = if changed_words(&pm) < changed_words(&am) {
+        (plain, pm)
+    } else {
+        (anchored, am)
+    };
+    old.changed = oc;
+    new.changed = nc;
     // Emit each word the first time the op sequence reaches one of its
     // characters; unchanged words and the whitespace around them come from
     // the new side. A deleted word follows the new side's pending whitespace
@@ -1751,6 +1771,25 @@ mod tests {
             );
             assert_eq!(side(&d, "insert"), no_ws(a), "{a:?} -> {b:?}");
             assert_eq!(side(&d, "delete"), no_ws(b), "{a:?} -> {b:?}");
+        }
+        // Repeated words with shifted whitespace boundaries stay equal.
+        for (a, b, ins, del) in [
+            ("a aa", "aa a", 0, 0),
+            ("ab a b", "a ba b", 0, 0),
+            ("a aa x", "aa a y", 1, 1),
+        ] {
+            let d = run(a, b, "word", "all").await;
+            assert_eq!(
+                (d["insertions"].as_u64(), d["deletions"].as_u64()),
+                (Some(ins), Some(del)),
+                "{a:?} -> {b:?}"
+            );
+            assert_eq!(side(&d, "insert"), no_ws(a), "{a:?} -> {b:?}");
+            assert_eq!(side(&d, "delete"), no_ws(b), "{a:?} -> {b:?}");
+            if ins == 0 {
+                assert_eq!(d["similarity"], 1.0, "{a:?} -> {b:?}");
+                assert_eq!(changed_side(&d), b);
+            }
         }
         // Deleted words keep their spacing in the rendered diff.
         let render = |d: &serde_json::Value| -> Vec<(String, String)> {
