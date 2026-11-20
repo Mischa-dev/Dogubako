@@ -115,7 +115,7 @@ def rust_section() -> list[str]:
         if not manifest.exists():
             continue
         txt = sh(
-            "cargo", "tree", "--locked", "--manifest-path", str(manifest),
+            "cargo", "tree", "--locked", "--color", "never", "--manifest-path", str(manifest),
             "--workspace", "-e", "normal", "--prefix", "none",
             # The platforms this release ships: macOS app, Linux homelab image.
             "--target", "aarch64-apple-darwin", "--target", "x86_64-unknown-linux-gnu",
