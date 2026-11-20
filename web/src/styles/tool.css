@@ -220,6 +220,7 @@ mark.match.alt { background: var(--mark-2); box-shadow: 0 0 0 1px color-mix(in s
 .dash-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .dash-updated { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
 .dash { display: flex; flex-direction: column; gap: 14px; }
+.dash-output { display: flex; flex-direction: column; gap: 14px; }
 .dash-note { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--text-3); }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .stat-card { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); min-width: 0; }
@@ -249,3 +250,9 @@ mark.match.alt { background: var(--mark-2); box-shadow: 0 0 0 1px color-mix(in s
 .code-view .dl-del { color: var(--del-text); background: var(--del-bg); display: inline-block; min-width: 100%; }
 .code-view .dl-hunk { color: var(--accent-text); }
 .code-view .dl-meta { color: var(--text-3); }
+
+/* A result kept on screen while the form is invalid. */
+.stale-notice { display: flex; align-items: flex-start; gap: 6px; margin: 0 0 12px; padding: 8px 10px; border: 1px solid var(--danger-border); border-radius: var(--r-md); background: var(--danger-soft); color: var(--danger); font-size: var(--fs-sm); font-weight: 500; }
+.stale-notice svg { margin-top: 2px; flex: none; }
+.is-stale .result, .is-stale .qr-preview, .is-stale .dash, .is-stale.tool-stage { opacity: 0.45; filter: grayscale(0.6); transition: opacity 160ms var(--ease); }
+.run-msg-error { color: var(--danger); font-weight: 500; }

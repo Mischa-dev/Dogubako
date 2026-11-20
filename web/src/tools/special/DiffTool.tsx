@@ -4,7 +4,9 @@ import { ParamForm } from '../../form/ParamForm';
 import { useToolForm } from '../useToolForm';
 import { useLiveRun, useToolShortcuts } from '../GenericTool';
 import { ResultView } from '../../results/ResultView';
-import { RunBar } from '../RunBar';
+import { ResetButton, RunBar } from '../RunBar';
+import { cx } from '../../components/ui';
+import { StaleNotice } from '../../results/Stale';
 
 /** Two side-by-side inputs (texts or files) and a rendered diff. Text inputs re-run live. */
 export default function DiffTool({ tool, jobId }: { tool: ToolInfo; jobId?: string | null }) {
@@ -22,10 +24,11 @@ export default function DiffTool({ tool, jobId }: { tool: ToolInfo; jobId?: stri
         ))}
       </div>
       <div className="diff-options">
-        <ParamForm params={tool.params} exclude={pair.map((p) => p.name)} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="diff" />
-        {!textMode && <RunBar form={form} label="Compare" disabled={!tool.availability.available} />}
+        <ParamForm resetKey={form.resetKey} params={tool.params} exclude={pair.map((p) => p.name)} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="diff" />
+        {textMode ? <ResetButton form={form} /> : <RunBar form={form} label="Compare" disabled={!tool.availability.available} />}
       </div>
-      <div className="tool-output">
+      <div className={cx('tool-output', form.stale && 'is-stale')}>
+        <StaleNotice stale={form.stale} />
         {job && <ResultView job={job} tool={tool} input={form.input} live={textMode} dataFirst />}
       </div>
     </div>

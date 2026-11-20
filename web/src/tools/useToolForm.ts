@@ -5,7 +5,7 @@ import {
   defaultValues, fromRunParams, fileItemFromRef, persistableValues, toRunParams, validate,
   type FileItem, type FormErrors, type FormValues,
 } from '../lib/schema';
-import { loadToolParams, pendingInput, pendingParams, prefs, saveToolParams } from '../lib/store';
+import { clearToolParams, loadToolParams, pendingInput, pendingParams, prefs, saveToolParams } from '../lib/store';
 import { acceptMatches } from '../form/FileField';
 import type { Setter } from '../form/Field';
 import type { InputContext } from '../results/DataViews';
@@ -18,9 +18,15 @@ export interface ToolForm {
   setValue: Setter;
   setValues: React.Dispatch<React.SetStateAction<FormValues>>;
   errors: FormErrors;
-  /** Errors to display (after an attempted run, plus server-side errors). */
+  /** Errors to display: fields the user changed, every field after an attempted run, plus server-side errors. */
   shownErrors: FormErrors;
   valid: boolean;
+  /** The form differs from a fresh one (values, a result, or errors on screen): Reset has something to clear. */
+  dirty: boolean;
+  /** The result on screen no longer matches the form, whose current values are invalid. */
+  stale: boolean;
+  /** Changes on every reset, so form chrome (Advanced) can return to its initial state. */
+  resetKey: number;
   job: ReturnType<typeof useJob>;
   run: (opts?: { silent?: boolean; live?: boolean; overrides?: Record<string, unknown>; toolId?: string }) => Promise<JobView | null>;
   reset: () => void;
@@ -58,10 +64,13 @@ function initialValues(tool: ToolInfo): FormValues {
   return base;
 }
 
-export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null } = {}): ToolForm {
+/** `provided`: params the tool page supplies itself at run time (via `run` overrides), so they are never validated as form fields. */
+export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null; provided?: readonly string[] } = {}): ToolForm {
   const { backend } = useApp();
   const [values, setValues] = useState<FormValues>(() => initialValues(tool));
   const [attempted, setAttempted] = useState(false);
+  const [touched, setTouched] = useState<ReadonlySet<string>>(() => new Set());
+  const [resetKey, setResetKey] = useState(0);
   const [serverErrors, setServerErrors] = useState<FormErrors>({});
   const job = useJob(backend);
   const { setJob, run: runJob, reset: resetJob } = job;
@@ -69,11 +78,24 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null } = {}
   const setValue: Setter = useCallback((name, v) => {
     setValues((prev) => ({ ...prev, [name]: typeof v === 'function' ? (v as (p: unknown) => unknown)(prev[name]) : v }));
     setServerErrors((e) => (e[name] ? Object.fromEntries(Object.entries(e).filter(([k]) => k !== name)) : e));
+    setTouched((t) => (t.has(name) ? t : new Set(t).add(name)));
   }, []);
 
-  const errors = useMemo(() => validate(tool, values), [tool, values]);
+  const providedKey = (opts.provided ?? []).join('\n');
+  const errors = useMemo(() => {
+    const errs = validate(tool, values);
+    for (const k of providedKey ? providedKey.split('\n') : []) delete errs[k];
+    return errs;
+  }, [tool, values, providedKey]);
   const valid = Object.keys(errors).length === 0;
-  const shownErrors = useMemo(() => ({ ...(attempted ? errors : {}), ...serverErrors }), [attempted, errors, serverErrors]);
+  const shownErrors = useMemo(() => {
+    const client = attempted ? errors : Object.fromEntries(Object.entries(errors).filter(([k]) => touched.has(k)));
+    return { ...client, ...serverErrors };
+  }, [attempted, touched, errors, serverErrors]);
+  const defaults = useMemo(() => defaultValues(tool), [tool]);
+  const dirty = !!job.job || Object.keys(shownErrors).length > 0
+    || tool.params.some((p) => JSON.stringify(values[p.name] ?? null) !== JSON.stringify(defaults[p.name] ?? null));
+  const stale = !!job.job && !job.running && !valid;
 
   // Re-open a past job with the same parameters.
   const loadedJob = useRef<string | null>(null);
@@ -145,7 +167,10 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null } = {}
   const reset = useCallback(() => {
     setValues(defaultValues(tool));
     setAttempted(false);
+    setTouched(new Set());
     setServerErrors({});
+    setResetKey((k) => k + 1);
+    clearToolParams(tool.id);
     resetJob();
   }, [tool, resetJob]);
 
@@ -179,5 +204,5 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null } = {}
   }, [tool.id, fileValue, result]);
   useEffect(() => () => setToolSubject(null), []);
 
-  return { tool, values, setValue, setValues, errors, shownErrors, valid, job, run, reset, input };
+  return { tool, values, setValue, setValues, errors, shownErrors, valid, dirty, stale, resetKey, job, run, reset, input };
 }
