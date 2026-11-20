@@ -15,6 +15,8 @@ export interface EnumOption {
   unavailable?: string | null;
 }
 export interface ShowIf { param: string; values: unknown[] }
+/** A lower maximum while another param has one of the values. */
+export interface MaxIf { param: string; values: unknown[]; max: number }
 
 interface ParamBase {
   name: string;
@@ -32,8 +34,8 @@ interface ParamBase {
 export type ParamSpec = ParamBase & (
   | { type: 'text'; multiline?: boolean; max_len?: number; syntax?: string; placeholder?: string }
   | { type: 'secret' }
-  | { type: 'integer'; min?: number; max?: number }
-  | { type: 'number'; min?: number; max?: number; step?: number }
+  | { type: 'integer'; min?: number; max?: number; max_if?: MaxIf[] }
+  | { type: 'number'; min?: number; max?: number; step?: number; max_if?: MaxIf[] }
   | { type: 'boolean' }
   | { type: 'enum'; options: EnumOption[]; multi?: boolean }
   | { type: 'color' }

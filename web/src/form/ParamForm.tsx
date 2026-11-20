@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { ParamSpec } from '../lib/types';
-import { isVisible, optionIssue, valueIssue, type FormErrors, type FormValues } from '../lib/schema';
+import { isVisible, optionIssue, valueIssue, withLimits, type FormErrors, type FormValues } from '../lib/schema';
 import { Field, type Setter } from './Field';
 
 export const ParamForm = memo(function ParamForm({ params, values, errors, onChange, mono, exclude, idPrefix = 'form', resetKey }: {
@@ -40,7 +40,7 @@ export const ParamForm = memo(function ParamForm({ params, values, errors, onCha
   return (
     <div className="param-form">
       {main.map((p) => (
-        <Field key={p.name} param={p} value={values[p.name]} error={errors[p.name]} onChange={onChange} mono={mono} {...extra(p)} />
+        <Field key={p.name} param={withLimits(p, values)} value={values[p.name]} error={errors[p.name]} onChange={onChange} mono={mono} {...extra(p)} />
       ))}
       {adv.length > 0 && (
         <div className="advanced">
@@ -58,7 +58,7 @@ export const ParamForm = memo(function ParamForm({ params, values, errors, onCha
           {isOpen && (
             <div className="advanced-body" id={`${idPrefix}-adv`}>
               {adv.map((p) => (
-                <Field key={p.name} param={p} value={values[p.name]} error={errors[p.name]} onChange={onChange} mono={mono} {...extra(p)} />
+                <Field key={p.name} param={withLimits(p, values)} value={values[p.name]} error={errors[p.name]} onChange={onChange} mono={mono} {...extra(p)} />
               ))}
             </div>
           )}

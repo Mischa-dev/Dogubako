@@ -52,7 +52,7 @@ Also found by: mp3, wav, flac, aac, m4a, ogg, opus, aiff, alac, wma, transcode, 
 |---|---|---|---|---|
 | `input` *(required)* | positional | files |  | Audio files. Accepts audio/\*, video/\*, .mp3 .m4a .aac .wav .flac .ogg +24 more. |
 | `format` | `--format` | choice | `mp3` | One of: `mp3`, `m4a` (AAC (M4A)), `ogg` (Ogg Vorbis), `opus`, `flac` (FLAC (lossless)), `wav` (WAV (uncompressed)), `aiff`, `alac` (Apple Lossless (M4A)), `wma`, `ac3` (AC-3 (Dolby Digital)). |
-| `bitrate` | `--bitrate` | integer 32–640 | `192` | Bitrate (kbit/s). Only used when `format` is one of `mp3`, `m4a`, `ogg`, `opus`, `wma`, `ac3`. |
+| `bitrate` | `--bitrate` | integer 32–640 | `192` | Bitrate (kbit/s). At most 320 when `format` is `mp3`. Only used when `format` is one of `mp3`, `m4a`, `ogg`, `opus`, `wma`, `ac3`. |
 | `vbr_quality` | `--vbr-quality` | integer 0–9 |  | Use variable bitrate instead of a fixed bitrate (MP3 / Vorbis). Only used when `format` is one of `mp3`, `ogg`. *Advanced.* |
 | `sample_rate` | `--sample-rate` | choice | `keep` | One of: `keep`, `8000` (8 kHz), `11025` (11.025 kHz), `16000` (16 kHz), `22050` (22.05 kHz), `24000` (24 kHz), `32000` (32 kHz), `44100` (44.1 kHz), `48000` (48 kHz), `88200` (88.2 kHz), `96000` (96 kHz), `192000` (192 kHz). *Advanced.* |
 | `channels` | `--channels` | choice | `keep` | One of: `keep`, `1` (Mono), `2` (Stereo). *Advanced.* |

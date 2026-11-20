@@ -345,10 +345,13 @@ pub fn tool_info(i: &ToolInfo, out: &Out) {
             ParamKind::Text { .. } => "text".to_string(),
             ParamKind::Secret => "secret".into(),
             ParamKind::Integer { min, max } => format!(
-                "integer{}",
-                range(min.map(|x| x as f64), max.map(|x| x as f64))
+                "integer{}{}",
+                range(min.map(|x| x as f64), max.map(|x| x as f64)),
+                caps(p)
             ),
-            ParamKind::Number { min, max, .. } => format!("number{}", range(*min, *max)),
+            ParamKind::Number { min, max, .. } => {
+                format!("number{}{}", range(*min, *max), caps(p))
+            }
             ParamKind::Boolean => "boolean".into(),
             ParamKind::Enum { options, multi } => format!(
                 "{}one of: {}",
@@ -382,6 +385,24 @@ pub fn tool_info(i: &ToolInfo, out: &Out) {
             println!("  {:<18} {}", "", p.description);
         }
     }
+}
+
+fn caps(p: &dogubako_core::spec::ParamSpec) -> String {
+    p.max_if
+        .iter()
+        .map(|c| {
+            let vals: Vec<String> = c
+                .values
+                .iter()
+                .map(|v| {
+                    v.as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| v.to_string())
+                })
+                .collect();
+            format!(" (≤{} when {}={})", c.max, c.param, vals.join("|"))
+        })
+        .collect()
 }
 
 fn range(min: Option<f64>, max: Option<f64>) -> String {

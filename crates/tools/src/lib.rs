@@ -96,6 +96,15 @@ mod tests {
             // boolean condition must test a boolean parameter (the web form
             // compares values loosely, so `""` never equals `false`).
             for p in &spec.params {
+                for cap in &p.max_if {
+                    assert!(
+                        spec.params.iter().any(|q| q.name == cap.param),
+                        "{}.{}: max_if on unknown '{}'",
+                        spec.id,
+                        p.name,
+                        cap.param
+                    );
+                }
                 let Some(cond) = &p.show_if else { continue };
                 let target = spec
                     .params

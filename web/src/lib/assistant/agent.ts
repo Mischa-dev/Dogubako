@@ -187,7 +187,11 @@ export function describeTool(t: ToolInfo): Record<string, unknown> {
     if (desc) o.description = short(desc, 200);
     switch (p.type) {
       case 'enum': o.options = p.options.map((x) => x.value); if (p.multi) o.multiple = true; break;
-      case 'integer': case 'number': if (p.min != null) o.min = p.min; if (p.max != null) o.max = p.max; break;
+      case 'integer': case 'number':
+        if (p.min != null) o.min = p.min;
+        if (p.max != null) o.max = p.max;
+        if (p.max_if?.length) o.max_when = p.max_if.map((c) => `at most ${c.max} when ${c.param} is ${c.values.map(String).join(' or ')}`).join('; ');
+        break;
       case 'file': o.type = p.multiple ? 'file refs (array)' : 'file ref'; if (p.accept?.length) o.accept = p.accept; break;
       case 'path': o.kind = p.kind; break;
       case 'text': if (p.max_len) o.max_len = p.max_len; break;

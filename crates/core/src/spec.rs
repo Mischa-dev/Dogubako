@@ -300,6 +300,9 @@ pub struct ParamSpec {
     /// Only show in UI when another param equals one of the values.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_if: Option<ShowIf>,
+    /// Lower maximums (numeric params) while another param has one of the values.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub max_if: Vec<MaxIf>,
     /// What this install must support for the param to be turned on
     /// (booleans) or set at all.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -313,6 +316,14 @@ pub struct ParamSpec {
 pub struct ShowIf {
     pub param: String,
     pub values: Vec<Value>,
+}
+
+/// A numeric param's maximum while `param` has one of `values`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MaxIf {
+    pub param: String,
+    pub values: Vec<Value>,
+    pub max: f64,
 }
 
 fn humanize(name: &str) -> String {
@@ -337,6 +348,7 @@ impl ParamSpec {
             advanced: false,
             primary: false,
             show_if: None,
+            max_if: Vec::new(),
             requires: None,
             unavailable: None,
         }
@@ -551,6 +563,18 @@ impl ParamSpec {
                 .iter()
                 .map(|v| Value::String(v.to_string()))
                 .collect(),
+        });
+        self
+    }
+    /// Caps a numeric param at `max` while `param` is one of `values`.
+    pub fn max_if(mut self, param: &str, values: &[&str], max: f64) -> Self {
+        self.max_if.push(MaxIf {
+            param: param.to_string(),
+            values: values
+                .iter()
+                .map(|v| Value::String(v.to_string()))
+                .collect(),
+            max,
         });
         self
     }

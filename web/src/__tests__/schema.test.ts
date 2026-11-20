@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultValues, fromRunParams, isSliderRange, isVisible, toRunParams, validate, type FileItem } from '../lib/schema';
+import { defaultValues, effectiveMax, fromRunParams, isSliderRange, isVisible, toRunParams, validate, withLimits, type FileItem } from '../lib/schema';
 import type { ParamSpec } from '../lib/types';
 import { tool } from './fixtures';
 import { redactSecrets } from '../lib/backend/tauri';
@@ -122,5 +122,24 @@ describe('isSliderRange', () => {
     expect(isSliderRange(params[2])).toBe(true);
     expect(isSliderRange({ name: 'w', label: 'W', type: 'integer', min: 1 })).toBe(false);
     expect(isSliderRange({ name: 'w', label: 'W', type: 'integer', min: 1, max: 100000 })).toBe(false);
+  });
+});
+
+describe('max_if', () => {
+  const bitrate: ParamSpec = { name: 'bitrate', label: 'Bitrate', type: 'integer', min: 32, max: 640, default: 192, max_if: [{ param: 'format', values: ['mp3'], max: 320 }] };
+  const fmt: ParamSpec = { name: 'format', label: 'Format', type: 'enum', options: [{ value: 'mp3', label: 'MP3' }, { value: 'ac3', label: 'AC-3' }], default: 'mp3' };
+  const audio = tool({ id: 'audio.x', name: 'A', params: [fmt, bitrate] });
+
+  it('lowers the maximum while the controlling value matches', () => {
+    expect(effectiveMax(bitrate, { format: 'mp3' })).toBe(320);
+    expect(effectiveMax(bitrate, { format: 'ac3' })).toBe(640);
+    expect(withLimits(bitrate, { format: 'mp3' })).toMatchObject({ max: 320 });
+    expect(withLimits(bitrate, { format: 'ac3' })).toBe(bitrate);
+  });
+
+  it('rejects values above the lowered maximum', () => {
+    expect(validate(audio, { format: 'mp3', bitrate: 640 }).bitrate).toBe('Must be at most 320');
+    expect(validate(audio, { format: 'mp3', bitrate: 320 }).bitrate).toBeUndefined();
+    expect(validate(audio, { format: 'ac3', bitrate: 640 }).bitrate).toBeUndefined();
   });
 });
