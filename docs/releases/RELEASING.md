@@ -40,8 +40,10 @@ When the bump merges, the **Release** workflow
   A draft creates no tag and is not public. The image stays a workflow
   artifact; nothing is pushed to ghcr.io.
 
-Fixes merged before shipping: run **Release** again by hand (Actions ›
-Release › Run workflow on main). It replaces the draft for that version.
+Fixes merged before shipping: add them to `CHANGELOG.md` and the notes. A
+change to either (or to anything under `docs/releases/`) on main re-runs
+**Release**, which replaces the draft for that version. A fix with no notes
+change needs a manual run (Actions › Release › Run workflow on main).
 
 ## 3. Ship (Mischa)
 

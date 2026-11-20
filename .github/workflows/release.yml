@@ -2,8 +2,9 @@ name: Release
 
 # Prepares a release up to the point of shipping it, and ships nothing.
 #
-# Runs when a version bump lands on main (Cargo.toml), by hand, or on a v* tag
-# pushed by hand. It checks the release is complete (release.py check), builds
+# Runs when a version bump or a release-notes change lands on main (Cargo.toml,
+# CHANGELOG.md, docs/releases/), by hand, or on a v* tag pushed by hand. Once
+# the version is published, pushes to main prepare nothing until the next bump. It checks the release is complete (release.py check), builds
 # and smoke-tests every artifact, and leaves them in a draft GitHub release with
 # the notes from docs/releases/v<version>.md. The draft creates no tag and is
 # invisible to the public; the homelab image is kept as a workflow artifact
@@ -14,7 +15,7 @@ name: Release
 on:
   push:
     branches: [main]
-    paths: ["Cargo.toml"]
+    paths: ["Cargo.toml", "CHANGELOG.md", "docs/releases/**"]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -66,9 +67,13 @@ jobs:
       - name: Replace an earlier draft of this version
         if: steps.v.outputs.prepare == 'true'
         run: |
-          if gh release view "${{ steps.v.outputs.tag }}" --json isDraft --jq .isDraft 2>/dev/null | grep -qx true; then
-            gh release delete "${{ steps.v.outputs.tag }}" --yes
-          fi
+          # Every draft of this tag, so a run never adds to (or uploads into) a duplicate.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
+            --jq '.[] | select(.draft and .tag_name == "${{ steps.v.outputs.tag }}") | .id' |
+          while read -r id; do
+            echo "Deleting draft release $id"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
+          done
 
   generated-docs:
     name: Generated docs are current
