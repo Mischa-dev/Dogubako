@@ -13755,7 +13755,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 8,
+     "default": 4,
      "advanced": true,
      "primary": false
     },
@@ -13944,7 +13944,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 8,
+     "default": 4,
      "advanced": true,
      "primary": false
     }
@@ -14194,7 +14194,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 8,
+     "default": 4,
      "advanced": true,
      "primary": false
     },
