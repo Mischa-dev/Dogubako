@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { ParamSpec } from '../lib/types';
-import { isVisible, type FormErrors, type FormValues } from '../lib/schema';
+import { isVisible, optionIssue, valueIssue, type FormErrors, type FormValues } from '../lib/schema';
 import { Field, type Setter } from './Field';
 
 export const ParamForm = memo(function ParamForm({ params, values, errors, onChange, mono, exclude, idPrefix = 'form', resetKey }: {
@@ -24,11 +24,23 @@ export const ParamForm = memo(function ParamForm({ params, values, errors, onCha
   const isOpen = open || advHasError;
   useEffect(() => setOpen(false), [resetKey]);
 
+  // Options this install (or the current values) can't do: disabled with the reason, and a warning when one is picked.
+  const extra = (p: ParamSpec) => {
+    const warning = valueIssue(p, values, params);
+    if (p.type !== 'enum') return warning ? { warning } : {};
+    const issues: Record<string, string> = {};
+    for (const o of p.options) {
+      const i = optionIssue(o, values, params);
+      if (i) issues[o.value] = i;
+    }
+    return Object.keys(issues).length || warning ? { optionIssues: issues, warning } : {};
+  };
+
   if (!params.length) return null;
   return (
     <div className="param-form">
       {main.map((p) => (
-        <Field key={p.name} param={p} value={values[p.name]} error={errors[p.name]} onChange={onChange} mono={mono} />
+        <Field key={p.name} param={p} value={values[p.name]} error={errors[p.name]} onChange={onChange} mono={mono} {...extra(p)} />
       ))}
       {adv.length > 0 && (
         <div className="advanced">
@@ -46,7 +58,7 @@ export const ParamForm = memo(function ParamForm({ params, values, errors, onCha
           {isOpen && (
             <div className="advanced-body" id={`${idPrefix}-adv`}>
               {adv.map((p) => (
-                <Field key={p.name} param={p} value={values[p.name]} error={errors[p.name]} onChange={onChange} mono={mono} />
+                <Field key={p.name} param={p} value={values[p.name]} error={errors[p.name]} onChange={onChange} mono={mono} {...extra(p)} />
               ))}
             </div>
           )}

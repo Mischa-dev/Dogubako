@@ -30,6 +30,15 @@ fn format_choices(with_auto: bool) -> Vec<(&'static str, &'static str)> {
     v
 }
 
+/// Output format picker; ImageMagick formats are marked so UIs disable the
+/// ones this install can't write.
+fn format_param(with_auto: bool) -> ParamSpec {
+    MAGICK_FORMATS.iter().fold(
+        ParamSpec::choice("format", &format_choices(with_auto)),
+        |p, (f, _)| p.option_needs(f, Requirement::magick_write(f)),
+    )
+}
+
 fn save_opts(p: &Params) -> ToolResult<SaveOpts> {
     Ok(SaveOpts {
         quality: p.int_or("quality", 85).clamp(1, 100) as u8,
@@ -43,7 +52,7 @@ fn convert() -> Arc<dyn Tool> {
         .describe("Convert images between PNG, JPEG, WebP, AVIF, GIF, BMP, TIFF, ICO, TGA, QOI and more, in bulk")
         .keywords(&["convert", "format", "png to jpg", "jpg to png", "webp", "avif", "heic", "batch", "transcode"])
         .param(images_param())
-        .param(ParamSpec::choice("format", &format_choices(false)).label("Output format").default_str("png"))
+        .param(format_param(false).label("Output format").default_str("png"))
         .param(quality_param().show_if("format", &["jpg", "webp", "avif", "heic", "jxl", "jp2"]))
         .param(ParamSpec::boolean("lossless").describe("Lossless WebP encoding").show_if("format", &["webp"]).default_bool(false))
         .param(ParamSpec::color("background").describe("Background used when flattening transparency (e.g. PNG → JPEG)").default_str("#ffffff").advanced())
@@ -205,7 +214,7 @@ fn resize() -> Arc<dyn Tool> {
         .param(ParamSpec::choice("fit", FITS).describe("How to fit when both width and height are given").default_str("contain"))
         .param(ParamSpec::choice("filter", FILTERS).default_str("lanczos").advanced())
         .param(ParamSpec::boolean("no_upscale").label("Don't enlarge").describe("Never make images larger than the original").default_bool(false))
-        .param(ParamSpec::choice("format", &format_choices(true)).label("Output format").default_str("same").advanced())
+        .param(format_param(true).label("Output format").default_str("same").advanced())
         .param(quality_param().advanced())
         .param(ParamSpec::color("background").describe("Padding color for 'fill' and flattening for JPEG").default_str("#ffffff").advanced())
         .output(OutputKind::Files)

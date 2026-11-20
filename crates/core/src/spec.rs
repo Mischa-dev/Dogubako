@@ -171,6 +171,48 @@ impl Permission {
 pub struct EnumOption {
     pub value: String,
     pub label: String,
+    /// What this install must support for the option to work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requires: Option<Requirement>,
+    /// Only usable while another param has one of these values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub only_if: Option<ShowIf>,
+    /// Set by the engine when listing tools: why the option cannot work here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<String>,
+}
+
+/// A capability of the installed engines that an option or param needs.
+/// Checked by the engine, so UIs can disable the option before a run and
+/// runs fail with a plain reason instead of an engine error.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Requirement {
+    /// ImageMagick can write this format (e.g. `jxl`, `heic`).
+    MagickWrite { format: String },
+    /// FFmpeg has this encoder (e.g. `libmp3lame`).
+    FfmpegEncoder { encoder: String },
+    /// A program that ships alongside a dependency (e.g. Poppler's `pdftocairo`).
+    Program { dependency: String, program: String },
+}
+
+impl Requirement {
+    pub fn magick_write(format: &str) -> Self {
+        Requirement::MagickWrite {
+            format: format.to_string(),
+        }
+    }
+    pub fn ffmpeg_encoder(encoder: &str) -> Self {
+        Requirement::FfmpegEncoder {
+            encoder: encoder.to_string(),
+        }
+    }
+    pub fn program(dependency: &str, program: &str) -> Self {
+        Requirement::Program {
+            dependency: dependency.to_string(),
+            program: program.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -258,6 +300,13 @@ pub struct ParamSpec {
     /// Only show in UI when another param equals one of the values.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_if: Option<ShowIf>,
+    /// What this install must support for the param to be turned on
+    /// (booleans) or set at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requires: Option<Requirement>,
+    /// Set by the engine when listing tools: why the param cannot be used here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -288,6 +337,8 @@ impl ParamSpec {
             advanced: false,
             primary: false,
             show_if: None,
+            requires: None,
+            unavailable: None,
         }
     }
     pub fn text(name: &str) -> Self {
@@ -348,6 +399,9 @@ impl ParamSpec {
                     .map(|(v, l)| EnumOption {
                         value: v.to_string(),
                         label: l.to_string(),
+                        requires: None,
+                        only_if: None,
+                        unavailable: None,
                     })
                     .collect(),
                 multi: false,
@@ -506,6 +560,38 @@ impl ParamSpec {
             values: vec![Value::Bool(value)],
         });
         self
+    }
+
+    /// The param only works when this install meets `req`.
+    pub fn needs(mut self, req: Requirement) -> Self {
+        self.requires = Some(req);
+        self
+    }
+    /// Enum option `value` only works when this install meets `req`.
+    pub fn option_needs(mut self, value: &str, req: Requirement) -> Self {
+        if let Some(o) = self.option_mut(value) {
+            o.requires = Some(req);
+        }
+        self
+    }
+    /// Enum option `value` is only usable while `param` is one of `values`.
+    pub fn option_only_if(mut self, value: &str, param: &str, values: &[&str]) -> Self {
+        if let Some(o) = self.option_mut(value) {
+            o.only_if = Some(ShowIf {
+                param: param.to_string(),
+                values: values
+                    .iter()
+                    .map(|v| Value::String(v.to_string()))
+                    .collect(),
+            });
+        }
+        self
+    }
+    fn option_mut(&mut self, value: &str) -> Option<&mut EnumOption> {
+        match &mut self.kind {
+            ParamKind::Enum { options, .. } => options.iter_mut().find(|o| o.value == value),
+            _ => None,
+        }
     }
 
     pub fn is_file(&self) -> bool {
