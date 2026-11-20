@@ -941,7 +941,17 @@ fn tts() -> Arc<dyn Tool> {
         ctx.message(format!("Synthesizing with {}", voice.name));
         // Raw mode synthesizes each stdin line on its own (file mode joins
         // them into one utterance), so short lines keep Piper's memory bounded.
-        let batches = piper_batches(&piper_lines(&text, PIPER_MAX_LINE), PIPER_MAX_BATCH);
+        let pause = p.num_or("sentence_pause", 0.2);
+        let max_sentences = if pause > 0.0 {
+            ((PIPER_MAX_PAUSE_SECS / pause) as usize).max(1)
+        } else {
+            usize::MAX
+        };
+        let batches = piper_batches(
+            &piper_lines(&text, PIPER_MAX_LINE),
+            PIPER_MAX_BATCH,
+            max_sentences,
+        );
         let mut pcm = Vec::new();
         for (i, batch) in batches.iter().enumerate() {
             ctx.progress(
@@ -959,7 +969,7 @@ fn tts() -> Arc<dyn Tool> {
                     "--length-scale",
                     &format!("{:.4}", 1.0 / speed),
                     "--sentence-silence",
-                    &format!("{:.3}", p.num_or("sentence_pause", 0.2)),
+                    &format!("{:.3}", pause),
                 ])
                 .readable(ctx.models_dir())
                 .stdin(batch.clone().into_bytes());
@@ -1018,21 +1028,36 @@ const PIPER_MAX_LINE: usize = 400;
 /// Characters per Piper process, which keeps its raw audio on stdout well
 /// under the output limit even at the slowest speed.
 const PIPER_MAX_BATCH: usize = 2_000;
+/// Seconds of sentence-pause silence per Piper process. Raw mode adds the pause
+/// after every sentence of every line, so many short lines with a long pause
+/// would otherwise overflow stdout.
+const PIPER_MAX_PAUSE_SECS: f64 = 300.0;
 
-/// Groups lines into stdin batches of at most `max` characters (a longer line
-/// gets a batch of its own).
-fn piper_batches(lines: &str, max: usize) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+/// Upper bound on the sentences Piper sees in a line (each gets a pause).
+fn piper_sentences(line: &str) -> usize {
+    1 + line
+        .chars()
+        .filter(|c| matches!(c, '.' | '!' | '?' | '…' | '。' | '！' | '？'))
+        .count()
+}
+
+/// Groups lines into stdin batches of at most `max_chars` characters and
+/// `max_sentences` sentences (a line over either gets a batch of its own).
+fn piper_batches(lines: &str, max_chars: usize, max_sentences: usize) -> Vec<String> {
+    let mut out: Vec<(String, usize, usize)> = Vec::new();
     for line in lines.lines().filter(|l| !l.trim().is_empty()) {
+        let (chars, sentences) = (line.chars().count(), piper_sentences(line));
         match out.last_mut() {
-            Some(b) if b.chars().count() + 1 + line.chars().count() <= max => {
+            Some((b, c, s)) if *c + 1 + chars <= max_chars && *s + sentences <= max_sentences => {
                 b.push('\n');
                 b.push_str(line);
+                *c += 1 + chars;
+                *s += sentences;
             }
-            _ => out.push(line.to_string()),
+            _ => out.push((line.to_string(), chars, sentences)),
         }
     }
-    out
+    out.into_iter().map(|(b, _, _)| b).collect()
 }
 
 /// A 16-bit mono PCM WAV file around Piper's raw output.
@@ -1151,8 +1176,12 @@ mod tests {
 
     #[test]
     fn piper_batches_group_lines() {
-        let b = piper_batches("aa\nbb\n\ncc\ndddddd", 5);
+        let b = piper_batches("aa\nbb\n\ncc\ndddddd", 5, usize::MAX);
         assert_eq!(b, ["aa\nbb", "cc", "dddddd"]);
+        let b = piper_batches("a\nb. c\nd\ne", 100, 3);
+        assert_eq!(b, ["a\nb. c", "d\ne"]);
+        let a = vec!["a"; 400].join("\n");
+        assert_eq!(piper_batches(&a, PIPER_MAX_BATCH, 60).len(), 7);
         let w = wav_bytes(16000, &[0u8; 16000]);
         let dir = std::env::temp_dir().join(format!("dgb-tts-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
