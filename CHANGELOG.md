@@ -53,6 +53,12 @@ campaign are added here as they merge.
   needed glibc 2.43 and failed on Debian 13. Minimum: glibc 2.28, which means
   Debian 10+, Ubuntu 20.04+, RHEL / AlmaLinux / Rocky 8+ and Fedora 29+.
   Musl distros such as Alpine are not supported; use the Docker image there.
+- Convert Audio to Ogg Vorbis no longer fails on default settings: with a
+  fixed bitrate, the bitrate (and if needed the sample rate) is fitted to what
+  libvorbis accepts for the input, with a warning when it changes.
+- Convert Markup to ODT works when Pandoc runs with `--sandbox`.
+- Tool forms show validation errors before Run, disable Run until they are
+  fixed, mark a result as stale once its inputs change, and always offer Reset.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 
