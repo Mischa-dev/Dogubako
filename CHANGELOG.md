@@ -32,6 +32,9 @@ campaign are added here as they merge.
 - The engine lock records the exact upstream source of every bottle, and the
   release's engine-sources tar is built only from those pins, with each
   download checked against its SHA-256 or git commit.
+- The engine-sources tar includes each bottle's exact Homebrew recipe and the
+  patches and resources it applies, and jbig2dec's source pin is the tag
+  archive its bottle was built from. (#26)
 - Website: a command palette, a pause for the hero demo, a docs link back to
   the home page, and versioned CSS and script links so a deploy never pairs
   new pages with cached styles.

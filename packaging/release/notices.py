@@ -56,6 +56,16 @@ def brew_source(formula: str, version: str) -> str | None:
     return src
 
 
+def pinned_source(bottle: dict) -> str | None:
+    """The exact source the lock pins for this bottle (what the tar ships)."""
+    src = bottle.get("source") or {}
+    if src.get("url"):
+        return src["url"]
+    if src.get("git") and src.get("revision"):
+        return f"{src['git']} @ {src['revision']}"
+    return None
+
+
 def engines_section(fetch: bool) -> list[str]:
     toml_path, lock_path = ENGINES / "engines.toml", ENGINES / "engines.lock.json"
     if not lock_path.exists():
@@ -103,7 +113,7 @@ def engines_section(fetch: bool) -> list[str]:
                     lic = b.get("license") or "see upstream"
                     src = ""
                     if fetch and any(c in lic for c in COPYLEFT):
-                        src = brew_source(f, b.get("version", "")) or ""
+                        src = pinned_source(b) or brew_source(f, b.get("version", "")) or ""
                     out.append(f"| {f} | {b.get('version', '')} | {lic} | {src} |")
             out.append("")
     return out
