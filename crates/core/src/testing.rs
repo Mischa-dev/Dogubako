@@ -82,6 +82,26 @@ impl TestHarness {
             .await
             .map(|(o, _)| o)
     }
+
+    /// Run a tool's pre-run check (`Engine::check`), as UIs do before Run.
+    pub async fn check(&self, id: &str, params: Value) -> ToolResult<()> {
+        let map: Map<String, Value> = params.as_object().cloned().unwrap_or_default();
+        let resolver = LocalFileResolver::unrestricted();
+        self.engine
+            .check(RunRequest {
+                tool_id: id,
+                params: map,
+                resolver: &resolver,
+                out_dir: self.dir.path().join("check"),
+                permissions: PermissionSet::all(),
+                authorize: None,
+                progress: None,
+                cancel: Default::default(),
+                timeout: None,
+                fs: None,
+            })
+            .await
+    }
 }
 
 pub fn read(p: &Path) -> Vec<u8> {

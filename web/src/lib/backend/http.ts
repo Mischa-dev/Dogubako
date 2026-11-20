@@ -1,6 +1,6 @@
 import type {
   AdminConfig, Artifact, AuditRow, Category, DepInfo, FileView, JobView, Me, ModelDownload, ModelInfo,
-  NewToken, Policy, Role, Status, ToolInfo, TokenRow, UserRow,
+  NewToken, Policy, Role, Status, ToolErrorView, ToolInfo, TokenRow, UserRow,
 } from '../types';
 import { ApiError, type AssistantInfo, type AssistantTarget, type Backend, type FileRef, type RunHandle, type RunOptions } from './types';
 
@@ -87,6 +87,11 @@ export class HttpBackend implements Backend {
   async listCategories(): Promise<Category[]> {
     const r = await this.get<{ categories: Category[] }>('/categories');
     return r.categories;
+  }
+
+  async check(toolId: string, params: Record<string, unknown>): Promise<ToolErrorView | null> {
+    const r = await this.post<{ ok: boolean; error?: ToolErrorView }>(`/tools/${encodeURIComponent(toolId)}/check`, { params });
+    return r.ok ? null : (r.error ?? null);
   }
 
   run(toolId: string, params: Record<string, unknown>, opts: RunOptions = {}): RunHandle {

@@ -82,6 +82,10 @@ export class TauriBackend implements Backend {
   }
   async listCategories(): Promise<Category[] | null> { return null; }
 
+  async check(toolId: string, params: Record<string, unknown>): Promise<ToolErrorView | null> {
+    return (await invoke<ToolErrorView | null>('check_tool', { toolId, params })) ?? null;
+  }
+
   run(toolId: string, params: Record<string, unknown>, opts: RunOptions = {}): RunHandle {
     const runId = `r_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     const created = Math.floor(Date.now() / 1000);

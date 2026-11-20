@@ -92,18 +92,41 @@ export function useToolForm(
   const checkRef = useRef(opts.check);
   checkRef.current = opts.check;
   const validateAll = useCallback((vals: FormValues) => ({ ...(checkRef.current?.(vals) ?? {}), ...validate(tool, vals) }), [tool]);
-  const errors = useMemo(() => {
+  const clientErrors = useMemo(() => {
     const errs = validateAll(values);
     for (const k of providedKey ? providedKey.split('\n') : []) delete errs[k];
     return errs;
   }, [validateAll, values, providedKey]);
+  // Tools with `prechecks` look at the chosen inputs (e.g. a video's codecs) before Run, for problems the spec cannot express.
+  const clientValid = Object.keys(clientErrors).length === 0;
+  const precheckKey = useMemo(
+    () => (tool.prechecks && backend.check && clientValid && !providedKey ? JSON.stringify(toRunParams(tool, values)) : null),
+    [tool, backend, clientValid, providedKey, values],
+  );
+  const [precheck, setPrecheck] = useState<{ key: string; errors: FormErrors } | null>(null);
+  useEffect(() => {
+    if (!precheckKey || !backend.check) return;
+    let alive = true;
+    const t = setTimeout(() => {
+      backend.check!(tool.id, JSON.parse(precheckKey)).then((e) => {
+        if (!alive) return;
+        const errs: FormErrors = e?.code === 'invalid_input' && e.param && tool.params.some((p) => p.name === e.param) ? { [e.param]: e.message ?? 'Invalid value' } : {};
+        setPrecheck({ key: precheckKey, errors: errs });
+      }, () => undefined);
+    }, 300);
+    return () => { alive = false; clearTimeout(t); };
+  }, [precheckKey, backend, tool]);
+  const precheckErrors = useMemo(() => (precheck && precheck.key === precheckKey ? precheck.errors : {}), [precheck, precheckKey]);
+  const precheckRef = useRef(precheckErrors);
+  precheckRef.current = precheckErrors;
+  const errors = useMemo(() => ({ ...precheckErrors, ...clientErrors }), [precheckErrors, clientErrors]);
   // Tool checks span several fields, so their errors show even when only another field changed.
   const checkKeys = useMemo(() => new Set(Object.keys(checkRef.current?.(values) ?? {})), [values]);
   const valid = Object.keys(errors).length === 0;
   const shownErrors = useMemo(() => {
-    const client = attempted ? errors : Object.fromEntries(Object.entries(errors).filter(([k]) => touched.has(k) || checkKeys.has(k)));
+    const client = attempted ? errors : Object.fromEntries(Object.entries(errors).filter(([k]) => touched.has(k) || checkKeys.has(k) || k in precheckErrors));
     return { ...client, ...serverErrors };
-  }, [attempted, touched, errors, serverErrors, checkKeys]);
+  }, [attempted, touched, errors, serverErrors, checkKeys, precheckErrors]);
   const defaults = useMemo(() => defaultValues(tool), [tool]);
   const dirty = !!job.job || Object.keys(shownErrors).length > 0
     || tool.params.some((p) => JSON.stringify(values[p.name] ?? null) !== JSON.stringify(defaults[p.name] ?? null));
@@ -152,7 +175,7 @@ export function useToolForm(
 
   const run = useCallback<ToolForm['run']>(async (o = {}) => {
     const vals = valuesRef.current;
-    const errs = validateAll(vals);
+    const errs = { ...precheckRef.current, ...validateAll(vals) };
     for (const k of Object.keys(o.overrides ?? {})) delete errs[k];
     if (Object.keys(errs).length) {
       if (!o.silent) {

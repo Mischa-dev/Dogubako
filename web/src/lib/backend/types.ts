@@ -38,6 +38,8 @@ export interface Backend {
   listTools(): Promise<ToolInfo[]>;
   listCategories(): Promise<Category[] | null>;
   run(toolId: string, params: Record<string, unknown>, opts?: RunOptions): RunHandle;
+  /** Pre-run check of a tool's inputs (tools with `prechecks`): the error a run would fail with, or null. */
+  check?(toolId: string, params: Record<string, unknown>): Promise<ToolErrorView | null>;
 
   /** Turn browser File objects into tool input references (upload or stage). */
   uploadFiles(files: File[], onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<FileRef[]>;

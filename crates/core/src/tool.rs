@@ -32,6 +32,12 @@ pub enum Environment {
 pub trait Tool: Send + Sync + 'static {
     fn spec(&self) -> &ToolSpec;
     async fn run(&self, ctx: ToolContext, params: Params) -> ToolResult<ToolOutput>;
+    /// Quick checks of the chosen inputs (e.g. probing a file) that UIs run
+    /// before Run, for problems the spec alone cannot express. Tools that
+    /// override this set [`ToolSpec::prechecks`].
+    async fn check(&self, _ctx: ToolContext, _params: Params) -> ToolResult<()> {
+        Ok(())
+    }
 }
 
 /// An output file produced by a tool.
@@ -438,6 +444,9 @@ type SyncFn = dyn Fn(&ToolContext, &Params) -> ToolResult<ToolOutput> + Send + S
 type AsyncFn = dyn Fn(ToolContext, Params) -> Pin<Box<dyn Future<Output = ToolResult<ToolOutput>> + Send>>
     + Send
     + Sync;
+type CheckFn = dyn Fn(ToolContext, Params) -> Pin<Box<dyn Future<Output = ToolResult<()>> + Send>>
+    + Send
+    + Sync;
 
 /// A tool whose body is a synchronous function, run on the blocking pool.
 pub struct SyncTool {
@@ -461,6 +470,7 @@ impl Tool for SyncTool {
 pub struct AsyncTool {
     spec: ToolSpec,
     f: Box<AsyncFn>,
+    check: Option<Box<CheckFn>>,
 }
 
 #[async_trait::async_trait]
@@ -470,6 +480,12 @@ impl Tool for AsyncTool {
     }
     async fn run(&self, ctx: ToolContext, params: Params) -> ToolResult<ToolOutput> {
         (self.f)(ctx, params).await
+    }
+    async fn check(&self, ctx: ToolContext, params: Params) -> ToolResult<()> {
+        match &self.check {
+            Some(c) => c(ctx, params).await,
+            None => Ok(()),
+        }
     }
 }
 
@@ -493,5 +509,23 @@ where
     Arc::new(AsyncTool {
         spec,
         f: Box::new(move |c, p| Box::pin(f(c, p))),
+        check: None,
+    })
+}
+
+/// Create a tool from an async function plus a pre-run `check` of its
+/// inputs, which UIs call before Run (the tool should repeat it in `f`).
+pub fn checked_tool<C, CFut, F, Fut>(mut spec: ToolSpec, check: C, f: F) -> Arc<dyn Tool>
+where
+    C: Fn(ToolContext, Params) -> CFut + Send + Sync + 'static,
+    CFut: Future<Output = ToolResult<()>> + Send + 'static,
+    F: Fn(ToolContext, Params) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = ToolResult<ToolOutput>> + Send + 'static,
+{
+    spec.prechecks = true;
+    Arc::new(AsyncTool {
+        spec,
+        f: Box::new(move |c, p| Box::pin(f(c, p))),
+        check: Some(Box::new(move |c, p| Box::pin(check(c, p)))),
     })
 }
