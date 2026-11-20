@@ -1,14 +1,111 @@
 name: Release
 
+# Prepares a release up to the point of shipping it, and ships nothing.
+#
+# Runs when a version bump lands on main (Cargo.toml), by hand, or on a v* tag
+# pushed by hand. It checks the release is complete (release.py check), builds
+# and smoke-tests every artifact, and leaves them in a draft GitHub release with
+# the notes from docs/releases/v<version>.md. The draft creates no tag and is
+# invisible to the public; the homelab image is kept as a workflow artifact
+# instead of being pushed. Re-running it replaces the draft for that version.
+#
+# Shipping is ship.yml, run by Mischa: see docs/releases/RELEASING.md.
+
 on:
   push:
+    branches: [main]
+    paths: ["Cargo.toml"]
     tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  gate:
+    name: Is there a release to prepare?
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      prepare: ${{ steps.v.outputs.prepare }}
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          version="$(python3 -I packaging/release/release.py current)"
+          tag="v$version"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the version on that commit ($version)."; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          draft="$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || echo none)"
+          if [ "$draft" = false ]; then
+            if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF_TYPE" = branch ]; then
+              echo "::notice::$tag is already published; no new version on main, nothing to prepare."
+              echo "prepare=false" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+            echo "::error::$tag is already published. Bump the version (release.py bump) to make a new release."; exit 1
+          fi
+          echo "prepare=true" >> "$GITHUB_OUTPUT"
+      - name: Release is complete (versions, changelog, notes, generated docs, pages)
+        if: steps.v.outputs.prepare == 'true'
+        run: python3 -I packaging/release/release.py check
+      - name: Replace an earlier draft of this version
+        if: steps.v.outputs.prepare == 'true'
+        run: |
+          if gh release view "${{ steps.v.outputs.tag }}" --json isDraft --jq .isDraft 2>/dev/null | grep -qx true; then
+            gh release delete "${{ steps.v.outputs.tag }}" --yes
+          fi
+
+  generated-docs:
+    name: Generated docs are current
+    needs: gate
+    if: needs.gate.outputs.prepare == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci && npm run build
+        working-directory: web
+      - run: npm ci
+        working-directory: site
+      - run: cargo build --locked -p dogubako-cli
+      - run: python3 -I packaging/release/release.py regen --check
+      - name: Third-party notices are current
+        run: python3 -I packaging/release/notices.py --check
+      # Every page, internal link and anchor of docs.dogubako.app at this commit.
+      - run: npm run build
+        working-directory: site
+
+  website:
+    name: Website for this release
+    needs: gate
+    if: needs.gate.outputs.prepare == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download links point at this release
+        run: |
+          mkdir _site && cp -R website/. _site/
+          python3 -I packaging/release/website_links.py _site --docs --release "${{ needs.gate.outputs.tag }}"
+          python3 -I packaging/release/website_links.py _site --check
+          grep -rl "releases/download/${{ needs.gate.outputs.tag }}/" _site >/dev/null
+
   # The alpha is macOS only: Linux and Windows desktop bundles come back once
   # their installers accept the pre-release version (Tauri's MSI does not).
   desktop:
     name: macOS app (Apple silicon)
+    needs: [gate, generated-docs, website]
     runs-on: macos-15
     permissions:
       contents: write
@@ -51,7 +148,7 @@ jobs:
       - name: Engines
         env:
           # The app downloads on-demand engines from this release's assets.
-          DOGUBAKO_ENGINE_PACK_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+          DOGUBAKO_ENGINE_PACK_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.gate.outputs.tag }}
         run: |
           python3 -I packaging/engines/lock.py --check
           python3 -I packaging/engines/fetch.py
@@ -69,17 +166,23 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
         with:
           projectPath: apps/desktop/src-tauri
-          tagName: ${{ github.ref_name }}
-          releaseName: Dogubako ${{ github.ref_name }}
+          tagName: ${{ needs.gate.outputs.tag }}
+          releaseName: Dogubako ${{ needs.gate.outputs.tag }}
+          releaseBody: See the release notes below once they are attached.
           releaseDraft: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(needs.gate.outputs.tag, '-') }}
+          # The tag is created at this commit only when ship.yml publishes the draft.
+          releaseCommitish: ${{ github.sha }}
           args: --target aarch64-apple-darwin --config tauri.engines.conf.json
-      - name: Upload engine packs
-        run: gh release upload "${{ github.ref_name }}" build/engines/packs/*.tar.gz build/engines/packs/packs.json --clobber
+      - name: Upload engine packs and notes
+        run: |
+          gh release upload "${{ needs.gate.outputs.tag }}" build/engines/packs/*.tar.gz build/engines/packs/packs.json --clobber
+          python3 -I packaging/release/release.py notes-body "${{ needs.gate.outputs.version }}" > notes.md
+          gh release edit "${{ needs.gate.outputs.tag }}" --notes-file notes.md
 
   cli:
     name: CLI/server binary (${{ matrix.target }})
-    needs: desktop   # uploads into the draft release the desktop job created
+    needs: [gate, desktop]   # uploads into the draft release the desktop job created
     strategy:
       fail-fast: false
       matrix:
@@ -103,6 +206,13 @@ jobs:
         with: { targets: "${{ matrix.target }}" }
       - if: runner.os != 'Linux'
         run: cargo build --release --locked -p dogubako-cli --target ${{ matrix.target }}
+      - name: Smoke test
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          bin="target/${{ matrix.target }}/release/dogubako${{ matrix.ext }}"
+          "$bin" --version | grep -F "${{ needs.gate.outputs.version }}"
+          "$bin" tools list >/dev/null
       # Built in a glibc 2.28 container so it runs on older distros than the
       # runner, then checked on the oldest and a current stable distro.
       - name: Build and check (Linux, glibc 2.28+)
@@ -115,35 +225,52 @@ jobs:
         run: |
           out="dogubako-${{ matrix.target }}${{ matrix.ext }}"
           cp "target/${{ matrix.target }}/release/dogubako${{ matrix.ext }}" "$out"
-          gh release upload "${{ github.ref_name }}" "$out" --clobber
+          gh release upload "${{ needs.gate.outputs.tag }}" "$out" --clobber
 
   homelab-image:
-    name: Homelab image (ghcr.io, linux/amd64)
+    name: Homelab image (linux/amd64, kept for ship.yml)
+    needs: gate
+    if: needs.gate.outputs.prepare == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+    env:
+      IMAGE: ghcr.io/mischa-dev/dogubako:${{ needs.gate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - id: v
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      # A new package on ghcr.io is private until Mischa makes it public.
+      # Built and tested here but not pushed: ship.yml pushes this exact image.
       - uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
-          push: true
-          tags: ghcr.io/mischa-dev/dogubako:${{ steps.v.outputs.version }}
+          push: false
+          load: true
+          tags: ${{ env.IMAGE }}
+      - name: Smoke test
+        run: |
+          set -eux
+          docker run --rm "$IMAGE" --version | grep -F "${{ needs.gate.outputs.version }}"
+          docker run --rm "$IMAGE" deps | tee deps.txt
+          for e in FFmpeg qpdf Poppler Ghostscript Tesseract Pandoc 7-Zip ImageMagick ExifTool whisper.cpp Piper; do
+            grep -E "✓ +$e" deps.txt
+          done
+          mkdir -p data && sudo chown 10001 data
+          docker run -d --name dgb -p 8420:8420 -v "$PWD/data:/data" "$IMAGE"
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8420/healthz && break; sleep 2; done
+          curl -fsS http://127.0.0.1:8420/healthz
+          docker rm -f dgb
+      - run: docker save "$IMAGE" | gzip -1 > homelab-image.tar.gz && ls -lh homelab-image.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: homelab-image
+          path: homelab-image.tar.gz
+          retention-days: 30
+          compression-level: 0
 
   engine-sources:
     name: Engine source code (GPL source offer)
-    needs: desktop
+    needs: [gate, desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -153,15 +280,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - id: v
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
       # Fails if any engine's source can't be fetched: no release without it.
-      - run: python3 -I packaging/release/engine_sources.py --version "${{ steps.v.outputs.version }}"
-      - run: gh release upload "${{ github.ref_name }}" "build/release/engine-sources-${{ steps.v.outputs.version }}.tar" --clobber
+      - run: python3 -I packaging/release/engine_sources.py --version "${{ needs.gate.outputs.version }}"
+      - run: gh release upload "${{ needs.gate.outputs.tag }}" "build/release/engine-sources-${{ needs.gate.outputs.version }}.tar" --clobber
 
   checksums:
     name: SHA256SUMS.txt
-    needs: [desktop, cli, engine-sources]
+    needs: [gate, desktop, cli, engine-sources, homelab-image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -171,7 +296,7 @@ jobs:
       - name: Checksum every release asset
         run: |
           mkdir assets && cd assets
-          gh release download "${{ github.ref_name }}" --repo "${{ github.repository }}" --pattern '*'
+          gh release download "${{ needs.gate.outputs.tag }}" --repo "${{ github.repository }}" --pattern '*'
           rm -f SHA256SUMS.txt
           sha256sum * | tee ../SHA256SUMS.txt
-          cd .. && gh release upload "${{ github.ref_name }}" SHA256SUMS.txt --repo "${{ github.repository }}" --clobber
+          cd .. && gh release upload "${{ needs.gate.outputs.tag }}" SHA256SUMS.txt --repo "${{ github.repository }}" --clobber
