@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pause, Play, RefreshCw, Info } from 'lucide-react';
+import { AlertTriangle, Pause, Play, RefreshCw, Info } from 'lucide-react';
 import type { ToolInfo } from '../../lib/types';
 import { ParamForm } from '../../form/ParamForm';
 import { useToolForm } from '../useToolForm';
@@ -119,6 +119,13 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
 
   const job = form.job.job;
   const text = job?.result?.text;
+  const invalid = !form.valid;
+  const stale = invalid && (!!lastGood || !!job);
+  const status = invalid
+    ? <><AlertTriangle size={12} aria-hidden /> Not updating: fix the highlighted settings</>
+    : updated
+      ? (paused ? 'Paused · ' : 'Live · ') + `updated ${formatRelative(updated)}`
+      : job?.status === 'failed' ? 'Not updated' : 'Loading…';
   return (
     <div className="tool-body special special-system">
       {tool.params.length > 0 && (
@@ -130,15 +137,15 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
         <Button size="sm" variant="secondary" icon={paused ? Play : Pause} onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
           {paused ? 'Resume' : 'Pause'}
         </Button>
-        <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => void form.run({ silent: true, live: true }).then((j) => { if (j?.result) { setLastGood(j.result.data as any); setUpdated(Date.now() / 1000); } })}>Refresh</Button>
+        <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => void form.run({ live: true }).then((j) => { if (j?.result) { setLastGood(j.result.data as any); setUpdated(Date.now() / 1000); } })}>Refresh</Button>
         <Segmented size="sm" label="Refresh interval" value={interval} onChange={setIntervalS} options={[{ value: '2', label: '2 s' }, { value: '3', label: '3 s' }, { value: '5', label: '5 s' }]} />
-        <span className="muted small dash-updated" aria-live="off">
-          {form.job.running && <Spinner size={11} />} {updated ? (paused ? 'Paused · ' : 'Live · ') + `updated ${formatRelative(updated)}` : 'Loading…'}
+        <span className={cx('muted small dash-updated', invalid && 'is-invalid')} aria-live="off">
+          {form.job.running && !invalid && <Spinner size={11} />} {status}
         </span>
         <ResetButton form={form} />
       </div>
-      <div className={cx('dash-output', form.stale && 'is-stale')}>
-        <StaleNotice stale={form.stale} />
+      <div className={cx('dash-output', stale && 'is-stale')}>
+        <StaleNotice stale={stale} />
         {job?.status === 'failed' && <ErrorView error={job.error ?? { code: 'failed' }} />}
         {job?.status === 'succeeded' && <Warnings warnings={job.result?.warnings} />}
         {lastGood && Object.keys(lastGood).length > 0 ? <Dashboard data={lastGood} /> : text ? <pre className="code-view mono">{text}</pre> : null}

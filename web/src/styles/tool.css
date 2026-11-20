@@ -219,6 +219,7 @@ mark.match.alt { background: var(--mark-2); box-shadow: 0 0 0 1px color-mix(in s
 .special-system .tool-input { max-width: 680px; }
 .dash-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .dash-updated { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.dash-updated.is-invalid { color: var(--danger); }
 .dash { display: flex; flex-direction: column; gap: 14px; }
 .dash-output { display: flex; flex-direction: column; gap: 14px; }
 .dash-note { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--text-3); }
