@@ -189,7 +189,7 @@ also attaches the source tarballs of these components.
 | graphite2 | 1.3.15 | MIT OR MPL-2.0 OR LGPL-2.1-or-later OR GPL-2.0-or-later | https://github.com/silnrsi/graphite/releases/download/1.3.15/graphite2-1.3.15.tgz |
 | harfbuzz | 15.0.0_1 | MIT |  |
 | icu4c@79 | 79.1 | Unicode-3.0 |  |
-| jbig2dec | 0.20 | AGPL-3.0-or-later | https://github.com/ArtifexSoftware/jbig2dec/releases/download/0.20/jbig2dec-0.20.tar.gz |
+| jbig2dec | 0.20 | AGPL-3.0-or-later | https://github.com/ArtifexSoftware/jbig2dec/archive/refs/tags/0.20.tar.gz |
 | jpeg-turbo | 3.2.1 | IJG AND Zlib AND BSD-3-Clause |  |
 | json-c | 0.19 | MIT |  |
 | leptonica | 1.87.0 | BSD-2-Clause |  |
