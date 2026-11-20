@@ -5,7 +5,8 @@ import { useApp } from '../lib/app';
 import { kindOf } from '../lib/bench';
 import { formatBytes } from '../lib/format';
 import { FileThing } from '../components/BenchObject';
-import { Spinner, cx } from '../components/ui';
+import { ArrowDown } from 'lucide-react';
+import { Button, Spinner, cx } from '../components/ui';
 import { PlayableMedia, StillImage } from '../results/MediaPreview';
 
 const ext = (name: string) => (name.includes('.') ? name.split('.').pop()!.toUpperCase() : '');
@@ -41,12 +42,14 @@ function delta(before: number, after: number) {
  * The file and what became of it, side by side (or just the result).
  * Detail (every output, data, downloads) stays in the result below.
  */
-export const Stage = memo(function Stage({ files, job, running, live, mode }: {
+export const Stage = memo(function Stage({ files, job, running, live, mode, onShowResult }: {
   files: FileItem[];
   job: JobView | null;
   running: boolean;
   live: boolean;
   mode: 'side' | 'result';
+  /** Brings the detailed result below into view, for results with no file to show here. */
+  onShowResult?: () => void;
 }) {
   const { backend } = useApp();
   const first = files[0];
@@ -66,6 +69,7 @@ export const Stage = memo(function Stage({ files, job, running, live, mode }: {
   const totalOut = arts.reduce((n, a) => n + a.size, 0);
   const showOriginal = mode === 'side' || !out;
   const failed = job && (job.status === 'failed' || job.status === 'cancelled');
+  const doneNoFile = job?.status === 'succeeded' && !out;
 
   return (
     <div className={cx('stage', mode === 'side' ? 'is-side' : 'is-single', !isMedia(first.mime, first.name) && (!out || !isMedia(out.mime, out.name)) && 'is-compact')}>
@@ -83,7 +87,12 @@ export const Stage = memo(function Stage({ files, job, running, live, mode }: {
           <div className={cx('stage-frame', !out && 'is-empty')}>
             {out ? <Media name={out.name} mime={out.mime} url={outUrl} controls /> : (
               <span className="stage-wait">
-                {running ? <><Spinner size={16} /> Working…</> : failed ? 'That didn’t work. The details are below.' : live ? 'The result shows here as you change settings.' : 'Run it to see the result here.'}
+                {running ? <><Spinner size={16} /> Working…</> : failed ? 'That didn’t work. The details are below.' : doneNoFile ? (
+                  <>
+                    Done. This result has no file; it is below.
+                    {onShowResult && <Button size="sm" variant="secondary" icon={ArrowDown} onClick={onShowResult}>Show result</Button>}
+                  </>
+                ) : live ? 'The result shows here as you change settings.' : 'Run it to see the result here.'}
               </span>
             )}
           </div>

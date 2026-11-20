@@ -659,3 +659,112 @@ async fn malformed_input() {
         .unwrap_err();
     assert_eq!(e.code(), "invalid_input");
 }
+
+/// RGB of the first frame of `p` as (width, height, pixels).
+fn first_frame_rgb(p: &std::path::Path) -> (usize, usize, Vec<u8>) {
+    let (w, h) = dims(p);
+    let out = std::process::Command::new("ffmpeg")
+        .args(["-v", "error", "-i"])
+        .arg(p)
+        .args(["-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+        .output()
+        .expect("ffmpeg runs");
+    assert!(out.status.success());
+    (w as usize, h as usize, out.stdout)
+}
+
+fn is_red(px: &[u8]) -> bool {
+    px[0] > 180 && px[1] < 80 && px[2] < 80
+}
+
+#[tokio::test]
+async fn watermark_margin_keeps_logo_on_canvas() {
+    let h = harness();
+    need!(h, "video.watermark");
+    let v = gen(
+        &h,
+        "small.mp4",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "color=blue:s=160x120:d=1:r=10",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+        ],
+    );
+    let logo = gen(
+        &h,
+        "logo.png",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "color=red:s=64x32",
+            "-frames:v",
+            "1",
+            "-update",
+            "1",
+        ],
+    );
+    let wm = |pos: &'static str, margin: i64| {
+        json!({"input": [s(&v)], "kind": "image", "image": s(&logo), "opacity": 1.0,
+               "size": 25, "position": pos, "margin": margin, "quality": "high"})
+    };
+
+    // The maximum margin is clamped to the frame and warns instead of hiding the logo.
+    for pos in ["bottom-right", "top-left", "top-right", "bottom-left"] {
+        let out = h.run("video.watermark", wm(pos, 2000)).await.unwrap();
+        let (fw, fh, rgb) = first_frame_rgb(&out.artifacts[0].path);
+        let red = rgb.chunks(3).filter(|px| is_red(px)).count();
+        assert!(red > 300, "{pos}: watermark not visible ({red} red pixels)");
+        // The margin is clamped to the room available, so the logo ends at the opposite edge.
+        let (cx, cy) = match pos {
+            "top-left" => (fw - 3, fh - 3),
+            "top-right" => (2, fh - 3),
+            "bottom-left" => (fw - 3, 2),
+            _ => (2, 2),
+        };
+        let i = (cy * fw + cx) * 3;
+        assert!(
+            is_red(&rgb[i..i + 3]),
+            "{pos}: margin not clamped to the frame"
+        );
+        assert!(
+            out.warnings.iter().any(|w| w.contains("margin")),
+            "{pos}: {:?}",
+            out.warnings
+        );
+    }
+
+    // A modest margin still offsets the logo from the corner, without a warning.
+    let out = h.run("video.watermark", wm("top-left", 16)).await.unwrap();
+    let (fw, _, rgb) = first_frame_rgb(&out.artifacts[0].path);
+    let at = |x: usize, y: usize| is_red(&rgb[(y * fw + x) * 3..(y * fw + x) * 3 + 3]);
+    assert!(!at(4, 4), "logo should start after the margin");
+    assert!(
+        at(24, 22),
+        "logo should be inside the frame after the margin"
+    );
+    assert!(!out.warnings.iter().any(|w| w.contains("margin")));
+
+    if has_filter("drawtext") {
+        let out = h
+            .run(
+                "video.watermark",
+                json!({"input": [s(&v)], "kind": "text", "text": "WM", "color": "#ff0000",
+                       "box": false, "opacity": 1.0, "size": 30, "margin": 2000, "quality": "high"}),
+            )
+            .await
+            .unwrap();
+        let (_, _, rgb) = first_frame_rgb(&out.artifacts[0].path);
+        assert!(
+            rgb.chunks(3).filter(|px| is_red(px)).count() > 20,
+            "text watermark not visible"
+        );
+    }
+}

@@ -32,7 +32,8 @@ pub mod prelude {
     pub use crate::error::{Context, ToolError, ToolResult};
     pub use crate::params::{InputFile, Params};
     pub use crate::spec::{
-        Category, Execution, OutputKind, ParamSpec, PathKind, Permission, Platform, ToolSpec,
+        Category, Execution, OutputKind, ParamSpec, PathKind, Permission, Platform, Requirement,
+        ToolSpec,
     };
     pub use crate::tool::{
         async_tool, sync_tool, Artifact, Environment, Tool, ToolContext, ToolOutput,

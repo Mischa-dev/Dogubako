@@ -13,3 +13,4 @@ apps/desktop/src-tauri/gen/
 
 # Local compose settings (may hold API keys)
 .env
+__pycache__/

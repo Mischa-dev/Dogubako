@@ -33,7 +33,7 @@ outputs, models, extensions and the optional config file.
 Releases publish the image as `ghcr.io/mischa-dev/dogubako:<version>`
 (linux/amd64), starting with `0.1.0-alpha.1`. The package is private during the
 alpha, so build it as above for now. Once it's public, set
-`image: ghcr.io/mischa-dev/dogubako:0.1.0-alpha.1` in the compose file and
+`image: ghcr.io/mischa-dev/dogubako:0.1.0-alpha.2` in the compose file and
 start with `docker compose up -d --no-build`. To load an image tarball from
 a test build instead, see [Try the alpha](/start/alpha/#test-builds-from-ci).
 :::

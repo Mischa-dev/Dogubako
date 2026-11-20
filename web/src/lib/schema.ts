@@ -1,4 +1,4 @@
-import type { ParamSpec, ToolInfo } from './types';
+import type { EnumOption, ParamSpec, ShowIf, ToolInfo } from './types';
 import type { FileRef } from './backend/types';
 
 /** A file in a form value: either uploading or ready (with ref). */
@@ -66,6 +66,38 @@ export function isVisible(p: ParamSpec, values: FormValues, all?: ParamSpec[], d
   return true;
 }
 
+function matches(cond: ShowIf, values: FormValues): boolean {
+  const cur = values[cond.param];
+  const vals = cond.values ?? [];
+  return Array.isArray(cur) ? cur.some((c) => vals.some((v) => looseEq(c, v))) : vals.some((v) => looseEq(cur, v));
+}
+
+/** Why an enum option can't be used right now (install capability or another param's value), or null. */
+export function optionIssue(o: EnumOption, values: FormValues, all?: ParamSpec[]): string | null {
+  if (o.unavailable) return o.unavailable;
+  if (o.only_if && !matches(o.only_if, values)) {
+    const dep = all?.find((x) => x.name === o.only_if!.param);
+    const cur = values[o.only_if.param];
+    const curLabel = dep?.type === 'enum' ? dep.options.find((x) => looseEq(x.value, cur))?.label : undefined;
+    return curLabel ? `Not available with ${curLabel}` : `Not available with this ${dep?.label ?? o.only_if.param}`;
+  }
+  return null;
+}
+
+/** Why the param's current value can't work here, or null. */
+export function valueIssue(p: ParamSpec, values: FormValues, all?: ParamSpec[]): string | null {
+  const v = values[p.name];
+  if (p.unavailable && !isEmpty(v) && v !== false) return p.unavailable;
+  if (p.type !== 'enum') return null;
+  const chosen = Array.isArray(v) ? v : isEmpty(v) ? [] : [v];
+  for (const c of chosen) {
+    const o = p.options.find((x) => looseEq(x.value, c));
+    const issue = o && optionIssue(o, values, all);
+    if (issue) return `${o.label}: ${issue}`;
+  }
+  return null;
+}
+
 const DECIMAL = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
 
 /** Parse a number param value; text that is not a plain decimal (`0x3`, `1.2.3`, `Infinity`) is NaN. */
@@ -80,6 +112,22 @@ export function isEmpty(v: unknown): boolean {
 }
 
 /** Validate visible params. Returns map param -> message. */
+const utf8 = new TextEncoder();
+
+/** Text length as the engine counts it (UTF-8 bytes), so the form's limit matches the server's. */
+export function textLength(s: string): number {
+  // eslint-disable-next-line no-control-regex
+  return /^[\x00-\x7f]*$/.test(s) ? s.length : utf8.encode(s).length;
+}
+
+export function textLengthError(s: string, max: number): string | undefined {
+  const n = textLength(s);
+  if (n <= max) return undefined;
+  const over = (n - max).toLocaleString();
+  const unit = n === s.length ? 'characters' : 'bytes';
+  return `Too long: ${n.toLocaleString()} of ${max.toLocaleString()} ${unit} allowed. Remove ${over} to run.`;
+}
+
 export function validate(tool: Pick<ToolInfo, 'params'>, values: FormValues): FormErrors {
   const errs: FormErrors = {};
   for (const p of tool.params) {
@@ -96,6 +144,8 @@ export function validate(tool: Pick<ToolInfo, 'params'>, values: FormValues): Fo
       if (p.required && p.type !== 'boolean') errs[p.name] = 'Required';
       continue;
     }
+    const issue = valueIssue(p, values, tool.params);
+    if (issue) { errs[p.name] = issue; continue; }
     if (p.type === 'integer' || p.type === 'number') {
       const n = parseNum(v);
       if (!Number.isFinite(n)) { errs[p.name] = 'Enter a number'; continue; }
@@ -109,8 +159,9 @@ export function validate(tool: Pick<ToolInfo, 'params'>, values: FormValues): Fo
     if (p.type === 'color' && !/^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(String(v).trim())) {
       errs[p.name] = 'Use a hex color like #3366ff';
     }
-    if (p.type === 'text' && p.max_len && String(v).length > p.max_len) {
-      errs[p.name] = `At most ${p.max_len} characters`;
+    if (p.type === 'text' && p.max_len) {
+      const err = textLengthError(String(v), p.max_len);
+      if (err) errs[p.name] = err;
     }
   }
   return errs;

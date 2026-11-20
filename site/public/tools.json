@@ -1,5 +1,5 @@
 {
- "version": "0.1.0-alpha.1",
+ "version": "0.1.0-alpha.2",
  "tools": [
   {
    "id": "image.convert",
@@ -118,19 +118,35 @@
       },
       {
        "value": "heic",
-       "label": "HEIC (ImageMagick)"
+       "label": "HEIC (ImageMagick)",
+       "requires": {
+        "kind": "magick_write",
+        "format": "heic"
+       }
       },
       {
        "value": "jxl",
-       "label": "JPEG XL (ImageMagick)"
+       "label": "JPEG XL (ImageMagick)",
+       "requires": {
+        "kind": "magick_write",
+        "format": "jxl"
+       }
       },
       {
        "value": "jp2",
-       "label": "JPEG 2000 (ImageMagick)"
+       "label": "JPEG 2000 (ImageMagick)",
+       "requires": {
+        "kind": "magick_write",
+        "format": "jp2"
+       }
       },
       {
        "value": "psd",
-       "label": "PSD (ImageMagick)"
+       "label": "PSD (ImageMagick)",
+       "requires": {
+        "kind": "magick_write",
+        "format": "psd"
+       }
       }
      ],
      "multi": false,
@@ -429,19 +445,35 @@
       },
       {
        "value": "heic",
-       "label": "HEIC (ImageMagick)"
+       "label": "HEIC (ImageMagick)",
+       "requires": {
+        "kind": "magick_write",
+        "format": "heic"
+       }
       },
       {
        "value": "jxl",
-       "label": "JPEG XL (ImageMagick)"
+       "label": "JPEG XL (ImageMagick)",
+       "requires": {
+        "kind": "magick_write",
+        "format": "jxl"
+       }
       },
       {
        "value": "jp2",
-       "label": "JPEG 2000 (ImageMagick)"
+       "label": "JPEG 2000 (ImageMagick)",
+       "requires": {
+        "kind": "magick_write",
+        "format": "jp2"
+       }
       },
       {
        "value": "psd",
-       "label": "PSD (ImageMagick)"
+       "label": "PSD (ImageMagick)",
+       "requires": {
+        "kind": "magick_write",
+        "format": "psd"
+       }
       }
      ],
      "multi": false,
@@ -9849,23 +9881,43 @@
      "options": [
       {
        "value": "mp3",
-       "label": "MP3"
+       "label": "MP3",
+       "requires": {
+        "kind": "ffmpeg_encoder",
+        "encoder": "libmp3lame"
+       }
       },
       {
        "value": "m4a",
-       "label": "AAC (M4A)"
+       "label": "AAC (M4A)",
+       "requires": {
+        "kind": "ffmpeg_encoder",
+        "encoder": "aac"
+       }
       },
       {
        "value": "ogg",
-       "label": "Ogg Vorbis"
+       "label": "Ogg Vorbis",
+       "requires": {
+        "kind": "ffmpeg_encoder",
+        "encoder": "libvorbis"
+       }
       },
       {
        "value": "opus",
-       "label": "Opus"
+       "label": "Opus",
+       "requires": {
+        "kind": "ffmpeg_encoder",
+        "encoder": "libopus"
+       }
       },
       {
        "value": "flac",
-       "label": "FLAC (lossless)"
+       "label": "FLAC (lossless)",
+       "requires": {
+        "kind": "ffmpeg_encoder",
+        "encoder": "flac"
+       }
       },
       {
        "value": "wav",
@@ -9877,15 +9929,27 @@
       },
       {
        "value": "alac",
-       "label": "Apple Lossless (M4A)"
+       "label": "Apple Lossless (M4A)",
+       "requires": {
+        "kind": "ffmpeg_encoder",
+        "encoder": "alac"
+       }
       },
       {
        "value": "wma",
-       "label": "WMA"
+       "label": "WMA",
+       "requires": {
+        "kind": "ffmpeg_encoder",
+        "encoder": "wmav2"
+       }
       },
       {
        "value": "ac3",
-       "label": "AC-3 (Dolby Digital)"
+       "label": "AC-3 (Dolby Digital)",
+       "requires": {
+        "kind": "ffmpeg_encoder",
+        "encoder": "ac3"
+       }
       }
      ],
      "multi": false,
@@ -9945,31 +10009,127 @@
       },
       {
        "value": "8000",
-       "label": "8 kHz"
+       "label": "8 kHz",
+       "only_if": {
+        "param": "format",
+        "values": [
+         "mp3",
+         "m4a",
+         "ogg",
+         "opus",
+         "flac",
+         "wav",
+         "aiff",
+         "alac",
+         "wma"
+        ]
+       }
       },
       {
        "value": "11025",
-       "label": "11.025 kHz"
+       "label": "11.025 kHz",
+       "only_if": {
+        "param": "format",
+        "values": [
+         "mp3",
+         "m4a",
+         "ogg",
+         "flac",
+         "wav",
+         "aiff",
+         "alac",
+         "wma"
+        ]
+       }
       },
       {
        "value": "16000",
-       "label": "16 kHz"
+       "label": "16 kHz",
+       "only_if": {
+        "param": "format",
+        "values": [
+         "mp3",
+         "m4a",
+         "ogg",
+         "opus",
+         "flac",
+         "wav",
+         "aiff",
+         "alac",
+         "wma"
+        ]
+       }
       },
       {
        "value": "22050",
-       "label": "22.05 kHz"
+       "label": "22.05 kHz",
+       "only_if": {
+        "param": "format",
+        "values": [
+         "mp3",
+         "m4a",
+         "ogg",
+         "flac",
+         "wav",
+         "aiff",
+         "alac",
+         "wma"
+        ]
+       }
       },
       {
        "value": "24000",
-       "label": "24 kHz"
+       "label": "24 kHz",
+       "only_if": {
+        "param": "format",
+        "values": [
+         "mp3",
+         "m4a",
+         "ogg",
+         "opus",
+         "flac",
+         "wav",
+         "aiff",
+         "alac",
+         "wma"
+        ]
+       }
       },
       {
        "value": "32000",
-       "label": "32 kHz"
+       "label": "32 kHz",
+       "only_if": {
+        "param": "format",
+        "values": [
+         "mp3",
+         "m4a",
+         "ogg",
+         "flac",
+         "wav",
+         "aiff",
+         "alac",
+         "wma",
+         "ac3"
+        ]
+       }
       },
       {
        "value": "44100",
-       "label": "44.1 kHz"
+       "label": "44.1 kHz",
+       "only_if": {
+        "param": "format",
+        "values": [
+         "mp3",
+         "m4a",
+         "ogg",
+         "flac",
+         "wav",
+         "aiff",
+         "alac",
+         "wma",
+         "ac3"
+        ]
+       }
       },
       {
        "value": "48000",
@@ -9977,15 +10137,47 @@
       },
       {
        "value": "88200",
-       "label": "88.2 kHz"
+       "label": "88.2 kHz",
+       "only_if": {
+        "param": "format",
+        "values": [
+         "m4a",
+         "ogg",
+         "flac",
+         "wav",
+         "aiff",
+         "alac"
+        ]
+       }
       },
       {
        "value": "96000",
-       "label": "96 kHz"
+       "label": "96 kHz",
+       "only_if": {
+        "param": "format",
+        "values": [
+         "m4a",
+         "ogg",
+         "flac",
+         "wav",
+         "aiff",
+         "alac"
+        ]
+       }
       },
       {
        "value": "192000",
-       "label": "192 kHz"
+       "label": "192 kHz",
+       "only_if": {
+        "param": "format",
+        "values": [
+         "ogg",
+         "flac",
+         "wav",
+         "aiff",
+         "alac"
+        ]
+       }
       }
      ],
      "multi": false,
@@ -13569,7 +13761,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 8,
+     "default": 4,
      "advanced": true,
      "primary": false
     },
@@ -13758,7 +13950,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 8,
+     "default": 4,
      "advanced": true,
      "primary": false
     }
@@ -14008,7 +14200,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 8,
+     "default": 4,
      "advanced": true,
      "primary": false
     },
@@ -16038,6 +16230,11 @@
       "values": [
        "png"
       ]
+     },
+     "requires": {
+      "kind": "program",
+      "dependency": "poppler",
+      "program": "pdftocairo"
      }
     }
    ],

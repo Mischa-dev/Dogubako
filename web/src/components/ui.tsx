@@ -108,13 +108,15 @@ export function Switch({ checked, onChange, id, disabled, label, describedBy }: 
 }
 
 /** Radio-group styled as a segmented control, with arrow-key navigation. */
-export function Segmented<T extends string>({ value, options, onChange, label, id, size }: {
+export function Segmented<T extends string>({ value, options, onChange, label, id, size, wrap }: {
   value: T;
-  options: { value: T; label: ReactNode; icon?: LucideIcon; title?: string }[];
+  options: { value: T; label: ReactNode; icon?: LucideIcon; title?: string; disabled?: boolean }[];
   onChange: (v: T) => void;
   label?: string;
   id?: string;
   size?: 'sm';
+  /** Wrap onto more lines instead of scrolling when the options don't fit. */
+  wrap?: boolean;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const idx = Math.max(0, options.findIndex((o) => o.value === value));
@@ -124,14 +126,16 @@ export function Segmented<T extends string>({ value, options, onChange, label, i
     if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (idx - 1 + options.length) % options.length;
     if (e.key === 'Home') n = 0;
     if (e.key === 'End') n = options.length - 1;
-    if (n >= 0) {
+    const step = e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'End' ? -1 : 1;
+    for (let k = 0; n >= 0 && options[n].disabled && k < options.length; k++) n = (n + step + options.length) % options.length;
+    if (n >= 0 && !options[n].disabled) {
       e.preventDefault();
       onChange(options[n].value);
       refs.current[n]?.focus();
     }
   };
   return (
-    <div className={cx('segmented', size === 'sm' && 'segmented-sm')} role="radiogroup" aria-label={label} id={id} onKeyDown={onKey}>
+    <div className={cx('segmented', size === 'sm' && 'segmented-sm', wrap && 'segmented-wrap')} role="radiogroup" aria-label={label} id={id} onKeyDown={onKey}>
       {options.map((o, i) => {
         const Icon = o.icon;
         const on = o.value === value;
@@ -146,6 +150,7 @@ export function Segmented<T extends string>({ value, options, onChange, label, i
             className={cx('segment', on && 'is-on')}
             onClick={() => onChange(o.value)}
             title={o.title}
+            disabled={o.disabled && !on}
           >
             {Icon && <Icon size={14} aria-hidden />}
             {o.label}

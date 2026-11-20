@@ -18,12 +18,12 @@ side by side.
 
 ## Desktop app
 
-The current release is **0.1.0-alpha.1**, a test build. The desktop app is
+The current release is **0.1.0-alpha.2**, a test build. The desktop app is
 available for **macOS 15 (Sequoia) or newer on Apple silicon**. Installers for
 Windows, Linux and Intel Macs aren't part of the alpha; you can
 [build those yourself](/develop/building/#desktop-app-tauri-2).
 
-1. Download `Dogubako_0.1.0-alpha.1_aarch64.dmg` from the
+1. Download `Dogubako_0.1.0-alpha.2_aarch64.dmg` from the
    [GitHub release](https://github.com/mischa-dev/dogubako/releases), open it
    and drag **Dogubako** into **Applications**.
 2. Open Dogubako. If the build isn't signed yet, macOS refuses the first time;
