@@ -609,3 +609,20 @@ async fn whisper_and_piper_if_installed() {
         );
     }
 }
+
+/// Piper runs one inference per sentence; a long run without sentence breaks
+/// used to grow its memory until onnxruntime aborted (exit 134).
+#[tokio::test]
+async fn tts_long_text_without_sentence_breaks() {
+    let h = harness();
+    if !h.available("speech.tts") {
+        return;
+    }
+    let text = "word ".repeat(4_000);
+    let out = h.run("speech.tts", json!({"text": text})).await.unwrap();
+    assert!(
+        out.data["duration"].as_f64().unwrap() > 60.0,
+        "{}",
+        out.data
+    );
+}

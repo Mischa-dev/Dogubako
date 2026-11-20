@@ -111,6 +111,12 @@ campaign are added here as they merge.
 - Text fields no longer truncate silently at their length limit; the field
   shows the error instead.
 - Watermark Video clamps the margin so the watermark stays on the frame.
+- TIFF, TGA, QOI and PPM outputs preview in the GUI, ASS and QOI get proper
+  MIME types, and the audio preview explains files it can't play.
+- QR Code Generator and Styled QR Code check the content against the chosen
+  error correction level's capacity before Run.
+- Extract Frames in scene mode reports "no frames matched" for JPEG/WebP
+  instead of an FFmpeg encoder error.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 
