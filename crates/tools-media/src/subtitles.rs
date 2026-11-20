@@ -684,6 +684,37 @@ fn sub_codec_for(fmt: &str, src_ext: &str) -> &'static str {
     }
 }
 
+/// Why the probed streams cannot be stream-copied into WebM, which only
+/// holds VP8/VP9/AV1 video and Opus/Vorbis audio.
+fn webm_copy_problem(fmt: &str, pr: &Probe) -> Option<String> {
+    if fmt != "webm" {
+        return None;
+    }
+    let mut bad: Vec<String> = vec![];
+    for st in pr.streams() {
+        let c = st["codec_name"].as_str().unwrap_or("unknown");
+        let problem = match st["codec_type"].as_str() {
+            Some("video") if !VCodec::from_probe(c).is_some_and(|v| video_ok_in(fmt, v)) => {
+                format!("{c} video (it needs VP8, VP9 or AV1)")
+            }
+            Some("audio") if !audio_copy_ok(fmt, c) => {
+                format!("{c} audio (it needs Opus or Vorbis)")
+            }
+            _ => continue,
+        };
+        if !bad.contains(&problem) {
+            bad.push(problem);
+        }
+    }
+    if bad.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "WebM cannot hold {} without re-encoding, and Add Subtitles does not re-encode; choose MKV or MP4, or convert the video to WebM first",
+        bad.join(" or ")
+    ))
+}
+
 /// Mux subtitle files into a video (stream copy for audio/video).
 pub(crate) async fn mux_subtitles(
     ctx: &ToolContext,
@@ -778,6 +809,9 @@ fn subtitles_add() -> Arc<dyn Tool> {
             o => o,
         }
         .to_string();
+        if let Some(msg) = webm_copy_problem(&fmt, &pr) {
+            return Err(ToolError::invalid("format", msg));
+        }
         // validate subtitle files by parsing text formats
         let mut list = vec![];
         for (k, s) in subs.iter().enumerate() {
