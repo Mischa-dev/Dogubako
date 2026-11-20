@@ -45,21 +45,6 @@
     "tools": 1
   },
   {
-    "id": "vips",
-    "name": "libvips",
-    "purpose": "Fast, low-memory processing of very large images",
-    "license": "LGPL-2.1+",
-    "install": {
-      "apt": "libvips-tools",
-      "dnf": "vips-tools",
-      "pacman": "libvips",
-      "brew": "vips",
-      "winget": null,
-      "url": "https://www.libvips.org/install.html"
-    },
-    "tools": 0
-  },
-  {
     "id": "exiftool",
     "name": "ExifTool",
     "purpose": "Read and write metadata for images, video, audio and documents",

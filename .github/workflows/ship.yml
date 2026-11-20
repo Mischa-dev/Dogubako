@@ -1,0 +1,138 @@
+name: Ship release
+
+# Mischa's one yes. Ships the release that release.yml prepared as a draft:
+# checks the draft is complete and its checksums match, pushes the tested
+# homelab image to ghcr.io, publishes the release (which creates the tag at
+# the commit the draft was built from), then deploys dogubako.app pointing at it
+# and docs.dogubako.app (which holds back while the release is unpublished).
+#
+# Only ever run by hand. The `release` environment is where required
+# reviewers go, so the run also waits for an approval click when set.
+# See docs/releases/RELEASING.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to ship, exactly as in Cargo.toml (e.g. 0.1.0-alpha.2)
+        type: string
+        required: true
+
+# Shared with release.yml, so the draft can't be replaced while it ships.
+concurrency:
+  group: dogubako-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Draft ${{ inputs.version }} is complete
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write   # draft releases are only visible with write access
+      actions: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ inputs.version }}
+      TAG: v${{ inputs.version }}
+    outputs:
+      sha: ${{ steps.draft.outputs.sha }}
+      run: ${{ steps.run.outputs.id }}
+    steps:
+      - id: draft
+        name: The draft exists and is unpublished
+        run: |
+          gh release view "$TAG" --json isDraft,targetCommitish > release.json || {
+            echo "::error::No draft release $TAG. Run the Release workflow first."; exit 1; }
+          [ "$(jq -r .isDraft release.json)" = true ] || { echo "::error::$TAG is already published."; exit 1; }
+          sha="$(jq -r .targetCommitish release.json)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.draft.outputs.sha }}
+      - name: The draft was built from this version
+        run: |
+          [ "$(python3 -I packaging/release/release.py current)" = "$VERSION" ] || {
+            echo "::error::The draft's commit is not version $VERSION."; exit 1; }
+          python3 -I packaging/release/release.py check --version "$VERSION"
+          tagged="$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | tail -n1 | cut -f1)"
+          if [ -n "$tagged" ] && [ "$tagged" != "${{ steps.draft.outputs.sha }}" ]; then
+            echo "::error::Tag $TAG exists at $tagged, but the draft was built from ${{ steps.draft.outputs.sha }}."; exit 1
+          fi
+      - name: Every asset is there and matches SHA256SUMS.txt
+        run: |
+          mkdir assets && cd assets
+          gh release download "$TAG" --pattern '*'
+          for f in "Dogubako_${VERSION}_aarch64.dmg" dogubako-x86_64-unknown-linux-gnu dogubako-aarch64-apple-darwin \
+                   dogubako-x86_64-pc-windows-msvc.exe "engine-sources-${VERSION}.tar" packs.json SHA256SUMS.txt; do
+            [ -s "$f" ] || { echo "::error::Missing release asset $f"; exit 1; }
+          done
+          sha256sum -c SHA256SUMS.txt
+          [ "$(grep -c . SHA256SUMS.txt)" -eq "$(ls | grep -vcx SHA256SUMS.txt)" ] || {
+            echo "::error::SHA256SUMS.txt does not cover every asset."; exit 1; }
+      - id: run
+        name: The Release run that built it
+        run: |
+          id="$(gh run list --workflow release.yml --commit "${{ steps.draft.outputs.sha }}" --status success \
+                 --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          [ -n "$id" ] || { echo "::error::No successful Release run for ${{ steps.draft.outputs.sha }}."; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  image:
+    name: Push ghcr.io/mischa-dev/dogubako:${{ inputs.version }}
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: homelab-image
+          run-id: ${{ needs.verify.outputs.run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The exact image release.yml smoke-tested. A new package on ghcr.io is
+      # private until Mischa makes it public.
+      - run: |
+          gunzip -c homelab-image.tar.gz | docker load
+          docker push "ghcr.io/mischa-dev/dogubako:${{ inputs.version }}"
+
+  publish:
+    name: Publish v${{ inputs.version }}
+    needs: [verify, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - run: gh release edit "v${{ inputs.version }}" --draft=false --target "${{ needs.verify.outputs.sha }}"
+
+  website:
+    name: Deploy dogubako.app
+    needs: [verify, publish]
+    uses: ./.github/workflows/website.yml
+    with:
+      docs_live: true
+      release: v${{ inputs.version }}
+      deploy: true
+      ref: ${{ needs.verify.outputs.sha }}
+    secrets: inherit
+
+  docs:
+    name: Deploy docs.dogubako.app
+    needs: [verify, publish]
+    uses: ./.github/workflows/docs.yml
+    with:
+      ref: ${{ needs.verify.outputs.sha }}
+    secrets: inherit
