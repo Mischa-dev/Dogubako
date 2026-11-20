@@ -31,7 +31,7 @@ Convert, resize, compress, inspect and edit images. 30 tools. Run any of them fr
 | [Contact Sheet](#contact-sheet) | `image.contact_sheet` | — |
 | [Sprite Sheet](#sprite-sheet) | `image.sprite_sheet` | — |
 | [Redact Regions](#redact-regions) | `image.redact` | — |
-| [Reduce Noise](#reduce-noise) | `image.denoise` | — |
+| [Reduce Image Noise](#reduce-image-noise) | `image.denoise` | — |
 | [View Image Metadata](#view-image-metadata) | `image.metadata` | — |
 | [Remove Image Metadata](#remove-image-metadata) | `image.strip_metadata` | — |
 | [SVG to PNG/JPEG/WebP](#svg-to-pngjpegwebp) | `image.svg_to_raster` | — |
@@ -502,7 +502,7 @@ Also found by: redact, blur, pixelate, censor, anonymize, hide, privacy, black b
 | `format` | `--format` | choice | `same` | Output format. One of: `same` (Same as input), `png`, `jpg` (JPEG), `webp`, `avif`, `gif`, `bmp`, `tiff`, `ico` (ICO (max 256px)), `tga`, `qoi`, `ppm` (PPM/PNM). *Advanced.* |
 | `quality` | `--quality` | integer 1–100 | `92` | Quality for lossy formats (JPEG, WebP, AVIF), 1–100. *Advanced.* |
 
-## Reduce Noise
+## Reduce Image Noise
 
 <div class="tool-meta"><span class="engine-native">native</span><span>progress</span></div>
 

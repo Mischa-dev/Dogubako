@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Pause, Play, RefreshCw, Info } from 'lucide-react';
-import type { ToolInfo } from '../../lib/types';
+import { AlertTriangle, Pause, Play, RefreshCw, Info } from 'lucide-react';
+import type { JobView, ToolInfo } from '../../lib/types';
 import { ParamForm } from '../../form/ParamForm';
 import { useToolForm } from '../useToolForm';
 import { DataTable, KeyValue, fmtNum } from '../../results/DataViews';
@@ -110,25 +110,33 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
   }, []);
 
   const polledValues = useRef<unknown>(null);
+  const wasPaused = useRef(paused);
+  const inflight = useRef<Promise<JobView | null> | null>(null);
   useEffect(() => {
     // Paused: no polling. Changing a setting still refreshes once so the readings match the form.
     const changed = polledValues.current !== form.values;
+    const resumed = wasPaused.current && !paused;
     polledValues.current = form.values;
+    wasPaused.current = paused;
     if (paused && !changed) return;
     let alive = true;
     let timer: number | undefined;
-    let busy = false;
     const schedule = () => {
       window.clearTimeout(timer);
       timer = undefined;
-      if (alive && !paused && !document.hidden) timer = window.setTimeout(tick, Number(interval) * 1000);
+      if (alive && !paused && !document.hidden) timer = window.setTimeout(() => void tick(), Number(interval) * 1000);
     };
-    const tick = async () => {
+    // One poll at a time, also across effect re-runs; only new settings start a run while one is in flight.
+    const tick = async (fresh = false) => {
       timer = undefined;
-      if (!alive || busy) return;
-      busy = true;
-      const j = await formRef.current.run({ silent: true, live: true });
-      busy = false;
+      if (!alive) return;
+      let p = inflight.current;
+      if (!p || fresh) {
+        const run = formRef.current.run({ silent: true, live: true });
+        inflight.current = p = run;
+        void run.finally(() => { if (inflight.current === run) inflight.current = null; });
+      }
+      const j = await p;
       if (!alive) return;
       if (j?.status === 'succeeded' && j.result) accept((j.result.data as any) ?? {});
       schedule();
@@ -138,7 +146,8 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
       if (document.hidden) { window.clearTimeout(timer); timer = undefined; }
       else if (timer === undefined && !paused) void tick();
     };
-    if (paused || !document.hidden) void tick();
+    if (changed) { if (paused || !document.hidden) void tick(true); }
+    else if (!document.hidden) { if (resumed || inflight.current) void tick(); else schedule(); }
     if (!paused) document.addEventListener('visibilitychange', onVisibility);
     return () => {
       alive = false;
@@ -149,6 +158,13 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
 
   const job = form.job.job;
   const text = job?.result?.text;
+  const invalid = !form.valid;
+  const stale = invalid && (!!lastGood || !!job);
+  const status = invalid
+    ? <><AlertTriangle size={12} aria-hidden /> Not updating: fix the highlighted settings</>
+    : updated
+      ? (paused ? 'Paused · ' : 'Live · ') + `updated ${formatRelative(updated)}`
+      : job?.status === 'failed' ? 'Not updated' : 'Loading…';
   return (
     <div className="tool-body special special-system">
       {tool.params.length > 0 && (
@@ -160,15 +176,15 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
         <Button size="sm" variant="secondary" icon={paused ? Play : Pause} onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
           {paused ? 'Resume' : 'Pause'}
         </Button>
-        <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => void form.run({ silent: true, live: true }).then((j) => { if (j?.status === 'succeeded' && j.result) accept((j.result.data as any) ?? {}); })}>Refresh</Button>
+        <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => void form.run({ live: true }).then((j) => { if (j?.status === 'succeeded' && j.result) accept((j.result.data as any) ?? {}); })}>Refresh</Button>
         <Segmented size="sm" label="Refresh interval" value={interval} onChange={setIntervalS} options={POLL_INTERVALS.map((v) => ({ value: v, label: `${v} s` }))} />
-        <span className="muted small dash-updated" aria-live="off">
-          {form.job.running && !lastGood && <Spinner size={11} />} {updated ? (paused ? 'Paused · ' : 'Live · ') + `updated ${formatRelative(updated)}` : 'Loading…'}
+        <span className={cx('muted small dash-updated', invalid && 'is-invalid')} aria-live="off">
+          {form.job.running && !lastGood && !invalid && <Spinner size={11} />} {status}
         </span>
         <ResetButton form={form} />
       </div>
-      <div className={cx('dash-output', form.stale && 'is-stale')}>
-        <StaleNotice stale={form.stale} />
+      <div className={cx('dash-output', stale && 'is-stale')}>
+        <StaleNotice stale={stale} />
         {job?.status === 'failed' && <ErrorView error={job.error ?? { code: 'failed' }} />}
         {job?.status === 'succeeded' && <Warnings warnings={job.result?.warnings} />}
         {lastGood && Object.keys(lastGood).length > 0 ? <Dashboard data={lastGood} /> : text ? <pre className="code-view mono">{text}</pre> : null}

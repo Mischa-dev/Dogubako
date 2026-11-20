@@ -66,6 +66,15 @@ export function isVisible(p: ParamSpec, values: FormValues, all?: ParamSpec[], d
   return true;
 }
 
+const DECIMAL = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
+
+/** Parse a number param value; text that is not a plain decimal (`0x3`, `1.2.3`, `Infinity`) is NaN. */
+export function parseNum(v: unknown): number {
+  if (typeof v === 'number') return v;
+  const t = String(v).trim();
+  return DECIMAL.test(t) ? Number(t) : NaN;
+}
+
 export function isEmpty(v: unknown): boolean {
   return v == null || v === '' || (Array.isArray(v) && v.length === 0);
 }
@@ -88,7 +97,7 @@ export function validate(tool: Pick<ToolInfo, 'params'>, values: FormValues): Fo
       continue;
     }
     if (p.type === 'integer' || p.type === 'number') {
-      const n = Number(v);
+      const n = parseNum(v);
       if (!Number.isFinite(n)) { errs[p.name] = 'Enter a number'; continue; }
       if (p.type === 'integer' && !Number.isInteger(n)) { errs[p.name] = 'Enter a whole number'; continue; }
       if (p.min != null && n < p.min) { errs[p.name] = `Must be at least ${p.min}`; continue; }
@@ -122,7 +131,7 @@ export function toRunParams(tool: Pick<ToolInfo, 'params'>, values: FormValues):
       }
       case 'integer':
       case 'number':
-        if (!isEmpty(v) && Number.isFinite(Number(v))) out[p.name] = Number(v);
+        if (!isEmpty(v) && Number.isFinite(parseNum(v))) out[p.name] = parseNum(v);
         break;
       case 'boolean':
         out[p.name] = !!v;
