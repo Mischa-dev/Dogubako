@@ -2583,6 +2583,12 @@ fn watermark() -> Arc<dyn Tool> {
             let (vw, vh) = pr.dims().unwrap_or((1280, 720));
             let dir = ctx.temp_dir(&format!("wm-{i}"))?;
             let (xe, ye) = wm_pos(&pos, m, kind == "image");
+            if pos != "center" && (m >= vw as i64 || m >= vh as i64) {
+                rep.warnings.push(format!(
+                    "{}: margin {m}px is larger than the {vw}×{vh} frame; it was reduced to keep the watermark inside the frame",
+                    f.name
+                ));
+            }
             let re = reencode(&ctx, f, &pr, &p, true, &mut rep.warnings).await?;
             let out = out_path(&ctx, f, "watermarked", re.ext);
             let mut ff = Ff::new().input(&f.path);
@@ -2634,19 +2640,23 @@ fn watermark() -> Arc<dyn Tool> {
     })
 }
 
+/// Overlay coordinates for a watermark. Edge positions are clamped so a margin
+/// larger than the frame keeps the watermark on-canvas instead of pushing it off.
 fn wm_pos(pos: &str, m: i64, image: bool) -> (String, String) {
     let (w, h, ow, oh) = if image {
         ("W", "H", "w", "h")
     } else {
         ("w", "h", "tw", "th")
     };
-    match pos {
+    let clamp = |e: String, full: &str, size: &str| format!("'clip({e},0,max(0,{full}-{size}))'");
+    let (x, y) = match pos {
         "top-left" => (format!("{m}"), format!("{m}")),
         "top-right" => (format!("{w}-{ow}-{m}"), format!("{m}")),
         "bottom-left" => (format!("{m}"), format!("{h}-{oh}-{m}")),
-        "center" => (format!("({w}-{ow})/2"), format!("({h}-{oh})/2")),
+        "center" => return (format!("({w}-{ow})/2"), format!("({h}-{oh})/2")),
         _ => (format!("{w}-{ow}-{m}"), format!("{h}-{oh}-{m}")),
-    }
+    };
+    (clamp(x, w, ow), clamp(y, h, oh))
 }
 
 // ---------------------------------------------------------------------------
