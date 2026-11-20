@@ -8,6 +8,7 @@ use crate::subtitles::{
 };
 use dogubako_core::models::{ModelSpec, KNOWN_MODELS};
 use dogubako_core::prelude::*;
+use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -952,7 +953,9 @@ fn tts() -> Arc<dyn Tool> {
             PIPER_MAX_BATCH,
             max_sentences,
         );
-        let mut pcm = Vec::new();
+        let mut out = std::fs::File::create(&wav)?;
+        out.write_all(&wav_header(sample_rate, 0))?;
+        let mut pcm_len = 0usize;
         for (i, batch) in batches.iter().enumerate() {
             ctx.progress(
                 0.8 * i as f32 / batches.len() as f32,
@@ -976,14 +979,17 @@ fn tts() -> Arc<dyn Tool> {
             if let Some(s) = p.opt_int("speaker") {
                 cmd = cmd.args(["-s", &s.to_string()]);
             }
-            pcm.extend(cmd.run().await?.stdout);
+            let pcm = cmd.run().await?.stdout;
+            out.write_all(&pcm)?;
+            pcm_len += pcm.len();
         }
-        if pcm.is_empty() {
+        if pcm_len == 0 {
             return Err(ToolError::failed("piper produced no audio"));
         }
-        std::fs::write(&wav, wav_bytes(sample_rate, &pcm))?;
-        drop(pcm);
-        let duration = wav_duration(&wav);
+        out.seek(SeekFrom::Start(0))?;
+        out.write_all(&wav_header(sample_rate, pcm_len))?;
+        drop(out);
+        let duration = Some(pcm_len as f64 / (sample_rate as f64 * 2.0));
         let fmt = p.str("format")?;
         let base = text
             .split_whitespace()
@@ -1060,11 +1066,11 @@ fn piper_batches(lines: &str, max_chars: usize, max_sentences: usize) -> Vec<Str
     out.into_iter().map(|(b, _, _)| b).collect()
 }
 
-/// A 16-bit mono PCM WAV file around Piper's raw output.
-fn wav_bytes(sample_rate: u32, pcm: &[u8]) -> Vec<u8> {
-    let mut b = Vec::with_capacity(44 + pcm.len());
+/// The header of a 16-bit mono PCM WAV holding `pcm_len` bytes of audio.
+fn wav_header(sample_rate: u32, pcm_len: usize) -> Vec<u8> {
+    let mut b = Vec::with_capacity(44);
     b.extend(b"RIFF");
-    b.extend((36 + pcm.len() as u32).to_le_bytes());
+    b.extend((36 + pcm_len as u32).to_le_bytes());
     b.extend(b"WAVEfmt ");
     b.extend(16u32.to_le_bytes());
     b.extend([1, 0, 1, 0]);
@@ -1072,8 +1078,7 @@ fn wav_bytes(sample_rate: u32, pcm: &[u8]) -> Vec<u8> {
     b.extend((sample_rate * 2).to_le_bytes());
     b.extend([2, 0, 16, 0]);
     b.extend(b"data");
-    b.extend((pcm.len() as u32).to_le_bytes());
-    b.extend(pcm);
+    b.extend((pcm_len as u32).to_le_bytes());
     b
 }
 
@@ -1182,7 +1187,8 @@ mod tests {
         assert_eq!(b, ["a\nb. c", "d\ne"]);
         let a = vec!["a"; 400].join("\n");
         assert_eq!(piper_batches(&a, PIPER_MAX_BATCH, 60).len(), 7);
-        let w = wav_bytes(16000, &[0u8; 16000]);
+        let mut w = wav_header(16000, 16000);
+        w.extend([0u8; 16000]);
         let dir = std::env::temp_dir().join(format!("dgb-tts-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("a.wav");
@@ -1227,7 +1233,7 @@ mod tests {
     }
 
     #[test]
-    fn wav_header() {
+    fn wav_duration_reads_header() {
         let dir = std::env::temp_dir().join(format!("dgb-wav-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("a.wav");
