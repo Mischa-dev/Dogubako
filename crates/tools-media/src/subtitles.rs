@@ -1104,13 +1104,25 @@ fn subtitles_extract() -> Arc<dyn Tool> {
         let mut artifacts = vec![];
         let mut warnings = vec![];
         let mut tracks = vec![];
+        let want = if p.bool("list_only") {
+            None
+        } else {
+            p.opt_int("track").map(|t| t as usize)
+        };
+        let mut max_tracks = 0;
         for (i, f) in files.iter().enumerate() {
             let pr = probe_video(&ctx, f).await?;
             let subs = pr.subtitle_streams();
+            let n = subs.len();
+            max_tracks = max_tracks.max(n);
             if subs.is_empty() {
                 warnings.push(format!("{}: no subtitle tracks", f.name));
+            } else if let Some(t) = want.filter(|&t| t >= n) {
+                warnings.push(format!(
+                    "{}: no subtitle track {t} (the video has {n})",
+                    f.name
+                ));
             }
-            let n = subs.len();
             for (k, s) in subs.iter().enumerate() {
                 let codec = s["codec_name"].as_str().unwrap_or("?").to_string();
                 let lang = s["tags"]["language"].as_str().unwrap_or("und").to_string();
@@ -1186,6 +1198,16 @@ fn subtitles_extract() -> Arc<dyn Tool> {
                 ]));
                 tracks.push(json!({"file": f.name, "track": k, "codec": codec, "language": lang, "title": title, "bitmap": bitmap, "output": file_name}));
             }
+        }
+        if let Some(t) = want.filter(|&t| t >= max_tracks) {
+            return Err(ToolError::invalid(
+                "track",
+                if files.len() == 1 {
+                    format!("no subtitle track {t}: the video has {max_tracks} subtitle track(s) (0 = first)")
+                } else {
+                    format!("no subtitle track {t}: the videos have at most {max_tracks} subtitle track(s) (0 = first)")
+                },
+            ));
         }
         let mut o = ToolOutput::files(artifacts).with_data(json!({"tracks": tracks, "table": {"columns": ["Video", "Track", "Codec", "Language", "Title", "Type", "Output"], "rows": rows}}));
         o.warnings = warnings;

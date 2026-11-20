@@ -191,6 +191,68 @@ async fn video_subtitle_tools() {
     assert!(out.artifacts.is_empty());
     assert_eq!(out.data["tracks"].as_array().unwrap().len(), 2);
 
+    let one_track = h
+        .run(
+            "video.subtitles_add",
+            json!({"input": s(&v), "subtitles": [s(&srt)]}),
+        )
+        .await
+        .unwrap()
+        .artifacts[0]
+        .path
+        .clone();
+    let out = h
+        .run(
+            "video.subtitles_extract",
+            json!({"input": [s(&one_track)], "track": 0}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.artifacts.len(), 1);
+    let out = h
+        .run(
+            "video.subtitles_extract",
+            json!({"input": [s(&with_subs)], "track": 1}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.artifacts.len(), 1);
+    for track in [1, 49, 99] {
+        let e = h
+            .run(
+                "video.subtitles_extract",
+                json!({"input": [s(&one_track)], "track": track}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(e.code(), "invalid_input");
+        assert!(
+            e.to_string()
+                .contains(&format!("no subtitle track {track}")),
+            "{e}"
+        );
+    }
+    let out = h
+        .run(
+            "video.subtitles_extract",
+            json!({"input": [s(&one_track), s(&with_subs)], "track": 1}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.artifacts.len(), 1);
+    assert!(out
+        .warnings
+        .iter()
+        .any(|w| w.contains("no subtitle track 1")));
+    let out = h
+        .run(
+            "video.subtitles_extract",
+            json!({"input": [s(&one_track)], "track": 49, "list_only": true}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["tracks"].as_array().unwrap().len(), 1);
+
     let out = h
         .run(
             "video.subtitles_remove",
