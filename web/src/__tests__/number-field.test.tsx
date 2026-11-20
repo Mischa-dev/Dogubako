@@ -66,9 +66,11 @@ describe('number field typing', () => {
   it('commits text that is not a number as-is so validation can flag it', () => {
     const seen: unknown[] = [];
     render(<Harness param={decimal} seen={seen} />);
-    fireEvent.change(input('Speed'), { target: { value: '1.2.3' } });
-    expect(seen.at(-1)).toBe('1.2.3');
-    expect(input('Speed').value).toBe('1.2.3');
+    for (const text of ['1.2.3', '0x3', 'Infinity']) {
+      fireEvent.change(input('Speed'), { target: { value: text } });
+      expect(seen.at(-1)).toBe(text);
+      expect(input('Speed').value).toBe(text);
+    }
   });
 
   it('clears to an empty value', () => {

@@ -1,7 +1,7 @@
 import { memo, useEffect, useId, useRef, useState } from 'react';
 import { Eye, EyeOff, FolderOpen } from 'lucide-react';
 import type { ParamSpec } from '../lib/types';
-import { isSliderRange, type FileItem } from '../lib/schema';
+import { isSliderRange, parseNum, type FileItem } from '../lib/schema';
 import { Segmented, Switch, cx } from '../components/ui';
 import { FileField } from './FileField';
 import { useApp } from '../lib/app';
@@ -61,8 +61,6 @@ function toHex6(v: string): string {
   return /^[0-9a-f]{6}$/i.test(s) ? `#${s.toLowerCase()}` : '#000000';
 }
 
-const COMPLETE_NUM = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
-
 function decimals(n: number): number {
   const m = String(n).match(/\.(\d+)$/);
   return m ? m[1].length : 0;
@@ -90,14 +88,15 @@ function NumberInput({ common, integer, min, max, step, value, placeholder, onCh
 
   const commit = (s: string) => {
     const t = s.trim();
-    const v = t === '' ? '' : COMPLETE_NUM.test(t) ? Number(t) : s;
+    const n = parseNum(t);
+    const v = t === '' ? '' : Number.isFinite(n) ? n : s;
     committed.current = v;
     onChange(v);
   };
   const type = (s: string) => { setDraft(s); commit(s); };
   const stepBy = (dir: 1 | -1) => {
-    const cur = Number(draft.trim());
-    const base = draft.trim() !== '' && Number.isFinite(cur) ? cur : min ?? 0;
+    const cur = parseNum(draft);
+    const base = Number.isFinite(cur) ? cur : min ?? 0;
     let next = Number((base + dir * step).toFixed(Math.max(decimals(step), decimals(base))));
     if (min != null && next < min) next = min;
     if (max != null && next > max) next = max;
@@ -120,8 +119,8 @@ function NumberInput({ common, integer, min, max, step, value, placeholder, onCh
       placeholder={placeholder}
       onChange={(e) => type(e.target.value)}
       onBlur={() => {
-        const t = draft.trim();
-        if (COMPLETE_NUM.test(t) && String(Number(t)) !== draft) setDraft(String(Number(t)));
+        const n = parseNum(draft);
+        if (draft.trim() !== '' && Number.isFinite(n) && String(n) !== draft) setDraft(String(n));
       }}
       onKeyDown={(e) => {
         if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
