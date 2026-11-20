@@ -179,6 +179,11 @@ function describeParam(p) {
     parts.push(`${p.multi ? 'Any of' : 'One of'}: ${opts.join(', ')}.`);
   }
   if (p.type === 'file' && p.accept?.length) parts.push(`Accepts ${esc(acceptSummary(p.accept))}.`);
+  for (const cap of p.max_if ?? []) {
+    const vals = cap.values.map((v) => code(v));
+    const unless = cap.unless_set?.length ? ` unless ${cap.unless_set.map(code).join(' or ')} is set` : '';
+    parts.push(`At most ${cap.max} when ${code(cap.param)} is ${vals.length === 1 ? vals[0] : `one of ${vals.join(', ')}`}${unless}.`);
+  }
   if (p.show_if) {
     const vals = p.show_if.values.map((v) => code(v));
     const which = vals.length === 1 ? vals[0] : `one of ${vals.join(', ')}`;

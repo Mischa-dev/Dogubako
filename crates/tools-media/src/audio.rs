@@ -337,7 +337,7 @@ fn convert() -> Arc<dyn Tool> {
         .keywords(&["mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "aiff", "alac", "wma", "transcode", "format"])
         .param(audio_input(true))
         .param(format_choice())
-        .param(ParamSpec::integer("bitrate").label("Bitrate (kbit/s)").range(32.0, 640.0).default_int(192).show_if("format", &["mp3", "m4a", "ogg", "opus", "wma", "ac3"]))
+        .param(ParamSpec::integer("bitrate").label("Bitrate (kbit/s)").range(32.0, 640.0).max_if("format", &["mp3"], 320.0).max_unless_set("vbr_quality").default_int(192).show_if("format", &["mp3", "m4a", "ogg", "opus", "wma", "ac3"]))
         .param(ParamSpec::integer("vbr_quality").label("VBR quality (0 = best, 9 = smallest)").range(0.0, 9.0).describe("Use variable bitrate instead of a fixed bitrate (MP3 / Vorbis)").show_if("format", &["mp3", "ogg"]).advanced())
         .param(rate_choice_for_format("sample_rate").advanced())
         .param(ParamSpec::choice("channels", &[("keep", "Keep"), ("1", "Mono"), ("2", "Stereo")]).default_str("keep").advanced())
@@ -345,12 +345,6 @@ fn convert() -> Arc<dyn Tool> {
     async_tool(spec, |ctx, p| async move {
         let fmt = p.str("format")?.to_string();
         let kbps = p.int_or("bitrate", 192) as u32;
-        if fmt == "mp3" && p.opt_int("vbr_quality").is_none() && kbps > 320 {
-            return Err(ToolError::invalid(
-                "bitrate",
-                format!("MP3 allows at most 320 kbit/s; {kbps} was requested"),
-            ));
-        }
         let (ext, enc, args) = format_args(
             &fmt,
             kbps,

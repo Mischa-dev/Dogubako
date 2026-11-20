@@ -679,4 +679,11 @@ async fn convert_mp3_bitrate_capped_at_320() {
         probe_json(&out.artifacts[0].path)["streams"][0]["bit_rate"],
         "320000"
     );
+    // VBR ignores the fixed bitrate, so a leftover value above 320 is fine.
+    h.run(
+        "audio.convert",
+        json!({"input": [s(&t)], "format": "mp3", "bitrate": 500, "vbr_quality": 2}),
+    )
+    .await
+    .unwrap();
 }

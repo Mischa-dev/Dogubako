@@ -511,6 +511,19 @@ mod tests {
                 |_c, p| Ok(ToolOutput::text(p.str("mode")?)),
             ),
             sync_tool(
+                ToolSpec::new("dev.capped", "Capped", Category::Dev)
+                    .describe("per-mode maximum")
+                    .param(ParamSpec::choice_of("mode", &["a", "b"]).default_str("a"))
+                    .param(ParamSpec::integer("q").range(0.0, 9.0))
+                    .param(
+                        ParamSpec::integer("n")
+                            .range(1.0, 640.0)
+                            .max_if("mode", &["a"], 320.0)
+                            .max_unless_set("q"),
+                    ),
+                |_c, p| Ok(ToolOutput::data(json!({"n": p.opt_int("n")}))),
+            ),
+            sync_tool(
                 ToolSpec::new("dev.types", "Types", Category::Dev)
                     .describe("coercion")
                     .param(ParamSpec::integer("n").range(1.0, 10.0).required())
@@ -557,6 +570,38 @@ mod tests {
         h.run("dev.caps", json!({"mode": "a", "extra": false}))
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn max_if_caps_a_param_while_another_has_a_value() {
+        let h = TestHarness::new(tools());
+        let e = h.run("dev.capped", json!({"n": 321})).await.unwrap_err();
+        assert_eq!(e.code(), "invalid_input");
+        assert!(e.to_string().contains("at most 320 when mode is a"), "{e}");
+        let e = h
+            .run("dev.capped", json!({"mode": "a", "n": "640"}))
+            .await
+            .unwrap_err();
+        assert_eq!(e.code(), "invalid_input");
+        h.run("dev.capped", json!({"n": 320})).await.unwrap();
+        h.run("dev.capped", json!({"mode": "b", "n": 640}))
+            .await
+            .unwrap();
+        let e = h
+            .run("dev.capped", json!({"mode": "b", "n": 641}))
+            .await
+            .unwrap_err();
+        assert!(e.to_string().contains("at most 640"), "{e}");
+        h.run("dev.capped", json!({})).await.unwrap();
+        // Setting the lifting param removes the cap; null doesn't count as set.
+        h.run("dev.capped", json!({"n": 640, "q": 2}))
+            .await
+            .unwrap();
+        let e = h
+            .run("dev.capped", json!({"n": 640, "q": null}))
+            .await
+            .unwrap_err();
+        assert!(e.to_string().contains("unless q is set"), "{e}");
     }
 
     #[tokio::test]
