@@ -81,9 +81,8 @@ export function ToolsMenu({ open, onClose, anchor }: { open: boolean; onClose: (
             return (
               <li key={t.id} className={cx('tools-menu-row', on && 'is-pinned')}>
                 <a href={href.tool(t.id)} onClick={(e) => { e.preventDefault(); go(t.id); }} className={cx(why && 'is-unavailable')}>
-                  {t.name}
-                  {q.trim() && <span className="tools-menu-cat-hint"> · {categoryLabel(t.category)}</span>}
-                  {why && <span className="tools-menu-why"> · {why}</span>}
+                  <span className="tools-menu-name">{t.name}{why && <span className="tools-menu-why"> · {why}</span>}</span>
+                  {q.trim() && <span className="tools-menu-cat-hint">{categoryLabel(t.category)}</span>}
                 </a>
                 <button type="button" className="pin-btn" aria-pressed={on} aria-label={on ? `Unpin ${t.name}` : `Pin ${t.name}`} title={on ? 'Unpin' : 'Pin'}
                   onClick={() => toggleFavorite(t.id)}>
