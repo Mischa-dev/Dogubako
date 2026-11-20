@@ -42,7 +42,7 @@ Legend — Engine: **native** = built into Dogubako (no external programs), **ex
 | Contact Sheet | `image.contact_sheet` | native | — | L M W | — |
 | Sprite Sheet | `image.sprite_sheet` | native | — | L M W | — |
 | Redact Regions | `image.redact` | native | — | L M W | — |
-| Reduce Noise | `image.denoise` | native | — | L M W | — |
+| Reduce Image Noise | `image.denoise` | native | — | L M W | — |
 | View Image Metadata | `image.metadata` | native | — | L M W | — |
 | Remove Image Metadata | `image.strip_metadata` | native | — | L M W | — |
 | SVG to PNG/JPEG/WebP | `image.svg_to_raster` | native | — | L M W | — |
@@ -67,7 +67,7 @@ Legend — Engine: **native** = built into Dogubako (no external programs), **ex
 | Crop Video | `video.crop` | external | ffmpeg, ffprobe | L M W | — |
 | Rotate / Flip Video | `video.rotate` | external | ffmpeg, ffprobe | L M W | — |
 | Merge Videos | `video.merge` | external | ffmpeg, ffprobe | L M W | — |
-| Extract Audio from Video | `video.extract_audio` | external | ffmpeg, ffprobe | L M W | — |
+| Extract Audio | `video.extract_audio` | external | ffmpeg, ffprobe | L M W | — |
 | Remove Audio | `video.remove_audio` | external | ffmpeg, ffprobe | L M W | — |
 | Replace Audio | `video.replace_audio` | external | ffmpeg, ffprobe | L M W | — |
 | Extract Frames | `video.extract_frames` | external | ffmpeg, ffprobe | L M W | — |
@@ -105,7 +105,7 @@ Legend — Engine: **native** = built into Dogubako (no external programs), **ex
 | Audio Spectrogram | `audio.spectrogram` | external | ffmpeg, ffprobe | L M W | — |
 | Audio Info | `audio.info` | external | ffmpeg, ffprobe | L M W | — |
 | Audio Tags | `audio.tags` | external | ffmpeg, ffprobe | L M W | — |
-| Reduce Noise | `audio.denoise` | external | ffmpeg, ffprobe | L M W | — |
+| Reduce Audio Noise | `audio.denoise` | external | ffmpeg, ffprobe | L M W | — |
 | Change Audio Speed / Pitch | `audio.speed` | external | ffmpeg, ffprobe | L M W | — |
 | Equalizer | `audio.equalizer` | external | ffmpeg, ffprobe | L M W | — |
 | Fade In / Out | `audio.fade` | external | ffmpeg, ffprobe | L M W | — |

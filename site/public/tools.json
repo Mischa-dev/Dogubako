@@ -3842,7 +3842,7 @@
   },
   {
    "id": "image.denoise",
-   "name": "Reduce Noise",
+   "name": "Reduce Image Noise",
    "description": "Remove image noise with an edge-preserving bilateral filter or a median filter (great for salt-and-pepper noise)",
    "category": "image",
    "keywords": [
@@ -7267,10 +7267,11 @@
   },
   {
    "id": "video.extract_audio",
-   "name": "Extract Audio from Video",
+   "name": "Extract Audio",
    "description": "Save the soundtrack of videos as audio — lossless stream copy or MP3, AAC, WAV, FLAC, Opus or Ogg",
    "category": "video",
    "keywords": [
+    "extract audio from video",
     "rip audio",
     "soundtrack",
     "video to mp3",
@@ -12273,7 +12274,7 @@
   },
   {
    "id": "audio.denoise",
-   "name": "Reduce Noise",
+   "name": "Reduce Audio Noise",
    "description": "Reduce background hiss and hum with FFmpeg's FFT denoiser (afftdn) or non-local-means (anlmdn), plus optional high-/low-pass filters",
    "category": "audio",
    "keywords": [
@@ -12938,6 +12939,7 @@
    "description": "Save the soundtrack of videos as audio — lossless stream copy or MP3, AAC, WAV, FLAC, Opus or Ogg",
    "category": "audio",
    "keywords": [
+    "extract audio from video",
     "rip audio",
     "soundtrack",
     "video to mp3",

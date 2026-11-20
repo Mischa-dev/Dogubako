@@ -156,13 +156,14 @@ async fn processes_and_privacy() {
         .await
         .unwrap();
     assert_eq!(out.data["process_count"], 0);
-    assert_eq!(
-        h.run("system.processes", json!({"limit": 0}))
+    for limit in [0, 501] {
+        let err = h
+            .run("system.processes", json!({ "limit": limit }))
             .await
-            .unwrap_err()
-            .code(),
-        "invalid_input"
-    );
+            .unwrap_err();
+        assert_eq!(err.code(), "invalid_input", "limit {limit}");
+        assert!(err.to_string().contains("limit"), "limit {limit}: {err}");
+    }
 }
 
 #[tokio::test]
