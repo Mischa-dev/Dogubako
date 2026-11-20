@@ -72,12 +72,13 @@ describe('decoders', () => {
     expect(px(rle, 1)).toEqual([0, 255, 0, 255]);
   });
 
-  it('decodes an uncompressed TIFF', async () => {
-    // Little-endian, 2x1 RGB, 8 bits per sample, one strip at offset 8.
+  // Little-endian, 2x1 RGB, 8 bits per sample, one strip at offset 8.
+  function tiff({ photometric = 2, orientation }: { photometric?: number; orientation?: number } = {}) {
     const pixels = [255, 0, 0, 0, 255, 0];
     const entries: [number, number, number, number][] = [
-      [256, 3, 1, 2], [257, 3, 1, 1], [258, 3, 3, 0], [259, 3, 1, 1], [262, 3, 1, 2],
-      [273, 4, 1, 8], [277, 3, 1, 3], [278, 3, 1, 1], [279, 4, 1, 6],
+      [256, 3, 1, 2], [257, 3, 1, 1], [258, 3, 3, 0], [259, 3, 1, 1], [262, 3, 1, photometric],
+      [273, 4, 1, 8], ...(orientation ? [[274, 3, 1, orientation] as [number, number, number, number]] : []),
+      [277, 3, 1, 3], [278, 3, 1, 1], [279, 4, 1, 6],
     ];
     const ifdAt = 8 + pixels.length;
     const bpsAt = ifdAt + 2 + entries.length * 12 + 4;
@@ -94,10 +95,27 @@ describe('decoders', () => {
       if (type === 3 && count === 1) buf.setUint16(o + 8, value, true); else buf.setUint32(o + 8, value, true);
     });
     [8, 8, 8].forEach((v, i) => buf.setUint16(bpsAt + i * 2, v, true));
-    const t = await decodeTiff(u8);
+    return u8;
+  }
+
+  it('decodes an uncompressed TIFF', async () => {
+    const t = await decodeTiff(tiff());
     expect([t.width, t.height]).toEqual([2, 1]);
     expect(px(t, 0)).toEqual([255, 0, 0, 255]);
     expect(px(t, 1)).toEqual([0, 255, 0, 255]);
+  });
+
+  it('applies the TIFF Orientation tag', async () => {
+    const mirrored = await decodeTiff(tiff({ orientation: 2 }));
+    expect(px(mirrored, 0)).toEqual([0, 255, 0, 255]);
+    const turned = await decodeTiff(tiff({ orientation: 6 }));
+    expect([turned.width, turned.height]).toEqual([1, 2]);
+    expect(px(turned, 0)).toEqual([255, 0, 0, 255]);
+    expect(px(turned, 1)).toEqual([0, 255, 0, 255]);
+  });
+
+  it('rejects TIFF colour spaces it would draw as blank', async () => {
+    await expect(decodeTiff(tiff({ photometric: 8 }))).rejects.toThrow();
   });
 });
 

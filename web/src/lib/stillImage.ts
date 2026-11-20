@@ -257,8 +257,39 @@ export async function decodeTiff(b: Uint8Array): Promise<DecodedImage> {
   if (!first) throw new Error('no image in TIFF');
   checkSize(first.t256[0], first.t257[0]);
   UTIF.decodeImage(buf, first, ifds);
-  const rgba = UTIF.toRGBA8(first);
-  return { width: first.width, height: first.height, data: new Uint8ClampedArray(rgba) };
+  // UTIF returns all-transparent pixels for colour spaces it can't convert (CIELab and friends).
+  const photometric = first.t262?.[0];
+  if (photometric === 8 || photometric === 9 || photometric === 10) throw new Error('unsupported TIFF colour space');
+  const rgba = new Uint8ClampedArray(UTIF.toRGBA8(first));
+  let visible = false;
+  for (let i = 3; i < rgba.length; i += 4) if (rgba[i]) { visible = true; break; }
+  if (!visible) throw new Error('TIFF decoded to nothing');
+  return orient({ width: first.width, height: first.height, data: rgba }, first.t274?.[0] ?? 1);
+}
+
+/** Apply a TIFF/EXIF Orientation value (1-8) to decoded pixels. */
+export function orient(img: DecodedImage, o: number): DecodedImage {
+  if (!(o >= 2 && o <= 8)) return img;
+  const { width: w, height: h, data } = img;
+  const swap = o >= 5;
+  const W = swap ? h : w, H = swap ? w : h;
+  const out = new Uint8ClampedArray(data.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let X: number, Y: number;
+      switch (o) {
+        case 2: X = w - 1 - x; Y = y; break;
+        case 3: X = w - 1 - x; Y = h - 1 - y; break;
+        case 4: X = x; Y = h - 1 - y; break;
+        case 5: X = y; Y = x; break;
+        case 6: X = h - 1 - y; Y = x; break;
+        case 7: X = h - 1 - y; Y = w - 1 - x; break;
+        default: X = y; Y = w - 1 - x; break;
+      }
+      out.set(data.subarray((y * w + x) * 4, (y * w + x) * 4 + 4), (Y * W + X) * 4);
+    }
+  }
+  return { width: W, height: H, data: out };
 }
 
 export function decodeStill(format: StillFormat, bytes: Uint8Array): Promise<DecodedImage> {
