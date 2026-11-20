@@ -22,6 +22,10 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
         working-directory: web
+      # Release's gate runs the same check; catch a new dependency here instead.
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Third-party notices are current
+        run: python3 -I packaging/release/notices.py --check
       - run: npm test -- --run
         working-directory: web
       - run: npm run build

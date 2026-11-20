@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import subprocess
 import sys
@@ -202,8 +203,10 @@ def main() -> int:
             return 1
         # Source columns depend on the network; compare everything else.
         strip = lambda s: [l.rsplit("|", 2)[0] if l.startswith("| ") and l.count("|") == 5 else l for l in s.splitlines()]
-        if strip(out.read_text()) != strip(text):
+        have, want = strip(out.read_text()), strip(text)
+        if have != want:
             print(f"{out} is stale: run packaging/release/notices.py", file=sys.stderr)
+            sys.stderr.writelines(l + "\n" for l in difflib.unified_diff(have, want, "committed", "generated", lineterm=""))
             return 1
         return 0
     out.write_text(text)
