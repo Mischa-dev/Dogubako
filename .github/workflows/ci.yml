@@ -78,6 +78,40 @@ jobs:
           echo '{"b":2,"a":1}' | ./target/debug/dogubako dev json
           ./target/debug/dogubako deps
 
+  generated:
+    # The same checks the Release workflow runs, so drift fails the PR that causes it.
+    name: Generated docs and third-party notices are current
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci
+        working-directory: web
+      - run: npm ci
+        working-directory: site
+      - run: cargo build -p dogubako-cli --locked
+      - name: Generated docs (release.py regen)
+        run: python3 -I packaging/release/release.py regen --check
+      - name: Third-party notices (notices.py --fetch-sources)
+        if: success() || failure()
+        run: python3 -I packaging/release/notices.py --check
+      - name: Keep the regenerated docs
+        if: failure()
+        run: git diff > regenerated-docs.diff
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: regenerated-docs
+          path: regenerated-docs.diff
+
   linux-cli:
     name: Linux CLI runs on glibc 2.28+
     needs: web
