@@ -44,6 +44,8 @@ describe('describeError', () => {
     expect(stderrReason("Unrecognized option 'fps_mode'.\nError splitting the argument list: Option not found")).toBe("Unrecognized option 'fps_mode'.");
     expect(stderrReason("convert: Not a TIFF or MDI file, bad magic number 20011 (0x4e2b). `in.tif' @ error/tiff.c/TIFFErrors/606.\nconvert: no images defined `out.tiff' @ error/convert.c/ConvertImageCommand/3229."))
       .toBe("convert: Not a TIFF or MDI file, bad magic number 20011 (0x4e2b). `in.tif'");
+    expect(stderrReason("convert: no decode delegate for this image format `' @ error/constitute.c/ReadImage/580.\nconvert: no images defined `tiff:out.tiff' @ error/convert.c/ConvertImageCommand/3229."))
+      .toBe("convert: no decode delegate for this image format `'");
     expect(stderrReason('')).toBe('');
     expect(stderrReason(`Error: ${'x'.repeat(400)}`)).toHaveLength(300);
   });

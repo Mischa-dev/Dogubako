@@ -61,7 +61,7 @@ export function describeError(e: ToolErrorView | null | undefined): FriendlyErro
 }
 
 const GENERIC_TRAILERS = /^(conversion failed!?|exiting\.?|aborted\.?)$/i;
-const FAILURE_WORDS = /\b(error|errors|invalid|failed|failure|fatal|cannot|can't|could not|couldn't|unable|unsupported|not supported|not found|no such|denied|incorrect|unknown|unrecognized|missing|not an?|bad|too (?:large|long|big|many)|out of memory|panicked|segmentation fault)\b/i;
+const FAILURE_WORDS = /\b(error|errors|invalid|failed|failure|fatal|cannot|can't|could not|couldn't|unable|unsupported|not supported|not found|no such|denied|incorrect|unknown|unrecognized|missing|not an?|bad|no (?:decode|encode) delegate|too (?:large|long|big|many)|out of memory|panicked|segmentation fault)\b/i;
 const REASON_MAX = 300;
 
 /** The most telling line of a program's stderr, for a one-line summary. */
