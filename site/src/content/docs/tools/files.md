@@ -275,7 +275,7 @@ Also found by: zip, compress, tar, tar.gz, tgz, 7z, archive, pack, bundle
 | `input` *(required)* | positional | files |  | Files. |
 | `format` | `--format` | choice | `zip` | One of: `zip`, `tar.gz`, `tar.xz`, `tar.zst`, `tar.bz2`, `tar` (tar (uncompressed)), `7z`. |
 | `zip_method` | `--zip-method` | choice | `deflate` | One of: `deflate` (Deflate (compatible)), `zstd` (Zstandard), `bzip2`, `store` (Store (no compression)). Only used when `format` is `zip`. *Advanced.* |
-| `level` | `--level` | integer 0–22 |  | Higher is smaller but slower (format-specific range; empty = default). *Advanced.* |
+| `level` | `--level` | integer 0–22 |  | Higher is smaller but slower; zip 0 = store, zip deflate/bzip2 1-9, zip zstd 1-22, tar.gz/tar.bz2/tar.xz 1-9, tar.zst 1-22, 7z 0-9 (empty = default). *Advanced.* |
 | `password` | `--password` | secret |  | Encrypt the zip (AES-256) or 7z archive. *Advanced.* |
 | `name` | `--name` | text | `archive` | Archive name. |
 
