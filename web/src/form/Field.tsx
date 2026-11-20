@@ -1,7 +1,7 @@
 import { memo, useEffect, useId, useRef, useState } from 'react';
 import { Eye, EyeOff, FolderOpen } from 'lucide-react';
 import type { ParamSpec } from '../lib/types';
-import { isSliderRange, parseNum, type FileItem } from '../lib/schema';
+import { isSliderRange, parseNum, textLength, type FileItem } from '../lib/schema';
 import { Segmented, Switch, cx } from '../components/ui';
 import { FileField } from './FileField';
 import { useApp } from '../lib/app';
@@ -308,6 +308,14 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
       const t = p.type === 'text' ? p : null;
       const s = String(value ?? '');
       const isMono = mono || !!t?.syntax;
+      const max = t?.max_len;
+      const len = max ? textLength(s) : s.length;
+      const over = !!max && len > max;
+      const counter = (show: boolean) => show && (
+        <span className={cx('char-count', over && 'is-over')} aria-live={over ? 'polite' : undefined}>
+          {len.toLocaleString()}{max ? ` / ${max.toLocaleString()}` : ''}
+        </span>
+      );
       if (t?.multiline) {
         const onDrop = async (e: React.DragEvent<HTMLTextAreaElement>) => {
           const f = e.dataTransfer.files?.[0];
@@ -325,7 +333,7 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
             extra={
               <span className="field-meta">
                 {t.syntax && <span className="syntax-tag">{t.syntax}</span>}
-                {s.length > 0 && <span className="char-count">{s.length.toLocaleString()}{t.max_len ? ` / ${t.max_len.toLocaleString()}` : ''}</span>}
+                {counter(s.length > 0)}
               </span>
             }
           >
@@ -338,14 +346,13 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
               onChange={(e) => set(e.target.value)}
               onDrop={onDrop}
               spellCheck={!isMono}
-              maxLength={t.max_len}
             />
           </FieldShell>
         );
       }
       return (
-        <FieldShell param={p} id={id} error={error} descId={descId}>
-          <input {...common} className={cx('input', isMono && 'mono')} value={s} placeholder={t?.placeholder} onChange={(e) => set(e.target.value)} maxLength={t?.max_len} spellCheck={!isMono} />
+        <FieldShell param={p} id={id} error={error} descId={descId} extra={counter(!!max && len >= max * 0.8)}>
+          <input {...common} className={cx('input', isMono && 'mono')} value={s} placeholder={t?.placeholder} onChange={(e) => set(e.target.value)} spellCheck={!isMono} />
         </FieldShell>
       );
     }
