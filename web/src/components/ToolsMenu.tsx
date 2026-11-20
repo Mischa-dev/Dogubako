@@ -14,7 +14,7 @@ import { cx } from './ui';
  * collapsed sidebar's "Tools" button or with the T key from anywhere.
  */
 export function ToolsMenu({ open, onClose, anchor }: { open: boolean; onClose: () => void; anchor?: { left: number; top: number } }) {
-  const { categories, visibleTools, docs, toolMap } = useApp();
+  const { categories, visibleTools, docs, toolMap, categoryLabel } = useApp();
   const favs = useStore(favStore);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<string>(categories[0]?.id ?? '');
@@ -81,7 +81,9 @@ export function ToolsMenu({ open, onClose, anchor }: { open: boolean; onClose: (
             return (
               <li key={t.id} className={cx('tools-menu-row', on && 'is-pinned')}>
                 <a href={href.tool(t.id)} onClick={(e) => { e.preventDefault(); go(t.id); }} className={cx(why && 'is-unavailable')}>
-                  {t.name}{why && <span className="tools-menu-why"> · {why}</span>}
+                  {t.name}
+                  {q.trim() && <span className="tools-menu-cat-hint"> · {categoryLabel(t.category)}</span>}
+                  {why && <span className="tools-menu-why"> · {why}</span>}
                 </a>
                 <button type="button" className="pin-btn" aria-pressed={on} aria-label={on ? `Unpin ${t.name}` : `Pin ${t.name}`} title={on ? 'Unpin' : 'Pin'}
                   onClick={() => toggleFavorite(t.id)}>

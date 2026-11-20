@@ -21,7 +21,7 @@ Convert, compress, trim and inspect video. 27 tools. Run any of them from the ap
 | [Crop Video](#crop-video) | `video.crop` | FFmpeg, FFprobe |
 | [Rotate / Flip Video](#rotate--flip-video) | `video.rotate` | FFmpeg, FFprobe |
 | [Merge Videos](#merge-videos) | `video.merge` | FFmpeg, FFprobe |
-| [Extract Audio from Video](#extract-audio-from-video) | `video.extract_audio` | FFmpeg, FFprobe |
+| [Extract Audio](#extract-audio) | `video.extract_audio` | FFmpeg, FFprobe |
 | [Remove Audio](#remove-audio) | `video.remove_audio` | FFmpeg, FFprobe |
 | [Replace Audio](#replace-audio) | `video.replace_audio` | FFmpeg, FFprobe |
 | [Extract Frames](#extract-frames) | `video.extract_frames` | FFmpeg, FFprobe |
@@ -256,7 +256,7 @@ Also found by: join, concatenate, combine, append, concat
 | `format` | `--format` | choice | `same` | One of: `same` (Same as first video), `mp4`, `mkv`, `webm`, `mov`. |
 | `quality` | `--quality` | choice | `medium` | Encoding quality used when the video must be re-encoded. One of: `high` (High (larger file)), `medium` (Balanced), `low` (Low (smaller file)). *Advanced.* |
 
-## Extract Audio from Video
+## Extract Audio
 
 <div class="tool-meta"><span class="engine-external">external engine</span><span>FFmpeg</span><span>FFprobe</span><span>progress</span></div>
 
@@ -268,7 +268,7 @@ dogubako video extract-audio <files…> [options]
 
 Id `video.extract_audio` · MCP `video_extract_audio` · Output: files · Timeout 180 min
 
-Also found by: rip audio, soundtrack, video to mp3, mp4 to mp3, demux, audio track
+Also found by: extract audio from video, rip audio, soundtrack, video to mp3, mp4 to mp3, demux, audio track
 
 | Option | CLI | Type | Default | Description |
 |---|---|---|---|---|

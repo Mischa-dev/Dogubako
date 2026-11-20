@@ -17,7 +17,7 @@ pub fn tools() -> Vec<Arc<dyn Tool>> {
         crop(),
         rotate(),
         merge(),
-        extract_audio_tool("video.extract_audio", Category::Video),
+        extract_audio_tool("video.extract_audio", "Extract Audio", Category::Video),
         remove_audio(),
         replace_audio(),
         extract_frames(),
@@ -1377,14 +1377,14 @@ fn merge() -> Arc<dyn Tool> {
 // ---------------------------------------------------------------------------
 // Audio extraction (shared with audio.extract_from_video)
 
-pub(crate) fn extract_audio_tool(id: &str, cat: Category) -> Arc<dyn Tool> {
-    let spec = ToolSpec::new(id, "Extract Audio from Video", cat)
+pub(crate) fn extract_audio_tool(id: &str, name: &str, cat: Category) -> Arc<dyn Tool> {
+    let spec = ToolSpec::new(id, name, cat)
         .requires(FF)
         .output(OutputKind::Files)
         .progress()
         .timeout(3 * 3600)
         .describe("Save the soundtrack of videos as audio — lossless stream copy or MP3, AAC, WAV, FLAC, Opus or Ogg")
-        .keywords(&["rip audio", "soundtrack", "video to mp3", "mp4 to mp3", "demux", "audio track"])
+        .keywords(&["extract audio from video", "rip audio", "soundtrack", "video to mp3", "mp4 to mp3", "demux", "audio track"])
         .param(video_input(true))
         .param(ParamSpec::choice("format", &[("copy", "Original (no re-encode)"), ("mp3", "MP3"), ("m4a", "AAC (M4A)"), ("wav", "WAV"), ("flac", "FLAC"), ("opus", "Opus"), ("ogg", "Ogg Vorbis")]).default_str("mp3"))
         .param(ParamSpec::integer("bitrate").label("Bitrate (kbit/s)").range(32.0, 320.0).default_int(192).show_if("format", &["mp3", "m4a", "opus"]))

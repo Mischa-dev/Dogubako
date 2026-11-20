@@ -50,6 +50,25 @@ describe('search', () => {
     expect(boosted[0]).toBe('video.convert');
   });
 
+  it('gives same-purpose tools in different categories distinct names', () => {
+    const pairs = [
+      tool({ id: 'image.denoise', name: 'Reduce Image Noise', category: 'image', keywords: ['denoise', 'noise reduction'] }),
+      tool({ id: 'audio.denoise', name: 'Reduce Audio Noise', category: 'audio', keywords: ['noise reduction', 'hiss'] }),
+      tool({ id: 'video.extract_audio', name: 'Extract Audio', category: 'video', keywords: ['extract audio from video', 'rip audio'] }),
+      tool({ id: 'audio.extract_from_video', name: 'Extract Audio from Video', category: 'audio', keywords: ['rip audio'] }),
+    ];
+    const cat: Record<string, string> = { image: 'Images', audio: 'Audio', video: 'Video' };
+    const pd = pairs.map((t) => ({ doc: makeDoc(t, cat[t.category]), item: t }));
+    for (const q of ['reduce noise', 'extract audio from video']) {
+      const hits = search(pd, q);
+      expect(hits).toHaveLength(2);
+      expect(new Set(hits.map((h) => h.item.name)).size).toBe(2);
+    }
+    expect(search(pd, 'reduce image noise')[0].item.id).toBe('image.denoise');
+    expect(search(pd, 'reduce audio noise')[0].item.id).toBe('audio.denoise');
+    expect(search(pd, 'extract audio from video')[0].item.id).toBe('audio.extract_from_video');
+  });
+
   it('returns no results for nonsense', () => {
     expect(ids('zzqqxx')).toEqual([]);
   });

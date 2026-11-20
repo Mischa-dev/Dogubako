@@ -61,6 +61,7 @@
 .tools-menu-row a { flex: 1; min-width: 0; color: var(--text); font-size: var(--fs-md); text-decoration: none !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tools-menu-row a.is-unavailable { color: var(--text-3); }
 .tools-menu-why { font-size: var(--fs-xs); }
+.tools-menu-cat-hint { font-size: var(--fs-xs); color: var(--text-3); }
 .pin-btn { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--text-3); opacity: 0; flex: none; }
 .tools-menu-row:hover .pin-btn, .pin-btn:focus-visible, .pin-btn[aria-pressed='true'] { opacity: 1; }
 .pin-btn[aria-pressed='true'] { color: var(--text); }

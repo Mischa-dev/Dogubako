@@ -27,7 +27,7 @@ Convert, trim, normalize and analyze audio. 21 tools. Run any of them from the a
 | [Audio Spectrogram](#audio-spectrogram) | `audio.spectrogram` | FFmpeg, FFprobe |
 | [Audio Info](#audio-info) | `audio.info` | FFmpeg, FFprobe |
 | [Audio Tags](#audio-tags) | `audio.tags` | FFmpeg, FFprobe |
-| [Reduce Noise](#reduce-noise) | `audio.denoise` | FFmpeg, FFprobe |
+| [Reduce Audio Noise](#reduce-audio-noise) | `audio.denoise` | FFmpeg, FFprobe |
 | [Change Audio Speed / Pitch](#change-audio-speed--pitch) | `audio.speed` | FFmpeg, FFprobe |
 | [Equalizer](#equalizer) | `audio.equalizer` | FFmpeg, FFprobe |
 | [Fade In / Out](#fade-in--out) | `audio.fade` | FFmpeg, FFprobe |
@@ -375,7 +375,7 @@ Also found by: id3, metadata, mp3 tags, cover art, album art, vorbis comment, ar
 | `remove_cover` | `--remove-cover` | boolean | `false` |  |
 | `clear_all` | `--clear-all` | boolean | `false` | Remove all existing tags before writing. *Advanced.* |
 
-## Reduce Noise
+## Reduce Audio Noise
 
 <div class="tool-meta"><span class="engine-external">external engine</span><span>FFmpeg</span><span>FFprobe</span><span>progress</span></div>
 
@@ -492,7 +492,7 @@ dogubako audio extract-from-video <files…> [options]
 
 Id `audio.extract_from_video` · MCP `audio_extract_from_video` · Output: files · Timeout 180 min
 
-Also found by: rip audio, soundtrack, video to mp3, mp4 to mp3, demux, audio track
+Also found by: extract audio from video, rip audio, soundtrack, video to mp3, mp4 to mp3, demux, audio track
 
 | Option | CLI | Type | Default | Description |
 |---|---|---|---|---|
