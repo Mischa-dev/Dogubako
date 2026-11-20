@@ -121,6 +121,8 @@ campaign are added here as they merge.
   crashes it.
 - Compare Text rounds similarity to three decimals and labels change counts
   with their unit (lines, tokens or characters).
+- Video to GIF accepts 2 colours, the field's minimum, instead of failing in
+  FFmpeg's palette generator.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 
