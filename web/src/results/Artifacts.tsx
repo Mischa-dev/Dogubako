@@ -151,6 +151,7 @@ export function BeforeAfter({ before, after, afterMime = '', afterName = '' }: {
     if (!r) return;
     setPos(Math.max(0, Math.min(100, ((clientX - r.left) / r.width) * 100)));
   };
+  if (shown.failed) return <p className="muted small preview-note">{PREVIEW_UNSUPPORTED}</p>;
   return (
     <div
       className="ba checker"
@@ -160,7 +161,7 @@ export function BeforeAfter({ before, after, afterMime = '', afterName = '' }: {
       onPointerMove={(e) => drag.current && update(e.clientX)}
       onPointerUp={() => { drag.current = false; }}
     >
-      {shown.failed ? <p className="muted small preview-note ba-img">{PREVIEW_UNSUPPORTED}</p> : <img src={shown.src} alt="After" className="ba-img" draggable={false} />}
+      {shown.src ? <img src={shown.src} alt="After" className="ba-img" draggable={false} /> : <div className="preview-note"><Spinner /></div>}
       <div className="ba-before" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
         <img src={before} alt="Before" className="ba-img" draggable={false} onLoad={(e) => setMaxW(e.currentTarget.naturalWidth || undefined)} />
       </div>

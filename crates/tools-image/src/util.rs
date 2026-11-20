@@ -4,7 +4,9 @@
 use ab_glyph::{point, Font, FontArc, PxScale, ScaleFont};
 use dogubako_core::prelude::*;
 use dogubako_core::process::Exec;
-use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits, Rgba, RgbaImage};
+use image::{
+    DynamicImage, ImageDecoder, ImageEncoder, ImageFormat, ImageReader, Limits, Rgba, RgbaImage,
+};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -430,8 +432,18 @@ pub fn encode(
             img.write_to(&mut buf, ImageFormat::Qoi).map_err(enc_err)?;
         }
         OutFmt::Pnm => {
-            DynamicImage::ImageRgb8(flatten(img, opts.background))
-                .write_to(&mut buf, ImageFormat::Pnm)
+            // `write_to(.., ImageFormat::Pnm)` writes PAM (P7), which most PPM readers reject.
+            let rgb = flatten(img, opts.background);
+            image::codecs::pnm::PnmEncoder::new(&mut buf)
+                .with_subtype(image::codecs::pnm::PnmSubtype::Pixmap(
+                    image::codecs::pnm::SampleEncoding::Binary,
+                ))
+                .write_image(
+                    rgb.as_raw(),
+                    rgb.width(),
+                    rgb.height(),
+                    image::ExtendedColorType::Rgb8,
+                )
                 .map_err(enc_err)?;
         }
         OutFmt::Magick(ext) => {

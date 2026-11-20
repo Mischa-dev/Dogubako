@@ -19,7 +19,7 @@ export function stillFormat(mime: string, name: string): StillFormat | null {
   if (m === 'image/tiff' || e === 'tif' || e === 'tiff') return 'tiff';
   if (m === 'image/x-tga' || m === 'image/tga' || m === 'image/x-targa' || e === 'tga') return 'tga';
   if (m === 'image/qoi' || e === 'qoi') return 'qoi';
-  if (/^image\/x-portable-(anymap|bitmap|graymap|pixmap)$/.test(m) || /^(pnm|pbm|pgm|ppm)$/.test(e)) return 'pnm';
+  if (/^image\/x-portable-(anymap|bitmap|graymap|pixmap|arbitrarymap)$/.test(m) || /^(pnm|pbm|pgm|ppm|pam)$/.test(e)) return 'pnm';
   return null;
 }
 
@@ -60,8 +60,45 @@ export function decodeQoi(b: Uint8Array): DecodedImage {
   return { width, height, data: out };
 }
 
-/** Netpbm P1-P6 (PBM, PGM, PPM, ASCII or binary, 8 or 16 bit). */
+/** PAM (P7): a text header of KEY value lines, then binary tuples. */
+function decodePam(b: Uint8Array): DecodedImage {
+  let p = 2;
+  const head: Record<string, string> = {};
+  for (;;) {
+    const nl = b.indexOf(0x0a, p);
+    if (nl < 0) throw new Error('bad PAM header');
+    const line = String.fromCharCode(...b.subarray(p, nl)).trim();
+    p = nl + 1;
+    if (line === 'ENDHDR') break;
+    if (!line || line.startsWith('#')) continue;
+    const [k, ...v] = line.split(/\s+/);
+    head[k.toUpperCase()] = v.join(' ');
+  }
+  const width = Number(head.WIDTH), height = Number(head.HEIGHT), depth = Number(head.DEPTH), maxval = Number(head.MAXVAL);
+  checkSize(width, height);
+  if (!(depth >= 1 && depth <= 4) || !(maxval >= 1 && maxval <= 65535)) throw new Error('unsupported PAM');
+  const wide = maxval > 255;
+  const n = width * height;
+  if (p + n * depth * (wide ? 2 : 1) > b.length) throw new Error('truncated PAM data');
+  const out = new Uint8ClampedArray(n * 4);
+  const v = [0, 0, 0, 0];
+  for (let i = 0; i < n; i++) {
+    for (let c = 0; c < depth; c++) {
+      const raw = wide ? (b[p] << 8) | b[p + 1] : b[p];
+      p += wide ? 2 : 1;
+      v[c] = maxval === 1 && depth <= 2 && c === 0 ? raw * 255 : Math.round((raw * 255) / maxval);
+    }
+    const o = i * 4;
+    if (depth >= 3) { out[o] = v[0]; out[o + 1] = v[1]; out[o + 2] = v[2]; }
+    else { out[o] = out[o + 1] = out[o + 2] = v[0]; }
+    out[o + 3] = depth === 2 ? v[1] : depth === 4 ? v[3] : 255;
+  }
+  return { width, height, data: out };
+}
+
+/** Netpbm: P1-P6 (PBM, PGM, PPM, ASCII or binary, 8 or 16 bit) and P7 (PAM). */
 export function decodePnm(b: Uint8Array): DecodedImage {
+  if (b.length >= 3 && b[0] === 0x50 && b[1] === 0x37) return decodePam(b);
   if (b.length < 3 || b[0] !== 0x50 || b[1] < 0x31 || b[1] > 0x36) throw new Error('not a Netpbm file');
   const kind = b[1] - 0x30;
   let p = 2;

@@ -16,6 +16,7 @@ describe('stillFormat', () => {
     expect(stillFormat('application/octet-stream', 'a.qoi')).toBe('qoi');
     expect(stillFormat('image/x-portable-pixmap', 'a.ppm')).toBe('pnm');
     expect(stillFormat('image/x-portable-graymap', 'a.pgm')).toBe('pnm');
+    expect(stillFormat('application/octet-stream', 'a.pam')).toBe('pnm');
   });
   it('leaves browser formats alone', () => {
     for (const [m, n] of [['image/png', 'a.png'], ['image/jpeg', 'a.jpg'], ['image/webp', 'a.webp'], ['image/svg+xml', 'a.svg']]) {
@@ -44,6 +45,8 @@ describe('decoders', () => {
     expect(px(p6, 1)).toEqual([0, 0, 255, 255]);
     const p2 = decodePnm(bytes('P2 1 2 15\n0 15\n'));
     expect(px(p2, 1)).toEqual([255, 255, 255, 255]);
+    const p7 = decodePnm(bytes('P7\nWIDTH 1\nHEIGHT 1\nDEPTH 4\nMAXVAL 255\nTUPLTYPE RGB_ALPHA\nENDHDR\n', [10, 20, 30, 40]));
+    expect(px(p7, 0)).toEqual([10, 20, 30, 40]);
     const p4 = decodePnm(bytes('P4 2 1\n', [0b10000000]));
     expect(px(p4, 0)).toEqual([0, 0, 0, 255]);
     expect(px(p4, 1)).toEqual([255, 255, 255, 255]);
