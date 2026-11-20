@@ -101,6 +101,10 @@ tests.
 - **Web UI:** `npm ci`, tests and build.
 - **Rust** on Linux, macOS and Windows: build, workspace tests, clippy (on
   Linux) and a CLI smoke test.
+- **Linux CLI on glibc 2.28+:** builds the CLI the way the release does, in a
+  `manylinux_2_28` container (`packaging/release/build-linux-cli.sh`), then
+  checks it needs no newer glibc and runs it on AlmaLinux 8 and Debian 13
+  (`packaging/release/check-linux-cli.sh`).
 - **Desktop app** and **Docker** builds.
 
 Tagging `v*` runs `.github/workflows/release.yml`, which builds draft desktop

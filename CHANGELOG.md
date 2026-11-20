@@ -11,6 +11,11 @@ All notable changes to Dogubako are recorded here. The format follows
 - Downloading the `whisper-small.en-tdrz` model (speaker turns) no longer
   fails with 404: it now comes from `akashmjn/tinydiarize-whisper.cpp` on
   Hugging Face, and its pinned size is corrected.
+- The Linux x86-64 CLI (`dogubako-x86_64-unknown-linux-gnu`) is built against
+  glibc 2.28, so it starts on current stable distros again. 0.1.0-alpha.1
+  needed glibc 2.43 and failed on Debian 13. Minimum: glibc 2.28, which means
+  Debian 10+, Ubuntu 20.04+, RHEL / AlmaLinux / Rocky 8+ and Fedora 29+.
+  Musl distros such as Alpine are not supported; use the Docker image there.
 
 ## [0.1.0-alpha.1] - unreleased
 

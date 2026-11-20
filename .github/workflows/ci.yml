@@ -78,6 +78,22 @@ jobs:
           echo '{"b":2,"a":1}' | ./target/debug/dogubako dev json
           ./target/debug/dogubako deps
 
+  linux-cli:
+    name: Linux CLI runs on glibc 2.28+
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+      - name: Build in the release container
+        id: build
+        run: echo "bin=$(packaging/release/build-linux-cli.sh --debug)" >> "$GITHUB_OUTPUT"
+      - name: Glibc floor and smoke test on AlmaLinux 8 and Debian 13
+        run: packaging/release/check-linux-cli.sh "${{ steps.build.outputs.bin }}"
+
   desktop:
     name: Desktop app (Tauri) check
     needs: web
