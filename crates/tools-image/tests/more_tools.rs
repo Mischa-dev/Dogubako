@@ -579,6 +579,56 @@ async fn qr_roundtrip() {
 }
 
 #[tokio::test]
+async fn qr_over_capacity_is_invalid_input() {
+    let h = harness();
+    // 2331 bytes is the most a QR code holds at the default (Medium) level.
+    let fits = "x".repeat(2331);
+    let out = h
+        .run("dev.qr_generate", json!({"text": fits, "format": "svg"}))
+        .await
+        .unwrap();
+    assert_eq!(out.data["error_correction"], "M");
+    assert_eq!(out.data["version"], 40);
+    for tool in ["dev.qr_generate", "design.qr_style"] {
+        let err = h
+            .run(tool, json!({"text": "x".repeat(4296)}))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "invalid_input", "{tool}");
+        match &err {
+            dogubako_core::prelude::ToolError::InvalidInput { param, message } => {
+                assert_eq!(param.as_deref(), Some("text"));
+                assert!(message.contains("Medium error correction"), "{message}");
+                assert!(message.contains("2331 bytes"), "{message}");
+            }
+            e => panic!("{tool}: {e}"),
+        }
+        let ok = h
+            .run(tool, json!({"text": "https://example.com"}))
+            .await
+            .unwrap();
+        assert_eq!(ok.data["verified_scan"], true, "{tool}");
+    }
+    // Uppercase/digit content packs denser and still fits at Low.
+    h.run(
+        "dev.qr_generate",
+        json!({"text": "A1".repeat(2148), "error_correction": "L", "format": "svg"}),
+    )
+    .await
+    .unwrap();
+    // A logo forces High, so the advice is about the logo, not the level.
+    let logo = save(&h, "logo.png", &pattern(64, 64, false));
+    let err = h
+        .run(
+            "design.qr_style",
+            json!({"text": "x".repeat(1300), "error_correction": "L", "logo": s(&logo)}),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("remove the logo"), "{err}");
+}
+
+#[tokio::test]
 async fn barcode_roundtrip() {
     let h = harness();
     for (fmt, text, expect) in [

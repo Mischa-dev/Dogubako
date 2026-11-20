@@ -64,8 +64,14 @@ function initialValues(tool: ToolInfo): FormValues {
   return base;
 }
 
-/** `provided`: params the tool page supplies itself at run time (via `run` overrides), so they are never validated as form fields. */
-export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null; provided?: readonly string[] } = {}): ToolForm {
+/**
+ * `provided`: params the tool page supplies itself at run time (via `run` overrides), so they are never validated as form fields.
+ * `check`: extra validation a tool page adds on top of the spec's (rules that depend on several values).
+ */
+export function useToolForm(
+  tool: ToolInfo,
+  opts: { jobId?: string | null; provided?: readonly string[]; check?: (values: FormValues) => FormErrors } = {},
+): ToolForm {
   const { backend } = useApp();
   const [values, setValues] = useState<FormValues>(() => initialValues(tool));
   const [attempted, setAttempted] = useState(false);
@@ -82,11 +88,14 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null; provi
   }, []);
 
   const providedKey = (opts.provided ?? []).join('\n');
+  const checkRef = useRef(opts.check);
+  checkRef.current = opts.check;
+  const validateAll = useCallback((vals: FormValues) => ({ ...(checkRef.current?.(vals) ?? {}), ...validate(tool, vals) }), [tool]);
   const errors = useMemo(() => {
-    const errs = validate(tool, values);
+    const errs = validateAll(values);
     for (const k of providedKey ? providedKey.split('\n') : []) delete errs[k];
     return errs;
-  }, [tool, values, providedKey]);
+  }, [validateAll, values, providedKey]);
   const valid = Object.keys(errors).length === 0;
   const shownErrors = useMemo(() => {
     const client = attempted ? errors : Object.fromEntries(Object.entries(errors).filter(([k]) => touched.has(k)));
@@ -140,7 +149,7 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null; provi
 
   const run = useCallback<ToolForm['run']>(async (o = {}) => {
     const vals = valuesRef.current;
-    const errs = validate(tool, vals);
+    const errs = validateAll(vals);
     for (const k of Object.keys(o.overrides ?? {})) delete errs[k];
     if (Object.keys(errs).length) {
       if (!o.silent) {
@@ -162,7 +171,7 @@ export function useToolForm(tool: ToolInfo, opts: { jobId?: string | null; provi
       setAttempted(true);
     }
     return result;
-  }, [tool, runJob]);
+  }, [tool, runJob, validateAll]);
 
   const reset = useCallback(() => {
     setValues(defaultValues(tool));

@@ -11,12 +11,21 @@ import { Warnings } from '../../results/Warnings';
 import { Spinner, cx } from '../../components/ui';
 import { ResetButton } from '../RunBar';
 import { StaleNotice } from '../../results/Stale';
+import { qrCapacityError } from '../../lib/qr';
+import type { FileItem, FormErrors, FormValues } from '../../lib/schema';
+
+/** Content must fit a QR code at the chosen error correction (a logo forces High). */
+export function checkQr(values: FormValues): FormErrors {
+  const logo = ((values.logo as FileItem[] | undefined) ?? []).length > 0;
+  const err = qrCapacityError(String(values.text ?? ''), logo ? 'H' : String(values.error_correction ?? 'M'), logo);
+  return err ? { text: err } : {};
+}
 
 
 /** QR generator with a live preview of the produced SVG/PNG. */
 export default function Qr({ tool, jobId }: { tool: ToolInfo; jobId?: string | null }) {
   const { backend } = useApp();
-  const form = useToolForm(tool, { jobId });
+  const form = useToolForm(tool, { jobId, check: checkQr });
   useToolShortcuts(form);
   useLiveRun(form, tool.availability.available, 400);
   const job = form.job.job;
