@@ -348,6 +348,22 @@ fn mtime(path: &Path) -> std::time::SystemTime {
         .unwrap_or(std::time::UNIX_EPOCH)
 }
 
+/// Rejects a compression level outside the codec's supported range.
+fn check_level(
+    level: Option<i64>,
+    lo: i64,
+    hi: i64,
+    codec: &str,
+) -> Result<Option<u32>, ToolError> {
+    match level {
+        Some(l) if !(lo..=hi).contains(&l) => Err(ToolError::invalid(
+            "level",
+            format!("{codec} compression level must be {lo}-{hi} (got {l})"),
+        )),
+        l => Ok(l.map(|l| l as u32)),
+    }
+}
+
 fn archive_create() -> Arc<dyn Tool> {
     let spec = ToolSpec::new("files.archive_create", "Create Archive", Category::Files)
         .describe("Pack files into a zip (optionally AES-encrypted), tar, tar.gz, tar.bz2, tar.xz, tar.zst or 7z archive")
@@ -358,7 +374,7 @@ fn archive_create() -> Arc<dyn Tool> {
                 .default_str("zip"),
         )
         .param(ParamSpec::choice("zip_method", &[("deflate", "Deflate (compatible)"), ("zstd", "Zstandard"), ("bzip2", "bzip2"), ("store", "Store (no compression)")]).default_str("deflate").show_if("format", &["zip"]).advanced())
-        .param(ParamSpec::integer("level").label("Compression level").describe("Higher is smaller but slower (format-specific range; empty = default)").range(0.0, 22.0).advanced())
+        .param(ParamSpec::integer("level").label("Compression level").describe("Higher is smaller but slower; zip 0 = store, zip deflate/bzip2 1-9, zip zstd 1-22, tar.gz/tar.bz2/tar.xz 1-9, tar.zst 1-22, 7z 0-9 (empty = default)").range(0.0, 22.0).advanced())
         .param(ParamSpec::secret("password").label("Password").describe("Encrypt the zip (AES-256) or 7z archive").advanced())
         .param(ParamSpec::text("name").label("Archive name").default_str("archive"))
         .output(OutputKind::Files)
@@ -367,7 +383,20 @@ fn archive_create() -> Arc<dyn Tool> {
     async_tool(spec, |ctx, p| async move {
         let files: Vec<InputFile> = p.files("input").to_vec();
         let format = p.str_or("format", "zip").to_string();
-        let level = p.opt_int("level");
+        let method = p.str_or("zip_method", "deflate").to_string();
+        let level = match format.as_str() {
+            "zip" if p.opt_int("level") == Some(0) => Some(0),
+            "zip" => match method.as_str() {
+                "zstd" => check_level(p.opt_int("level"), 1, 22, "zip zstd")?,
+                "bzip2" => check_level(p.opt_int("level"), 1, 9, "zip bzip2")?,
+                "store" => None,
+                _ => check_level(p.opt_int("level"), 1, 9, "zip deflate")?,
+            },
+            "tar.gz" | "tar.bz2" | "tar.xz" => check_level(p.opt_int("level"), 1, 9, &format)?,
+            "tar.zst" => check_level(p.opt_int("level"), 1, 22, &format)?,
+            "7z" => check_level(p.opt_int("level"), 0, 9, "7z")?,
+            _ => None,
+        };
         let password = p.opt_str("password").map(|s| s.to_string());
         if password.is_some() && !matches!(format.as_str(), "zip" | "7z") {
             return Err(ToolError::invalid(
@@ -395,7 +424,7 @@ fn archive_create() -> Arc<dyn Tool> {
                     std::fs::copy(&f.path, &dst)?;
                 }
             }
-            let mx = level.unwrap_or(5).clamp(0, 9);
+            let mx = level.unwrap_or(5);
             let mut cmd = ctx
                 .command("7zip")?
                 .args(["a", "-t7z", "-bd", "-y", &format!("-mx={mx}")])
@@ -411,7 +440,6 @@ fn archive_create() -> Arc<dyn Tool> {
         } else {
             let c = ctx.clone();
             let o2 = out.clone();
-            let method = p.str_or("zip_method", "deflate").to_string();
             ctx.blocking(move || {
                 let mut done = 0u64;
                 let progress =
@@ -420,6 +448,7 @@ fn archive_create() -> Arc<dyn Tool> {
                     let mut w =
                         zip::ZipWriter::new(std::io::BufWriter::new(std::fs::File::create(&o2)?));
                     let m = match method.as_str() {
+                        _ if level == Some(0) => zip::CompressionMethod::Stored,
                         "zstd" => zip::CompressionMethod::Zstd,
                         "bzip2" => zip::CompressionMethod::Bzip2,
                         "store" => zip::CompressionMethod::Stored,
@@ -444,7 +473,7 @@ fn archive_create() -> Arc<dyn Tool> {
                             .compression_level(if m == zip::CompressionMethod::Stored {
                                 None
                             } else {
-                                level
+                                level.map(i64::from)
                             })
                             .last_modified_time(zdt)
                             .unix_permissions(0o644)
@@ -461,25 +490,20 @@ fn archive_create() -> Arc<dyn Tool> {
                     w.finish().ctx("writing zip")?.flush()?;
                 } else {
                     let file = std::io::BufWriter::new(std::fs::File::create(&o2)?);
-                    let lv = level.map(|l| l as u32);
+                    let lv = level;
                     let writer: Box<dyn Write> = match format.as_str() {
                         "tar.gz" => Box::new(flate2::write::GzEncoder::new(
                             file,
-                            flate2::Compression::new(lv.unwrap_or(6).min(9)),
+                            flate2::Compression::new(lv.unwrap_or(6)),
                         )),
                         "tar.bz2" => Box::new(bzip2::write::BzEncoder::new(
                             file,
-                            bzip2::Compression::new(lv.unwrap_or(9).clamp(1, 9)),
+                            bzip2::Compression::new(lv.unwrap_or(9)),
                         )),
-                        "tar.xz" => {
-                            Box::new(liblzma::write::XzEncoder::new(file, lv.unwrap_or(6).min(9)))
-                        }
+                        "tar.xz" => Box::new(liblzma::write::XzEncoder::new(file, lv.unwrap_or(6))),
                         "tar.zst" => Box::new(
-                            zstd::stream::write::Encoder::new(
-                                file,
-                                lv.unwrap_or(3).clamp(1, 22) as i32,
-                            )?
-                            .auto_finish(),
+                            zstd::stream::write::Encoder::new(file, lv.unwrap_or(3) as i32)?
+                                .auto_finish(),
                         ),
                         _ => Box::new(file),
                     };
@@ -555,7 +579,12 @@ fn compress() -> Arc<dyn Tool> {
     sync_tool(spec, |ctx, p| {
         let files = p.files("input");
         let fmt = p.str_or("format", "gzip");
-        let level = p.opt_int("level").map(|l| l as u32);
+        let level = match fmt {
+            "zstd" => check_level(p.opt_int("level"), 1, 22, "zstd")?,
+            "brotli" => check_level(p.opt_int("level"), 0, 11, "brotli")?,
+            "xz" | "bzip2" => check_level(p.opt_int("level"), 1, 9, fmt)?,
+            _ => check_level(p.opt_int("level"), 1, 9, "gzip")?,
+        };
         let ext = match fmt {
             "zstd" => "zst",
             "xz" => "xz",
@@ -573,33 +602,26 @@ fn compress() -> Arc<dyn Tool> {
             let mut input = std::fs::File::open(&f.path)?;
             match fmt {
                 "zstd" => {
-                    let mut e = zstd::stream::write::Encoder::new(
-                        file,
-                        level.unwrap_or(3).clamp(1, 22) as i32,
-                    )?;
+                    let mut e = zstd::stream::write::Encoder::new(file, level.unwrap_or(3) as i32)?;
                     std::io::copy(&mut input, &mut e)?;
                     e.finish()?.flush()?;
                 }
                 "xz" => {
-                    let mut e = liblzma::write::XzEncoder::new(file, level.unwrap_or(6).min(9));
+                    let mut e = liblzma::write::XzEncoder::new(file, level.unwrap_or(6));
                     std::io::copy(&mut input, &mut e)?;
                     e.finish()?.flush()?;
                 }
                 "bzip2" => {
                     let mut e = bzip2::write::BzEncoder::new(
                         file,
-                        bzip2::Compression::new(level.unwrap_or(9).clamp(1, 9)),
+                        bzip2::Compression::new(level.unwrap_or(9)),
                     );
                     std::io::copy(&mut input, &mut e)?;
                     e.finish()?.flush()?;
                 }
                 "brotli" => {
-                    let mut e = brotli::CompressorWriter::new(
-                        file,
-                        64 * 1024,
-                        level.unwrap_or(9).min(11),
-                        22,
-                    );
+                    let mut e =
+                        brotli::CompressorWriter::new(file, 64 * 1024, level.unwrap_or(9), 22);
                     std::io::copy(&mut input, &mut e)?;
                     e.flush()?;
                     let mut inner = e.into_inner();
@@ -608,7 +630,7 @@ fn compress() -> Arc<dyn Tool> {
                 _ => {
                     let mut e = flate2::write::GzEncoder::new(
                         file,
-                        flate2::Compression::new(level.unwrap_or(6).min(9)),
+                        flate2::Compression::new(level.unwrap_or(6)),
                     );
                     std::io::copy(&mut input, &mut e)?;
                     e.finish()?.flush()?;
