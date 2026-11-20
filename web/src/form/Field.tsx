@@ -1,7 +1,7 @@
 import { memo, useEffect, useId, useRef, useState } from 'react';
 import { Eye, EyeOff, FolderOpen } from 'lucide-react';
 import type { ParamSpec } from '../lib/types';
-import { isSliderRange, parseNum, type FileItem } from '../lib/schema';
+import { isSliderRange, parseNum, textLength, type FileItem } from '../lib/schema';
 import { Segmented, Switch, cx } from '../components/ui';
 import { FileField } from './FileField';
 import { useApp } from '../lib/app';
@@ -16,10 +16,14 @@ export interface FieldProps {
   /** Use mono font for text editors (dev/data tools). */
   mono?: boolean;
   compact?: boolean;
+  /** Option value -> why it can't be picked right now. */
+  optionIssues?: Record<string, string>;
+  /** Why the current value can't work here (shown before Run). */
+  warning?: string | null;
 }
 
-function FieldShell({ param, id, error, children, inline, extra, descId }: {
-  param: ParamSpec; id: string; error?: string; children: React.ReactNode; inline?: boolean; extra?: React.ReactNode; descId: string;
+function FieldShell({ param, id, error, children, inline, extra, descId, warning }: {
+  param: ParamSpec; id: string; error?: string; children: React.ReactNode; inline?: boolean; extra?: React.ReactNode; descId: string; warning?: string | null;
 }) {
   const asGroup = param.type === 'enum' || param.type === 'file';
   return (
@@ -49,7 +53,7 @@ function FieldShell({ param, id, error, children, inline, extra, descId }: {
           {param.description && <p className="field-desc" id={descId}>{param.description}</p>}
         </>
       )}
-      {error && <p className="field-error" id={`${id}-err`} role="alert">{error}</p>}
+      {error ? <p className="field-error" id={`${id}-err`} role="alert">{error}</p> : warning && <p className="field-warn" role="status">{warning}</p>}
     </div>
   );
 }
@@ -139,7 +143,7 @@ function NumberInput({ common, integer, min, max, step, value, placeholder, onCh
   );
 }
 
-export const Field = memo(function Field({ param: p, value, error, onChange, mono }: FieldProps) {
+export const Field = memo(function Field({ param: p, value, error, onChange, mono, optionIssues, warning }: FieldProps) {
   const id = `f-${useId().replace(/:/g, '')}-${p.name}`;
   const descId = `${id}-desc`;
   const describedBy = [p.description ? descId : '', error ? `${id}-err` : ''].filter(Boolean).join(' ') || undefined;
@@ -154,10 +158,10 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
         <div className={cx('field field-switch', error && 'has-error')} data-param={p.name}>
           <div className="switch-row">
             <label className="field-label" htmlFor={id}>{p.label}</label>
-            <Switch id={id} checked={!!value} onChange={set} describedBy={describedBy} />
+            <Switch id={id} checked={!!value} onChange={set} describedBy={describedBy} disabled={!!p.unavailable && !value} />
           </div>
           {p.description && <p className="field-desc" id={descId}>{p.description}</p>}
-          {error && <p className="field-error" id={`${id}-err`}>{error}</p>}
+          {error ? <p className="field-error" id={`${id}-err`}>{error}</p> : p.unavailable && <p className="field-warn" role="status">{warning ?? p.unavailable}</p>}
         </div>
       );
 
@@ -165,13 +169,14 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
       if (p.multi) {
         const arr = Array.isArray(value) ? (value as string[]) : [];
         return (
-          <FieldShell param={p} id={id} error={error} descId={descId}>
+          <FieldShell param={p} id={id} error={error} descId={descId} warning={warning}>
             <div className="chips" role="group" aria-labelledby={`${id}-label`} aria-describedby={describedBy}>
               {p.options.map((o) => {
                 const on = arr.includes(o.value);
+                const issue = optionIssues?.[o.value];
                 return (
-                  <label key={o.value} className={cx('chip', on && 'is-on')}>
-                    <input type="checkbox" checked={on} onChange={() => set(on ? arr.filter((x) => x !== o.value) : [...arr, o.value])} />
+                  <label key={o.value} className={cx('chip', on && 'is-on', issue && 'is-disabled')} title={issue}>
+                    <input type="checkbox" checked={on} disabled={!!issue && !on} onChange={() => set(on ? arr.filter((x) => x !== o.value) : [...arr, o.value])} />
                     <span>{o.label}</span>
                   </label>
                 );
@@ -183,14 +188,17 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
       const short = p.options.length <= 4 && p.options.every((o) => o.label.length <= 22);
       const allowEmpty = !p.required && p.default == null;
       return (
-        <FieldShell param={p} id={id} error={error} descId={descId}>
+        <FieldShell param={p} id={id} error={error} descId={descId} warning={warning}>
           {short && !allowEmpty ? (
-            <Segmented label={p.label} id={id} value={String(value ?? '')} onChange={set} options={p.options.map((o) => ({ value: o.value, label: o.label }))} />
+            <Segmented label={p.label} id={id} value={String(value ?? '')} onChange={set} options={p.options.map((o) => ({ value: o.value, label: o.label, title: optionIssues?.[o.value], disabled: !!optionIssues?.[o.value] }))} />
           ) : (
             <div className="select-wrap">
               <select className="select" {...common} aria-labelledby={`${id}-label`} value={String(value ?? '')} onChange={(e) => set(e.target.value)}>
                 {allowEmpty && <option value="">—</option>}
-                {p.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {p.options.map((o) => {
+                  const issue = optionIssues?.[o.value];
+                  return <option key={o.value} value={o.value} disabled={!!issue && o.value !== String(value ?? '')} title={issue}>{issue ? `${o.label} (unavailable)` : o.label}</option>;
+                })}
               </select>
             </div>
           )}
@@ -308,6 +316,14 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
       const t = p.type === 'text' ? p : null;
       const s = String(value ?? '');
       const isMono = mono || !!t?.syntax;
+      const max = t?.max_len;
+      const len = max ? textLength(s) : s.length;
+      const over = !!max && len > max;
+      const counter = (show: boolean) => show && (
+        <span className={cx('char-count', over && 'is-over')} aria-live={over ? 'polite' : undefined}>
+          {len.toLocaleString()}{max ? ` / ${max.toLocaleString()}` : ''}
+        </span>
+      );
       if (t?.multiline) {
         const onDrop = async (e: React.DragEvent<HTMLTextAreaElement>) => {
           const f = e.dataTransfer.files?.[0];
@@ -325,7 +341,7 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
             extra={
               <span className="field-meta">
                 {t.syntax && <span className="syntax-tag">{t.syntax}</span>}
-                {s.length > 0 && <span className="char-count">{s.length.toLocaleString()}{t.max_len ? ` / ${t.max_len.toLocaleString()}` : ''}</span>}
+                {counter(s.length > 0)}
               </span>
             }
           >
@@ -338,14 +354,13 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
               onChange={(e) => set(e.target.value)}
               onDrop={onDrop}
               spellCheck={!isMono}
-              maxLength={t.max_len}
             />
           </FieldShell>
         );
       }
       return (
-        <FieldShell param={p} id={id} error={error} descId={descId}>
-          <input {...common} className={cx('input', isMono && 'mono')} value={s} placeholder={t?.placeholder} onChange={(e) => set(e.target.value)} maxLength={t?.max_len} spellCheck={!isMono} />
+        <FieldShell param={p} id={id} error={error} descId={descId} extra={counter(!!max && len >= max * 0.8)}>
+          <input {...common} className={cx('input', isMono && 'mono')} value={s} placeholder={t?.placeholder} onChange={(e) => set(e.target.value)} spellCheck={!isMono} />
         </FieldShell>
       );
     }

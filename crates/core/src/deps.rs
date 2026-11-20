@@ -5,10 +5,11 @@
 //! to install them. Nothing is ever installed system-wide automatically.
 
 use crate::engines::{Lookup, ManagedEngines, Origin};
+use crate::spec::Requirement;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize)]
@@ -377,6 +378,9 @@ pub struct DepRegistry {
     fallback_dirs: Vec<PathBuf>,
     managed: ManagedEngines,
     cache: RwLock<HashMap<String, DepStatus>>,
+    /// Capability listings (writable ImageMagick formats, FFmpeg encoders)
+    /// per binary path; `None` when the probe could not run.
+    probes: RwLock<HashMap<String, Option<Arc<HashSet<String>>>>>,
 }
 
 impl DepRegistry {
@@ -392,6 +396,7 @@ impl DepRegistry {
             fallback_dirs: platform_fallback_dirs(),
             managed,
             cache: RwLock::new(HashMap::new()),
+            probes: RwLock::new(HashMap::new()),
         }
     }
 
@@ -402,6 +407,83 @@ impl DepRegistry {
     /// Clear cached detection (after the user installs something).
     pub fn refresh(&self) {
         self.cache.write().unwrap().clear();
+        self.probes.write().unwrap().clear();
+    }
+
+    /// Whether this install meets `req`. A probe that cannot run counts as
+    /// met, so a flaky listing never hides an option that would work.
+    pub fn check(&self, req: &Requirement) -> Result<(), Unmet> {
+        match req {
+            Requirement::MagickWrite { format } => {
+                let path = self.need_path("imagemagick")?;
+                let fmt = format.to_ascii_uppercase();
+                match self.listing("magick", &path, &["-list", "format"], parse_magick_writable) {
+                    Some(set) if !set.contains(&fmt) => Err(Unmet::Unsupported(format!(
+                        "This ImageMagick install can't write {fmt}; install ImageMagick with {fmt} support or pick another format"
+                    ))),
+                    _ => Ok(()),
+                }
+            }
+            Requirement::FfmpegEncoder { encoder } => {
+                let path = self.need_path("ffmpeg")?;
+                match self.listing("ffmpeg", &path, &["-hide_banner", "-encoders"], parse_ffmpeg_encoders) {
+                    Some(set) if !set.contains(encoder) => Err(Unmet::Unsupported(format!(
+                        "This FFmpeg build has no '{encoder}' encoder; install an FFmpeg build that includes it or pick another option"
+                    ))),
+                    _ => Ok(()),
+                }
+            }
+            Requirement::Program {
+                dependency,
+                program,
+            } => {
+                let path = self.need_path(dependency)?;
+                let exe = if cfg!(windows) {
+                    format!("{program}.exe")
+                } else {
+                    program.clone()
+                };
+                let sibling = path.parent().is_some_and(|d| d.join(&exe).is_file());
+                if sibling
+                    || (self.system_lookup_allowed(dependency) && which::which(program).is_ok())
+                {
+                    Ok(())
+                } else {
+                    let name = self.status(dependency).name;
+                    Err(Unmet::Unsupported(format!(
+                        "Needs {program}, which this {name} install does not include"
+                    )))
+                }
+            }
+        }
+    }
+
+    fn need_path(&self, id: &str) -> Result<PathBuf, Unmet> {
+        let s = self.status(id);
+        s.path.ok_or(Unmet::MissingDependency {
+            dependency: s.id,
+            name: s.name,
+            hint: s.install_hint,
+        })
+    }
+
+    fn listing(
+        &self,
+        kind: &str,
+        path: &Path,
+        args: &[&str],
+        parse: fn(&str) -> HashSet<String>,
+    ) -> Option<Arc<HashSet<String>>> {
+        let key = format!("{kind}:{}", path.display());
+        if let Some(v) = self.probes.read().unwrap().get(&key) {
+            return v.clone();
+        }
+        let v = run_listing(path, args, &self.managed.env_for(path))
+            .map(|t| parse(&t))
+            .filter(|s| !s.is_empty())
+            .map(Arc::new);
+        self.probes.write().unwrap().insert(key, v.clone());
+        v
     }
 
     pub fn status(&self, id: &str) -> DepStatus {
@@ -604,6 +686,107 @@ fn exe_name(name: &str) -> String {
     }
 }
 
+/// Why a [`Requirement`] is not met on this install.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Unmet {
+    MissingDependency {
+        dependency: String,
+        name: String,
+        hint: String,
+    },
+    Unsupported(String),
+}
+
+impl Unmet {
+    pub fn message(&self) -> String {
+        match self {
+            Unmet::MissingDependency { name, .. } => format!("Requires {name}"),
+            Unmet::Unsupported(m) => m.clone(),
+        }
+    }
+}
+
+fn run_listing(path: &Path, args: &[&str], env: &[(String, std::ffi::OsString)]) -> Option<String> {
+    use std::process::{Command, Stdio};
+    let mut cmd = Command::new(path);
+    cmd.args(args)
+        .envs(env.iter().map(|(k, v)| (k, v)))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let mut child = cmd.spawn().ok()?;
+    let mut stdout = child.stdout.take()?;
+    // Drain stdout on a thread so a long listing can't fill the pipe.
+    let reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = std::io::Read::read_to_end(&mut stdout, &mut buf);
+        buf
+    });
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let ok = loop {
+        match child.try_wait() {
+            Ok(Some(st)) => break st.success(),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20))
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break false;
+            }
+        }
+    };
+    let buf = reader.join().ok()?;
+    ok.then(|| String::from_utf8_lossy(&buf).into_owned())
+}
+
+/// Format names ImageMagick can write, from `-list format`
+/// (`   JXL* JXL       rw+   JPEG XL (ISO/IEC 18181)`).
+pub fn parse_magick_writable(text: &str) -> HashSet<String> {
+    let mut out = HashSet::new();
+    for line in text.lines() {
+        let t: Vec<&str> = line.split_whitespace().collect();
+        if t.len() < 3 {
+            continue;
+        }
+        let mode = t[2];
+        if mode.len() == 3
+            && mode.chars().all(|c| matches!(c, 'r' | 'w' | '-' | '+'))
+            && mode.as_bytes()[1] == b'w'
+        {
+            out.insert(t[0].trim_end_matches('*').to_ascii_uppercase());
+        }
+    }
+    out
+}
+
+/// Encoder names from `ffmpeg -encoders` (` A....D libmp3lame  ...`).
+pub fn parse_ffmpeg_encoders(text: &str) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let mut started = false;
+    for line in text.lines() {
+        if line.trim_start().starts_with("---") {
+            started = true;
+            continue;
+        }
+        if !started {
+            continue;
+        }
+        let mut it = line.split_whitespace();
+        if let (Some(flags), Some(name)) = (it.next(), it.next()) {
+            if flags.chars().all(|c| c.is_ascii_uppercase() || c == '.') {
+                out.insert(name.to_string());
+            }
+        }
+    }
+    out
+}
+
 fn probe_version(path: &Path, spec: &DepSpec) -> Option<String> {
     use std::process::{Command, Stdio};
     let mut child = Command::new(path)
@@ -796,5 +979,66 @@ mod managed_tests {
             cfg!(target_os = "linux")
         );
         assert!(ids.contains(&"ffmpeg".to_string()));
+    }
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+
+    #[test]
+    fn magick_writable_formats() {
+        let text = "   Format  Mode  Description
+-------------------------------------------------------------------------------
+      HEIC* HEIC      rw+   High Efficiency Image Format (1.12.0)
+       JXL* JXL       r--   JPEG XL (ISO/IEC 18181)
+       JP2* JP2       rw-   JPEG-2000 File Format Syntax (2.5.0)
+       PSD* PSD       rw+   Adobe Photoshop bitmap
+                            See https://imagemagick.org for details
+";
+        let w = parse_magick_writable(text);
+        assert!(w.contains("HEIC") && w.contains("JP2") && w.contains("PSD"));
+        assert!(!w.contains("JXL"));
+        assert!(!w.contains("FORMAT"));
+    }
+
+    #[test]
+    fn ffmpeg_encoder_names() {
+        let text = "Encoders:
+ V..... = Video
+ A..... = Audio
+ ------
+ V....D libx264              libx264 H.264
+ A....D aac                  AAC (Advanced Audio Coding)
+ A....D pcm_s16le            PCM signed 16-bit little-endian
+";
+        let e = parse_ffmpeg_encoders(text);
+        assert!(e.contains("aac") && e.contains("libx264") && e.contains("pcm_s16le"));
+        assert!(!e.contains("libmp3lame") && !e.contains("="));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hung_listing_is_killed() {
+        let start = std::time::Instant::now();
+        let out = run_listing(Path::new("/bin/sleep"), &["30"], &[]);
+        assert!(out.is_none());
+        assert!(start.elapsed() < Duration::from_secs(20));
+    }
+
+    #[test]
+    fn missing_dependency_is_unmet() {
+        let r = DepRegistry::new(vec![]);
+        let u = r
+            .check(&Requirement::magick_write("jxl"))
+            .err()
+            .filter(|_| r.path("imagemagick").is_none());
+        if let Some(u) = u {
+            assert!(matches!(u, Unmet::MissingDependency { .. }));
+        }
+        assert!(matches!(
+            r.check(&Requirement::program("definitely-not-a-dep", "x")),
+            Err(Unmet::MissingDependency { .. })
+        ));
     }
 }

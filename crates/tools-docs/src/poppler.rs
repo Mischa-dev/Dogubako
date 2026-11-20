@@ -291,6 +291,7 @@ fn to_images() -> Arc<dyn Tool> {
             ParamSpec::boolean("transparent")
                 .label("Transparent background (PNG)")
                 .show_if("format", &["png"])
+                .needs(Requirement::program("poppler", "pdftocairo"))
                 .advanced(),
         )
         .requires(&["qpdf", "poppler"])

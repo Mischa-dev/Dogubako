@@ -91,6 +91,10 @@ const UI = {
 const tools = list.map(({ id }) => {
   const t = run('tools', 'info', id);
   delete t.availability;
+  for (const p of t.params ?? []) {
+    delete p.unavailable;
+    for (const o of p.options ?? []) delete o.unavailable;
+  }
   delete t.input_schema;
   return t;
 });
