@@ -95,6 +95,17 @@ campaign are added here as they merge.
 - Same-named tools have distinct titles (Reduce Image Noise / Reduce Audio
   Noise, Extract Audio / Extract Audio from Video), and tool search shows
   categories.
+- Multi-file results have Save all on the desktop, and archive extraction
+  keeps subfolders on disk and in the server's `artifacts.zip`.
+- Settings that rarely change the output explain when they matter; a lone
+  `fps_from` or `fps_to` in Shift Subtitles is invalid input; behaviour that
+  changed silently (format-changing compress, subtitle file over `stream`)
+  now warns.
+- TSV and NDJSON results save as `.tsv` / `.ndjson`, audio bit depth is read
+  from the output, color names use CIELAB distance, and default subtitle
+  names no longer repeat the language code.
+- Live system dashboards stop animating between polls (much lower CPU on
+  WebKitGTK), run one poll at a time, and Pause stops polling.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 

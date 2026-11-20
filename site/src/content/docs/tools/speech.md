@@ -92,7 +92,7 @@ Also found by: speech to text, whisper, transcription, dictation, captions, subt
 | `translate` | `--translate` | boolean | `false` | Translate the speech to English. |
 | `vad` | `--vad` | boolean | `false` | Skip non-speech with Silero VAD (needs the 'silero-vad' model). *Advanced.* |
 | `prompt` | `--prompt` | text (multi-line) |  | Initial prompt: names, spelling or style hints. *Advanced.* |
-| `threads` | `--threads` | integer 1–64 | `8` | *Advanced.* |
+| `threads` | `--threads` | integer 1–64 | `4` | *Advanced.* |
 | `word_timestamps` | `--word-timestamps` | boolean | `false` | Include per-word timings in the JSON / data. *Advanced.* |
 | `diarize` | `--diarize` | choice | `none` | One of: `none` (Off), `tinydiarize` (Speaker turns (uses whisper-small.en-tdrz)), `stereo` (Stereo: one speaker per channel). *Advanced.* |
 
@@ -115,7 +115,7 @@ Also found by: language identification, what language, whisper, lid, spoken lang
 | `input` *(required)* | positional | file |  | Audio / video. Accepts audio/\*, video/\*, .mp3 .m4a .aac .wav .flac .ogg +24 more. |
 | `model` | `--model` | choice | `auto` | Whisper model (download models in Settings → Models). One of: `auto` (Best installed), `whisper-tiny` (Whisper tiny), `whisper-tiny.en` (Whisper tiny (English)), `whisper-base` (Whisper base), `whisper-base.en` (Whisper base (English)), `whisper-small` (Whisper small), `whisper-small.en` (Whisper small (English)), `whisper-small.en-tdrz` (Whisper small + tinydiarize), `whisper-large-v3-turbo-q5_0` (Whisper large-v3 turbo (q5)), `whisper-large-v3-turbo` (Whisper large-v3 turbo). |
 | `offset` | `--offset` | text |  | Where to start listening. |
-| `threads` | `--threads` | integer 1–64 | `8` | *Advanced.* |
+| `threads` | `--threads` | integer 1–64 | `4` | *Advanced.* |
 
 ## Generate Subtitles
 
@@ -142,7 +142,7 @@ Also found by: auto subtitles, captions, closed captions, srt, vtt, whisper, acc
 | `translate` | `--translate` | boolean | `false` | Translate the speech to English. |
 | `vad` | `--vad` | boolean | `false` | Skip non-speech with Silero VAD (needs the 'silero-vad' model). *Advanced.* |
 | `prompt` | `--prompt` | text (multi-line) |  | Initial prompt: names, spelling or style hints. *Advanced.* |
-| `threads` | `--threads` | integer 1–64 | `8` | *Advanced.* |
+| `threads` | `--threads` | integer 1–64 | `4` | *Advanced.* |
 | `font_size` | `--font-size` | integer 0–200 | `0` | 0 = automatic. Only used when `embed` is `burn`. |
 | `color` | `--color` | color | `#ffffff` | Only used when `embed` is `burn`. |
 | `outline_color` | `--outline-color` | color | `#000000` | Only used when `embed` is `burn`. *Advanced.* |
