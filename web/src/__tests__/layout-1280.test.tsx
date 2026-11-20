@@ -79,6 +79,12 @@ describe('typeAheadMatch', () => {
     expect(b.value).toBe('tiff');
   });
 
+  it('lets Space open the dropdown again once the typed text has expired', () => {
+    const s = select();
+    expect(typeAheadMatch(s, ' ', false, { text: 'w', at: 1000 }, 5000)).toBeNull();
+    expect(typeAheadMatch(s, ' ', false, { text: 'w', at: 1000 }, 1200)).not.toBeNull();
+  });
+
   it('leaves modified and non-printable keys to the browser', () => {
     const s = select();
     expect(typeAheadMatch(s, 'ArrowDown', false, { text: '', at: 0 })).toBeNull();

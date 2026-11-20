@@ -147,7 +147,7 @@ function NumberInput({ common, integer, min, max, step, value, placeholder, onCh
 export function typeAheadMatch(
   select: HTMLSelectElement, key: string, modified: boolean, prev: { text: string; at: number }, now = Date.now(),
 ): { value: string; buffer: { text: string; at: number } } | null {
-  if (modified || key.length !== 1 || key === ' ' && !prev.text) return null;
+  if (modified || key.length !== 1 || key === ' ' && (!prev.text || now - prev.at >= 800)) return null;
   const k = key.toLowerCase();
   const text = now - prev.at < 800 ? prev.text + k : k;
   const opts = Array.from(select.options).filter((o) => !o.disabled);
