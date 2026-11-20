@@ -1088,7 +1088,9 @@ fn diff_tokens_ignoring_ws(
         if matches!(tag, DiffTag::Delete | DiffTag::Replace) {
             let text = old_toks[old_idx[o.start]..=old_idx[o.end - 1]].concat();
             push_chunk(&mut chunks, "delete", &text);
-            del += o.len();
+            // Character counts are reported in characters, but a whitespace
+            // run is a single comparison key.
+            del += if chars { text.chars().count() } else { o.len() };
         }
         if n.is_empty() {
             continue;
@@ -1100,10 +1102,11 @@ fn diff_tokens_ignoring_ws(
         } else {
             "insert"
         };
-        push_chunk(&mut chunks, tag, &new_toks[start..end].concat());
+        let text = new_toks[start..end].concat();
         if tag == "insert" {
-            ins += n.len();
+            ins += if chars { text.chars().count() } else { n.len() };
         }
+        push_chunk(&mut chunks, tag, &text);
         next_new = end;
     }
     push_chunk(&mut chunks, "equal", &new_toks[next_new..].concat());
@@ -1741,6 +1744,19 @@ mod tests {
             .unwrap()
             .data;
         assert_eq!(d["similarity"].to_string(), "0.833");
+        // Whitespace runs are one comparison key but still count as characters.
+        let d = h
+            .run(
+                "text.diff",
+                json!({"original": "ab", "changed": "a\n\nb", "granularity": "char", "whitespace": "changes"}),
+            )
+            .await
+            .unwrap()
+            .data;
+        assert_eq!(
+            (d["insertions"].as_u64(), d["deletions"].as_u64()),
+            (Some(2), Some(0))
+        );
         for r in [0.0f32, 0.1, 0.333_333, 0.8333, 0.9995, 1.0] {
             let s = serde_json::to_string(&super::round3(r)).unwrap();
             assert!(s.len() <= 5, "{r}: {s}");
