@@ -1,13 +1,15 @@
 export interface TableData { columns: string[]; rows: unknown[][] }
 export interface ColorData { hex: string; name?: string }
 export interface DiffSeg { tag: 'equal' | 'insert' | 'delete'; text: string }
+/** Engine-counted changes, in the unit the engine diffed by (lines, tokens, characters). */
+export interface DiffCounts { insertions: number; deletions: number; unit: string }
 export interface Region { x: number; y: number; width: number; height: number; label?: string; score?: number }
 export interface Match { start: number; end: number; text: string; groups?: unknown[] }
 
 export type DataView =
   | { kind: 'table'; key: string; table: TableData }
   | { kind: 'colors'; key: string; colors: ColorData[] }
-  | { kind: 'diff'; key: string; diff: DiffSeg[] }
+  | { kind: 'diff'; key: string; diff: DiffSeg[]; counts?: DiffCounts }
   | { kind: 'regions'; key: string; regions: Region[] }
   | { kind: 'matches'; key: string; matches: Match[] }
   | { kind: 'kv'; key: string; value: Record<string, unknown> }
@@ -48,6 +50,13 @@ export function selectDataViews(data: unknown): DataView[] {
     else if (k === 'regions' && isRegions(v)) views.push({ kind: 'regions', key: k, regions: v });
     else if (k === 'matches' && isMatches(v)) views.push({ kind: 'matches', key: k, matches: v });
     else rest[k] = v;
+  }
+  const diffView = views.find((v) => v.kind === 'diff');
+  if (diffView && typeof rest.insertions === 'number' && typeof rest.deletions === 'number' && typeof rest.unit === 'string') {
+    diffView.counts = { insertions: rest.insertions, deletions: rest.deletions, unit: rest.unit };
+    delete rest.insertions;
+    delete rest.deletions;
+    delete rest.unit;
   }
   if (Object.keys(rest).length) views.push({ kind: 'kv', key: '', value: rest });
   return views;

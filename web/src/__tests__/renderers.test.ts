@@ -18,6 +18,19 @@ describe('selectDataViews', () => {
     expect(v.map((x) => x.kind)).toEqual(['table', 'colors', 'diff', 'regions', 'matches', 'kv']);
     expect(v[5]).toMatchObject({ kind: 'kv', value: { count: 3 } });
   });
+  it('moves engine change counts and their unit into the diff view', () => {
+    const v = selectDataViews({
+      identical: false, similarity: 0.833, insertions: 2, deletions: 1, unit: 'tokens',
+      diff: [{ tag: 'equal', text: 'a ' }, { tag: 'insert', text: 'x ' }],
+    });
+    expect(v[0]).toMatchObject({ kind: 'diff', counts: { insertions: 2, deletions: 1, unit: 'tokens' } });
+    expect(v[1]).toEqual({ kind: 'kv', key: '', value: { identical: false, similarity: 0.833 } });
+  });
+  it('leaves counts in kv when no unit is given', () => {
+    const v = selectDataViews({ insertions: 2, diff: [{ tag: 'insert', text: 'x' }] });
+    expect(v[0]).not.toHaveProperty('counts');
+    expect(v[1]).toMatchObject({ kind: 'kv', value: { insertions: 2 } });
+  });
   it('falls back to kv when a special key has the wrong shape', () => {
     expect(selectDataViews({ table: 'nope' }).map((x) => x.kind)).toEqual(['kv']);
     expect(selectDataViews({ regions: [{ x: 1 }] }).map((x) => x.kind)).toEqual(['kv']);

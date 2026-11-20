@@ -2,7 +2,7 @@ import { memo, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Download } from 'lucide-react';
 import {
   compareCells, selectDataViews, tableToCsv,
-  type ColorData, type DiffSeg, type Match, type Region, type TableData,
+  type ColorData, type DiffCounts, type DiffSeg, type Match, type Region, type TableData,
 } from '../lib/renderers';
 import { humanizeKey } from '../lib/format';
 import { downloadText } from '../lib/clipboard';
@@ -114,17 +114,23 @@ function extraColorInfo(c: ColorData & Record<string, unknown>) {
   return bits.length ? <span className="swatch-name">{bits.join(' · ')}</span> : null;
 }
 
-export function InlineDiff({ diff }: { diff: DiffSeg[] }) {
+const DIFF_UNIT_HINTS: Record<string, string> = { tokens: 'Words and runs of whitespace' };
+
+export function InlineDiff({ diff, counts }: { diff: DiffSeg[]; counts?: DiffCounts }) {
   const stats = useMemo(() => {
+    if (counts) return { ins: counts.insertions, del: counts.deletions, unit: counts.unit };
     let ins = 0;
     let del = 0;
     for (const s of diff) { if (s.tag === 'insert') ins += s.text.length; else if (s.tag === 'delete') del += s.text.length; }
-    return { ins, del };
-  }, [diff]);
+    return { ins, del, unit: 'characters' };
+  }, [diff, counts]);
   return (
     <div className="data-block">
       <div className="data-block-head">
-        <span className="data-block-title">Differences <span className="diff-stat ins">+{stats.ins}</span> <span className="diff-stat del">−{stats.del}</span></span>
+        <span className="data-block-title">
+          Differences <span className="diff-stat ins">+{stats.ins}</span> <span className="diff-stat del">−{stats.del}</span>{' '}
+          <span className="muted diff-unit" title={DIFF_UNIT_HINTS[stats.unit]}>{stats.unit}</span>
+        </span>
       </div>
       {stats.ins === 0 && stats.del === 0 ? (
         <p className="muted small">No differences.</p>
@@ -248,7 +254,7 @@ export function DataViews({ data, input }: { data: unknown; input?: InputContext
         switch (v.kind) {
           case 'table': return <DataTable key={i} table={v.table} />;
           case 'colors': return <Swatches key={i} colors={v.colors} />;
-          case 'diff': return <InlineDiff key={i} diff={v.diff} />;
+          case 'diff': return <InlineDiff key={i} diff={v.diff} counts={v.counts} />;
           case 'regions': return <RegionOverlay key={i} regions={v.regions} imageUrl={input?.imageUrl} />;
           case 'matches': return <MatchHighlight key={i} matches={v.matches} text={input?.text} />;
           case 'kv': return <KeyValue key={i} value={v.value} />;

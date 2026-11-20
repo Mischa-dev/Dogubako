@@ -960,12 +960,23 @@ fn diff() -> Arc<dyn Tool> {
         )
         .with_data(json!({
             "identical": identical,
-            "similarity": (ratio * 1000.0).round() / 1000.0,
+            "similarity": round3(ratio),
             "insertions": ins,
             "deletions": del,
+            "unit": match granularity {
+                "line" => "lines",
+                "char" => "characters",
+                _ => "tokens",
+            },
             "diff": chunks,
         })))
     })
+}
+
+/// Rounds in f64 so the JSON number is short (`0.833`, not the widened
+/// f32 `0.8330000042915344`).
+fn round3(ratio: f32) -> f64 {
+    (f64::from(ratio) * 1000.0).round() / 1000.0
 }
 
 fn push_chunk(chunks: &mut Vec<(&'static str, String)>, tag: &'static str, text: &str) {
@@ -1699,6 +1710,41 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.data["identical"], true);
+    }
+
+    #[tokio::test]
+    async fn diff_similarity_is_short_and_units_are_named() {
+        let h = h();
+        for (g, unit) in [
+            ("word", "tokens"),
+            ("char", "characters"),
+            ("line", "lines"),
+        ] {
+            let d = h
+                .run(
+                    "text.diff",
+                    json!({"original": "abcdef", "changed": "abcxef", "granularity": g}),
+                )
+                .await
+                .unwrap()
+                .data;
+            assert_eq!(d["unit"], unit);
+            let sim = d["similarity"].to_string();
+            assert!(sim.len() <= 5, "{g}: {sim}");
+        }
+        let d = h
+            .run(
+                "text.diff",
+                json!({"original": "abcdef", "changed": "abcxef", "granularity": "char"}),
+            )
+            .await
+            .unwrap()
+            .data;
+        assert_eq!(d["similarity"].to_string(), "0.833");
+        for r in [0.0f32, 0.1, 0.333_333, 0.8333, 0.9995, 1.0] {
+            let s = serde_json::to_string(&super::round3(r)).unwrap();
+            assert!(s.len() <= 5, "{r}: {s}");
+        }
     }
 
     #[tokio::test]
