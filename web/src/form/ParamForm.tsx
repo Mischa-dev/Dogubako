@@ -1,10 +1,10 @@
-import { memo, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { ParamSpec } from '../lib/types';
 import { isVisible, type FormErrors, type FormValues } from '../lib/schema';
 import { Field, type Setter } from './Field';
 
-export const ParamForm = memo(function ParamForm({ params, values, errors, onChange, mono, exclude, idPrefix = 'form' }: {
+export const ParamForm = memo(function ParamForm({ params, values, errors, onChange, mono, exclude, idPrefix = 'form', resetKey }: {
   params: ParamSpec[];
   values: FormValues;
   errors: FormErrors;
@@ -12,6 +12,8 @@ export const ParamForm = memo(function ParamForm({ params, values, errors, onCha
   mono?: boolean;
   exclude?: string[];
   idPrefix?: string;
+  /** Changing it collapses Advanced again (the form was reset). */
+  resetKey?: number;
 }) {
   const visible = params.filter((p) => !exclude?.includes(p.name) && isVisible(p, values, params));
   const main = visible.filter((p) => !p.advanced);
@@ -20,6 +22,7 @@ export const ParamForm = memo(function ParamForm({ params, values, errors, onCha
   const changed = adv.filter((p) => p.type !== 'file' && JSON.stringify(values[p.name] ?? '') !== JSON.stringify(p.default ?? (p.type === 'boolean' ? false : ''))).length;
   const [open, setOpen] = useState(false);
   const isOpen = open || advHasError;
+  useEffect(() => setOpen(false), [resetKey]);
 
   if (!params.length) return null;
   return (

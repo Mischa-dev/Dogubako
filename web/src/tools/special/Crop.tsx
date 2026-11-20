@@ -9,6 +9,7 @@ import { ResultView } from '../../results/ResultView';
 import { useToolForm } from '../useToolForm';
 import { useToolShortcuts } from '../GenericTool';
 import { RunBar } from '../RunBar';
+import { StaleNotice } from '../../results/Stale';
 import { Segmented, cx } from '../../components/ui';
 import { toolLayout, useStore } from '../../lib/store';
 import type { SpecialProps } from '../ToolPage';
@@ -129,11 +130,12 @@ export default function Crop({ tool, jobId, head, meta }: SpecialProps) {
       <section className="tool-input tool-controls" aria-label="Settings">
         {head}
         <Field param={singleParam} value={form.values[fileParam.name]} error={form.shownErrors[fileParam.name]} onChange={form.setValue} />
-        <ParamForm params={tool.params} exclude={exclude} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="crop" />
+        <ParamForm resetKey={form.resetKey} params={tool.params} exclude={exclude} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="crop" />
         <RunBar form={form} label="Crop" disabled={!tool.availability.available || !item} disabledReason={!item ? `Choose ${isVideo ? 'a video' : 'an image'} first` : undefined} />
         {meta}
       </section>
-      <div className="tool-output" aria-label="Result">
+      <div className={cx('tool-output', form.stale && 'is-stale')} aria-label="Result">
+        <StaleNotice stale={form.stale} />
         {form.job.job && <ResultView job={form.job.job} tool={tool} input={undefined} />}
       </div>
     </div>

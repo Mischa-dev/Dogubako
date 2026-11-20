@@ -77,6 +77,72 @@ async fn convert_compress() {
 }
 
 #[tokio::test]
+async fn convert_ogg_default_bitrate_fits_input() {
+    let h = harness();
+    need!(h, "audio.convert");
+    if !has_encoder("libvorbis") {
+        return;
+    }
+    // The default 192 kbit/s is above what libvorbis allows for 16 kHz mono.
+    let mono16 = gen(
+        &h,
+        "mono16.wav",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=d=2:sample_rate=16000",
+            "-ac",
+            "1",
+        ],
+    );
+    let out = h
+        .run(
+            "audio.convert",
+            json!({"input": [s(&mono16)], "format": "ogg"}),
+        )
+        .await
+        .unwrap();
+    let j = probe_json(&out.artifacts[0].path);
+    assert_eq!(j["streams"][0]["codec_name"], "vorbis");
+    assert_eq!(sr(&out.artifacts[0].path), "16000");
+    assert!(
+        out.warnings.iter().any(|w| w.contains("16-100 kbit/s")),
+        "{:?}",
+        out.warnings
+    );
+
+    // libvorbis has no fixed-bitrate mode above 50 kHz: resample to 48 kHz.
+    let hi = gen(
+        &h,
+        "hi96.wav",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=d=1:sample_rate=96000",
+            "-ac",
+            "2",
+        ],
+    );
+    let out = h
+        .run("audio.convert", json!({"input": [s(&hi)], "format": "ogg"}))
+        .await
+        .unwrap();
+    assert_eq!(sr(&out.artifacts[0].path), "48000");
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+
+    let out = h
+        .run(
+            "audio.convert",
+            json!({"input": [s(&mono16)], "format": "ogg", "bitrate": 64}),
+        )
+        .await
+        .unwrap();
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+}
+
+#[tokio::test]
 async fn trim_split_merge() {
     let h = harness();
     need!(h, "audio.trim");
