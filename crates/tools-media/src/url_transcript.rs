@@ -7,7 +7,7 @@ use crate::speech::{default_threads, language_name, model_param, run_whisper, Wh
 use crate::subtitles::{
     detect_format, format_segments, parse_any, segments_table, to_json, to_md, Segment,
 };
-use dogubako_core::net::{check_url, resolve_checked};
+use dogubako_core::net::{check_url, resolve_checked, PolicyProxy};
 use dogubako_core::prelude::*;
 use dogubako_core::process::Exec;
 use std::path::{Path, PathBuf};
@@ -205,6 +205,11 @@ pub fn ytdlp_error(stderr: &str) -> ToolError {
     let line = line.trim_start_matches("ERROR:").trim();
     let low = line.to_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| low.contains(w));
+    if has(&["blocked by network policy"]) {
+        return ToolError::denied(
+            "yt-dlp tried to reach a private or blocked address, which this server's network policy doesn't allow",
+        );
+    }
     if has(&["unsupported url", "no suitable extractor"]) {
         return ToolError::invalid(
             "url",
@@ -292,7 +297,18 @@ fn clock(secs: f64) -> String {
     }
 }
 
-fn ytdlp(ctx: &ToolContext, cookies: Option<&Path>) -> ToolResult<Exec> {
+/// What every yt-dlp run shares: the cookies copy and the policy proxy.
+#[derive(Clone, Copy)]
+struct Fetch<'a> {
+    cookies: Option<&'a Path>,
+    proxy: &'a str,
+}
+
+/// Audio over HTTP(S) or HLS, which the native downloader fetches through the proxy.
+const AUDIO_FORMAT: &str =
+    "bestaudio[protocol^=http]/bestaudio[protocol^=m3u8]/best[protocol^=http]/best[protocol^=m3u8]";
+
+fn ytdlp(ctx: &ToolContext, f: Fetch<'_>) -> ToolResult<Exec> {
     let mut e = ctx
         .command("ytdlp")?
         .args([
@@ -305,9 +321,14 @@ fn ytdlp(ctx: &ToolContext, cookies: Option<&Path>) -> ToolResult<Exec> {
             "30",
             "--retries",
             "3",
+            // Plain HTTP downloads only, all through the proxy that applies the network policy.
+            "--downloader",
+            "native",
+            "--proxy",
         ])
+        .arg(f.proxy)
         .allow_network();
-    if let Some(c) = cookies {
+    if let Some(c) = f.cookies {
         e = e.arg("--cookies").arg(c);
     }
     Ok(e)
@@ -330,7 +351,7 @@ fn find_file(dir: &Path, prefix: &str) -> Option<PathBuf> {
 
 async fn fetch_captions(
     ctx: &ToolContext,
-    cookies: Option<&Path>,
+    fetch: Fetch<'_>,
     dir: &Path,
     info: &Path,
     t: &Track,
@@ -339,7 +360,7 @@ async fn fetch_captions(
         Kind::AutoCaptions => "--write-auto-subs",
         _ => "--write-subs",
     };
-    let out = ytdlp(ctx, cookies)?
+    let out = ytdlp(ctx, fetch)?
         .arg("--load-info-json")
         .arg(info)
         .args(["--skip-download", flag, "--sub-langs"])
@@ -395,7 +416,7 @@ struct Generated {
 async fn transcribe_audio(
     ctx: &ToolContext,
     p: &Params,
-    cookies: Option<&Path>,
+    fetch: Fetch<'_>,
     dir: &Path,
     info: &Path,
     duration: Option<f64>,
@@ -436,10 +457,10 @@ async fn transcribe_audio(
     }
     ctx.progress(0.05, "Downloading audio");
     let pc = ctx.clone();
-    let out = ytdlp(ctx, cookies)?
+    let out = ytdlp(ctx, fetch)?
         .arg("--load-info-json")
         .arg(info)
-        .args(["-f", "bestaudio/best", "--newline", "-P"])
+        .args(["-f", AUDIO_FORMAT, "--newline", "-P"])
         .arg(dir)
         .args(["-o", "audio.%(ext)s"])
         .on_stdout_line(move |l| {
@@ -574,10 +595,15 @@ fn transcribe_url() -> Arc<dyn Tool> {
             }
             None => None,
         };
-        let cookies = cookies.as_deref();
+        let proxy = PolicyProxy::start(ctx.net_policy().clone()).await?;
+        let proxy_url = proxy.url();
+        let fetch = Fetch {
+            cookies: cookies.as_deref(),
+            proxy: &proxy_url,
+        };
 
         ctx.progress(0.01, "Reading the video page");
-        let out = ytdlp(&ctx, cookies)?
+        let out = ytdlp(&ctx, fetch)?
             .args([
                 "--dump-single-json",
                 "--flat-playlist",
@@ -642,7 +668,7 @@ fn transcribe_url() -> Arc<dyn Tool> {
         let (segments, kind, language, track_key, model) = match track {
             Some(t) => {
                 ctx.progress(0.3, format!("Downloading '{}' captions", t.key));
-                let segs = fetch_captions(&ctx, cookies, &dir, &info_path, &t).await?;
+                let segs = fetch_captions(&ctx, fetch, &dir, &info_path, &t).await?;
                 if segs.is_empty() {
                     return Err(ToolError::input(format!(
                         "the '{}' captions are empty; try Source: Whisper only",
@@ -680,7 +706,7 @@ fn transcribe_url() -> Arc<dyn Tool> {
                 let g = transcribe_audio(
                     &ctx,
                     &p,
-                    cookies,
+                    fetch,
                     &dir,
                     &info_path,
                     duration,
