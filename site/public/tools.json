@@ -15117,6 +15117,233 @@
    "source": "builtin"
   },
   {
+   "id": "speech.transcribe_url",
+   "name": "Transcribe Video URL",
+   "description": "Full transcript of a YouTube, TED, Vimeo or other video-site URL (sites supported by yt-dlp): the site's captions when it has them, otherwise the audio transcribed offline with Whisper. Shows the source, language and whether the text is captions or generated, with timestamps; export as text, SRT, WebVTT, JSON or Markdown",
+   "category": "speech",
+   "keywords": [
+    "youtube",
+    "youtube transcript",
+    "video url",
+    "link",
+    "captions",
+    "subtitles",
+    "yt-dlp",
+    "ted",
+    "vimeo",
+    "what was said",
+    "speech to text",
+    "transcription",
+    "podcast"
+   ],
+   "params": [
+    {
+     "name": "url",
+     "label": "Video URL",
+     "description": "Page URL of one video or audio item",
+     "type": "text",
+     "multiline": false,
+     "placeholder": "https://www.youtube.com/watch?v=…",
+     "required": true,
+     "advanced": false,
+     "primary": true
+    },
+    {
+     "name": "source",
+     "label": "Source",
+     "description": "Use the site's captions, or transcribe the audio locally (needs whisper.cpp, FFmpeg and a Whisper model)",
+     "type": "enum",
+     "options": [
+      {
+       "value": "auto",
+       "label": "Captions, else Whisper"
+      },
+      {
+       "value": "captions",
+       "label": "Captions only"
+      },
+      {
+       "value": "whisper",
+       "label": "Whisper only"
+      }
+     ],
+     "multi": false,
+     "required": false,
+     "default": "auto",
+     "advanced": false,
+     "primary": false
+    },
+    {
+     "name": "language",
+     "label": "Language",
+     "description": "Caption language code; 'auto' is the language spoken in the video",
+     "type": "text",
+     "multiline": false,
+     "max_len": 16,
+     "placeholder": "auto, en, de, pt-BR…",
+     "required": false,
+     "default": "auto",
+     "advanced": false,
+     "primary": false
+    },
+    {
+     "name": "auto_captions",
+     "label": "Allow auto-generated captions",
+     "description": "Use captions the site generated automatically (e.g. YouTube) when there are no published ones",
+     "type": "boolean",
+     "required": false,
+     "default": true,
+     "advanced": false,
+     "primary": false
+    },
+    {
+     "name": "formats",
+     "label": "Formats",
+     "type": "enum",
+     "options": [
+      {
+       "value": "txt",
+       "label": "Text"
+      },
+      {
+       "value": "srt",
+       "label": "SRT"
+      },
+      {
+       "value": "vtt",
+       "label": "WebVTT"
+      },
+      {
+       "value": "json",
+       "label": "JSON"
+      },
+      {
+       "value": "md",
+       "label": "Markdown"
+      }
+     ],
+     "multi": true,
+     "required": false,
+     "default": [
+      "txt",
+      "srt"
+     ],
+     "advanced": false,
+     "primary": false
+    },
+    {
+     "name": "cookies",
+     "label": "Cookies",
+     "description": "Netscape cookies.txt exported from your browser, for videos that need you signed in or YouTube's \"not a bot\" check",
+     "type": "file",
+     "accept": [
+      ".txt"
+     ],
+     "multiple": false,
+     "required": false,
+     "advanced": true,
+     "primary": false
+    },
+    {
+     "name": "model",
+     "label": "Model",
+     "description": "Whisper model (download models in Settings → Models)",
+     "type": "enum",
+     "options": [
+      {
+       "value": "auto",
+       "label": "Best installed"
+      },
+      {
+       "value": "whisper-tiny",
+       "label": "Whisper tiny"
+      },
+      {
+       "value": "whisper-tiny.en",
+       "label": "Whisper tiny (English)"
+      },
+      {
+       "value": "whisper-base",
+       "label": "Whisper base"
+      },
+      {
+       "value": "whisper-base.en",
+       "label": "Whisper base (English)"
+      },
+      {
+       "value": "whisper-small",
+       "label": "Whisper small"
+      },
+      {
+       "value": "whisper-small.en",
+       "label": "Whisper small (English)"
+      },
+      {
+       "value": "whisper-small.en-tdrz",
+       "label": "Whisper small + tinydiarize"
+      },
+      {
+       "value": "whisper-large-v3-turbo-q5_0",
+       "label": "Whisper large-v3 turbo (q5)"
+      },
+      {
+       "value": "whisper-large-v3-turbo",
+       "label": "Whisper large-v3 turbo"
+      }
+     ],
+     "multi": false,
+     "required": false,
+     "default": "auto",
+     "advanced": true,
+     "primary": false
+    },
+    {
+     "name": "threads",
+     "label": "Threads",
+     "type": "integer",
+     "min": 1,
+     "max": 64,
+     "required": false,
+     "default": 4,
+     "advanced": true,
+     "primary": false
+    },
+    {
+     "name": "max_minutes",
+     "label": "Max minutes",
+     "description": "Longest video whose audio is downloaded and transcribed with Whisper",
+     "type": "integer",
+     "min": 1,
+     "max": 1440,
+     "required": false,
+     "default": 240,
+     "advanced": true,
+     "primary": false
+    }
+   ],
+   "output": {
+    "kind": "text",
+    "text_mime": "text/markdown"
+   },
+   "platforms": [
+    "linux",
+    "macos",
+    "windows"
+   ],
+   "requires": [
+    "ytdlp"
+   ],
+   "permissions": [
+    "network"
+   ],
+   "timeout_secs": 21600,
+   "reports_progress": true,
+   "execution": "network",
+   "version": "1.0.0",
+   "destructive": false,
+   "source": "builtin"
+  },
+  {
    "id": "pdf.merge",
    "name": "Merge PDFs",
    "description": "Combine several PDFs into one document in the given order, optionally taking only some pages of each",

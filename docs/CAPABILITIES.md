@@ -1,6 +1,6 @@
 # Capability matrix
 
-Generated from the tool registry by `dogubako tools matrix` (Dogubako 0.1.0-alpha.2). 249 tools.
+Generated from the tool registry by `dogubako tools matrix` (Dogubako 0.1.0-alpha.2). 250 tools.
 
 Legend — Engine: **native** = built into Dogubako (no external programs), **external** = invokes the listed program(s), **model** = needs a downloadable local model, **network** = makes outbound requests. Platforms: L = Linux, M = macOS, W = Windows.
 
@@ -9,7 +9,7 @@ Legend — Engine: **native** = built into Dogubako (no external programs), **ex
 | Images | 30 | 24 | 4 | 2 | 0 |
 | Video | 27 | 0 | 27 | 0 | 0 |
 | Audio | 21 | 0 | 21 | 0 | 0 |
-| Speech & Voice | 9 | 2 | 3 | 4 | 0 |
+| Speech & Voice | 10 | 2 | 3 | 4 | 1 |
 | PDF & Documents | 27 | 5 | 22 | 0 | 0 |
 | Files | 23 | 23 | 0 | 0 | 0 |
 | Text | 27 | 27 | 0 | 0 | 0 |
@@ -125,6 +125,7 @@ Legend — Engine: **native** = built into Dogubako (no external programs), **ex
 | Voice Activity Detection | `speech.vad` | external | ffmpeg, ffprobe | L M W | — |
 | Extract Speech Segments | `speech.extract_segments` | external | ffmpeg, ffprobe | L M W | — |
 | Split at Pauses | `speech.split_by_speech` | external | ffmpeg, ffprobe | L M W | — |
+| Transcribe Video URL | `speech.transcribe_url` | network | ytdlp | L M W | network |
 
 ## PDF & Documents
 

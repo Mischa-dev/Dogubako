@@ -139,7 +139,7 @@ const AUTO_ORDER: &[&str] = &[
 ];
 const TDRZ: &str = "whisper-small.en-tdrz";
 
-fn model_param() -> ParamSpec {
+pub(crate) fn model_param() -> ParamSpec {
     let mut opts: Vec<(&str, &str)> = vec![("auto", "Best installed")];
     opts.extend(
         KNOWN_MODELS
@@ -224,7 +224,7 @@ fn select_model(
     Ok((pick, ctx.models().path(pick.id).unwrap()))
 }
 
-fn default_threads() -> i64 {
+pub(crate) fn default_threads() -> i64 {
     std::thread::available_parallelism()
         .map(|n| n.get() as i64)
         .unwrap_or(4)

@@ -14,6 +14,14 @@ campaign are added here as they merge.
 
 ### Added
 
+- **Transcribe Video URL** (`speech.transcribe_url`): paste a YouTube, TED,
+  Vimeo or other video-site link and get the full transcript. It uses the
+  site's published or auto-generated captions (pick the language), or
+  downloads the audio and transcribes it offline with Whisper when there are
+  none. The result names the source, language and whether it is captions or
+  generated text, keeps timestamps, and exports as text, SRT, WebVTT, JSON or
+  Markdown. Needs [yt-dlp](https://github.com/yt-dlp/yt-dlp); see
+  [Video URL transcripts](https://docs.dogubako.app/app/video-url-transcripts/).
 - Podman support: the compose file labels `./data` for SELinux (`:z`) and
   declares the health check itself, and `deploy/dogubako.container` is a
   Quadlet unit with the same hardening, so the container starts at boot. New

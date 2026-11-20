@@ -36,6 +36,7 @@ Sizes are real numbers from the current lock (macOS, Apple silicon).
 | whisper.cpp | on-demand | v1.7.6 | ~3 MB | ~5 MB | Speech tools need a model download first anyway |
 | LibreOffice | system | | | ~700 MB | Too big for now; detected if installed |
 | Piper | system | | | | Last native release's macOS build is broken (below) |
+| yt-dlp | system | | | | Video sites change often; users keep it current with their package manager or `yt-dlp -U` |
 | rembg | system | | | | Python app, not relocatable; better replaced by an in-process model |
 | libvips | dropped | | | | No tool uses it |
 
