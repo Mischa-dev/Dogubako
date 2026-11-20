@@ -33,10 +33,14 @@ fn hocr_without_temp_path(html: &str, staged: &std::path::Path, name: &str) -> S
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#39;");
-    let staged = arg_path(staged).to_string_lossy().to_string();
-    let html = html.replace(&staged, &esc);
-    let full = staged.replace('&', "&amp;");
-    html.replace(&full, &esc)
+    let mut html = html.to_string();
+    for path in [arg_path(staged), staged.as_os_str().to_os_string()] {
+        let path = path.to_string_lossy().to_string();
+        html = html
+            .replace(&path, &esc)
+            .replace(&path.replace('&', "&amp;"), &esc);
+    }
+    html
 }
 
 fn valid_langs(s: &str) -> ToolResult<String> {
@@ -373,10 +377,13 @@ mod tests {
 
     #[test]
     fn hocr_names_the_users_file() {
-        let staged = std::path::Path::new("/tmp/job/in-ab12.png");
-        let html = "<div class='ocr_page' title='image \"/tmp/job/in-ab12.png\"; bbox 0 0 9 9'>";
-        let out = hocr_without_temp_path(html, staged, "scan <1>.png");
-        assert!(!out.contains("/tmp/job"), "{out}");
+        let staged = std::env::temp_dir().join("job").join("in-ab12.png");
+        let html = format!(
+            "<div class='ocr_page' title='image \"{}\"; bbox 0 0 9 9'>",
+            arg_path(&staged).to_string_lossy()
+        );
+        let out = hocr_without_temp_path(&html, &staged, "scan <1>.png");
+        assert!(!out.contains("in-ab12"), "{out}");
         assert!(out.contains("image \"scan &lt;1&gt;.png\""), "{out}");
     }
 }
