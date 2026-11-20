@@ -32,7 +32,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 REPO = "https://github.com/Mischa-dev/Dogubako"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$")
-VERSION_IN_TEXT = r"(?<![\w.-]){}(?![\w-]|\.\d)"
+# Also matches tags (v0.1.0) and file names (Dogubako_0.1.0_aarch64.dmg).
+VERSION_IN_TEXT = r"(?<![0-9A-Za-z.-])v?{}(?![0-9A-Za-z-]|\.\d)"
 # A line that names an older release as history ("starting with 0.1.0-alpha.1")
 # is not stale.
 HISTORY = re.compile(r"\b(starting with|since|introduced in)\b", re.I)
@@ -234,6 +235,10 @@ def regen(check: bool) -> int:
     # Some defaults follow the CPU count (Whisper threads): pin to 4 CPUs, as
     # on the CI runner, so the pages don't change with the machine.
     pin = ["taskset", "-c", "0-3"] if shutil.which("taskset") and (os.cpu_count() or 0) >= 4 else []
+    if not pin and os.cpu_count() != 4:
+        print(f"warning: can't pin to 4 CPUs here ({os.cpu_count()} CPUs): CPU-dependent defaults will differ "
+              "from CI. Regenerate on Linux, or take the diff from the Release workflow's generated-docs job.",
+              file=sys.stderr)
     matrix = subprocess.run([*pin, binary, "tools", "matrix"], check=True, capture_output=True, text=True, env=env).stdout
     CAPABILITIES.write_text(matrix if matrix.endswith("\n") else matrix + "\n", encoding="utf-8")
     subprocess.run([*pin, "npm", "run", "--silent", "gen:tools"], cwd=ROOT / "site", check=True, env=env)
