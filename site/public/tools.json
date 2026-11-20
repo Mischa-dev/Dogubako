@@ -1,5 +1,5 @@
 {
- "version": "0.1.0-alpha.1",
+ "version": "0.1.0-alpha.2",
  "tools": [
   {
    "id": "image.convert",
@@ -13761,7 +13761,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 8,
+     "default": 4,
      "advanced": true,
      "primary": false
     },
@@ -13950,7 +13950,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 8,
+     "default": 4,
      "advanced": true,
      "primary": false
     }
@@ -14200,7 +14200,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 8,
+     "default": 4,
      "advanced": true,
      "primary": false
     },

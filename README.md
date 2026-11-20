@@ -8,9 +8,9 @@ as a desktop app, a self-hosted web service, a CLI, an HTTP API and an MCP serve
 
 ---
 
-> **Status: alpha.** The first alpha, `v0.1.0-alpha.1`, is for testers. The
+> **Status: alpha.** The second alpha, `v0.1.0-alpha.2`, is for testers. The
 > desktop build is macOS on Apple silicon (macOS 15+) only, and expect rough
-> edges. See the [release notes](docs/releases/v0.1.0-alpha.1.md) and
+> edges. See the [release notes](docs/releases/v0.1.0-alpha.2.md) and
 > [CHANGELOG](CHANGELOG.md).
 
 Dogubako replaces the dozens of single-purpose utility websites and small apps
@@ -60,7 +60,7 @@ The full, generated list with dependencies and platforms is in
 
 ### Desktop
 
-**macOS (Apple silicon, macOS 15+):** download `Dogubako_0.1.0-alpha.1_aarch64.dmg`
+**macOS (Apple silicon, macOS 15+):** download `Dogubako_0.1.0-alpha.2_aarch64.dmg`
 from [Releases](https://github.com/Mischa-dev/Dogubako/releases). The core engines
 (FFmpeg, qpdf, Poppler, ExifTool, 7-Zip) are inside the app. Heavier ones
 (ImageMagick, Tesseract, Ghostscript, Pandoc, whisper.cpp, Real-ESRGAN) download
