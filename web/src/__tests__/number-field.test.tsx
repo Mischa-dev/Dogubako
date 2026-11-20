@@ -109,6 +109,23 @@ describe('number field typing', () => {
     expect(el.value).toBe('9');
   });
 
+  it('snaps a fractional draft in a whole-number field to the next whole number', () => {
+    const seen: unknown[] = [];
+    render(<Harness param={whole} initial={1.5} seen={seen} />);
+    fireEvent.keyDown(input('Count'), { key: 'ArrowUp' });
+    expect(seen.at(-1)).toBe(2);
+    fireEvent.change(input('Count'), { target: { value: '3.5' } });
+    fireEvent.keyDown(input('Count'), { key: 'ArrowDown' });
+    expect(seen.at(-1)).toBe(3);
+  });
+
+  it('starts an empty field at its minimum', () => {
+    const seen: unknown[] = [];
+    render(<Harness param={whole} seen={seen} />);
+    fireEvent.keyDown(input('Count'), { key: 'ArrowUp' });
+    expect(seen.at(-1)).toBe(1);
+  });
+
   it('steps decimals without float noise', () => {
     const seen: unknown[] = [];
     const p = { ...decimal, step: 0.1 } as unknown as ParamSpec;

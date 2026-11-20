@@ -96,8 +96,15 @@ function NumberInput({ common, integer, min, max, step, value, placeholder, onCh
   const type = (s: string) => { setDraft(s); commit(s); };
   const stepBy = (dir: 1 | -1) => {
     const cur = parseNum(draft);
-    const base = Number.isFinite(cur) ? cur : min ?? 0;
-    let next = Number((base + dir * step).toFixed(Math.max(decimals(step), decimals(base))));
+    const anchor = min ?? 0;
+    const places = Math.max(decimals(step), decimals(anchor));
+    let next: number;
+    if (!Number.isFinite(cur)) next = anchor;
+    else {
+      // Snap off-step values (e.g. 1.5 in a whole-number field) to the next step in this direction.
+      const k = Math.round(((cur - anchor) / step) * 1e9) / 1e9;
+      next = Number((anchor + (dir > 0 ? Math.floor(k) + 1 : Math.ceil(k) - 1) * step).toFixed(places));
+    }
     if (min != null && next < min) next = min;
     if (max != null && next > max) next = max;
     type(String(next));
