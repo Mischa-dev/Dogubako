@@ -100,7 +100,7 @@ jobs:
       - run: cargo build -p dogubako-cli --locked
       - name: Generated docs (release.py regen)
         run: python3 -I packaging/release/release.py regen --check
-      - name: Third-party notices (notices.py --fetch-sources)
+      - name: Third-party notices (notices.py --check)
         if: success() || failure()
         run: python3 -I packaging/release/notices.py --check
       - name: Keep the regenerated docs
