@@ -268,6 +268,7 @@
 .field-note { font-size: var(--fs-sm); color: var(--warn); }
 .field-meta { display: inline-flex; align-items: center; gap: 8px; }
 .char-count { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.char-count.is-over { color: var(--danger); font-weight: 600; }
 .syntax-tag { font: 500 10.5px/1 var(--font-mono); padding: 3px 6px; border-radius: 4px; background: var(--surface-sunken); color: var(--text-3); text-transform: lowercase; }
 .syntax-tag.is-bad { background: var(--danger-soft); color: var(--danger); }
 .syntax-tag.is-ok { color: var(--success); }

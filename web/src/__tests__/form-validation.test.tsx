@@ -102,4 +102,29 @@ describe('tool form validation', () => {
     expect(result.current.stale).toBe(false);
     expect(Object.keys(result.current.shownErrors)).toEqual([]);
   });
+  it('keeps over-long text, shows it is too long and blocks Run instead of truncating', () => {
+    const rename = tool({ id: 'file.rename', name: 'Rename', params: [
+      { name: 'pattern', label: 'Pattern', type: 'text', max_len: 10 },
+      { name: 'body', label: 'Body', type: 'text', multiline: true, max_len: 5 },
+    ] });
+    render(<GenericTool tool={rename} />);
+    const pattern = screen.getByLabelText('Pattern') as HTMLInputElement;
+    expect(pattern.maxLength).toBe(-1);
+    expect(screen.queryByText(/\/ 10/)).toBeNull();
+    fireEvent.change(pattern, { target: { value: 'abcdefghijkl' } });
+    expect(pattern.value).toBe('abcdefghijkl');
+    expect(screen.getByText('Too long: 12 of 10 characters allowed. Remove 2 to run.')).toBeTruthy();
+    expect(screen.getByText('12 / 10').classList.contains('is-over')).toBe(true);
+    expect(runButton().disabled).toBe(true);
+    fireEvent.change(pattern, { target: { value: 'abcdefghij' } });
+    expect(screen.queryByText(/Too long/)).toBeNull();
+    expect(screen.getByText('10 / 10').classList.contains('is-over')).toBe(false);
+    expect(runButton().disabled).toBe(false);
+
+    const body = screen.getByLabelText('Body') as HTMLTextAreaElement;
+    expect(body.maxLength).toBe(-1);
+    fireEvent.change(body, { target: { value: 'héllo' } });
+    expect(screen.getByText('Too long: 6 of 5 bytes allowed. Remove 1 to run.')).toBeTruthy();
+    expect(runButton().disabled).toBe(true);
+  });
 });

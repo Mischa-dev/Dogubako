@@ -112,6 +112,22 @@ export function isEmpty(v: unknown): boolean {
 }
 
 /** Validate visible params. Returns map param -> message. */
+const utf8 = new TextEncoder();
+
+/** Text length as the engine counts it (UTF-8 bytes), so the form's limit matches the server's. */
+export function textLength(s: string): number {
+  // eslint-disable-next-line no-control-regex
+  return /^[\x00-\x7f]*$/.test(s) ? s.length : utf8.encode(s).length;
+}
+
+export function textLengthError(s: string, max: number): string | undefined {
+  const n = textLength(s);
+  if (n <= max) return undefined;
+  const over = (n - max).toLocaleString();
+  const unit = n === s.length ? 'characters' : 'bytes';
+  return `Too long: ${n.toLocaleString()} of ${max.toLocaleString()} ${unit} allowed. Remove ${over} to run.`;
+}
+
 export function validate(tool: Pick<ToolInfo, 'params'>, values: FormValues): FormErrors {
   const errs: FormErrors = {};
   for (const p of tool.params) {
@@ -143,8 +159,9 @@ export function validate(tool: Pick<ToolInfo, 'params'>, values: FormValues): Fo
     if (p.type === 'color' && !/^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(String(v).trim())) {
       errs[p.name] = 'Use a hex color like #3366ff';
     }
-    if (p.type === 'text' && p.max_len && String(v).length > p.max_len) {
-      errs[p.name] = `At most ${p.max_len} characters`;
+    if (p.type === 'text' && p.max_len) {
+      const err = textLengthError(String(v), p.max_len);
+      if (err) errs[p.name] = err;
     }
   }
   return errs;
