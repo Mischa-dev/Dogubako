@@ -73,6 +73,33 @@ async fn transcript_convert_and_shift() {
         .await
         .unwrap();
     assert_eq!(out.text.as_deref(), Some("Hello World\n"));
+    let vtt = "WEBVTT\n\n00:01.000 --> 00:02.000 align:start line:10%\n<b>Bold</b> words\n";
+    let out = h
+        .run(
+            "speech.transcript_convert",
+            json!({"text": vtt, "output_format": "vtt"}),
+        )
+        .await
+        .unwrap();
+    assert!(out
+        .text
+        .unwrap()
+        .contains("00:00:01.000 --> 00:00:02.000 align:start line:10%\n<b>Bold</b> words"));
+    for (fmt, want) in [
+        ("txt", "Bold words"),
+        ("md", "Bold words"),
+        ("json", "Bold words"),
+    ] {
+        let out = h
+            .run(
+                "speech.transcript_convert",
+                json!({"text": vtt, "output_format": fmt}),
+            )
+            .await
+            .unwrap();
+        let t = out.text.unwrap();
+        assert!(t.contains(want) && !t.contains("<b>"), "{fmt}: {t}");
+    }
     let e = h
         .run(
             "speech.transcript_convert",
