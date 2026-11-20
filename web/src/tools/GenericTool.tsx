@@ -5,6 +5,7 @@ import { Zap } from 'lucide-react';
 import type { ToolInfo } from '../lib/types';
 import { ParamForm } from '../form/ParamForm';
 import { ResultView } from '../results/ResultView';
+import { StaleNotice } from '../results/Stale';
 import { useToolForm, type ToolForm } from './useToolForm';
 import { RunBar } from './RunBar';
 import { Spinner, cx } from '../components/ui';
@@ -104,14 +105,14 @@ export function GenericTool({ tool, jobId, head, meta }: { tool: ToolInfo; jobId
   return (
     <div className={cx('tool-body tool-work', `place-${layout.controls}`, hasStage && 'has-stage', live && 'tool-live')}>
       {hasStage && (
-        <div className="tool-stage" ref={stageRef}>
+        <div className={cx('tool-stage', form.stale && 'is-stale')} ref={stageRef}>
           <Stage files={files} job={result} running={form.job.running} live={live} mode={layout.preview} />
         </div>
       )}
       <section className="tool-input tool-controls" aria-label="Settings">
         {head}
         {noParams ? <p className="muted">This tool has no options.</p> : (
-          <ParamForm params={tool.params} values={form.values} errors={form.shownErrors} onChange={form.setValue} mono={mono} />
+          <ParamForm resetKey={form.resetKey} params={tool.params} values={form.values} errors={form.shownErrors} onChange={form.setValue} mono={mono} />
         )}
         <RunBar
           form={form}
@@ -121,7 +122,8 @@ export function GenericTool({ tool, jobId, head, meta }: { tool: ToolInfo; jobId
         />
         {meta}
       </section>
-      <div className="tool-output" ref={resultsRef} aria-label="Result">
+      <div className={cx('tool-output', form.stale && 'is-stale')} ref={resultsRef} aria-label="Result">
+        <StaleNotice stale={form.stale} />
         {live && !result && (
           <div className="live-placeholder">
             {form.job.running ? <Spinner /> : <Zap size={16} aria-hidden />}

@@ -13,9 +13,13 @@ import { useToolForm } from '../useToolForm';
 import { useJob } from '../useJob';
 import { useToolShortcuts } from '../GenericTool';
 import { RunBar } from '../RunBar';
+import { StaleNotice } from '../../results/Stale';
 import { Button, Callout, IconButton, Spinner, cx } from '../../components/ui';
 import { describeError } from '../../lib/errors';
 import { BoxEditor } from './BoxEditor';
+
+/** Drawn on the image and passed to the run as overrides, not edited as form fields. */
+const REGION_PARAMS = ['regions', 'extra_regions'];
 
 /** Image redaction editor: detect faces (optional) → edit boxes → image.redact. */
 export default function FaceRedact({ tool, jobId, head, meta }: SpecialProps) {
@@ -26,7 +30,7 @@ export default function FaceRedact({ tool, jobId, head, meta }: SpecialProps) {
   const canDetect = !!detect && detect.availability.available && detect.permitted !== false;
   // The final step always uses image.redact (single image, explicit regions).
   const target = redact && redact.permitted !== false ? redact : tool;
-  const form = useToolForm(target, { jobId });
+  const form = useToolForm(target, { jobId, provided: REGION_PARAMS });
   useToolShortcuts(form, false);
   const detectJob = useJob(backend);
   const [boxes, setBoxes] = useState<Region[]>([]);
@@ -164,7 +168,7 @@ export default function FaceRedact({ tool, jobId, head, meta }: SpecialProps) {
             ))}
           </ul>
         )}
-        <ParamForm params={optionParams} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="redact" />
+        <ParamForm resetKey={form.resetKey} params={optionParams} values={form.values} errors={form.shownErrors} onChange={form.setValue} idPrefix="redact" />
         <RunBar
           form={form}
           label="Apply redaction"
@@ -174,7 +178,8 @@ export default function FaceRedact({ tool, jobId, head, meta }: SpecialProps) {
         />
         {meta}
       </section>
-      <div className="tool-output" aria-label="Result">
+      <div className={cx('tool-output', form.stale && 'is-stale')} aria-label="Result">
+        <StaleNotice stale={form.stale} />
         {form.job.job && <ResultView job={form.job.job} tool={target} input={{ imageUrl }} hideData />}
         {!form.job.job && item && boxes.length > 0 && (
           <p className="muted small"><Wand2 size={13} aria-hidden /> Choose a style, then apply to see the result here.</p>
