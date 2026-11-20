@@ -1611,6 +1611,21 @@ fn image_args(fmt: &str) -> Vec<String> {
     }
 }
 
+/// Warning for a requested width that enlarges the source.
+fn upscale_note(f: &InputFile, pr: &Probe, w: i64) -> Option<String> {
+    let (sw, _) = pr.dims()?;
+    (w > sw as i64).then(|| {
+        format!(
+            "{}: enlarged from {sw} to {w} px wide, which adds no detail",
+            f.name
+        )
+    })
+}
+
+fn trim_fps(f: f64) -> f64 {
+    (f * 1000.0).round() / 1000.0
+}
+
 fn extract_frames() -> Arc<dyn Tool> {
     let spec = video_spec("video.extract_frames", "Extract Frames")
         .describe("Export frames as images: every N seconds, at a frame rate, at specific timestamps, at scene changes, keyframes only, or every frame — optionally zipped")
@@ -1689,7 +1704,13 @@ fn extract_frames() -> Arc<dyn Tool> {
                 let mut post: Vec<String> = vec!["-fps_mode".into(), "vfr".into()];
                 match mode.as_str() {
                     "interval" => vf.push(format!("fps=1/{}", p.num("interval")?)),
-                    "fps" => vf.push(format!("fps={}", p.num("fps")?)),
+                    "fps" => {
+                        let rate = p.num("fps")?;
+                        if let Some(src) = pr.fps().filter(|s| rate > s + 0.01) {
+                            warnings.push(format!("{}: {rate} fps is above the video's {} fps, so some frames repeat the previous one", f.name, trim_fps(src)));
+                        }
+                        vf.push(format!("fps={rate}"))
+                    }
                     "scene" => vf.push(format!("select='gt(scene,{})'", p.num("scene_threshold")?)),
                     "keyframes" => pre = vec!["-skip_frame".into(), "nokey".into()],
                     _ => post = vec!["-fps_mode".into(), "passthrough".into()],
@@ -1795,6 +1816,9 @@ fn thumbnail() -> Arc<dyn Tool> {
                 vf.push("thumbnail=n=120".to_string());
             }
             if let Some(w) = p.opt_int("width") {
+                if let Some(note) = upscale_note(f, &pr, w) {
+                    rep.warnings.push(note);
+                }
                 vf.push(format!("scale={w}:-2:flags=lanczos"));
             }
             let out = out_path(&ctx, f, "thumbnail", &fmt);
@@ -2390,6 +2414,11 @@ fn preview() -> Arc<dyn Tool> {
             };
             let audio = p.bool("audio") && pr.audio().is_some();
             let w = p.int_or("width", 640);
+            if w > 0 {
+                if let Some(note) = upscale_note(f, &pr, w) {
+                    rep.warnings.push(note);
+                }
+            }
             let mut ff = Ff::new();
             let mut fc = vec![];
             let mut labels = String::new();

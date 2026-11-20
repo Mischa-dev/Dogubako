@@ -174,6 +174,15 @@ fn parse_language(p: &Params) -> ToolResult<String> {
 }
 
 /// Pick the whisper model to use.
+/// Speaker turn detection always runs on the tinydiarize model; say so
+/// unless that is what was picked.
+fn tdrz_note(tdrz: bool, choice: &str) -> Option<String> {
+    (tdrz && choice != TDRZ).then(|| {
+        let picked = if choice == "auto" { "the automatic choice".to_string() } else { format!("'{choice}'") };
+        format!("speaker turns need the '{TDRZ}' model (English only), so it was used instead of {picked}")
+    })
+}
+
 fn select_model(
     ctx: &ToolContext,
     choice: &str,
@@ -364,6 +373,9 @@ pub async fn run_whisper(
     }
     let (model, model_path) = select_model(ctx, &o.model, &o.language, tdrz)?;
     res.model = model.id.to_string();
+    if let Some(note) = tdrz_note(tdrz, &o.model) {
+        res.warnings.push(note);
+    }
     if model.languages == "en" && o.language != "en" && o.language != "auto" {
         res.warnings.push(format!(
             "{} is English-only; the language setting is ignored",
@@ -578,7 +590,7 @@ fn transcribe() -> Arc<dyn Tool> {
             .param(ParamSpec::multi_choice("formats", &[("txt", "Text"), ("srt", "SRT"), ("vtt", "WebVTT"), ("json", "JSON"), ("md", "Markdown")]).default_value(json!(["txt", "srt"]))),
     )
     .param(ParamSpec::boolean("word_timestamps").describe("Include per-word timings in the JSON / data").advanced())
-    .param(ParamSpec::choice("diarize", &[("none", "Off"), ("tinydiarize", "Speaker turns (tinydiarize model)"), ("stereo", "Stereo: one speaker per channel")]).default_str("none").advanced())
+    .param(ParamSpec::choice("diarize", &[("none", "Off"), ("tinydiarize", "Speaker turns (uses whisper-small.en-tdrz)"), ("stereo", "Stereo: one speaker per channel")]).default_str("none").advanced())
     .text_output("text/plain");
     async_tool(spec, |ctx, p| async move {
         let o = WhisperOpts::from_params(&p)?;
@@ -1007,6 +1019,15 @@ mod tests {
             Some(("de".into(), 0.912345))
         );
         assert_eq!(parse_detected("nothing"), None);
+    }
+
+    #[test]
+    fn tinydiarize_discloses_model_swap() {
+        assert_eq!(tdrz_note(false, "auto"), None);
+        assert_eq!(tdrz_note(true, TDRZ), None);
+        assert!(tdrz_note(true, "auto").unwrap().contains(TDRZ));
+        let n = tdrz_note(true, "whisper-base").unwrap();
+        assert!(n.contains(TDRZ) && n.contains("'whisper-base'"), "{n}");
     }
 
     #[test]

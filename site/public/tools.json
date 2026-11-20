@@ -763,7 +763,7 @@
     {
      "name": "keep_if_larger",
      "label": "Keep original if smaller",
-     "description": "Return the original file when re-encoding would make it larger",
+     "description": "Return the original file when re-encoding would make it larger (only when the format and size stay the same)",
      "type": "boolean",
      "required": false,
      "default": true,
@@ -9538,7 +9538,7 @@
     {
      "name": "stream",
      "label": "Stream",
-     "description": "…or burn this embedded subtitle track (0 = first)",
+     "description": "…or burn this embedded subtitle track (0 = first; ignored when a subtitle file is chosen)",
      "type": "integer",
      "min": 0,
      "max": 99,
@@ -10810,6 +10810,7 @@
     {
      "name": "true_peak",
      "label": "True peak (dBTP)",
+     "description": "Ceiling for peaks after normalizing; only changes the result when the louder audio would peak above it",
      "type": "number",
      "min": -9,
      "max": 0,
@@ -10827,6 +10828,7 @@
     {
      "name": "lra",
      "label": "Loudness range (LU)",
+     "description": "Only applies when normalization has to compress dynamics (shown as \"dynamic\" in the result); a plain gain change keeps the original range",
      "type": "number",
      "min": 1,
      "max": 50,
@@ -11624,6 +11626,7 @@
     {
      "name": "background",
      "label": "Background",
+     "description": "Background colour; #rrggbbaa sets its opacity. Ignored when Transparent is on",
      "type": "color",
      "required": false,
      "default": "#ffffff",
@@ -13290,7 +13293,7 @@
     {
      "name": "fps_from",
      "label": "Convert from frame rate",
-     "description": "Sets the factor to fps_from / fps_to",
+     "description": "Sets the factor to fps_from / fps_to (give both; replaces the speed factor)",
      "type": "number",
      "min": 1,
      "max": 240,
@@ -13301,6 +13304,7 @@
     {
      "name": "fps_to",
      "label": "…to frame rate",
+     "description": "Give together with the 'from' frame rate",
      "type": "number",
      "min": 1,
      "max": 240,
@@ -13563,7 +13567,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 4,
+     "default": 8,
      "advanced": true,
      "primary": false
     },
@@ -13588,7 +13592,7 @@
       },
       {
        "value": "tinydiarize",
-       "label": "Speaker turns (tinydiarize model)"
+       "label": "Speaker turns (uses whisper-small.en-tdrz)"
       },
       {
        "value": "stereo",
@@ -13752,7 +13756,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 4,
+     "default": 8,
      "advanced": true,
      "primary": false
     }
@@ -14002,7 +14006,7 @@
      "min": 1,
      "max": 64,
      "required": false,
-     "default": 4,
+     "default": 8,
      "advanced": true,
      "primary": false
     },
