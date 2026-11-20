@@ -898,42 +898,50 @@ fn diff() -> Arc<dyn Tool> {
         use similar::{ChangeTag, TextDiffConfig, WhitespaceMode};
         let a = p.text("original");
         let b = p.text("changed");
+        let timeout = std::time::Duration::from_secs(20);
         let mut cfg = TextDiffConfig::default();
-        cfg.timeout(std::time::Duration::from_secs(20));
-        cfg.whitespace_mode(match p.str("whitespace")? {
+        cfg.timeout(timeout);
+        let ws = match p.str("whitespace")? {
             "changes" => WhitespaceMode::IgnoreChanges,
             "all" => WhitespaceMode::IgnoreAll,
             _ => WhitespaceMode::Exact,
-        });
-        ctx.check_cancelled()?;
-        let d = match p.str("granularity")? {
-            "line" => cfg.diff_lines(a, b),
-            "char" => cfg.diff_chars(a, b),
-            _ => cfg.diff_words(a, b),
         };
+        cfg.whitespace_mode(ws);
+        ctx.check_cancelled()?;
+        let granularity = p.str("granularity")?;
         // Chunks are owned strings appended in place and converted to JSON
         // once (re-cloning a chunk per token is quadratic).
         let mut chunks: Vec<(&'static str, String)> = vec![];
         let (mut ins, mut del) = (0usize, 0usize);
-        for (n, c) in d.iter_all_changes().enumerate() {
-            if n % 65_536 == 0 {
-                ctx.check_cancelled()?;
-            }
-            let tag = match c.tag() {
-                ChangeTag::Equal => "equal",
-                ChangeTag::Insert => {
-                    ins += 1;
-                    "insert"
-                }
-                ChangeTag::Delete => {
-                    del += 1;
-                    "delete"
-                }
+        let ratio;
+        if granularity != "line" && ws != WhitespaceMode::Exact {
+            // `similar` only honours the whitespace mode for line diffs.
+            let r = diff_tokens_ignoring_ws(a, b, granularity == "char", ws, timeout);
+            (chunks, ins, del, ratio) = (r.chunks, r.insertions, r.deletions, r.ratio);
+        } else {
+            let d = match granularity {
+                "line" => cfg.diff_lines(a, b),
+                "char" => cfg.diff_chars(a, b),
+                _ => cfg.diff_words(a, b),
             };
-            match chunks.last_mut() {
-                Some((t, text)) if *t == tag => text.push_str(c.value()),
-                _ => chunks.push((tag, c.value().to_string())),
+            for (n, c) in d.iter_all_changes().enumerate() {
+                if n % 65_536 == 0 {
+                    ctx.check_cancelled()?;
+                }
+                let tag = match c.tag() {
+                    ChangeTag::Equal => "equal",
+                    ChangeTag::Insert => {
+                        ins += 1;
+                        "insert"
+                    }
+                    ChangeTag::Delete => {
+                        del += 1;
+                        "delete"
+                    }
+                };
+                push_chunk(&mut chunks, tag, c.value());
             }
+            ratio = d.ratio();
         }
         let chunks: Vec<Value> = chunks
             .into_iter()
@@ -952,12 +960,408 @@ fn diff() -> Arc<dyn Tool> {
         )
         .with_data(json!({
             "identical": identical,
-            "similarity": (d.ratio() * 1000.0).round() / 1000.0,
+            "similarity": (ratio * 1000.0).round() / 1000.0,
             "insertions": ins,
             "deletions": del,
             "diff": chunks,
         })))
     })
+}
+
+fn push_chunk(chunks: &mut Vec<(&'static str, String)>, tag: &'static str, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    match chunks.last_mut() {
+        Some((t, s)) if *t == tag => s.push_str(text),
+        _ => chunks.push((tag, text.to_string())),
+    }
+}
+
+/// Splits text into whitespace runs and either words (runs of non-whitespace)
+/// or single characters.
+fn tokenize_for_diff(s: &str, chars: bool) -> Vec<&str> {
+    let mut out = vec![];
+    let mut start = 0;
+    let mut prev_ws: Option<bool> = None;
+    for (i, c) in s.char_indices() {
+        let ws = c.is_whitespace();
+        let split = match prev_ws {
+            None => false,
+            Some(p) => p != ws || (chars && !ws),
+        };
+        if split {
+            out.push(&s[start..i]);
+            start = i;
+        }
+        prev_ws = Some(ws);
+    }
+    if start < s.len() {
+        out.push(&s[start..]);
+    }
+    out
+}
+
+/// The comparison key of a token, or `None` when the token is ignored.
+/// `IgnoreChanges` follows Git's `-b`: a whitespace run compares as one space,
+/// line breaks are kept, and whitespace at the end of a line is ignored.
+fn whitespace_key(
+    tok: &str,
+    last: bool,
+    mode: similar::WhitespaceMode,
+) -> Option<std::borrow::Cow<'_, str>> {
+    use std::borrow::Cow;
+    if !tok.starts_with(char::is_whitespace) {
+        return Some(Cow::Borrowed(tok));
+    }
+    if mode == similar::WhitespaceMode::IgnoreAll {
+        return None;
+    }
+    let breaks = tok.matches('\n').count();
+    let indent = !last && tok.rsplit('\n').next().is_some_and(|t| !t.is_empty());
+    match (breaks, indent) {
+        (0, false) => None,
+        (0, true) => Some(Cow::Borrowed(" ")),
+        (n, i) => Some(Cow::Owned(format!(
+            "{}{}",
+            "\n".repeat(n),
+            if i { " " } else { "" }
+        ))),
+    }
+}
+
+struct TokenDiff {
+    chunks: Vec<(&'static str, String)>,
+    insertions: usize,
+    deletions: usize,
+    ratio: f32,
+}
+
+/// Word or character diff that honours an ignore-whitespace mode. Ignored
+/// whitespace is rendered from the changed side as equal text.
+fn diff_tokens_ignoring_ws(
+    a: &str,
+    b: &str,
+    chars: bool,
+    mode: similar::WhitespaceMode,
+    timeout: std::time::Duration,
+) -> TokenDiff {
+    use similar::{Algorithm, DiffTag};
+    if !chars && mode == similar::WhitespaceMode::IgnoreAll {
+        return diff_words_ignoring_all_ws(a, b, timeout);
+    }
+    let prepare = |s| {
+        let toks = tokenize_for_diff(s, chars);
+        let n = toks.len();
+        let (idx, keys): (Vec<usize>, Vec<_>) = toks
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| whitespace_key(t, i + 1 == n, mode).map(|k| (i, k)))
+            .unzip();
+        (toks, idx, keys)
+    };
+    let (old_toks, old_idx, old_keys) = prepare(a);
+    let (new_toks, new_idx, new_keys) = prepare(b);
+    let deadline = std::time::Instant::now() + timeout;
+    let ops = similar::capture_diff_slices_deadline(
+        Algorithm::Myers,
+        &old_keys,
+        &new_keys,
+        Some(deadline),
+    );
+    let mut chunks = vec![];
+    let (mut ins, mut del) = (0usize, 0usize);
+    let mut next_new = 0;
+    for op in &ops {
+        let (tag, o, n) = op.as_tag_tuple();
+        if matches!(tag, DiffTag::Delete | DiffTag::Replace) {
+            let text = old_toks[old_idx[o.start]..=old_idx[o.end - 1]].concat();
+            push_chunk(&mut chunks, "delete", &text);
+            del += o.len();
+        }
+        if n.is_empty() {
+            continue;
+        }
+        let (start, end) = (new_idx[n.start], new_idx[n.end - 1] + 1);
+        push_chunk(&mut chunks, "equal", &new_toks[next_new..start].concat());
+        let tag = if tag == DiffTag::Equal {
+            "equal"
+        } else {
+            "insert"
+        };
+        push_chunk(&mut chunks, tag, &new_toks[start..end].concat());
+        if tag == "insert" {
+            ins += n.len();
+        }
+        next_new = end;
+    }
+    push_chunk(&mut chunks, "equal", &new_toks[next_new..].concat());
+    TokenDiff {
+        chunks,
+        insertions: ins,
+        deletions: del,
+        ratio: similar::diff_ratio(&ops, old_keys.len(), new_keys.len()),
+    }
+}
+
+/// Word diff that ignores all whitespace, so "helloworld" matches
+/// "hello world": the non-whitespace characters are diffed and any word
+/// linked to a changed character is reported as changed as a whole on both
+/// sides.
+fn diff_words_ignoring_all_ws(a: &str, b: &str, timeout: std::time::Duration) -> TokenDiff {
+    use similar::{Algorithm, DiffTag};
+    struct Side<'a> {
+        toks: Vec<&'a str>,
+        // (token index, char) for every non-whitespace character.
+        chars: Vec<(usize, char)>,
+        changed: Vec<bool>,
+        words: usize,
+    }
+    let prepare = |s| {
+        let toks = tokenize_for_diff(s, false);
+        let chars: Vec<(usize, char)> = toks
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| !t.starts_with(char::is_whitespace))
+            .flat_map(|(i, t)| t.chars().map(move |c| (i, c)))
+            .collect();
+        let words = toks
+            .iter()
+            .filter(|t| !t.starts_with(char::is_whitespace))
+            .count();
+        Side {
+            changed: vec![false; toks.len()],
+            toks,
+            chars,
+            words,
+        }
+    };
+    let (mut old, mut new) = (prepare(a), prepare(b));
+    let keys = |s: &Side| s.chars.iter().map(|&(_, c)| c).collect::<Vec<_>>();
+    // (token index, range of its characters in `chars`) for every word.
+    let words = |s: &Side| {
+        let mut out: Vec<(usize, std::ops::Range<usize>)> = vec![];
+        for (i, &(t, _)) in s.chars.iter().enumerate() {
+            match out.last_mut() {
+                Some((w, r)) if *w == t => r.end = i + 1,
+                _ => out.push((t, i..i + 1)),
+            }
+        }
+        out
+    };
+    let (ok, nk) = (keys(&old), keys(&new));
+    let (ow, nw) = (words(&old), words(&new));
+    let span = |w: &[(usize, std::ops::Range<usize>)], total: usize, r: std::ops::Range<usize>| {
+        let start = w.get(r.start).map_or(total, |x| x.1.start);
+        let end = if r.is_empty() {
+            start
+        } else {
+            w[r.end - 1].1.end
+        };
+        start..end
+    };
+    let deadline = std::time::Instant::now() + timeout;
+    type Ops = Vec<(DiffTag, std::ops::Range<usize>, std::ops::Range<usize>)>;
+    let char_ops = |oc: std::ops::Range<usize>, nc: std::ops::Range<usize>, ops: &mut Ops| {
+        for sub in similar::capture_diff_slices_deadline(
+            Algorithm::Myers,
+            &ok[oc.clone()],
+            &nk[nc.clone()],
+            Some(deadline),
+        ) {
+            let (t, so, sn) = sub.as_tag_tuple();
+            ops.push((
+                t,
+                so.start + oc.start..so.end + oc.start,
+                sn.start + nc.start..sn.end + nc.start,
+            ));
+        }
+    };
+    // Two alignments: one anchored on whole words (so "cat" -> "cats" does
+    // not drift into neighbouring words) and a plain character alignment (so
+    // "a aa" -> "aa a" stays equal); the one marking fewer words wins.
+    let okeys: Vec<&str> = ow.iter().map(|w| old.toks[w.0]).collect();
+    let nkeys: Vec<&str> = nw.iter().map(|w| new.toks[w.0]).collect();
+    let mut anchored: Ops = vec![];
+    for op in
+        similar::capture_diff_slices_deadline(Algorithm::Myers, &okeys, &nkeys, Some(deadline))
+    {
+        let (tag, o, n) = op.as_tag_tuple();
+        let (oc, nc) = (span(&ow, ok.len(), o), span(&nw, nk.len(), n));
+        if tag == DiffTag::Equal {
+            anchored.push((tag, oc, nc));
+        } else {
+            char_ops(oc, nc, &mut anchored);
+        }
+    }
+    let mut plain: Ops = vec![];
+    char_ops(0..ok.len(), 0..nk.len(), &mut plain);
+    // Words linked by matching characters form one group (old words are nodes
+    // 0..n, new words follow). A group with any edited character is replaced
+    // as a whole on both sides, so partial in-word edits stay consistent.
+    let mark = |ops: &Ops| -> (Vec<bool>, Vec<bool>) {
+        fn root(parent: &mut [usize], mut x: usize) -> usize {
+            while parent[x] != x {
+                parent[x] = parent[parent[x]];
+                x = parent[x];
+            }
+            x
+        }
+        let base = old.toks.len();
+        let mut parent: Vec<usize> = (0..base + new.toks.len()).collect();
+        let mut edited = vec![false; parent.len()];
+        for (tag, o, n) in ops.iter().cloned() {
+            if tag == DiffTag::Equal {
+                for (i, j) in o.zip(n) {
+                    let (x, y) = (
+                        root(&mut parent, old.chars[i].0),
+                        root(&mut parent, base + new.chars[j].0),
+                    );
+                    parent[x] = y;
+                }
+            } else {
+                for i in o {
+                    edited[old.chars[i].0] = true;
+                }
+                for j in n {
+                    edited[base + new.chars[j].0] = true;
+                }
+            }
+        }
+        let mut group_edited = vec![false; parent.len()];
+        for (x, _) in edited.iter().enumerate().filter(|(_, &e)| e) {
+            group_edited[root(&mut parent, x)] = true;
+        }
+        let side = |parent: &mut Vec<usize>, off: usize, len: usize| {
+            (0..len)
+                .map(|t| group_edited[root(parent, off + t)])
+                .collect::<Vec<_>>()
+        };
+        (
+            side(&mut parent, 0, base),
+            side(&mut parent, base, new.toks.len()),
+        )
+    };
+    // Emit each word the first time the op sequence reaches one of its
+    // characters; unchanged words and the whitespace around them come from
+    // the new side. A deleted word follows the new side's pending whitespace
+    // and keeps its own surrounding spaces so it never runs into its
+    // neighbours.
+    let is_ws = |t: &str| t.starts_with(char::is_whitespace);
+    let render = |ops: &Ops, oc: &[bool], nc: &[bool]| {
+        let mut chunks: Vec<(&'static str, String)> = vec![];
+        let (mut old_seen, mut next_new) = (None::<usize>, 0usize);
+        let touch_old =
+            |chunks: &mut Vec<_>, seen: &mut Option<usize>, next: &mut usize, i: usize| {
+                let t = old.chars[i].0;
+                if *seen == Some(t) {
+                    return;
+                }
+                *seen = Some(t);
+                if !oc[t] {
+                    return;
+                }
+                while *next < new.toks.len() && is_ws(new.toks[*next]) {
+                    push_chunk(chunks, "equal", new.toks[*next]);
+                    *next += 1;
+                }
+                let mut text = String::new();
+                let ends_in_word = chunks
+                    .last()
+                    .is_some_and(|(_, s): &(&str, String)| !s.ends_with(char::is_whitespace));
+                if ends_in_word && t > 0 && is_ws(old.toks[t - 1]) {
+                    text.push_str(old.toks[t - 1]);
+                }
+                text.push_str(old.toks[t]);
+                match old.toks.get(t + 1) {
+                    Some(w) if is_ws(w) && !w.contains('\n') && *next < new.toks.len() => {
+                        text.push_str(w)
+                    }
+                    _ => {}
+                }
+                push_chunk(chunks, "delete", &text);
+            };
+        let touch_new = |chunks: &mut Vec<_>, next: &mut usize, i: usize| {
+            let t = new.chars[i].0;
+            if t >= *next {
+                push_chunk(chunks, "equal", &new.toks[*next..t].concat());
+                push_chunk(chunks, if nc[t] { "insert" } else { "equal" }, new.toks[t]);
+                *next = t + 1;
+            }
+        };
+        for (tag, o, n) in ops.iter().cloned() {
+            if tag == DiffTag::Equal {
+                for (i, j) in o.zip(n) {
+                    touch_old(&mut chunks, &mut old_seen, &mut next_new, i);
+                    touch_new(&mut chunks, &mut next_new, j);
+                }
+            } else {
+                for i in o {
+                    touch_old(&mut chunks, &mut old_seen, &mut next_new, i);
+                }
+                for j in n {
+                    touch_new(&mut chunks, &mut next_new, j);
+                }
+            }
+        }
+        push_chunk(&mut chunks, "equal", &new.toks[next_new..].concat());
+        chunks
+    };
+    // A rendering is only usable if dropping its inserts rebuilds the
+    // original and dropping its deletes rebuilds the changed text.
+    let no_ws =
+        |s: &mut dyn Iterator<Item = char>| s.filter(|c| !c.is_whitespace()).collect::<String>();
+    let rebuilds = |chunks: &[(&str, String)]| {
+        let side = |skip: &str| {
+            no_ws(
+                &mut chunks
+                    .iter()
+                    .filter(|(t, _)| *t != skip)
+                    .flat_map(|(_, s)| s.chars()),
+            )
+        };
+        side("insert") == no_ws(&mut a.chars()) && side("delete") == no_ws(&mut b.chars())
+    };
+    let changed_words = |m: &(Vec<bool>, Vec<bool>)| m.0.iter().chain(&m.1).filter(|&&c| c).count();
+    let (am, pm) = (mark(&anchored), mark(&plain));
+    let mut candidates = vec![(anchored, am), (plain, pm)];
+    if changed_words(&candidates[1].1) < changed_words(&candidates[0].1) {
+        candidates.swap(0, 1);
+    }
+    let picked = candidates.into_iter().find_map(|(ops, m)| {
+        let chunks = render(&ops, &m.0, &m.1);
+        rebuilds(&chunks).then_some((chunks, m))
+    });
+    let chunks = match picked {
+        Some((chunks, (oc, nc))) => {
+            old.changed = oc;
+            new.changed = nc;
+            chunks
+        }
+        None => {
+            // No alignment renders cleanly: replace the whole text.
+            old.changed = old.toks.iter().map(|t| !is_ws(t)).collect();
+            new.changed = new.toks.iter().map(|t| !is_ws(t)).collect();
+            let mut chunks = vec![];
+            push_chunk(&mut chunks, "delete", a);
+            push_chunk(&mut chunks, "insert", b);
+            chunks
+        }
+    };
+    let count = |s: &Side| s.changed.iter().filter(|&&c| c).count();
+    let (deletions, insertions) = (count(&old), count(&new));
+    let total = old.words + new.words;
+    let ratio = if total == 0 {
+        1.0
+    } else {
+        (total - deletions - insertions) as f32 / total as f32
+    };
+    TokenDiff {
+        chunks,
+        insertions,
+        deletions,
+        ratio,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1295,6 +1699,196 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.data["identical"], true);
+    }
+
+    #[tokio::test]
+    async fn diff_whitespace_modes() {
+        let h = h();
+        let run = |a: &'static str, b: &'static str, g: &'static str, ws: &'static str| {
+            let h = &h;
+            async move {
+                h.run(
+                    "text.diff",
+                    json!({"original": a, "changed": b, "granularity": g, "whitespace": ws}),
+                )
+                .await
+                .unwrap()
+                .data
+            }
+        };
+        let changed_side = |d: &serde_json::Value| -> String {
+            d["diff"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|c| c["tag"] != "delete")
+                .map(|c| c["text"].as_str().unwrap())
+                .collect()
+        };
+        let pairs = [
+            ("hello  world", "hello world"),
+            ("hello world ", "hello world"),
+            ("a\tb\nc  \n", "a b\nc\n"),
+        ];
+        for g in ["word", "char", "line"] {
+            for (a, b) in pairs {
+                let exact = run(a, b, g, "exact").await;
+                assert!(
+                    exact["insertions"].as_u64().unwrap() + exact["deletions"].as_u64().unwrap()
+                        > 0
+                );
+                assert!(exact["similarity"].as_f64().unwrap() < 1.0);
+                for ws in ["changes", "all"] {
+                    let d = run(a, b, g, ws).await;
+                    assert_eq!(
+                        (d["insertions"].as_u64(), d["deletions"].as_u64()),
+                        (Some(0), Some(0)),
+                        "{g} {ws} {a:?}"
+                    );
+                    assert_eq!(d["similarity"], 1.0, "{g} {ws} {a:?}");
+                    assert!(d["diff"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .all(|c| c["tag"] == "equal"));
+                    assert_eq!(changed_side(&d), b);
+                }
+            }
+        }
+        // Whitespace added where there was none is a change under "changes" only.
+        for g in ["word", "char"] {
+            let d = run("helloworld", "hello world", g, "changes").await;
+            assert!(d["insertions"].as_u64().unwrap() > 0, "{g}");
+        }
+        for g in ["word", "char"] {
+            let d = run("helloworld", "hello world", g, "all").await;
+            assert_eq!(
+                (d["insertions"].as_u64(), d["deletions"].as_u64()),
+                (Some(0), Some(0)),
+                "{g}"
+            );
+            assert_eq!(d["similarity"], 1.0, "{g}");
+            assert_eq!(changed_side(&d), "hello world");
+        }
+        let d = run("the quick  fox ", "the slow fox", "word", "all").await;
+        assert_eq!(
+            (d["insertions"].as_u64(), d["deletions"].as_u64()),
+            (Some(1), Some(1))
+        );
+        assert_eq!(changed_side(&d), "the slow fox");
+        // In-word insertions and deletions replace the whole word on both
+        // sides, so each side of the diff still rebuilds its own text.
+        let side = |d: &serde_json::Value, skip: &str| -> String {
+            d["diff"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|c| c["tag"] != skip)
+                .flat_map(|c| c["text"].as_str().unwrap().chars())
+                .filter(|c| !c.is_whitespace())
+                .collect()
+        };
+        let no_ws = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+        for (a, b, ins, del) in [
+            ("cat", "cats", 1, 1),
+            ("cats", "cat", 1, 1),
+            ("the cat sat", "the cats sat", 1, 1),
+            ("the cats sat", "the at sat", 1, 1),
+            ("foo bar", "foobaz", 1, 2),
+            ("foobar", "fo obaz", 2, 1),
+        ] {
+            let d = run(a, b, "word", "all").await;
+            assert_eq!(
+                (d["insertions"].as_u64(), d["deletions"].as_u64()),
+                (Some(ins), Some(del)),
+                "{a:?} -> {b:?}"
+            );
+            assert_eq!(side(&d, "insert"), no_ws(a), "{a:?} -> {b:?}");
+            assert_eq!(side(&d, "delete"), no_ws(b), "{a:?} -> {b:?}");
+        }
+        // Repeated words with shifted whitespace boundaries stay equal.
+        for (a, b, ins, del) in [
+            ("a aa", "aa a", 0, 0),
+            ("ab a b", "a ba b", 0, 0),
+            ("a aa x", "aa a y", 1, 1),
+        ] {
+            let d = run(a, b, "word", "all").await;
+            assert_eq!(
+                (d["insertions"].as_u64(), d["deletions"].as_u64()),
+                (Some(ins), Some(del)),
+                "{a:?} -> {b:?}"
+            );
+            assert_eq!(side(&d, "insert"), no_ws(a), "{a:?} -> {b:?}");
+            assert_eq!(side(&d, "delete"), no_ws(b), "{a:?} -> {b:?}");
+            if ins == 0 {
+                assert_eq!(d["similarity"], 1.0, "{a:?} -> {b:?}");
+                assert_eq!(changed_side(&d), b);
+            }
+        }
+        // Each side of the diff keeps its own word order.
+        for (a, b) in [("a a b", "ab b x"), ("b a a", "x b ba")] {
+            let d = run(a, b, "word", "all").await;
+            assert_eq!(side(&d, "insert"), no_ws(a), "{a:?} -> {b:?}");
+            assert_eq!(side(&d, "delete"), no_ws(b), "{a:?} -> {b:?}");
+        }
+        // Deleted words keep their spacing in the rendered diff.
+        let render = |d: &serde_json::Value| -> Vec<(String, String)> {
+            d["diff"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|c| {
+                    (
+                        c["tag"].as_str().unwrap().to_string(),
+                        c["text"].as_str().unwrap().to_string(),
+                    )
+                })
+                .collect()
+        };
+        let chunks = |v: &[(&str, &str)]| -> Vec<(String, String)> {
+            v.iter()
+                .map(|(t, s)| (t.to_string(), s.to_string()))
+                .collect()
+        };
+        for (a, b, want) in [
+            (
+                "the cat sat",
+                "the cats sat",
+                &[
+                    ("equal", "the "),
+                    ("delete", "cat "),
+                    ("insert", "cats"),
+                    ("equal", " sat"),
+                ][..],
+            ),
+            (
+                "the cat sat",
+                "the sat",
+                &[("equal", "the "), ("delete", "cat "), ("equal", "sat")][..],
+            ),
+            (
+                "the cat",
+                "the",
+                &[("equal", "the"), ("delete", " cat")][..],
+            ),
+        ] {
+            let d = run(a, b, "word", "all").await;
+            assert_eq!(render(&d), chunks(want), "{a:?} -> {b:?}");
+        }
+        // Real edits are still reported next to ignored whitespace.
+        let d = run("the quick  fox ", "the slow fox", "word", "changes").await;
+        assert_eq!(
+            (d["insertions"].as_u64(), d["deletions"].as_u64()),
+            (Some(1), Some(1))
+        );
+        let diff = d["diff"].as_array().unwrap();
+        assert!(diff
+            .iter()
+            .any(|c| c["tag"] == "delete" && c["text"] == "quick"));
+        assert!(diff
+            .iter()
+            .any(|c| c["tag"] == "insert" && c["text"] == "slow"));
+        assert_eq!(changed_side(&d), "the slow fox");
     }
 
     #[tokio::test]
