@@ -749,11 +749,11 @@ fn subtitles() -> Arc<dyn Tool> {
                     l
                 }
             });
-            let suffix = lang.as_deref().map(|l| format!(".{l}")).unwrap_or_default();
+            let sub_stem = subtitle_stem(&stem, lang.as_deref());
             let mut first_sub = None;
             for fmt in fmts {
                 let (body, ext, _) = format_segments(&r.segments, fmt, "");
-                let a = ctx.write_output(&format!("{stem}{suffix}.{ext}"), body.as_bytes())?;
+                let a = ctx.write_output(&format!("{sub_stem}.{ext}"), body.as_bytes())?;
                 if first_sub.is_none() {
                     first_sub = Some(a.path.clone());
                 }
@@ -814,6 +814,21 @@ fn subtitles() -> Arc<dyn Tool> {
 }
 
 /// ISO 639-1 → 639-2 (as used in MKV/MP4 language tags) for common languages.
+/// Subtitle file stem: `{stem}.{lang}` (the tag players read), unless the
+/// stem already ends with that tag, as with subtitles made from subtitle output.
+pub fn subtitle_stem(stem: &str, lang: Option<&str>) -> String {
+    match lang {
+        Some(l)
+            if !stem
+                .to_lowercase()
+                .ends_with(&format!(".{}", l.to_lowercase())) =>
+        {
+            format!("{stem}.{l}")
+        }
+        _ => stem.to_string(),
+    }
+}
+
 fn iso639_2(code: &str) -> &str {
     match code {
         "en" => "eng",
@@ -998,6 +1013,14 @@ pub fn wav_duration(path: &Path) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn subtitle_stem_adds_language_tag_once() {
+        assert_eq!(subtitle_stem("speech_en", Some("en")), "speech_en.en");
+        assert_eq!(subtitle_stem("speech_en.en", Some("en")), "speech_en.en");
+        assert_eq!(subtitle_stem("talk.EN", Some("en")), "talk.EN");
+        assert_eq!(subtitle_stem("talk", None), "talk");
+    }
+
     use super::*;
 
     #[test]

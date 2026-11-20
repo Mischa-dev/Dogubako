@@ -8282,8 +8282,8 @@
     },
     {
      "name": "repeat",
-     "label": "Repeat",
-     "description": "Extra times to repeat the animation",
+     "label": "Extra repeats",
+     "description": "Times to play the animation again after the first play: 0 plays it once, 2 plays it three times",
      "type": "integer",
      "min": 0,
      "max": 100,
@@ -31357,7 +31357,7 @@
   {
    "id": "system.processes",
    "name": "Top Processes",
-   "description": "Top running processes by CPU or memory with PID, user, status and start time (command lines only on request)",
+   "description": "Top running processes by CPU (% of one core, so busy multi-threaded processes can exceed 100%) or memory with PID, user, status and start time (command lines only on request)",
    "category": "system",
    "keywords": [
     "process",

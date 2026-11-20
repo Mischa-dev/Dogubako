@@ -2051,7 +2051,7 @@ fn from_gif() -> Arc<dyn Tool> {
         .keywords(&["gif to mp4", "gif to webm", "animated", "convert gif"])
         .param(ParamSpec::files("input").label("Animations").accept(&["image/gif", ".gif", ".webp", ".apng", ".png"]).required().primary())
         .param(ParamSpec::choice("format", &[("mp4", "MP4 (H.264)"), ("webm", "WebM (VP9)")]).default_str("mp4"))
-        .param(ParamSpec::integer("repeat").range(0.0, 100.0).default_int(0).describe("Extra times to repeat the animation"))
+        .param(ParamSpec::integer("repeat").range(0.0, 100.0).default_int(0).label("Extra repeats").describe("Times to play the animation again after the first play: 0 plays it once, 2 plays it three times"))
         .param(quality_param());
     async_tool(spec, |ctx, p| async move {
         let files = p.files("input").to_vec();
