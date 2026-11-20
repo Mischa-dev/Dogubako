@@ -507,6 +507,47 @@ async fn frames_thumbs_gif() {
 }
 
 #[tokio::test]
+async fn scene_mode_with_no_matches_reports_no_frames() {
+    let h = harness();
+    need!(h, "video.extract_frames");
+    let v = gen(
+        &h,
+        "still.mp4",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=blue:s=160x120:d=2:r=25",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+        ],
+    );
+    for fmt in ["png", "jpg", "webp"] {
+        if fmt == "webp" && !has_encoder("libwebp") {
+            continue;
+        }
+        let out = h
+            .run(
+                "video.extract_frames",
+                json!({"input": [s(&v)], "mode": "scene", "format": fmt}),
+            )
+            .await
+            .unwrap_or_else(|e| panic!("{fmt}: {e}"));
+        assert!(out.artifacts.is_empty(), "{fmt}");
+        assert_eq!(out.data["count"], 0, "{fmt}");
+        assert!(
+            out.warnings.iter().any(|w| w.contains("no frames matched")),
+            "{fmt}: {:?}",
+            out.warnings
+        );
+    }
+}
+
+#[tokio::test]
 async fn upscales_and_repeated_frames_are_disclosed() {
     let h = harness();
     need!(h, "video.extract_frames");
