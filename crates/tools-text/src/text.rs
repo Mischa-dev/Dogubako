@@ -960,12 +960,23 @@ fn diff() -> Arc<dyn Tool> {
         )
         .with_data(json!({
             "identical": identical,
-            "similarity": (ratio * 1000.0).round() / 1000.0,
+            "similarity": round3(ratio),
             "insertions": ins,
             "deletions": del,
+            "unit": match granularity {
+                "line" => "lines",
+                "char" => "characters",
+                _ => "tokens",
+            },
             "diff": chunks,
         })))
     })
+}
+
+/// Rounds in f64 so the JSON number is short (`0.833`, not the widened
+/// f32 `0.8330000042915344`).
+fn round3(ratio: f32) -> f64 {
+    (f64::from(ratio) * 1000.0).round() / 1000.0
 }
 
 fn push_chunk(chunks: &mut Vec<(&'static str, String)>, tag: &'static str, text: &str) {
@@ -1077,7 +1088,9 @@ fn diff_tokens_ignoring_ws(
         if matches!(tag, DiffTag::Delete | DiffTag::Replace) {
             let text = old_toks[old_idx[o.start]..=old_idx[o.end - 1]].concat();
             push_chunk(&mut chunks, "delete", &text);
-            del += o.len();
+            // Character counts are reported in characters, but a whitespace
+            // run is a single comparison key.
+            del += if chars { text.chars().count() } else { o.len() };
         }
         if n.is_empty() {
             continue;
@@ -1089,10 +1102,11 @@ fn diff_tokens_ignoring_ws(
         } else {
             "insert"
         };
-        push_chunk(&mut chunks, tag, &new_toks[start..end].concat());
+        let text = new_toks[start..end].concat();
         if tag == "insert" {
-            ins += n.len();
+            ins += if chars { text.chars().count() } else { n.len() };
         }
+        push_chunk(&mut chunks, tag, &text);
         next_new = end;
     }
     push_chunk(&mut chunks, "equal", &new_toks[next_new..].concat());
@@ -1699,6 +1713,54 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.data["identical"], true);
+    }
+
+    #[tokio::test]
+    async fn diff_similarity_is_short_and_units_are_named() {
+        let h = h();
+        for (g, unit) in [
+            ("word", "tokens"),
+            ("char", "characters"),
+            ("line", "lines"),
+        ] {
+            let d = h
+                .run(
+                    "text.diff",
+                    json!({"original": "abcdef", "changed": "abcxef", "granularity": g}),
+                )
+                .await
+                .unwrap()
+                .data;
+            assert_eq!(d["unit"], unit);
+            let sim = d["similarity"].to_string();
+            assert!(sim.len() <= 5, "{g}: {sim}");
+        }
+        let d = h
+            .run(
+                "text.diff",
+                json!({"original": "abcdef", "changed": "abcxef", "granularity": "char"}),
+            )
+            .await
+            .unwrap()
+            .data;
+        assert_eq!(d["similarity"].to_string(), "0.833");
+        // Whitespace runs are one comparison key but still count as characters.
+        let d = h
+            .run(
+                "text.diff",
+                json!({"original": "ab", "changed": "a\n\nb", "granularity": "char", "whitespace": "changes"}),
+            )
+            .await
+            .unwrap()
+            .data;
+        assert_eq!(
+            (d["insertions"].as_u64(), d["deletions"].as_u64()),
+            (Some(2), Some(0))
+        );
+        for r in [0.0f32, 0.1, 0.333_333, 0.8333, 0.9995, 1.0] {
+            let s = serde_json::to_string(&super::round3(r)).unwrap();
+            assert!(s.len() <= 5, "{r}: {s}");
+        }
     }
 
     #[tokio::test]
