@@ -147,6 +147,19 @@ pub fn has_encoder_for(fmt: &str) -> bool {
     }
 }
 
+/// Whether palettegen accepts `max_colors=2` (FFmpeg 6.0+; older builds stop at 4).
+pub fn palettegen_allows_two_colors() -> bool {
+    Command::new("ffmpeg")
+        .args(["-hide_banner", "-h", "filter=palettegen"])
+        .output()
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .any(|l| l.contains("max_colors") && l.contains("from 2 to"))
+        })
+        .unwrap_or(false)
+}
+
 /// Whether this FFmpeg build has the named filter.
 pub fn has_filter(name: &str) -> bool {
     Command::new("ffmpeg")
