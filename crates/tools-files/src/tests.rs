@@ -611,6 +611,107 @@ async fn archive_roundtrips() {
 }
 
 #[tokio::test]
+async fn compression_levels_follow_format_ranges() {
+    let h = harness();
+    let data: Vec<u8> = (0..20_000u32)
+        .flat_map(|i| (i % 31).to_le_bytes())
+        .collect();
+    let f = h.write("levels.bin", &data);
+    for (fmt, bad, good) in [
+        ("gzip", &[0, 10, 11, 22][..], &[1, 5, 9][..]),
+        ("bzip2", &[0, 10], &[1, 9]),
+        ("xz", &[0, 10], &[1, 9]),
+        ("zstd", &[0], &[1, 22]),
+        ("brotli", &[12, 22], &[0, 11]),
+    ] {
+        for &l in bad {
+            let err = h
+                .run(
+                    "files.compress",
+                    json!({"input": [s(&f)], "format": fmt, "level": l}),
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), "invalid_input", "{fmt} {l}");
+            assert!(err.to_string().contains("level"), "{fmt} {l}: {err}");
+        }
+        for &l in good {
+            let out = h
+                .run(
+                    "files.compress",
+                    json!({"input": [s(&f)], "format": fmt, "level": l}),
+                )
+                .await
+                .unwrap_or_else(|e| panic!("{fmt} {l}: {e}"));
+            let out = h
+                .run(
+                    "files.decompress",
+                    json!({"input": [s(&out.artifacts[0].path)]}),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                std::fs::read(&out.artifacts[0].path).unwrap(),
+                data,
+                "{fmt} {l}"
+            );
+        }
+    }
+    // Zip level 0 stores entries uncompressed.
+    let out = h
+        .run(
+            "files.archive_create",
+            json!({"input": [s(&f)], "format": "zip", "level": 0}),
+        )
+        .await
+        .unwrap();
+    let z = out.artifacts[0].path.clone();
+    let mut zr = zip::ZipArchive::new(std::fs::File::open(&z).unwrap()).unwrap();
+    assert_eq!(
+        zr.by_index(0).unwrap().compression(),
+        zip::CompressionMethod::Stored
+    );
+    let out = h
+        .run("files.archive_extract", json!({"input": s(&z)}))
+        .await
+        .unwrap();
+    assert_eq!(std::fs::read(&out.artifacts[0].path).unwrap(), data);
+    for (args, ok) in [
+        (json!({"format": "zip", "level": 9}), true),
+        (json!({"format": "zip", "level": 10}), false),
+        (
+            json!({"format": "zip", "zip_method": "zstd", "level": 22}),
+            true,
+        ),
+        (
+            json!({"format": "zip", "zip_method": "bzip2", "level": 10}),
+            false,
+        ),
+        (
+            json!({"format": "zip", "zip_method": "store", "level": 22}),
+            true,
+        ),
+        (json!({"format": "tar.gz", "level": 0}), false),
+        (json!({"format": "tar.gz", "level": 11}), false),
+        (json!({"format": "tar.gz", "level": 9}), true),
+        (json!({"format": "tar.zst", "level": 22}), true),
+        (json!({"format": "tar.xz", "level": 22}), false),
+        (json!({"format": "tar", "level": 22}), true),
+    ] {
+        let mut a = args.clone();
+        a["input"] = json!([s(&f)]);
+        let r = h.run("files.archive_create", a).await;
+        match r {
+            Ok(_) => assert!(ok, "{args} should fail"),
+            Err(e) => {
+                assert!(!ok, "{args}: {e}");
+                assert_eq!(e.code(), "invalid_input", "{args}");
+            }
+        }
+    }
+}
+
+#[tokio::test]
 async fn single_file_compression() {
     let h = harness();
     let data: Vec<u8> = (0..50_000u32)

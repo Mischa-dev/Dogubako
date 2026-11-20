@@ -143,6 +143,59 @@ async fn convert_ogg_default_bitrate_fits_input() {
 }
 
 #[tokio::test]
+async fn convert_mp3_rejects_high_sample_rates() {
+    let h = harness();
+    need!(h, "audio.convert");
+    if !has_encoder("libmp3lame") {
+        return;
+    }
+    let t = tone(&h, "tone.wav");
+    // LAME only encodes up to 48 kHz: say so up front instead of failing in FFmpeg.
+    for rate in ["88200", "96000", "192000"] {
+        let e = h
+            .run(
+                "audio.convert",
+                json!({"input": [s(&t)], "format": "mp3", "sample_rate": rate}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(e.code(), "invalid_input", "{rate}: {e}");
+        assert!(e.to_string().contains("MP3 cannot encode"), "{rate}: {e}");
+    }
+    let out = h
+        .run(
+            "audio.convert",
+            json!({"input": [s(&t)], "format": "mp3", "sample_rate": "48000"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(sr(&out.artifacts[0].path), "48000");
+
+    // A high-rate source with the rate kept still encodes, at 48 kHz.
+    let hi = gen(
+        &h,
+        "hi96.wav",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=d=1:sample_rate=96000",
+            "-ac",
+            "2",
+        ],
+    );
+    let out = h
+        .run("audio.convert", json!({"input": [s(&hi)], "format": "mp3"}))
+        .await
+        .unwrap();
+    assert_eq!(
+        codec(&out.artifacts[0].path, "audio").as_deref(),
+        Some("mp3")
+    );
+    assert_eq!(sr(&out.artifacts[0].path), "48000");
+}
+
+#[tokio::test]
 async fn trim_split_merge() {
     let h = harness();
     need!(h, "audio.trim");

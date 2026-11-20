@@ -161,6 +161,94 @@ async fn video_subtitle_tools() {
         .await
         .unwrap_err();
     assert_eq!(e.code(), "invalid_input");
+    let e = h
+        .run(
+            "video.subtitles_add",
+            json!({"input": s(&v), "subtitles": [s(&srt)], "format": "webm"}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "invalid_input");
+    let msg = e.to_string();
+    assert!(
+        msg.contains("'format'") && msg.contains("WebM cannot hold h264 video"),
+        "{msg}"
+    );
+    let webm = gen(
+        &h,
+        "clip.webm",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=s=160x120:d=2:r=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=f=440:d=2",
+            "-c:v",
+            "libvpx-vp9",
+            "-deadline",
+            "realtime",
+            "-cpu-used",
+            "8",
+            "-c:a",
+            "libopus",
+            "-shortest",
+        ],
+    );
+    let out = h
+        .run(
+            "video.subtitles_add",
+            json!({"input": s(&webm), "subtitles": [s(&srt)], "format": "webm"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["subtitle_tracks"][0]["codec"], "webvtt");
+    assert_eq!(
+        codec(&out.artifacts[0].path, "video").as_deref(),
+        Some("vp9")
+    );
+    let mixed = gen(
+        &h,
+        "mixed.mkv",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=s=160x120:d=2:r=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=f=440:d=2",
+            "-map",
+            "0",
+            "-map",
+            "1",
+            "-map",
+            "1",
+            "-c:v",
+            "libvpx-vp9",
+            "-deadline",
+            "realtime",
+            "-cpu-used",
+            "8",
+            "-c:a:0",
+            "libopus",
+            "-c:a:1",
+            "aac",
+            "-shortest",
+        ],
+    );
+    let e = h
+        .run(
+            "video.subtitles_add",
+            json!({"input": s(&mixed), "subtitles": [s(&srt)], "format": "webm"}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "invalid_input");
+    assert!(e.to_string().contains("aac audio"), "{e}");
     let bad = h.write("bad.srt", b"not subtitles at all");
     let e = h
         .run(
@@ -190,6 +278,68 @@ async fn video_subtitle_tools() {
         .unwrap();
     assert!(out.artifacts.is_empty());
     assert_eq!(out.data["tracks"].as_array().unwrap().len(), 2);
+
+    let one_track = h
+        .run(
+            "video.subtitles_add",
+            json!({"input": s(&v), "subtitles": [s(&srt)]}),
+        )
+        .await
+        .unwrap()
+        .artifacts[0]
+        .path
+        .clone();
+    let out = h
+        .run(
+            "video.subtitles_extract",
+            json!({"input": [s(&one_track)], "track": 0}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.artifacts.len(), 1);
+    let out = h
+        .run(
+            "video.subtitles_extract",
+            json!({"input": [s(&with_subs)], "track": 1}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.artifacts.len(), 1);
+    for track in [1, 49, 99] {
+        let e = h
+            .run(
+                "video.subtitles_extract",
+                json!({"input": [s(&one_track)], "track": track}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(e.code(), "invalid_input");
+        assert!(
+            e.to_string()
+                .contains(&format!("no subtitle track {track}")),
+            "{e}"
+        );
+    }
+    let out = h
+        .run(
+            "video.subtitles_extract",
+            json!({"input": [s(&one_track), s(&with_subs)], "track": 1}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.artifacts.len(), 1);
+    assert!(out
+        .warnings
+        .iter()
+        .any(|w| w.contains("no subtitle track 1")));
+    let out = h
+        .run(
+            "video.subtitles_extract",
+            json!({"input": [s(&one_track)], "track": 49, "list_only": true}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["tracks"].as_array().unwrap().len(), 1);
 
     let out = h
         .run(

@@ -18457,7 +18457,7 @@
     {
      "name": "level",
      "label": "Compression level",
-     "description": "Higher is smaller but slower (format-specific range; empty = default)",
+     "description": "Higher is smaller but slower; zip 0 = store, zip deflate/bzip2 1-9, zip zstd 1-22, tar.gz/tar.bz2/tar.xz 1-9, tar.zst 1-22, 7z 0-9 (empty = default)",
      "type": "integer",
      "min": 0,
      "max": 22,
