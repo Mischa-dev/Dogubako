@@ -325,6 +325,29 @@ impl Probe {
     pub fn audio(&self) -> Option<&Value> {
         self.streams().iter().find(|s| s["codec_type"] == "audio")
     }
+    /// Bits per sample the first audio stream stores (PCM, FLAC, ALAC);
+    /// `None` for lossy codecs, which have no fixed depth.
+    pub fn audio_bit_depth(&self) -> Option<u32> {
+        let a = self.audio()?;
+        let bits = |k: &str| {
+            a[k].as_u64()
+                .or_else(|| a[k].as_str().and_then(|s| s.parse().ok()))
+                .filter(|&b| b > 0)
+                .map(|b| b as u32)
+        };
+        bits("bits_per_raw_sample").or_else(|| bits("bits_per_sample"))
+    }
+    /// The stored depth as a label such as "24-bit" or "32-bit float".
+    pub fn audio_depth_label(&self) -> Option<String> {
+        let bits = self.audio_bit_depth()?;
+        let fmt = self.audio()?["sample_fmt"].as_str().unwrap_or("");
+        let float = fmt.starts_with("flt") || fmt.starts_with("dbl");
+        Some(if float {
+            format!("{bits}-bit float")
+        } else {
+            format!("{bits}-bit")
+        })
+    }
     pub fn audio_streams(&self) -> Vec<&Value> {
         self.streams()
             .iter()

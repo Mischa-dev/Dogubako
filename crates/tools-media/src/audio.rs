@@ -378,7 +378,20 @@ fn convert() -> Arc<dyn Tool> {
                 .span(span(i, files.len()), format!("Converting {}", f.name))
                 .run(&ctx)
                 .await?;
-            rep.file(&ctx, f, &out, vec![json!(enc)], json!({"encoder": enc}))?;
+            let opr = probe(&ctx, &out).await?;
+            let codec = opr.audio_codec().unwrap_or(enc).to_string();
+            let depth = opr.audio_bit_depth();
+            let label = match opr.audio_depth_label() {
+                Some(d) => format!("{codec} ({d})"),
+                None => codec.clone(),
+            };
+            rep.file(
+                &ctx,
+                f,
+                &out,
+                vec![json!(label)],
+                json!({"encoder": codec, "bit_depth": depth}),
+            )?;
         }
         Ok(rep.finish())
     })
@@ -1231,13 +1244,10 @@ fn sample_rate() -> Arc<dyn Tool> {
                 .run(&ctx)
                 .await?;
             let opr = probe(&ctx, &out).await?;
-            let desc = format!(
-                "{} Hz {}",
-                opr.sample_rate().unwrap_or(0),
-                opr.audio()
-                    .and_then(|a| a["sample_fmt"].as_str())
-                    .unwrap_or("")
-            );
+            let desc = match opr.audio_depth_label() {
+                Some(d) => format!("{} Hz {d}", opr.sample_rate().unwrap_or(0)),
+                None => format!("{} Hz", opr.sample_rate().unwrap_or(0)),
+            };
             rep.file(
                 &ctx,
                 f,

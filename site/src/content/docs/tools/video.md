@@ -413,7 +413,7 @@ Also found by: gif to mp4, gif to webm, animated, convert gif
 |---|---|---|---|---|
 | `input` *(required)* | positional | files |  | Animations. Accepts .gif .webp .apng .png. |
 | `format` | `--format` | choice | `mp4` | One of: `mp4` (MP4 (H.264)), `webm` (WebM (VP9)). |
-| `repeat` | `--repeat` | integer 0–100 | `0` | Extra times to repeat the animation. |
+| `repeat` | `--repeat` | integer 0–100 | `0` | Times to play the animation again after the first play: 0 plays it once, 2 plays it three times. |
 | `quality` | `--quality` | choice | `medium` | Encoding quality used when the video must be re-encoded. One of: `high` (High (larger file)), `medium` (Balanced), `low` (Low (smaller file)). *Advanced.* |
 
 ## Change Video Speed

@@ -145,17 +145,47 @@ const NAMED: &[(&str, [u8; 3])] = &[
     ("magenta", [255, 0, 255]),
     ("lavender", [230, 230, 250]),
     ("slate gray", [112, 128, 144]),
+    ("dark khaki", [189, 183, 107]),
 ];
 
+/// CIE L*a*b* (D65) of an sRGB color, so name matching follows perceived hue.
+fn lab(c: [u8; 3]) -> [f64; 3] {
+    let lin = |v: u8| {
+        let v = v as f64 / 255.0;
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let (r, g, b) = (lin(c[0]), lin(c[1]), lin(c[2]));
+    let x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;
+    let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
+    let f = |t: f64| {
+        if t > 0.008856 {
+            t.cbrt()
+        } else {
+            7.787 * t + 16.0 / 116.0
+        }
+    };
+    let (fx, fy, fz) = (f(x), f(y), f(z));
+    [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
+}
+
+/// Nearest entry of the named-color table by CIE76 distance.
 pub fn color_name(c: [u8; 3]) -> &'static str {
+    let l = lab(c);
     NAMED
         .iter()
-        .min_by_key(|(_, n)| {
-            let dr = c[0] as i32 - n[0] as i32;
-            let dg = c[1] as i32 - n[1] as i32;
-            let db = c[2] as i32 - n[2] as i32;
-            2 * dr * dr + 4 * dg * dg + 3 * db * db
+        .map(|(n, rgb)| {
+            let m = lab(*rgb);
+            (
+                n,
+                (l[0] - m[0]).powi(2) + (l[1] - m[1]).powi(2) + (l[2] - m[2]).powi(2),
+            )
         })
+        .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(n, _)| *n)
         .unwrap_or("")
 }
@@ -1149,4 +1179,18 @@ fn image_dimensions() -> Arc<dyn Tool> {
         }
         Ok(ToolOutput::data(json!({"table": {"columns": ["File", "Format", "Width", "Height", "Aspect", "MP", "DPI", "Size"], "rows": rows}})).with_text(csv, "text/csv"))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn color_names_follow_hue() {
+        assert_ne!(color_name([0xbc, 0xaa, 0x44]), "coral");
+        assert_eq!(color_name([255, 127, 80]), "coral");
+        for (n, rgb) in NAMED {
+            assert_eq!(color_name(*rgb), *n);
+        }
+    }
 }

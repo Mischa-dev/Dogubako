@@ -54,6 +54,8 @@ async fn convert_compress() {
     let j = probe_json(&out.artifacts[0].path);
     assert_eq!(j["streams"][0]["codec_name"], "pcm_s24le");
     assert_eq!(j["streams"][0]["channels"], 1);
+    assert_eq!(out.data["files"][0]["encoder"], "pcm_s24le");
+    assert_eq!(out.data["files"][0]["bit_depth"], 24);
     assert_eq!(sr(&out.artifacts[0].path), "16000");
     let out = h
         .run(
