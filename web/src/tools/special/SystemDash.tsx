@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Pause, Play, RefreshCw, Info } from 'lucide-react';
-import type { ToolInfo } from '../../lib/types';
+import type { JobView, ToolInfo } from '../../lib/types';
 import { ParamForm } from '../../form/ParamForm';
 import { useToolForm } from '../useToolForm';
 import { DataTable, KeyValue, fmtNum } from '../../results/DataViews';
@@ -55,7 +55,7 @@ function StatCard({ title, obj }: { title: string; obj: Record<string, any> }) {
   );
 }
 
-export function Dashboard({ data }: { data: Record<string, any> }) {
+export const Dashboard = memo(function Dashboard({ data }: { data: Record<string, any> }) {
   const scalars: [string, unknown][] = [];
   const cards: { title: string; obj: Record<string, any> }[] = [];
   const tables: [string, any][] = [];
@@ -88,34 +88,75 @@ export function Dashboard({ data }: { data: Record<string, any> }) {
       {tables.map(([k, t]) => <DataTable key={k} table={t} caption={k === 'table' ? 'Details' : humanizeKey(k)} />)}
     </div>
   );
-}
+});
+
+export const POLL_INTERVALS = ['2', '3', '5', '10'] as const;
+type PollInterval = (typeof POLL_INTERVALS)[number];
 
 export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: string | null }) {
   const form = useToolForm(tool, { jobId });
   const [paused, setPaused] = useState(false);
-  const [interval, setIntervalS] = useState<'2' | '3' | '5'>('3');
+  const [interval, setIntervalS] = useState<PollInterval>('3');
   const [updated, setUpdated] = useState<number | null>(null);
   const [lastGood, setLastGood] = useState<Record<string, any> | null>(null);
   const formRef = useRef(form);
   formRef.current = form;
   useEffect(() => { setLastGood(null); setUpdated(null); }, [form.resetKey]);
 
+  // Keep the previous object when a reading is unchanged so the dashboard skips re-rendering.
+  const accept = useCallback((data: Record<string, any>) => {
+    setLastGood((prev) => (prev && JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
+    setUpdated(Date.now() / 1000);
+  }, []);
+
+  const polledValues = useRef<unknown>(null);
+  const wasPaused = useRef(paused);
+  const inflight = useRef<Promise<JobView | null> | null>(null);
   useEffect(() => {
+    // Paused: no polling. Changing a setting still refreshes once so the readings match the form,
+    // and a reading already in flight is still shown.
+    const changed = polledValues.current !== form.values;
+    const resumed = wasPaused.current && !paused;
+    polledValues.current = form.values;
+    wasPaused.current = paused;
+    if (paused && !changed && !inflight.current) return;
     let alive = true;
     let timer: number | undefined;
-    const tick = async () => {
-      if (!alive) return;
-      if (!document.hidden) {
-        const j = await formRef.current.run({ silent: true, live: true });
-        if (!alive) return;
-        if (j?.status === 'succeeded' && j.result) { setLastGood((j.result.data as any) ?? {}); setUpdated(Date.now() / 1000); }
-      }
-      if (alive && !paused) timer = window.setTimeout(tick, Number(interval) * 1000);
+    const schedule = () => {
+      window.clearTimeout(timer);
+      timer = undefined;
+      if (alive && !paused && !document.hidden) timer = window.setTimeout(() => void tick(), Number(interval) * 1000);
     };
-    void tick();
-    return () => { alive = false; window.clearTimeout(timer); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused, interval, form.values]);
+    // One poll at a time, also across effect re-runs; only new settings start a run while one is in flight.
+    const tick = async (fresh = false) => {
+      timer = undefined;
+      if (!alive) return;
+      let p = inflight.current;
+      if (!p || fresh) {
+        const run = formRef.current.run({ silent: true, live: true });
+        inflight.current = p = run;
+        void run.finally(() => { if (inflight.current === run) inflight.current = null; });
+      }
+      const j = await p;
+      if (!alive) return;
+      if (j?.status === 'succeeded' && j.result) accept((j.result.data as any) ?? {});
+      schedule();
+    };
+    // Hidden windows stop polling and catch up as soon as they are shown again.
+    const onVisibility = () => {
+      if (document.hidden) { window.clearTimeout(timer); timer = undefined; }
+      else if (timer === undefined && !paused) void tick();
+    };
+    if (changed) { if (paused || !document.hidden) void tick(true); }
+    else if (inflight.current) void tick();
+    else if (!document.hidden) { if (resumed) void tick(); else schedule(); }
+    if (!paused) document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [paused, interval, form.values, accept]);
 
   const job = form.job.job;
   const text = job?.result?.text;
@@ -137,10 +178,10 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
         <Button size="sm" variant="secondary" icon={paused ? Play : Pause} onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
           {paused ? 'Resume' : 'Pause'}
         </Button>
-        <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => void form.run({ live: true }).then((j) => { if (j?.result) { setLastGood(j.result.data as any); setUpdated(Date.now() / 1000); } })}>Refresh</Button>
-        <Segmented size="sm" label="Refresh interval" value={interval} onChange={setIntervalS} options={[{ value: '2', label: '2 s' }, { value: '3', label: '3 s' }, { value: '5', label: '5 s' }]} />
+        <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => void form.run({ live: true }).then((j) => { if (j?.status === 'succeeded' && j.result) accept((j.result.data as any) ?? {}); })}>Refresh</Button>
+        <Segmented size="sm" label="Refresh interval" value={interval} onChange={setIntervalS} options={POLL_INTERVALS.map((v) => ({ value: v, label: `${v} s` }))} />
         <span className={cx('muted small dash-updated', invalid && 'is-invalid')} aria-live="off">
-          {form.job.running && !invalid && <Spinner size={11} />} {status}
+          {form.job.running && !lastGood && !invalid && <Spinner size={11} />} {status}
         </span>
         <ResetButton form={form} />
       </div>

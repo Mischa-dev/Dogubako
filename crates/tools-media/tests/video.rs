@@ -507,6 +507,61 @@ async fn frames_thumbs_gif() {
 }
 
 #[tokio::test]
+async fn upscales_and_repeated_frames_are_disclosed() {
+    let h = harness();
+    need!(h, "video.extract_frames");
+    let v = video(&h, "in.mp4");
+    let enlarged = |w: &[String]| w.iter().any(|w| w.contains("enlarged from 320 to"));
+    let out = h
+        .run(
+            "video.preview",
+            json!({"input": [s(&v)], "segments": 1, "segment_seconds": 1}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(dims(&out.artifacts[0].path).0, 640);
+    assert!(enlarged(&out.warnings), "{:?}", out.warnings);
+    let out = h
+        .run(
+            "video.preview",
+            json!({"input": [s(&v)], "segments": 1, "segment_seconds": 1, "width": 160}),
+        )
+        .await
+        .unwrap();
+    assert!(!enlarged(&out.warnings), "{:?}", out.warnings);
+    let out = h
+        .run(
+            "video.thumbnail",
+            json!({"input": [s(&v)], "mode": "time", "time": "1", "width": 2048}),
+        )
+        .await
+        .unwrap();
+    assert!(enlarged(&out.warnings), "{:?}", out.warnings);
+    let out = h
+        .run(
+            "video.extract_frames",
+            json!({"input": [s(&v)], "mode": "fps", "fps": 50, "max_frames": 10}),
+        )
+        .await
+        .unwrap();
+    assert!(
+        out.warnings
+            .iter()
+            .any(|w| w.contains("above the video's 25 fps")),
+        "{:?}",
+        out.warnings
+    );
+    let out = h
+        .run(
+            "video.extract_frames",
+            json!({"input": [s(&v)], "mode": "fps", "fps": 2}),
+        )
+        .await
+        .unwrap();
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+}
+
+#[tokio::test]
 async fn stabilize_watermark_info_hw() {
     let h = harness();
     need!(h, "video.stabilize");

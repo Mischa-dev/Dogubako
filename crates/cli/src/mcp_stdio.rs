@@ -205,6 +205,7 @@ impl McpBackend for LocalBackend {
                             label: a.label.clone(),
                             url: None,
                             path: Some(a.path.to_string_lossy().to_string()),
+                            rel_path: a.rel_path.clone(),
                         });
                     }
                     v.status = JobStatus::Succeeded;

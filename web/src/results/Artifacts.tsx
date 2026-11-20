@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { ChevronDown, Download, ExternalLink, FolderOpen, Columns2, Eye, Archive } from 'lucide-react';
+import { ChevronDown, Download, ExternalLink, FolderOpen, FolderDown, Columns2, Eye, Archive } from 'lucide-react';
 import type { Artifact } from '../lib/types';
 import { useApp } from '../lib/app';
 import { asServer } from '../lib/backend';
@@ -7,6 +7,7 @@ import { formatBytes } from '../lib/format';
 import { Button, IconButton, Segmented, Spinner, cx } from '../components/ui';
 import { fileKindIcon } from '../form/FileField';
 import { PlayableMedia, PREVIEW_UNSUPPORTED, useStillImage } from './MediaPreview';
+import { toast } from '../components/toast';
 
 const TEXTY = /^(text\/|application\/(json|xml|x-subrip|yaml|toml|javascript|sql|x-ndjson))/;
 const MAX_TEXT_PREVIEW = 512 * 1024;
@@ -26,16 +27,37 @@ export const ArtifactList = memo(function ArtifactList({ artifacts, jobId, input
   const server = asServer(backend);
   // Preview the first few previewable artifacts by default.
   const autoOpen = !collapsed && artifacts.length <= 4;
+  const [saving, setSaving] = useState(false);
+  const hasFolders = artifacts.some((a) => a.rel_path?.includes('/'));
+  const canZip = !!server && !!jobId && artifacts.length > 1;
+  const canSaveAll = artifacts.length > 1 && !server && !!backend.saveArtifacts && artifacts.some((a) => a.path);
+  const saveAll = async () => {
+    setSaving(true);
+    try {
+      const r = await backend.saveArtifacts!(artifacts);
+      if (r) toast.success(`Saved ${r.saved} ${r.saved === 1 ? 'file' : 'files'} to ${r.dir}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <div className="artifacts">
       <div className="output-head">
         <span className="output-title">{artifacts.length === 1 ? 'Output file' : `${artifacts.length} output files`}</span>
-        {server && jobId && artifacts.length > 1 && (
-          <a className="btn btn-secondary btn-sm" href={server.zipUrl(jobId)} download>
+        {server && jobId && canZip && (
+          <a className="btn btn-secondary btn-sm" href={server.zipUrl(jobId)} download title={hasFolders ? 'The zip keeps the folders shown on each file' : undefined}>
             <Archive size={14} aria-hidden /><span>Download all (.zip)</span>
           </a>
         )}
+        {canSaveAll && (
+          <Button size="sm" icon={FolderDown} loading={saving} onClick={() => void saveAll()} title={hasFolders ? 'Saves every file into a folder you pick, keeping the folders shown on each file' : 'Saves every file into a folder you pick'}>Save all…</Button>
+        )}
       </div>
+      {hasFolders && (
+        <p className="muted small">{canZip ? 'Download all keeps these folders.' : canSaveAll ? 'Save all keeps these folders.' : 'Saving one file at a time saves it without its folder.'}</p>
+      )}
       <ul className="artifact-list">
         {artifacts.map((a, i) => (
           <ArtifactItem key={(a.id ?? a.path ?? a.name) + i} a={a} defaultOpen={autoOpen && i < 2} inputImage={artifacts.length === 1 || i === 0 ? inputImage : undefined} />
@@ -57,7 +79,7 @@ function ArtifactItem({ a, defaultOpen, inputImage }: { a: Artifact; defaultOpen
       <div className="artifact-row">
         <span className="artifact-icon" aria-hidden><Icon size={16} /></span>
         <span className="artifact-meta">
-          <span className="artifact-name" title={a.name}>{a.name}</span>
+          <span className="artifact-name" title={a.rel_path ?? a.name}>{a.name}</span>
           <span className="artifact-sub">{formatBytes(a.size)} · {a.mime}{a.label ? <> · <span className="artifact-label">{a.label}</span></> : null}</span>
         </span>
         <span className="artifact-actions">

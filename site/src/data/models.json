@@ -124,5 +124,59 @@
     "size_bytes": 63201294,
     "license": "CC0 (see voice card)",
     "languages": "de-DE"
+  },
+  {
+    "id": "rembg-u2net",
+    "group": "rembg",
+    "name": "U²-Net (general)",
+    "description": "General-purpose background removal (168 MiB)",
+    "size_bytes": 175997641,
+    "license": "Apache-2.0",
+    "languages": ""
+  },
+  {
+    "id": "rembg-u2netp",
+    "group": "rembg",
+    "name": "U²-Net lite",
+    "description": "Small, fast background removal (4.4 MiB)",
+    "size_bytes": 4574861,
+    "license": "Apache-2.0",
+    "languages": ""
+  },
+  {
+    "id": "rembg-u2net_human_seg",
+    "group": "rembg",
+    "name": "U²-Net human segmentation",
+    "description": "Cuts out people (168 MiB)",
+    "size_bytes": 175997641,
+    "license": "Apache-2.0",
+    "languages": ""
+  },
+  {
+    "id": "rembg-isnet-general-use",
+    "group": "rembg",
+    "name": "IS-Net (general)",
+    "description": "Sharper general-purpose background removal (170 MiB)",
+    "size_bytes": 178648008,
+    "license": "Apache-2.0",
+    "languages": ""
+  },
+  {
+    "id": "rembg-isnet-anime",
+    "group": "rembg",
+    "name": "IS-Net anime",
+    "description": "Background removal for anime and illustrations (168 MiB)",
+    "size_bytes": 176069933,
+    "license": "Apache-2.0",
+    "languages": ""
+  },
+  {
+    "id": "rembg-silueta",
+    "group": "rembg",
+    "name": "Silueta",
+    "description": "Compact U²-Net variant (42 MiB)",
+    "size_bytes": 44173029,
+    "license": "see rembg",
+    "languages": ""
   }
 ]

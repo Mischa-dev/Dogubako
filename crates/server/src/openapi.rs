@@ -332,7 +332,7 @@ pub fn spec(engine: &Engine) -> Value {
             "responses": {"Error": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}},
             "schemas": {
                 "Error": {"type": "object", "properties": {"error": {"type": "object", "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "detail": {}}}}},
-                "Artifact": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "mime": {"type": "string"}, "size": {"type": "integer"}, "url": {"type": "string"}, "label": {"type": "string"}}},
+                "Artifact": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "mime": {"type": "string"}, "size": {"type": "integer"}, "url": {"type": "string"}, "label": {"type": "string"}, "rel_path": {"type": "string", "description": "Path with folders inside the result set; the job zip uses it"}}},
                 "Job": {"type": "object", "properties": {
                     "id": {"type": "string"}, "tool_id": {"type": "string"},
                     "status": {"type": "string", "enum": ["queued", "running", "succeeded", "failed", "cancelled"]},

@@ -1546,7 +1546,7 @@ fn redact() -> Arc<dyn Tool> {
 }
 
 fn denoise() -> Arc<dyn Tool> {
-    let spec = ToolSpec::new("image.denoise", "Reduce Noise", Category::Image)
+    let spec = ToolSpec::new("image.denoise", "Reduce Image Noise", Category::Image)
         .describe("Remove image noise with an edge-preserving bilateral filter or a median filter (great for salt-and-pepper noise)")
         .keywords(&["denoise", "noise reduction", "grain", "median", "bilateral", "smooth", "clean"])
         .param(images_param())

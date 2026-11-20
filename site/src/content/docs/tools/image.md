@@ -31,7 +31,7 @@ Convert, resize, compress, inspect and edit images. 30 tools. Run any of them fr
 | [Contact Sheet](#contact-sheet) | `image.contact_sheet` | — |
 | [Sprite Sheet](#sprite-sheet) | `image.sprite_sheet` | — |
 | [Redact Regions](#redact-regions) | `image.redact` | — |
-| [Reduce Noise](#reduce-noise) | `image.denoise` | — |
+| [Reduce Image Noise](#reduce-image-noise) | `image.denoise` | — |
 | [View Image Metadata](#view-image-metadata) | `image.metadata` | — |
 | [Remove Image Metadata](#remove-image-metadata) | `image.strip_metadata` | — |
 | [SVG to PNG/JPEG/WebP](#svg-to-pngjpegwebp) | `image.svg_to_raster` | — |
@@ -135,7 +135,7 @@ Also found by: compress, optimize, reduce size, smaller, oxipng, tinypng, shrink
 | `format` | `--format` | choice | `same` | One of: `same` (Same as input), `jpg` (JPEG), `webp`, `avif`, `png` (PNG (lossless)). |
 | `max_dimension` | `--max-dimension` | integer 1–100000 |  | Also downscale so the longest edge is at most this many pixels. |
 | `png_level` | `--png-level` | integer 0–6 | `2` | Lossless PNG optimization effort (0–6). *Advanced.* |
-| `keep_if_larger` | `--keep-if-larger` | boolean | `true` | Return the original file when re-encoding would make it larger. |
+| `keep_if_larger` | `--keep-if-larger` | boolean | `true` | Return the original file when re-encoding would make it larger (only when the format and size stay the same). |
 
 ## Image Info
 
@@ -502,7 +502,7 @@ Also found by: redact, blur, pixelate, censor, anonymize, hide, privacy, black b
 | `format` | `--format` | choice | `same` | Output format. One of: `same` (Same as input), `png`, `jpg` (JPEG), `webp`, `avif`, `gif`, `bmp`, `tiff`, `ico` (ICO (max 256px)), `tga`, `qoi`, `ppm` (PPM/PNM). *Advanced.* |
 | `quality` | `--quality` | integer 1–100 | `92` | Quality for lossy formats (JPEG, WebP, AVIF), 1–100. *Advanced.* |
 
-## Reduce Noise
+## Reduce Image Noise
 
 <div class="tool-meta"><span class="engine-native">native</span><span>progress</span></div>
 

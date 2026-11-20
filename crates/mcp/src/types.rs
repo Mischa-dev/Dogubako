@@ -57,6 +57,10 @@ pub struct ArtifactView {
     /// Local path (desktop / CLI / stdio MCP).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// Path with folders inside the result set ("docs/a.txt"), when the
+    /// tool keeps structure (archive extraction).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rel_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

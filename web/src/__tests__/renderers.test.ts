@@ -41,5 +41,7 @@ describe('helpers', () => {
     expect(extForMime('application/json')).toBe('json');
     expect(extForMime('text/markdown; charset=utf-8')).toBe('md');
     expect(extForMime(undefined)).toBe('txt');
+    expect(extForMime('text/tab-separated-values')).toBe('tsv');
+    expect(extForMime('application/x-ndjson')).toBe('ndjson');
   });
 });

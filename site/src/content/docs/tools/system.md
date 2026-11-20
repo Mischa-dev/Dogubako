@@ -143,7 +143,7 @@ Also found by: network, interface, adapter, mac, ip address, ifconfig, ipconfig,
 
 <div class="tool-meta"><span class="engine-native">native</span><span>process list</span><span>dashboard</span></div>
 
-Top running processes by CPU or memory with PID, user, status and start time (command lines only on request).
+Top running processes by CPU (% of one core, so busy multi-threaded processes can exceed 100%) or memory with PID, user, status and start time (command lines only on request).
 
 ```sh
 dogubako system processes [options]

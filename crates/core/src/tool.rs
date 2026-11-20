@@ -46,6 +46,10 @@ pub struct Artifact {
     /// Optional short label ("compressed", "page 3", "preview").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// Path with folders ("docs/a.txt") for saving the whole result set with
+    /// its structure; `path` itself is flat inside the run directory.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rel_path: Option<String>,
 }
 
 /// Result of a tool run.
@@ -284,6 +288,7 @@ impl ToolContext {
             name,
             size: meta.len(),
             label: None,
+            rel_path: None,
         })
     }
 

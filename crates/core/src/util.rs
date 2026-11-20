@@ -1,7 +1,7 @@
 //! Small shared helpers.
 
 use std::io::Read;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 /// MIME type for a path, by extension, falling back to content sniffing.
 pub fn mime_for_path(path: &Path) -> String {
@@ -132,6 +132,76 @@ pub fn suffixed(name: &str, suffix: &str, ext: Option<&str>) -> String {
     }
 }
 
+/// A relative path made only of plain components (no root, drive, `..`),
+/// with `/` or `\` separators; `None` when it would leave its base folder.
+pub fn plain_rel_path(rel: &str) -> Option<PathBuf> {
+    if rel.starts_with(['/', '\\']) {
+        return None;
+    }
+    let mut out = PathBuf::new();
+    for part in rel.split(['/', '\\']) {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part.contains(':') || part.chars().any(|c| c.is_control()) {
+            return None;
+        }
+        let mut comps = Path::new(part).components();
+        match (comps.next(), comps.next()) {
+            (Some(Component::Normal(c)), None) => out.push(c),
+            _ => return None,
+        }
+    }
+    (!out.as_os_str().is_empty()).then_some(out)
+}
+
+/// Copy `(source, relative target)` pairs into `dest`, creating folders from
+/// the relative paths. Unsafe targets fall back to the source's file name;
+/// existing files are never overwritten (`a.txt` becomes `a-2.txt`).
+/// Returns where each file was written.
+pub fn copy_files_into(items: &[(PathBuf, String)], dest: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let root = std::fs::canonicalize(dest)?;
+    let mut written = Vec::with_capacity(items.len());
+    for (src, rel) in items {
+        let rel = plain_rel_path(rel)
+            .or_else(|| src.file_name().map(PathBuf::from))
+            .unwrap_or_else(|| PathBuf::from("output"));
+        let target = dest.join(&rel);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)?;
+            if !std::fs::canonicalize(parent)?.starts_with(&root) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("{} leads outside the chosen folder", rel.display()),
+                ));
+            }
+        }
+        let name = rel
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let mut candidate = target.clone();
+        let mut i = 2;
+        let mut out = loop {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&candidate)
+            {
+                Ok(f) => break f,
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    candidate = target.with_file_name(suffixed(&name, &i.to_string(), None));
+                    i += 1;
+                }
+                Err(e) => return Err(e),
+            }
+        };
+        std::io::copy(&mut std::fs::File::open(src)?, &mut out)?;
+        written.push(candidate);
+    }
+    Ok(written)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,5 +223,70 @@ mod tests {
             sniff_bytes(b"qoif\0\0\0\x01\0\0\0\x01\x04\0"),
             Some("image/qoi")
         );
+    }
+
+    #[test]
+    fn plain_rel_path_rejects_escapes() {
+        assert_eq!(
+            plain_rel_path("docs/a.txt"),
+            Some(PathBuf::from("docs").join("a.txt"))
+        );
+        assert_eq!(
+            plain_rel_path("docs\\sub\\a.txt"),
+            Some(PathBuf::from("docs/sub/a.txt"))
+        );
+        assert_eq!(plain_rel_path("./a.txt"), Some(PathBuf::from("a.txt")));
+        for bad in [
+            "",
+            "/etc/passwd",
+            "../a",
+            "a/../../b",
+            "C:/x",
+            "a/C:x",
+            "a\u{0}b",
+        ] {
+            assert_eq!(plain_rel_path(bad), None, "{bad:?}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_files_into_refuses_symlinked_folders() {
+        let src = tempfile::tempdir().unwrap();
+        let dest = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let a = src.path().join("a.txt");
+        std::fs::write(&a, "x").unwrap();
+        std::os::unix::fs::symlink(outside.path(), dest.path().join("docs")).unwrap();
+        let err = copy_files_into(&[(a, "docs/a.txt".into())], dest.path()).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(!outside.path().join("a.txt").exists());
+    }
+
+    #[test]
+    fn copy_files_into_keeps_folders_and_never_overwrites() {
+        let src = tempfile::tempdir().unwrap();
+        let dest = tempfile::tempdir().unwrap();
+        let a = src.path().join("a.txt");
+        let a2 = src.path().join("a-2.txt");
+        std::fs::write(&a, "top").unwrap();
+        std::fs::write(&a2, "nested").unwrap();
+        std::fs::write(dest.path().join("a.txt"), "already here").unwrap();
+        let items = vec![
+            (a.clone(), "a.txt".to_string()),
+            (a2.clone(), "docs/a.txt".to_string()),
+            (a.clone(), "../escape.txt".to_string()),
+        ];
+        let out = copy_files_into(&items, dest.path()).unwrap();
+        assert_eq!(out[0], dest.path().join("a-2.txt"));
+        assert_eq!(out[1], dest.path().join("docs").join("a.txt"));
+        assert_eq!(out[2], dest.path().join("a-3.txt"));
+        assert_eq!(
+            std::fs::read_to_string(dest.path().join("a.txt")).unwrap(),
+            "already here"
+        );
+        assert_eq!(std::fs::read_to_string(&out[0]).unwrap(), "top");
+        assert_eq!(std::fs::read_to_string(&out[1]).unwrap(), "nested");
+        assert!(!dest.path().parent().unwrap().join("escape.txt").exists());
     }
 }

@@ -336,7 +336,7 @@ fn compress() -> Arc<dyn Tool> {
         .param(ParamSpec::choice("format", &[("same", "Same as input"), ("jpg", "JPEG"), ("webp", "WebP"), ("avif", "AVIF"), ("png", "PNG (lossless)")]).default_str("same"))
         .param(ParamSpec::integer("max_dimension").describe("Also downscale so the longest edge is at most this many pixels").min(1.0).max(100000.0))
         .param(ParamSpec::integer("png_level").describe("Lossless PNG optimization effort (0–6)").range(0.0, 6.0).default_int(2).advanced())
-        .param(ParamSpec::boolean("keep_if_larger").label("Keep original if smaller").describe("Return the original file when re-encoding would make it larger").default_bool(true))
+        .param(ParamSpec::boolean("keep_if_larger").label("Keep original if smaller").describe("Return the original file when re-encoding would make it larger (only when the format and size stay the same)").default_bool(true))
         .output(OutputKind::Files)
         .progress()
         .timeout(900);
@@ -393,6 +393,9 @@ fn compress() -> Arc<dyn Tool> {
                 notes.push(format!("{}: already optimal, original kept", f.name));
                 let orig = std::fs::read(&f.path)?;
                 return ctx.write_output(&name, &orig);
+            }
+            if p.bool("keep_if_larger") && !resized && !same_fmt && bytes.len() as u64 >= f.size() {
+                notes.push(format!("{}: converting to {} made it larger; the original is only kept when the format stays the same", f.name, fmt.ext().to_uppercase()));
             }
             ctx.write_output(&name, &bytes)
         })?;
