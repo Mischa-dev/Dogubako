@@ -43,6 +43,12 @@ campaign are added here as they merge.
 - The install guide no longer lets `tailscale serve` replace a service that
   already uses HTTPS port 443 on the host.
 - Website tools search no longer shows rows it hid.
+- `speech.transcribe` and `speech.subtitles` with translate on no longer start
+  the output with an unpaired `"` that Whisper adds, and cue and word times on
+  short clips stay within the media duration instead of ending at 0:30.
+- `speech.transcript_convert` keeps WebVTT cue settings (`align:`, `line:`,
+  `position:` ...) on WebVTT output and drops inline `<b>`/`<i>`/`<u>` markup
+  from text, JSON and Markdown output.
 - Downloading the `whisper-small.en-tdrz` model (speaker turns) no longer
   fails with 404: it now comes from `akashmjn/tinydiarize-whisper.cpp` on
   Hugging Face, and its pinned size is corrected.
