@@ -1,9 +1,9 @@
 ---
 title: Try the alpha
-description: Install Dogubako 0.1.0-alpha.1, open the unsigned macOS app, load the homelab image, and report what breaks.
+description: Install Dogubako 0.1.0-alpha.2, open the unsigned macOS app, load the homelab image, and report what breaks.
 ---
 
-**0.1.0-alpha.1** is the first public test build. Things will break, and
+**0.1.0-alpha.2** is the second public test build. Things will break, and
 settings or file formats may change before 1.0. Please
 [report problems](https://github.com/mischa-dev/dogubako/issues) as you find
 them.
@@ -12,11 +12,11 @@ them.
 
 | | Download | Notes |
 |---|---|---|
-| macOS app | `Dogubako_0.1.0-alpha.1_aarch64.dmg` | Apple silicon, macOS 15 (Sequoia) or newer |
-| Homelab / server | `ghcr.io/mischa-dev/dogubako:0.1.0-alpha.1` | Docker, linux/amd64, every engine included. Private for now: [build it yourself](/self-hosting/docker/) |
-| CLI | `dogubako-<target>` for Linux x86-64, macOS Apple silicon and Windows x86-64 | Uses the engines installed on the system. Linux needs glibc 2.28+ (Debian 10+, Ubuntu 20.04+, RHEL 8+) from 0.1.0-alpha.2; the alpha.1 build needs glibc 2.43 |
+| macOS app | `Dogubako_0.1.0-alpha.2_aarch64.dmg` | Apple silicon, macOS 15 (Sequoia) or newer |
+| Homelab / server | `ghcr.io/mischa-dev/dogubako:0.1.0-alpha.2` | Docker, linux/amd64, every engine included. Private for now: [build it yourself](/self-hosting/docker/) |
+| CLI | `dogubako-<target>` for Linux x86-64, macOS Apple silicon and Windows x86-64 | Uses the engines installed on the system. Linux needs glibc 2.28+ (Debian 10+, Ubuntu 20.04+, RHEL 8+) |
 | Checksums | `SHA256SUMS.txt` | |
-| Engine sources | `engine-sources-0.1.0-alpha.1.tar` | Corresponding source for the GPL, LGPL, AGPL and MPL engines |
+| Engine sources | `engine-sources-0.1.0-alpha.2.tar` | Corresponding source for the GPL, LGPL, AGPL and MPL engines |
 
 Everything is on the
 [GitHub release](https://github.com/mischa-dev/dogubako/releases). Not in
