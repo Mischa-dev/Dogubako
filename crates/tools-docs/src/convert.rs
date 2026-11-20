@@ -291,9 +291,10 @@ pub fn sanitize_ast(v: &mut Value) {
 }
 
 /// Pandoc with `--sandbox`: documents cannot make it read other files or the
-/// network. Writers that need Pandoc's data files (DOCX, EPUB) do not work
-/// under `--sandbox` in some Pandoc versions; for those the document is read
-/// in the sandbox into Pandoc's AST, sanitized, and then written.
+/// network. Writers that need Pandoc's data files (DOCX, ODT, EPUB) do not
+/// work under `--sandbox` in some Pandoc builds (e.g. Debian's, which keep
+/// the data files on disk); for those the document is read in the sandbox
+/// into Pandoc's AST, sanitized, and then written.
 async fn pandoc(
     ctx: &ToolContext,
     input: &Path,
@@ -302,7 +303,7 @@ async fn pandoc(
     standalone: bool,
     out: &Path,
 ) -> ToolResult<Vec<String>> {
-    let two_step = matches!(to, "docx" | "epub");
+    let two_step = writer_needs_data_files(to);
     let mut warnings = vec![];
     let (src, reader) = if two_step {
         let ast = ctx.temp_path(&format!("ast-{}.json", dogubako_core::util::random_id(4)));
@@ -353,6 +354,10 @@ async fn pandoc(
             .map(|l| l.to_string()),
     );
     Ok(warnings)
+}
+
+fn writer_needs_data_files(to: &str) -> bool {
+    matches!(to, "docx" | "odt" | "epub")
 }
 
 fn markup_inputs(ctx: &ToolContext, p: &Params) -> ToolResult<Vec<(String, PathBuf, String)>> {
@@ -495,6 +500,10 @@ mod tests {
         assert_eq!(file_url(Path::new("/tmp/a b/lo")), "file:///tmp/a%20b/lo");
         assert_eq!(reader_for_ext("md"), Some("markdown"));
         assert_eq!(ext_for_writer("latex"), "tex");
+        for w in ["docx", "odt", "epub"] {
+            assert!(writer_needs_data_files(w), "{w}");
+        }
+        assert!(!writer_needs_data_files("html"));
         let mut ast = json!({"meta": {"cover-image": {"t": "MetaString", "c": "/etc/passwd"}, "title": 1}, "blocks": [{"t": "Para", "c": [
             {"t": "Image", "c": [["", [], []], [{"t": "Str", "c": "alt"}], ["/etc/passwd", ""]]},
             {"t": "Image", "c": [["", [], []], [], ["data:image/png;base64,AAAA", ""]]}

@@ -888,6 +888,19 @@ async fn markup_conversion() {
         .await
         .unwrap();
     assert!(out.artifacts[0].name.ends_with(".epub"));
+    let out = h
+        .run(
+            "pdf.convert_markup",
+            json!({"text": "# Title\n\nSome *text*.\n", "to": "odt"}),
+        )
+        .await
+        .unwrap();
+    assert!(out.artifacts[0].name.ends_with(".odt"));
+    let odt = std::fs::read(&out.artifacts[0].path).unwrap();
+    assert!(odt.starts_with(b"PK"));
+    assert!(odt
+        .windows(39)
+        .any(|w| w == b"application/vnd.oasis.opendocument.text"));
     // --sandbox: documents cannot pull in other files.
     let secret = h.write("secret.txt", b"TOPSECRETVALUE");
     let tex = format!("\\input{{{}}}\n", secret.display());
