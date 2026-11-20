@@ -1090,6 +1090,8 @@ Fonts: Instrument Sans and DM Mono (SIL Open Font License 1.1, via Fontsource).
 | js-tokens | 4.0.0 | MIT |
 | loose-envify | 1.4.0 | MIT |
 | lucide-react | 0.577.0 | ISC |
+| pako | 1.0.11 | (MIT AND Zlib) |
 | react | 18.3.1 | MIT |
 | react-dom | 18.3.1 | MIT |
 | scheduler | 0.23.2 | MIT |
+| utif | 3.1.0 | MIT |
