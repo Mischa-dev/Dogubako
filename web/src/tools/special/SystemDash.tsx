@@ -113,12 +113,13 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
   const wasPaused = useRef(paused);
   const inflight = useRef<Promise<JobView | null> | null>(null);
   useEffect(() => {
-    // Paused: no polling. Changing a setting still refreshes once so the readings match the form.
+    // Paused: no polling. Changing a setting still refreshes once so the readings match the form,
+    // and a reading already in flight is still shown.
     const changed = polledValues.current !== form.values;
     const resumed = wasPaused.current && !paused;
     polledValues.current = form.values;
     wasPaused.current = paused;
-    if (paused && !changed) return;
+    if (paused && !changed && !inflight.current) return;
     let alive = true;
     let timer: number | undefined;
     const schedule = () => {
@@ -147,7 +148,8 @@ export default function SystemDash({ tool, jobId }: { tool: ToolInfo; jobId?: st
       else if (timer === undefined && !paused) void tick();
     };
     if (changed) { if (paused || !document.hidden) void tick(true); }
-    else if (!document.hidden) { if (resumed || inflight.current) void tick(); else schedule(); }
+    else if (inflight.current) void tick();
+    else if (!document.hidden) { if (resumed) void tick(); else schedule(); }
     if (!paused) document.addEventListener('visibilitychange', onVisibility);
     return () => {
       alive = false;

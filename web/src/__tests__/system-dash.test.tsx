@@ -191,6 +191,22 @@ describe('System dashboard polling', () => {
     expect(runs.length).toBe(3);
   });
 
+  it('Pause during the first reading still shows it and starts no more runs', async () => {
+    let release!: () => void;
+    hold = new Promise<void>((r) => { release = r; });
+    render(<SystemDash tool={cpuTool} />);
+    await flushMicro();
+    hold = null;
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await act(async () => { release(); });
+    await flushMicro();
+    expect(screen.getByText('12.5%')).toBeTruthy();
+    expect(screen.getByText(/Paused · updated/)).toBeTruthy();
+    expect(vi.getTimerCount()).toBe(0);
+    await advance(30_000);
+    expect(runs.length).toBe(1);
+  });
+
   it('changing the interval while idle waits the new interval', async () => {
     render(<SystemDash tool={cpuTool} />);
     await flushMicro();
