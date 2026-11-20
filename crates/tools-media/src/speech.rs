@@ -933,30 +933,46 @@ fn tts() -> Arc<dyn Tool> {
             .unwrap_or_else(|| PathBuf::from(format!("{}.json", model.to_string_lossy())));
         let wav = ctx.temp_path("tts.wav");
         let speed = p.num_or("speed", 1.0);
+        let sample_rate = std::fs::read(&config)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+            .and_then(|c| c["audio"]["sample_rate"].as_u64())
+            .unwrap_or(22_050) as u32;
         ctx.message(format!("Synthesizing with {}", voice.name));
-        let mut cmd = ctx
-            .command("piper")?
-            .arg("-m")
-            .arg(&model)
-            .arg("-c")
-            .arg(&config)
-            .arg("-f")
-            .arg(arg_path(&wav))
-            .args([
-                "--length-scale",
-                &format!("{:.4}", 1.0 / speed),
-                "--sentence-silence",
-                &format!("{:.3}", p.num_or("sentence_pause", 0.2)),
-            ])
-            .readable(ctx.models_dir())
-            .stdin(text.replace("\r\n", "\n").into_bytes());
-        if let Some(s) = p.opt_int("speaker") {
-            cmd = cmd.args(["-s", &s.to_string()]);
+        // Raw mode synthesizes each stdin line on its own (file mode joins
+        // them into one utterance), so short lines keep Piper's memory bounded.
+        let batches = piper_batches(&piper_lines(&text, PIPER_MAX_LINE), PIPER_MAX_BATCH);
+        let mut pcm = Vec::new();
+        for (i, batch) in batches.iter().enumerate() {
+            ctx.progress(
+                0.8 * i as f32 / batches.len() as f32,
+                format!("Synthesizing ({}/{})", i + 1, batches.len()),
+            );
+            let mut cmd = ctx
+                .command("piper")?
+                .arg("-m")
+                .arg(&model)
+                .arg("-c")
+                .arg(&config)
+                .arg("--output-raw")
+                .args([
+                    "--length-scale",
+                    &format!("{:.4}", 1.0 / speed),
+                    "--sentence-silence",
+                    &format!("{:.3}", p.num_or("sentence_pause", 0.2)),
+                ])
+                .readable(ctx.models_dir())
+                .stdin(batch.clone().into_bytes());
+            if let Some(s) = p.opt_int("speaker") {
+                cmd = cmd.args(["-s", &s.to_string()]);
+            }
+            pcm.extend(cmd.run().await?.stdout);
         }
-        cmd.run().await?;
-        if !wav.is_file() {
+        if pcm.is_empty() {
             return Err(ToolError::failed("piper produced no audio"));
         }
+        std::fs::write(&wav, wav_bytes(sample_rate, &pcm))?;
+        drop(pcm);
         let duration = wav_duration(&wav);
         let fmt = p.str("format")?;
         let base = text
@@ -993,6 +1009,84 @@ fn tts() -> Arc<dyn Tool> {
             json!({"voice": voice.id, "duration": duration, "characters": text.chars().count()}),
         ))
     })
+}
+
+/// Longest line handed to Piper. Piper runs one inference per sentence, and a
+/// long run without sentence breaks grows its memory quadratically (about
+/// 4 GB at 4,000 characters) until onnxruntime aborts or the process is killed.
+const PIPER_MAX_LINE: usize = 400;
+/// Characters per Piper process, which keeps its raw audio on stdout well
+/// under the output limit even at the slowest speed.
+const PIPER_MAX_BATCH: usize = 2_000;
+
+/// Groups lines into stdin batches of at most `max` characters (a longer line
+/// gets a batch of its own).
+fn piper_batches(lines: &str, max: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in lines.lines().filter(|l| !l.trim().is_empty()) {
+        match out.last_mut() {
+            Some(b) if b.chars().count() + 1 + line.chars().count() <= max => {
+                b.push('\n');
+                b.push_str(line);
+            }
+            _ => out.push(line.to_string()),
+        }
+    }
+    out
+}
+
+/// A 16-bit mono PCM WAV file around Piper's raw output.
+fn wav_bytes(sample_rate: u32, pcm: &[u8]) -> Vec<u8> {
+    let mut b = Vec::with_capacity(44 + pcm.len());
+    b.extend(b"RIFF");
+    b.extend((36 + pcm.len() as u32).to_le_bytes());
+    b.extend(b"WAVEfmt ");
+    b.extend(16u32.to_le_bytes());
+    b.extend([1, 0, 1, 0]);
+    b.extend(sample_rate.to_le_bytes());
+    b.extend((sample_rate * 2).to_le_bytes());
+    b.extend([2, 0, 16, 0]);
+    b.extend(b"data");
+    b.extend((pcm.len() as u32).to_le_bytes());
+    b.extend(pcm);
+    b
+}
+
+/// Text for Piper's stdin: one utterance per line, each at most `max` characters,
+/// broken after a sentence end, else after a comma-like pause, else at a space,
+/// else mid-word.
+fn piper_lines(text: &str, max: usize) -> String {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let mut rest = line.trim();
+        while rest.chars().count() > max {
+            let head: String = rest.chars().take(max).collect();
+            let after = |set: &[char]| {
+                head.char_indices()
+                    .filter(|&(i, c)| {
+                        set.contains(&c)
+                            && head[i + c.len_utf8()..].starts_with(char::is_whitespace)
+                    })
+                    .map(|(i, c)| i + c.len_utf8())
+                    .next_back()
+            };
+            let cut = after(&['.', '!', '?', '…'])
+                .or_else(|| {
+                    head.char_indices()
+                        .filter(|&(_, c)| matches!(c, '。' | '！' | '？'))
+                        .map(|(i, c)| i + c.len_utf8())
+                        .next_back()
+                })
+                .or_else(|| after(&[',', ';', ':', '—', '–', ')']))
+                .or_else(|| head.rfind(char::is_whitespace))
+                .filter(|&i| i > 0)
+                .unwrap_or(head.len());
+            out.push(rest[..cut].trim_end());
+            rest = rest[cut..].trim_start();
+        }
+        out.push(rest);
+    }
+    out.join("\n")
 }
 
 /// Duration of a PCM WAV file from its header.
@@ -1034,6 +1128,39 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn piper_lines_stay_short_and_keep_text() {
+        let words = "word ".repeat(40_000);
+        let solid = "a".repeat(1_000);
+        let prose = "The quick brown fox jumps over the lazy dog. ".repeat(50);
+        let cjk = "这是一个句子。".repeat(100);
+        for text in [words.as_str(), solid.as_str(), prose.as_str(), cjk.as_str()] {
+            let out = piper_lines(text, 400);
+            assert!(out.lines().all(|l| l.chars().count() <= 400), "{text:.20}");
+            let squash = |s: &str| s.split_whitespace().collect::<String>();
+            assert_eq!(squash(&out), squash(text));
+        }
+        assert!(piper_lines(&prose, 400)
+            .lines()
+            .all(|l| l.ends_with("dog.")));
+        assert!(piper_lines(&cjk, 400).lines().all(|l| l.ends_with('。')));
+        assert_eq!(piper_lines("Hi.\r\nThere.", 400), "Hi.\nThere.");
+        assert_eq!(piper_lines("a, b c", 4), "a,\nb c");
+    }
+
+    #[test]
+    fn piper_batches_group_lines() {
+        let b = piper_batches("aa\nbb\n\ncc\ndddddd", 5);
+        assert_eq!(b, ["aa\nbb", "cc", "dddddd"]);
+        let w = wav_bytes(16000, &[0u8; 16000]);
+        let dir = std::env::temp_dir().join(format!("dgb-tts-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("a.wav");
+        std::fs::write(&p, w).unwrap();
+        assert_eq!(wav_duration(&p), Some(0.5));
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn detected_line() {
