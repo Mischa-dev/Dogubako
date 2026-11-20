@@ -1242,78 +1242,112 @@ fn diff_words_ignoring_all_ws(a: &str, b: &str, timeout: std::time::Duration) ->
             side(&mut parent, base, new.toks.len()),
         )
     };
-    let changed_words = |m: &(Vec<bool>, Vec<bool>)| m.0.iter().chain(&m.1).filter(|&&c| c).count();
-    let (am, pm) = (mark(&anchored), mark(&plain));
-    let (ops, (oc, nc)) = if changed_words(&pm) < changed_words(&am) {
-        (plain, pm)
-    } else {
-        (anchored, am)
-    };
-    old.changed = oc;
-    new.changed = nc;
     // Emit each word the first time the op sequence reaches one of its
     // characters; unchanged words and the whitespace around them come from
     // the new side. A deleted word follows the new side's pending whitespace
     // and keeps its own surrounding spaces so it never runs into its
     // neighbours.
-    let mut chunks: Vec<(&'static str, String)> = vec![];
-    let (mut old_seen, mut next_new) = (None::<usize>, 0usize);
     let is_ws = |t: &str| t.starts_with(char::is_whitespace);
-    let touch_old = |chunks: &mut Vec<_>, seen: &mut Option<usize>, next: &mut usize, i: usize| {
-        let t = old.chars[i].0;
-        if *seen == Some(t) {
-            return;
+    let render = |ops: &Ops, oc: &[bool], nc: &[bool]| {
+        let mut chunks: Vec<(&'static str, String)> = vec![];
+        let (mut old_seen, mut next_new) = (None::<usize>, 0usize);
+        let touch_old =
+            |chunks: &mut Vec<_>, seen: &mut Option<usize>, next: &mut usize, i: usize| {
+                let t = old.chars[i].0;
+                if *seen == Some(t) {
+                    return;
+                }
+                *seen = Some(t);
+                if !oc[t] {
+                    return;
+                }
+                while *next < new.toks.len() && is_ws(new.toks[*next]) {
+                    push_chunk(chunks, "equal", new.toks[*next]);
+                    *next += 1;
+                }
+                let mut text = String::new();
+                let ends_in_word = chunks
+                    .last()
+                    .is_some_and(|(_, s): &(&str, String)| !s.ends_with(char::is_whitespace));
+                if ends_in_word && t > 0 && is_ws(old.toks[t - 1]) {
+                    text.push_str(old.toks[t - 1]);
+                }
+                text.push_str(old.toks[t]);
+                match old.toks.get(t + 1) {
+                    Some(w) if is_ws(w) && !w.contains('\n') && *next < new.toks.len() => {
+                        text.push_str(w)
+                    }
+                    _ => {}
+                }
+                push_chunk(chunks, "delete", &text);
+            };
+        let touch_new = |chunks: &mut Vec<_>, next: &mut usize, i: usize| {
+            let t = new.chars[i].0;
+            if t >= *next {
+                push_chunk(chunks, "equal", &new.toks[*next..t].concat());
+                push_chunk(chunks, if nc[t] { "insert" } else { "equal" }, new.toks[t]);
+                *next = t + 1;
+            }
+        };
+        for (tag, o, n) in ops.iter().cloned() {
+            if tag == DiffTag::Equal {
+                for (i, j) in o.zip(n) {
+                    touch_old(&mut chunks, &mut old_seen, &mut next_new, i);
+                    touch_new(&mut chunks, &mut next_new, j);
+                }
+            } else {
+                for i in o {
+                    touch_old(&mut chunks, &mut old_seen, &mut next_new, i);
+                }
+                for j in n {
+                    touch_new(&mut chunks, &mut next_new, j);
+                }
+            }
         }
-        *seen = Some(t);
-        if !old.changed[t] {
-            return;
-        }
-        while *next < new.toks.len() && is_ws(new.toks[*next]) {
-            push_chunk(chunks, "equal", new.toks[*next]);
-            *next += 1;
-        }
-        let mut text = String::new();
-        let ends_in_word = chunks
-            .last()
-            .is_some_and(|(_, s): &(&str, String)| !s.ends_with(char::is_whitespace));
-        if ends_in_word && t > 0 && is_ws(old.toks[t - 1]) {
-            text.push_str(old.toks[t - 1]);
-        }
-        text.push_str(old.toks[t]);
-        match old.toks.get(t + 1) {
-            Some(w) if is_ws(w) && !w.contains('\n') && *next < new.toks.len() => text.push_str(w),
-            _ => {}
-        }
-        push_chunk(chunks, "delete", &text);
+        push_chunk(&mut chunks, "equal", &new.toks[next_new..].concat());
+        chunks
     };
-    let touch_new = |chunks: &mut Vec<_>, next: &mut usize, i: usize| {
-        let t = new.chars[i].0;
-        if t >= *next {
-            push_chunk(chunks, "equal", &new.toks[*next..t].concat());
-            push_chunk(
-                chunks,
-                if new.changed[t] { "insert" } else { "equal" },
-                new.toks[t],
-            );
-            *next = t + 1;
-        }
+    // A rendering is only usable if dropping its inserts rebuilds the
+    // original and dropping its deletes rebuilds the changed text.
+    let no_ws =
+        |s: &mut dyn Iterator<Item = char>| s.filter(|c| !c.is_whitespace()).collect::<String>();
+    let rebuilds = |chunks: &[(&str, String)]| {
+        let side = |skip: &str| {
+            no_ws(
+                &mut chunks
+                    .iter()
+                    .filter(|(t, _)| *t != skip)
+                    .flat_map(|(_, s)| s.chars()),
+            )
+        };
+        side("insert") == no_ws(&mut a.chars()) && side("delete") == no_ws(&mut b.chars())
     };
-    for (tag, o, n) in ops.iter().cloned() {
-        if tag == DiffTag::Equal {
-            for (i, j) in o.zip(n) {
-                touch_old(&mut chunks, &mut old_seen, &mut next_new, i);
-                touch_new(&mut chunks, &mut next_new, j);
-            }
-        } else {
-            for i in o {
-                touch_old(&mut chunks, &mut old_seen, &mut next_new, i);
-            }
-            for j in n {
-                touch_new(&mut chunks, &mut next_new, j);
-            }
-        }
+    let changed_words = |m: &(Vec<bool>, Vec<bool>)| m.0.iter().chain(&m.1).filter(|&&c| c).count();
+    let (am, pm) = (mark(&anchored), mark(&plain));
+    let mut candidates = vec![(anchored, am), (plain, pm)];
+    if changed_words(&candidates[1].1) < changed_words(&candidates[0].1) {
+        candidates.swap(0, 1);
     }
-    push_chunk(&mut chunks, "equal", &new.toks[next_new..].concat());
+    let picked = candidates.into_iter().find_map(|(ops, m)| {
+        let chunks = render(&ops, &m.0, &m.1);
+        rebuilds(&chunks).then_some((chunks, m))
+    });
+    let chunks = match picked {
+        Some((chunks, (oc, nc))) => {
+            old.changed = oc;
+            new.changed = nc;
+            chunks
+        }
+        None => {
+            // No alignment renders cleanly: replace the whole text.
+            old.changed = old.toks.iter().map(|t| !is_ws(t)).collect();
+            new.changed = new.toks.iter().map(|t| !is_ws(t)).collect();
+            let mut chunks = vec![];
+            push_chunk(&mut chunks, "delete", a);
+            push_chunk(&mut chunks, "insert", b);
+            chunks
+        }
+    };
     let count = |s: &Side| s.changed.iter().filter(|&&c| c).count();
     let (deletions, insertions) = (count(&old), count(&new));
     let total = old.words + new.words;
@@ -1790,6 +1824,12 @@ mod tests {
                 assert_eq!(d["similarity"], 1.0, "{a:?} -> {b:?}");
                 assert_eq!(changed_side(&d), b);
             }
+        }
+        // Each side of the diff keeps its own word order.
+        for (a, b) in [("a a b", "ab b x"), ("b a a", "x b ba")] {
+            let d = run(a, b, "word", "all").await;
+            assert_eq!(side(&d, "insert"), no_ws(a), "{a:?} -> {b:?}");
+            assert_eq!(side(&d, "delete"), no_ws(b), "{a:?} -> {b:?}");
         }
         // Deleted words keep their spacing in the rendered diff.
         let render = |d: &serde_json::Value| -> Vec<(String, String)> {
