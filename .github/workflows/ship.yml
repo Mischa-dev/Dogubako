@@ -133,4 +133,6 @@ jobs:
     name: Deploy docs.dogubako.app
     needs: [verify, publish]
     uses: ./.github/workflows/docs.yml
+    with:
+      ref: ${{ needs.verify.outputs.sha }}
     secrets: inherit
