@@ -96,11 +96,13 @@ export function useToolForm(
     for (const k of providedKey ? providedKey.split('\n') : []) delete errs[k];
     return errs;
   }, [validateAll, values, providedKey]);
+  // Tool checks span several fields, so their errors show even when only another field changed.
+  const checkKeys = useMemo(() => new Set(Object.keys(checkRef.current?.(values) ?? {})), [values]);
   const valid = Object.keys(errors).length === 0;
   const shownErrors = useMemo(() => {
-    const client = attempted ? errors : Object.fromEntries(Object.entries(errors).filter(([k]) => touched.has(k)));
+    const client = attempted ? errors : Object.fromEntries(Object.entries(errors).filter(([k]) => touched.has(k) || checkKeys.has(k)));
     return { ...client, ...serverErrors };
-  }, [attempted, touched, errors, serverErrors]);
+  }, [attempted, touched, errors, serverErrors, checkKeys]);
   const defaults = useMemo(() => defaultValues(tool), [tool]);
   const dirty = !!job.job || Object.keys(shownErrors).length > 0
     || tool.params.some((p) => JSON.stringify(values[p.name] ?? null) !== JSON.stringify(defaults[p.name] ?? null));
