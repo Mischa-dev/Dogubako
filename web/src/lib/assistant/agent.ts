@@ -190,7 +190,7 @@ export function describeTool(t: ToolInfo): Record<string, unknown> {
       case 'integer': case 'number':
         if (p.min != null) o.min = p.min;
         if (p.max != null) o.max = p.max;
-        if (p.max_if?.length) o.max_when = p.max_if.map((c) => `at most ${c.max} when ${c.param} is ${c.values.map(String).join(' or ')}`).join('; ');
+        if (p.max_if?.length) o.max_when = p.max_if.map((c) => `at most ${c.max} when ${c.param} is ${c.values.map(String).join(' or ')}${c.unless_set?.length ? ` unless ${c.unless_set.join(' or ')} is set` : ''}`).join('; ');
         break;
       case 'file': o.type = p.multiple ? 'file refs (array)' : 'file ref'; if (p.accept?.length) o.accept = p.accept; break;
       case 'path': o.kind = p.kind; break;

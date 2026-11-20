@@ -77,7 +77,8 @@ export function effectiveMax(p: ParamSpec, values: FormValues): number | undefin
   if (p.type !== 'integer' && p.type !== 'number') return undefined;
   let max = p.max;
   for (const cap of p.max_if ?? []) {
-    if (matches(cap, values) && (max == null || cap.max < max)) max = cap.max;
+    const lifted = cap.unless_set?.some((q) => values[q] != null && values[q] !== '');
+    if (!lifted && matches(cap, values) && (max == null || cap.max < max)) max = cap.max;
   }
   return max;
 }

@@ -9985,7 +9985,10 @@
        "values": [
         "mp3"
        ],
-       "max": 320
+       "max": 320,
+       "unless_set": [
+        "vbr_quality"
+       ]
       }
      ]
     },

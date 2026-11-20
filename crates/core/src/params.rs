@@ -346,15 +346,32 @@ fn check_max_if(p: &ParamSpec, values: &Map<String, Value>) -> ToolResult<()> {
         let Some(cur) = values.get(&cap.param) else {
             continue;
         };
+        let lifted = cap
+            .unless_set
+            .iter()
+            .any(|q| values.get(q).is_some_and(|v| !v.is_null()));
         let cur = as_text(cur);
-        if n > cap.max && cap.values.iter().any(|v| as_text(v) == cur) {
+        if !lifted && n > cap.max && cap.values.iter().any(|v| as_text(v) == cur) {
             return Err(ToolError::invalid(
                 &p.name,
-                format!("must be at most {} when {} is {cur}", cap.max, cap.param),
+                format!(
+                    "must be at most {} when {} is {cur}{}",
+                    cap.max,
+                    cap.param,
+                    unless_text(cap)
+                ),
             ));
         }
     }
     Ok(())
+}
+
+fn unless_text(cap: &crate::spec::MaxIf) -> String {
+    if cap.unless_set.is_empty() {
+        String::new()
+    } else {
+        format!(" (unless {} is set)", cap.unless_set.join(" or "))
+    }
 }
 
 fn is_text(p: &ParamSpec) -> bool {

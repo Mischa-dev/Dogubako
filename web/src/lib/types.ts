@@ -16,7 +16,7 @@ export interface EnumOption {
 }
 export interface ShowIf { param: string; values: unknown[] }
 /** A lower maximum while another param has one of the values. */
-export interface MaxIf { param: string; values: unknown[]; max: number }
+export interface MaxIf { param: string; values: unknown[]; max: number; unless_set?: string[] }
 
 interface ParamBase {
   name: string;

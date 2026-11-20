@@ -400,7 +400,12 @@ fn caps(p: &dogubako_core::spec::ParamSpec) -> String {
                         .unwrap_or_else(|| v.to_string())
                 })
                 .collect();
-            format!(" (≤{} when {}={})", c.max, c.param, vals.join("|"))
+            let unless: String = c
+                .unless_set
+                .iter()
+                .map(|q| format!(", unless {q}"))
+                .collect();
+            format!(" (≤{} when {}={}{unless})", c.max, c.param, vals.join("|"))
         })
         .collect()
 }

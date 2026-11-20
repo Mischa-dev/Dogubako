@@ -106,10 +106,15 @@ pub fn param_schema(p: &ParamSpec, file_mode: &str) -> Value {
     for cap in &p.max_if {
         let vals: Vec<String> = cap.values.iter().map(value_text).collect();
         desc = format!(
-            "{desc} At most {} when {} is {}.",
+            "{desc} At most {} when {} is {}{}.",
             cap.max,
             cap.param,
-            vals.join(" or ")
+            vals.join(" or "),
+            if cap.unless_set.is_empty() {
+                String::new()
+            } else {
+                format!(" (unless {} is set)", cap.unless_set.join(" or "))
+            }
         );
     }
     s["description"] = json!(desc);

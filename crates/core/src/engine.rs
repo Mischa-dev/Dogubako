@@ -463,10 +463,12 @@ mod tests {
                 ToolSpec::new("dev.capped", "Capped", Category::Dev)
                     .describe("per-mode maximum")
                     .param(ParamSpec::choice_of("mode", &["a", "b"]).default_str("a"))
+                    .param(ParamSpec::integer("q").range(0.0, 9.0))
                     .param(
                         ParamSpec::integer("n")
                             .range(1.0, 640.0)
-                            .max_if("mode", &["a"], 320.0),
+                            .max_if("mode", &["a"], 320.0)
+                            .max_unless_set("q"),
                     ),
                 |_c, p| Ok(ToolOutput::data(json!({"n": p.opt_int("n")}))),
             ),
@@ -540,6 +542,15 @@ mod tests {
             .unwrap_err();
         assert!(e.to_string().contains("at most 640"), "{e}");
         h.run("dev.capped", json!({})).await.unwrap();
+        // Setting the lifting param removes the cap; null doesn't count as set.
+        h.run("dev.capped", json!({"n": 640, "q": 2}))
+            .await
+            .unwrap();
+        let e = h
+            .run("dev.capped", json!({"n": 640, "q": null}))
+            .await
+            .unwrap_err();
+        assert!(e.to_string().contains("unless q is set"), "{e}");
     }
 
     #[tokio::test]

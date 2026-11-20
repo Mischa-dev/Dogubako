@@ -142,4 +142,12 @@ describe('max_if', () => {
     expect(validate(audio, { format: 'mp3', bitrate: 320 }).bitrate).toBeUndefined();
     expect(validate(audio, { format: 'ac3', bitrate: 640 }).bitrate).toBeUndefined();
   });
+
+  it('lifts the cap while an unless_set param has a value', () => {
+    const vbr: ParamSpec = { ...bitrate, max_if: [{ param: 'format', values: ['mp3'], max: 320, unless_set: ['vbr_quality'] }] };
+    expect(effectiveMax(vbr, { format: 'mp3', vbr_quality: 2 })).toBe(640);
+    expect(effectiveMax(vbr, { format: 'mp3', vbr_quality: 0 })).toBe(640);
+    expect(effectiveMax(vbr, { format: 'mp3', vbr_quality: '' })).toBe(320);
+    expect(effectiveMax(vbr, { format: 'mp3' })).toBe(320);
+  });
 });

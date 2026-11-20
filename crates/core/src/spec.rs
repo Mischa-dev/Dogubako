@@ -318,12 +318,15 @@ pub struct ShowIf {
     pub values: Vec<Value>,
 }
 
-/// A numeric param's maximum while `param` has one of `values`.
+/// A numeric param's maximum while `param` has one of `values`, unless one
+/// of the `unless_set` params has a value.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MaxIf {
     pub param: String,
     pub values: Vec<Value>,
     pub max: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unless_set: Vec<String>,
 }
 
 fn humanize(name: &str) -> String {
@@ -575,7 +578,15 @@ impl ParamSpec {
                 .map(|v| Value::String(v.to_string()))
                 .collect(),
             max,
+            unless_set: Vec::new(),
         });
+        self
+    }
+    /// Lifts the last `max_if` cap while `param` has a value.
+    pub fn max_unless_set(mut self, param: &str) -> Self {
+        if let Some(cap) = self.max_if.last_mut() {
+            cap.unless_set.push(param.to_string());
+        }
         self
     }
     pub fn show_if_bool(mut self, param: &str, value: bool) -> Self {
