@@ -143,6 +143,31 @@ function NumberInput({ common, integer, min, max, step, value, placeholder, onCh
   );
 }
 
+/**
+ * Type-ahead for a closed `<select>`: typed letters pick the first option whose label starts
+ * with them, and repeating one letter cycles through its matches. Native support varies by engine
+ * (WebKitGTK ignores it), so it is done here for every engine alike.
+ */
+export function typeAheadMatch(
+  select: HTMLSelectElement, key: string, modified: boolean, prev: { text: string; at: number }, now = Date.now(),
+): { value: string; buffer: { text: string; at: number } } | null {
+  if (modified || key.length !== 1 || key === ' ' && (!prev.text || now - prev.at >= 800)) return null;
+  const k = key.toLowerCase();
+  const text = now - prev.at < 800 ? prev.text + k : k;
+  const opts = Array.from(select.options).filter((o) => !o.disabled);
+  const label = (o: HTMLOptionElement) => o.text.trim().toLowerCase();
+  const cur = select.selectedIndex;
+  const repeat = text.length > 1 && [...text].every((c) => c === k);
+  let hit: HTMLOptionElement | undefined;
+  if (repeat || text.length === 1) {
+    const matches = opts.filter((o) => label(o).startsWith(k));
+    hit = matches.find((o) => o.index > cur) ?? matches[0];
+  } else {
+    hit = opts.find((o) => label(o).startsWith(text));
+  }
+  return hit ? { value: hit.value, buffer: { text, at: now } } : { value: select.value, buffer: { text, at: now } };
+}
+
 export const Field = memo(function Field({ param: p, value, error, onChange, mono, optionIssues, warning }: FieldProps) {
   const id = `f-${useId().replace(/:/g, '')}-${p.name}`;
   const descId = `${id}-desc`;
@@ -150,6 +175,7 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
   const set = (v: unknown) => onChange(p.name, v);
   const common = { id, 'aria-describedby': describedBy, 'aria-invalid': error ? true : undefined, 'aria-required': p.required || undefined };
   const [reveal, setReveal] = useState(false);
+  const typed = useRef({ text: '', at: 0 });
   const { backend } = useApp();
 
   switch (p.type) {
@@ -185,15 +211,22 @@ export const Field = memo(function Field({ param: p, value, error, onChange, mon
           </FieldShell>
         );
       }
+      const typeAhead = (e: React.KeyboardEvent<HTMLSelectElement>) => {
+        const next = typeAheadMatch(e.currentTarget, e.key, e.ctrlKey || e.metaKey || e.altKey, typed.current);
+        if (!next) return;
+        e.preventDefault();
+        typed.current = next.buffer;
+        if (next.value !== String(value ?? '')) set(next.value);
+      };
       const short = p.options.length <= 4 && p.options.every((o) => o.label.length <= 22);
       const allowEmpty = !p.required && p.default == null;
       return (
         <FieldShell param={p} id={id} error={error} descId={descId} warning={warning}>
           {short && !allowEmpty ? (
-            <Segmented label={p.label} id={id} value={String(value ?? '')} onChange={set} options={p.options.map((o) => ({ value: o.value, label: o.label, title: optionIssues?.[o.value], disabled: !!optionIssues?.[o.value] }))} />
+            <Segmented wrap label={p.label} id={id} value={String(value ?? '')} onChange={set} options={p.options.map((o) => ({ value: o.value, label: o.label, title: optionIssues?.[o.value], disabled: !!optionIssues?.[o.value] }))} />
           ) : (
             <div className="select-wrap">
-              <select className="select" {...common} aria-labelledby={`${id}-label`} value={String(value ?? '')} onChange={(e) => set(e.target.value)}>
+              <select className="select" {...common} aria-labelledby={`${id}-label`} value={String(value ?? '')} onChange={(e) => set(e.target.value)} onKeyDown={typeAhead}>
                 {allowEmpty && <option value="">—</option>}
                 {p.options.map((o) => {
                   const issue = optionIssues?.[o.value];

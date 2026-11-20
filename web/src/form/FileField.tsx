@@ -131,6 +131,9 @@ export const FileField = memo(function FileField({ param, items, onChange, label
   const { backend } = useApp();
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
+  // A click only browses when the press also began on the zone. WebKitGTK can deliver the release of a
+  // pick in a native dropdown list that covers the zone as a click on it, which opened a file dialog.
+  const pressed = useRef(false);
   const [note, setNote] = useState<string | null>(null);
   const add = useFileAdder(param, onChange);
   const multiple = !!param.multiple;
@@ -221,7 +224,13 @@ export const FileField = memo(function FileField({ param, items, onChange, label
           tabIndex={0}
           aria-labelledby={labelledBy}
           aria-describedby={describedBy}
-          onClick={browse}
+          onPointerDown={() => { pressed.current = true; }}
+          onClick={(e) => {
+            const fromPress = pressed.current;
+            pressed.current = false;
+            if (e.detail > 0 && !fromPress) return;
+            void browse();
+          }}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void browse(); } }}
           onDragEnter={(e) => { e.preventDefault(); setOver(true); }}
           onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}

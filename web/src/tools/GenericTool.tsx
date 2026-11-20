@@ -66,6 +66,8 @@ export function useLiveRun(form: ToolForm, enabled: boolean, delay = 250) {
   }, [form.values, enabled, form.valid]);
 }
 
+const scrollBehavior = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
+
 export function GenericTool({ tool, jobId, head, meta }: { tool: ToolInfo; jobId?: string | null; head?: React.ReactNode; meta?: React.ReactNode }) {
   const form = useToolForm(tool, { jobId });
   const live = tool.ui === 'live';
@@ -83,8 +85,10 @@ export function GenericTool({ tool, jobId, head, meta }: { tool: ToolInfo; jobId
     const s = form.job.job?.status;
     if (!live && s && s !== lastStatus.current && (s === 'succeeded' || s === 'failed')) {
       // With a stage, the result shows next to the original: bring that into view rather than the detail below.
-      const target = stageShown.current ? stageRef.current : resultsRef.current;
-      target?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: stageShown.current ? 'start' : 'nearest' });
+      // A result with no file has nothing to show on the stage, so go to the detail below instead.
+      const onStage = stageShown.current && (s === 'failed' || !!form.job.job?.result?.artifacts?.length);
+      const target = onStage ? stageRef.current : resultsRef.current;
+      target?.scrollIntoView({ behavior: scrollBehavior(), block: onStage ? 'start' : 'nearest' });
     }
     lastStatus.current = s;
   }, [form.job.job?.status, live]);
@@ -106,7 +110,7 @@ export function GenericTool({ tool, jobId, head, meta }: { tool: ToolInfo; jobId
     <div className={cx('tool-body tool-work', `place-${layout.controls}`, hasStage && 'has-stage', live && 'tool-live')}>
       {hasStage && (
         <div className={cx('tool-stage', form.stale && 'is-stale')} ref={stageRef}>
-          <Stage files={files} job={result} running={form.job.running} live={live} mode={layout.preview} />
+          <Stage files={files} job={result} running={form.job.running} live={live} mode={layout.preview} onShowResult={() => resultsRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' })} />
         </div>
       )}
       <section className="tool-input tool-controls" aria-label="Settings">

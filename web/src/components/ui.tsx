@@ -108,13 +108,15 @@ export function Switch({ checked, onChange, id, disabled, label, describedBy }: 
 }
 
 /** Radio-group styled as a segmented control, with arrow-key navigation. */
-export function Segmented<T extends string>({ value, options, onChange, label, id, size }: {
+export function Segmented<T extends string>({ value, options, onChange, label, id, size, wrap }: {
   value: T;
   options: { value: T; label: ReactNode; icon?: LucideIcon; title?: string; disabled?: boolean }[];
   onChange: (v: T) => void;
   label?: string;
   id?: string;
   size?: 'sm';
+  /** Wrap onto more lines instead of scrolling when the options don't fit. */
+  wrap?: boolean;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const idx = Math.max(0, options.findIndex((o) => o.value === value));
@@ -133,7 +135,7 @@ export function Segmented<T extends string>({ value, options, onChange, label, i
     }
   };
   return (
-    <div className={cx('segmented', size === 'sm' && 'segmented-sm')} role="radiogroup" aria-label={label} id={id} onKeyDown={onKey}>
+    <div className={cx('segmented', size === 'sm' && 'segmented-sm', wrap && 'segmented-wrap')} role="radiogroup" aria-label={label} id={id} onKeyDown={onKey}>
       {options.map((o, i) => {
         const Icon = o.icon;
         const on = o.value === value;
