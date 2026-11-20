@@ -564,7 +564,12 @@ fn transcribe_url() -> Arc<dyn Tool> {
 
         ctx.progress(0.01, "Reading the video page");
         let out = ytdlp(&ctx, cookies)?
-            .args(["--dump-single-json", "--skip-download", "--"])
+            .args([
+                "--dump-single-json",
+                "--flat-playlist",
+                "--skip-download",
+                "--",
+            ])
             .arg(url.as_str())
             .timeout(Duration::from_secs(180))
             .run_unchecked()
@@ -747,7 +752,7 @@ fn transcribe_url() -> Arc<dyn Tool> {
             "segments": segments,
             "table": segments_table(&segments),
         });
-        let mut out = ToolOutput::text(text.trim_end().to_string())
+        let mut out = ToolOutput::text_as(text.trim_end().to_string(), "text/markdown")
             .with_artifacts(artifacts)
             .with_data(data);
         out.warnings = warnings;
