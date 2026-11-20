@@ -18,8 +18,9 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# Shared with ship.yml, so a draft is never replaced while it is being shipped.
 concurrency:
-  group: release-${{ github.ref }}
+  group: dogubako-release
   cancel-in-progress: false
 
 jobs:
@@ -42,6 +43,11 @@ jobs:
           tag="v$version"
           if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match the version on that commit ($version)."; exit 1
+          fi
+          # A tag pushed earlier fixes the release's commit: build that, not a later one.
+          tagged="$(git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" | tail -n1 | cut -f1)"
+          if [ -n "$tagged" ] && [ "$tagged" != "$GITHUB_SHA" ]; then
+            echo "::error::Tag $tag already exists at $tagged, not $GITHUB_SHA. Run Release on the tag, or bump the version."; exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -81,6 +87,14 @@ jobs:
         working-directory: site
       - run: cargo build --locked -p dogubako-cli
       - run: python3 -I packaging/release/release.py regen --check
+      - name: Keep the regenerated docs
+        if: failure()
+        run: git diff > regenerated-docs.diff
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: regenerated-docs
+          path: regenerated-docs.diff
       - name: Third-party notices are current
         run: python3 -I packaging/release/notices.py --check
       # Every page, internal link and anchor of docs.dogubako.app at this commit.

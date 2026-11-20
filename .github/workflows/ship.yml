@@ -17,8 +17,9 @@ on:
         type: string
         required: true
 
+# Shared with release.yml, so the draft can't be replaced while it ships.
 concurrency:
-  group: ship-release
+  group: dogubako-release
   cancel-in-progress: false
 
 permissions:
@@ -30,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     permissions:
-      contents: read
+      contents: write   # draft releases are only visible with write access
       actions: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -57,6 +58,10 @@ jobs:
           [ "$(python3 -I packaging/release/release.py current)" = "$VERSION" ] || {
             echo "::error::The draft's commit is not version $VERSION."; exit 1; }
           python3 -I packaging/release/release.py check --version "$VERSION"
+          tagged="$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | tail -n1 | cut -f1)"
+          if [ -n "$tagged" ] && [ "$tagged" != "${{ steps.draft.outputs.sha }}" ]; then
+            echo "::error::Tag $TAG exists at $tagged, but the draft was built from ${{ steps.draft.outputs.sha }}."; exit 1
+          fi
       - name: Every asset is there and matches SHA256SUMS.txt
         run: |
           mkdir assets && cd assets
