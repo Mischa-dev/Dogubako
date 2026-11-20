@@ -558,7 +558,7 @@ Also found by: docx to pdf, word to pdf, excel to pdf, powerpoint to pdf, odt, o
 | Option | CLI | Type | Default | Description |
 |---|---|---|---|---|
 | `input` *(required)* | positional | files |  | Documents. Accepts .doc .docx .odt .rtf .txt .html .htm .wpd .pages .xls +16 more. |
-| `format` | `--format` | choice | `pdf` | One of: `pdf`, `docx` (Word (DOCX)), `odt` (OpenDocument Text (ODT)), `rtf` (Rich Text (RTF)), `txt` (Plain text), `html`, `xlsx` (Excel (XLSX)), `ods` (OpenDocument Spreadsheet (ODS)), `csv` (CSV (first sheet)), `pptx` (PowerPoint (PPTX)), `odp` (OpenDocument Presentation (ODP)). |
+| `format` | `--format` | choice | `pdf` | Text documents convert to PDF, DOCX, ODT, RTF, plain text or HTML; spreadsheets to PDF, HTML, XLSX, ODS or CSV; presentations to PDF, HTML, PPTX or ODP; drawings to PDF or HTML. One of: `pdf`, `docx` (Word (DOCX)), `odt` (OpenDocument Text (ODT)), `rtf` (Rich Text (RTF)), `txt` (Plain text), `html`, `xlsx` (Excel (XLSX), spreadsheets only), `ods` (OpenDocument Spreadsheet (ODS), spreadsheets only), `csv` (CSV (first sheet), spreadsheets only), `pptx` (PowerPoint (PPTX), presentations only), `odp` (OpenDocument Presentation (ODP), presentations only). |
 
 ## Convert Markup Documents
 

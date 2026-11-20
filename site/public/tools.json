@@ -17069,6 +17069,7 @@
     {
      "name": "format",
      "label": "Format",
+     "description": "Text documents convert to PDF, DOCX, ODT, RTF, plain text or HTML; spreadsheets to PDF, HTML, XLSX, ODS or CSV; presentations to PDF, HTML, PPTX or ODP; drawings to PDF or HTML",
      "type": "enum",
      "options": [
       {
@@ -17097,23 +17098,23 @@
       },
       {
        "value": "xlsx",
-       "label": "Excel (XLSX)"
+       "label": "Excel (XLSX), spreadsheets only"
       },
       {
        "value": "ods",
-       "label": "OpenDocument Spreadsheet (ODS)"
+       "label": "OpenDocument Spreadsheet (ODS), spreadsheets only"
       },
       {
        "value": "csv",
-       "label": "CSV (first sheet)"
+       "label": "CSV (first sheet), spreadsheets only"
       },
       {
        "value": "pptx",
-       "label": "PowerPoint (PPTX)"
+       "label": "PowerPoint (PPTX), presentations only"
       },
       {
        "value": "odp",
-       "label": "OpenDocument Presentation (ODP)"
+       "label": "OpenDocument Presentation (ODP), presentations only"
       }
      ],
      "multi": false,

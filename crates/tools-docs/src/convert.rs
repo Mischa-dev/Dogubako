@@ -86,12 +86,120 @@ async fn soffice_convert(
         .filter_map(|e| e.ok().map(|e| e.path()))
         .find(|p| p.is_file());
     found.ok_or_else(|| {
-        let msg = format!("{} {}", res.stdout_text().trim(), res.stderr.trim());
-        ToolError::failed(format!(
-            "LibreOffice could not convert this file to {target}. {}",
-            msg.trim()
-        ))
+        let log = format!("{}\n{}", res.stdout_text(), res.stderr);
+        ToolError::failed(soffice_failure(target, &log))
     })
+}
+
+/// Plain-words explanation for a failed LibreOffice conversion, with
+/// LibreOffice's own error lines (not its startup noise) as detail.
+fn soffice_failure(target: &str, log: &str) -> String {
+    let label = format_label(target);
+    let mut msg = if log.contains("no export filter") {
+        format!("LibreOffice cannot save this kind of document as {label}.")
+    } else {
+        format!(
+            "LibreOffice could not convert this file to {label}. It may be damaged, password-protected or not a format LibreOffice can open."
+        )
+    };
+    let detail: Vec<&str> = log
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("Error"))
+        .collect();
+    if !detail.is_empty() {
+        msg.push_str(&format!(" (LibreOffice: {})", detail.join(" ")));
+    }
+    msg
+}
+
+/// Which LibreOffice application opens a document; each can only export
+/// to its own formats (a text document cannot become a spreadsheet).
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum OfficeKind {
+    Text,
+    Spreadsheet,
+    Presentation,
+    Drawing,
+}
+
+impl OfficeKind {
+    fn of(name: &str) -> Option<OfficeKind> {
+        let ext = Path::new(name)
+            .extension()?
+            .to_string_lossy()
+            .to_ascii_lowercase();
+        Some(match ext.as_str() {
+            "doc" | "docx" | "docm" | "dotx" | "odt" | "fodt" | "rtf" | "txt" | "html" | "htm"
+            | "wpd" | "pages" => OfficeKind::Text,
+            "xls" | "xlsx" | "xlsm" | "ods" | "fods" | "csv" => OfficeKind::Spreadsheet,
+            "ppt" | "pptx" | "pptm" | "odp" | "fodp" => OfficeKind::Presentation,
+            "odg" | "vsd" | "pub" => OfficeKind::Drawing,
+            _ => return None,
+        })
+    }
+
+    fn noun(self) -> &'static str {
+        match self {
+            OfficeKind::Text => "a text document",
+            OfficeKind::Spreadsheet => "a spreadsheet",
+            OfficeKind::Presentation => "a presentation",
+            OfficeKind::Drawing => "a drawing",
+        }
+    }
+
+    fn targets(self) -> &'static [&'static str] {
+        match self {
+            OfficeKind::Text => &["pdf", "docx", "odt", "rtf", "txt", "html"],
+            OfficeKind::Spreadsheet => &["pdf", "html", "xlsx", "ods", "csv"],
+            OfficeKind::Presentation => &["pdf", "html", "pptx", "odp"],
+            OfficeKind::Drawing => &["pdf", "html"],
+        }
+    }
+}
+
+const OFFICE_FORMATS: &[(&str, &str)] = &[
+    ("pdf", "PDF"),
+    ("docx", "Word (DOCX)"),
+    ("odt", "OpenDocument Text (ODT)"),
+    ("rtf", "Rich Text (RTF)"),
+    ("txt", "Plain text"),
+    ("html", "HTML"),
+    ("xlsx", "Excel (XLSX), spreadsheets only"),
+    ("ods", "OpenDocument Spreadsheet (ODS), spreadsheets only"),
+    ("csv", "CSV (first sheet), spreadsheets only"),
+    ("pptx", "PowerPoint (PPTX), presentations only"),
+    ("odp", "OpenDocument Presentation (ODP), presentations only"),
+];
+
+fn format_label(fmt: &str) -> &str {
+    OFFICE_FORMATS
+        .iter()
+        .find(|(v, _)| *v == fmt)
+        .map(|(_, l)| l.split(',').next().unwrap_or(l))
+        .unwrap_or(fmt)
+}
+
+/// Reject a target the input's LibreOffice application cannot write, before
+/// starting LibreOffice. Unknown extensions are left for LibreOffice to try.
+fn check_target(name: &str, fmt: &str) -> ToolResult<()> {
+    let Some(kind) = OfficeKind::of(name) else {
+        return Ok(());
+    };
+    let targets = kind.targets();
+    if targets.contains(&fmt) {
+        return Ok(());
+    }
+    let options: Vec<&str> = targets.iter().map(|t| format_label(t)).collect();
+    Err(ToolError::invalid(
+        "format",
+        format!(
+            "{name} is {}, which can't be converted to {}. Choose one of: {}.",
+            kind.noun(),
+            format_label(fmt),
+            options.join(", ")
+        ),
+    ))
 }
 
 const OFFICE_ACCEPT: &[&str] = &[
@@ -106,22 +214,8 @@ fn convert_document() -> Arc<dyn Tool> {
         .keywords(&["docx to pdf", "word to pdf", "excel to pdf", "powerpoint to pdf", "odt", "office", "libreoffice", "convert"])
         .param(ParamSpec::files("input").label("Documents").accept(OFFICE_ACCEPT).required().primary())
         .param(
-            ParamSpec::choice(
-                "format",
-                &[
-                    ("pdf", "PDF"),
-                    ("docx", "Word (DOCX)"),
-                    ("odt", "OpenDocument Text (ODT)"),
-                    ("rtf", "Rich Text (RTF)"),
-                    ("txt", "Plain text"),
-                    ("html", "HTML"),
-                    ("xlsx", "Excel (XLSX)"),
-                    ("ods", "OpenDocument Spreadsheet (ODS)"),
-                    ("csv", "CSV (first sheet)"),
-                    ("pptx", "PowerPoint (PPTX)"),
-                    ("odp", "OpenDocument Presentation (ODP)"),
-                ],
-            )
+            ParamSpec::choice("format", OFFICE_FORMATS)
+                .describe("Text documents convert to PDF, DOCX, ODT, RTF, plain text or HTML; spreadsheets to PDF, HTML, XLSX, ODS or CSV; presentations to PDF, HTML, PPTX or ODP; drawings to PDF or HTML")
             .default_str("pdf"),
         )
         .requires(&["libreoffice"])
@@ -131,6 +225,9 @@ fn convert_document() -> Arc<dyn Tool> {
     async_tool(spec, |ctx, p| async move {
         let files = p.files("input");
         let fmt = p.str_or("format", "pdf").to_string();
+        for f in files.iter() {
+            check_target(&f.name, &fmt)?;
+        }
         let mut arts = vec![];
         for (i, f) in files.iter().enumerate() {
             ctx.check_cancelled()?;
@@ -512,5 +609,57 @@ mod tests {
         assert!(ast["meta"].get("cover-image").is_none());
         assert_eq!(ast["blocks"][0]["c"][0]["t"], "Span");
         assert_eq!(ast["blocks"][0]["c"][1]["t"], "Image");
+    }
+
+    #[test]
+    fn office_targets_follow_input_kind() {
+        for input in ["letter.odt", "Letter.DOCX", "notes.txt", "a.rtf"] {
+            for fmt in ["xlsx", "ods", "csv", "pptx", "odp"] {
+                let err = check_target(input, fmt).unwrap_err();
+                assert_eq!(err.code(), "invalid_input", "{input} -> {fmt}");
+                let msg = err.to_string();
+                assert!(msg.contains("text document"), "{msg}");
+                assert!(!msg.contains("LibreOffice"), "{msg}");
+            }
+            for fmt in ["pdf", "docx", "odt", "rtf", "txt", "html"] {
+                assert!(check_target(input, fmt).is_ok(), "{input} -> {fmt}");
+            }
+        }
+        assert!(check_target("t.xlsx", "csv").is_ok());
+        assert!(check_target("t.csv", "ods").is_ok());
+        assert!(check_target("t.ods", "docx").is_err());
+        assert!(check_target("s.pptx", "odp").is_ok());
+        assert!(check_target("s.odp", "xlsx").is_err());
+        assert!(check_target("d.odg", "pdf").is_ok());
+        assert!(check_target("d.odg", "odt").is_err());
+        assert!(check_target("unknown.xyz", "xlsx").is_ok());
+        let msg = check_target("letter.odt", "xlsx").unwrap_err().to_string();
+        assert!(msg.contains("Excel (XLSX)") && msg.contains("PDF"), "{msg}");
+        for (v, _) in OFFICE_FORMATS {
+            assert!(
+                [
+                    OfficeKind::Text,
+                    OfficeKind::Spreadsheet,
+                    OfficeKind::Presentation
+                ]
+                .iter()
+                .any(|k| k.targets().contains(v)),
+                "{v}"
+            );
+        }
+    }
+
+    #[test]
+    fn soffice_failure_hides_startup_noise() {
+        let log = "Warning: failed to launch javaldx - java may not function correctly\nError: no export filter for /tmp/x/out0/w.xlsx found, aborting.\n";
+        let msg = soffice_failure("xlsx", log);
+        assert!(
+            msg.starts_with("LibreOffice cannot save this kind of document as Excel (XLSX)."),
+            "{msg}"
+        );
+        assert!(!msg.contains("javaldx"), "{msg}");
+        let msg = soffice_failure("pdf", "convert a -> b using filter : pdf\n");
+        assert!(msg.contains("may be damaged"), "{msg}");
+        assert!(!msg.contains("using filter"), "{msg}");
     }
 }
