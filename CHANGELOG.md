@@ -75,6 +75,8 @@ campaign are added here as they merge.
 - Convert Document rejects a target the input's LibreOffice app can't write
   (for example XLSX from a text document) and lists the formats it can; when
   LibreOffice still fails, the error shows only its `Error` lines.
+- Compare Text's whitespace option now applies at word and character
+  granularity, not only per line.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 
