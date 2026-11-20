@@ -336,26 +336,36 @@ fn to_images() -> Arc<dyn Tool> {
                 jobs.len()
             )));
         }
+        let transparent = fmt == "png" && p.bool("transparent");
+        if transparent && ctx.command_sibling("poppler", "pdftocairo").is_err() {
+            return Err(ToolError::invalid(
+                "transparent",
+                "transparent backgrounds need Poppler's pdftocairo, which this Poppler install does not include; turn the option off or install the full Poppler utilities",
+            ));
+        }
         let total = jobs.len();
         for (k, (fi, pg)) in jobs.into_iter().enumerate() {
             ctx.check_cancelled()?;
             let f = &files[fi];
             ctx.progress(k as f32 / total as f32, format!("{} page {pg}", f.name));
             let dir = ctx.temp_dir(&format!("r{k}"))?;
-            let mut cmd = ctx
-                .command("poppler")?
-                .arg(format!("-{fmt}"))
-                .args([
-                    "-r",
-                    &dpi.to_string(),
-                    "-f",
-                    &pg.to_string(),
-                    "-l",
-                    &pg.to_string(),
-                    "-singlefile",
-                ])
-                .arg_if(p.bool("grayscale"), "-gray")
-                .arg_if(fmt == "png" && p.bool("transparent"), "-transp");
+            // pdftoppm has no transparency option; pdftocairo renders with an alpha channel.
+            let mut cmd = if transparent {
+                ctx.command_sibling("poppler", "pdftocairo")?.arg("-transp")
+            } else {
+                ctx.command("poppler")?
+            }
+            .arg(format!("-{fmt}"))
+            .args([
+                "-r",
+                &dpi.to_string(),
+                "-f",
+                &pg.to_string(),
+                "-l",
+                &pg.to_string(),
+                "-singlefile",
+            ])
+            .arg_if(p.bool("grayscale"), "-gray");
             if fmt == "jpeg" {
                 cmd = cmd.args(["-jpegopt", &format!("quality={}", p.int_or("quality", 90))]);
             }
@@ -369,7 +379,13 @@ fn to_images() -> Arc<dyn Tool> {
             let produced = std::fs::read_dir(&dir)?
                 .filter_map(|e| e.ok().map(|e| e.path()))
                 .find(|p| p.is_file())
-                .ok_or_else(|| ToolError::failed("pdftoppm produced no image"))?;
+                .ok_or_else(|| ToolError::failed("Poppler produced no image"))?;
+            if transparent && p.bool("grayscale") {
+                // pdftocairo ignores -gray when -transp is set.
+                image::open(&produced)
+                    .and_then(|img| img.to_luma_alpha8().save(&produced))
+                    .map_err(|e| ToolError::failed(format!("grayscale conversion failed: {e}")))?;
+            }
             let width = counts[fi].to_string().len().max(2);
             let out = ctx.output_path(&format!(
                 "{}-p{:0width$}.{ext}",
