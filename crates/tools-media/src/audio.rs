@@ -27,7 +27,11 @@ pub fn tools() -> Vec<Arc<dyn Tool>> {
         equalizer(),
         fade(),
         reverse(),
-        extract_audio_tool("audio.extract_from_video", Category::Audio),
+        extract_audio_tool(
+            "audio.extract_from_video",
+            "Extract Audio from Video",
+            Category::Audio,
+        ),
     ]
 }
 
@@ -1909,7 +1913,7 @@ fn tags() -> Arc<dyn Tool> {
 // audio.denoise / speed / equalizer / fade / reverse
 
 fn denoise() -> Arc<dyn Tool> {
-    let spec = audio_spec("audio.denoise", "Reduce Noise")
+    let spec = audio_spec("audio.denoise", "Reduce Audio Noise")
         .describe("Reduce background hiss and hum with FFmpeg's FFT denoiser (afftdn) or non-local-means (anlmdn), plus optional high-/low-pass filters")
         .keywords(&["noise reduction", "hiss", "hum", "background noise", "clean audio", "afftdn", "anlmdn", "rumble"])
         .param(audio_input(true))

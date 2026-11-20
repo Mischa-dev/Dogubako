@@ -75,6 +75,12 @@ mod tests {
     #[test]
     fn registry_builds_without_conflicts() {
         let (reg, _) = build_registry(None);
+        let mut names = std::collections::HashMap::new();
+        for spec in reg.specs() {
+            if let Some(other) = names.insert(spec.name.to_lowercase(), spec.id.clone()) {
+                panic!("{} and {} share the name '{}'", other, spec.id, spec.name);
+            }
+        }
         for spec in reg.specs() {
             assert!(
                 !spec.description.is_empty(),

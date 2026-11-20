@@ -53,6 +53,12 @@ describe('validate', () => {
     expect(validate(t, { ...base, format: 'jpg' }).quality).toBe('Must be at most 100');
     expect(validate(t, { ...base, format: 'jpg', quality: 2.5 }).quality).toBe('Enter a whole number');
   });
+  it('rejects number text that is not a plain decimal', () => {
+    const base = { ...defaultValues(t), input: [ready('f_1')], format: 'jpg' };
+    for (const q of ['0x3', '0b1', '1.2.3', 'Infinity', '-', '.']) expect(validate(t, { ...base, quality: q }).quality).toBe('Enter a number');
+    expect(validate(t, { ...base, quality: ' 70 ' }).quality).toBeUndefined();
+    expect(toRunParams(t, { ...base, quality: '0x3' }).quality).toBeUndefined();
+  });
   it('validates JSON and colors', () => {
     const base = { ...defaultValues(t), input: [ready('f_1')] };
     expect(validate(t, { ...base, regions: '[{' }).regions).toMatch(/Invalid JSON/);
