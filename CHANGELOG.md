@@ -117,6 +117,10 @@ campaign are added here as they merge.
   error correction level's capacity before Run.
 - Extract Frames in scene mode reports "no frames matched" for JPEG/WebP
   instead of an FFmpeg encoder error.
+- Text to Speech splits long lines before Piper, so max-length text no longer
+  crashes it.
+- Compare Text rounds similarity to three decimals and labels change counts
+  with their unit (lines, tokens or characters).
 - Video to GIF accepts 2 colours, the field's minimum, instead of failing in
   FFmpeg's palette generator.
 
