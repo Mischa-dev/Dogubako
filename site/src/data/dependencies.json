@@ -135,6 +135,21 @@
     "tools": 3
   },
   {
+    "id": "ytdlp",
+    "name": "yt-dlp",
+    "purpose": "Captions and audio from YouTube and other video sites",
+    "license": "Unlicense",
+    "install": {
+      "apt": "yt-dlp",
+      "dnf": "yt-dlp",
+      "pacman": "yt-dlp",
+      "brew": "yt-dlp",
+      "winget": "yt-dlp.yt-dlp",
+      "url": "https://github.com/yt-dlp/yt-dlp#installation"
+    },
+    "tools": 1
+  },
+  {
     "id": "piper",
     "name": "Piper TTS",
     "purpose": "Offline neural text-to-speech",

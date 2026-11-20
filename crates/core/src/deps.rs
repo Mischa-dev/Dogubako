@@ -217,6 +217,24 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         ),
     },
     DepSpec {
+        id: "ytdlp",
+        name: "yt-dlp",
+        purpose: "Captions and audio from YouTube and other video sites",
+        binaries: &["yt-dlp"],
+        unix_only_binaries: &[],
+        version_args: &["--version"],
+        version_regex: r"(\d{4}\.\d{2}\.\d{2}(?:\.\d+)?)",
+        license: "Unlicense",
+        install: hints!(
+            Some("yt-dlp"),
+            Some("yt-dlp"),
+            Some("yt-dlp"),
+            Some("yt-dlp"),
+            Some("yt-dlp.yt-dlp"),
+            "https://github.com/yt-dlp/yt-dlp#installation"
+        ),
+    },
+    DepSpec {
         id: "piper",
         name: "Piper TTS",
         purpose: "Offline neural text-to-speech",

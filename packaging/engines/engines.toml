@@ -200,6 +200,16 @@ source_url = "https://github.com/rhasspy/piper"
 debian = []
 reason = "6 TTS tools; target tier is on-demand once we have a working macOS build."
 
+[engine.ytdlp]
+tier = "system"
+deps = ["ytdlp"]
+license = "Unlicense"
+bundling = "ok"
+license_note = "Public domain (Unlicense)."
+source_url = "https://github.com/yt-dlp/yt-dlp"
+debian = []
+reason = "1 URL transcription tool; sites change often, so users keep yt-dlp current with their own package manager or `yt-dlp -U`."
+
 [engine.libreoffice]
 tier = "system"
 deps = ["libreoffice"]

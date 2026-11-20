@@ -9,6 +9,7 @@ pub mod audio;
 pub mod ffmpeg;
 pub mod speech;
 pub mod subtitles;
+pub mod url_transcript;
 pub mod vad;
 pub mod video;
 
@@ -20,5 +21,6 @@ pub fn tools() -> Vec<Arc<dyn Tool>> {
     v.extend(subtitles::tools());
     v.extend(speech::tools());
     v.extend(vad::tools());
+    v.extend(url_transcript::tools());
     v
 }

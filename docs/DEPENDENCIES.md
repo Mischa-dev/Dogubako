@@ -71,6 +71,7 @@ license terms and source availability.
 | LibreOffice | MPL-2.0 | |
 | Pandoc | GPL-2.0+ | |
 | 7-Zip | LGPL-2.1+ with unRAR restriction | RAR extraction code is freeware, not open source; RAR *creation* is never used |
+| yt-dlp | Unlicense | Optional; fetches captions and audio for Transcribe Video URL |
 | bubblewrap | LGPL-2.0+ | Optional sandbox |
 
 ### Known engine issues
