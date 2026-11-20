@@ -77,7 +77,7 @@ export function extForMime(mime?: string): string {
   const m = mime.split(';')[0].trim();
   const map: Record<string, string> = {
     'application/json': 'json', 'text/markdown': 'md', 'text/html': 'html', 'image/svg+xml': 'svg',
-    'text/csv': 'csv', 'application/xml': 'xml', 'text/xml': 'xml', 'application/yaml': 'yaml', 'text/yaml': 'yaml',
+    'text/csv': 'csv', 'text/tab-separated-values': 'tsv', 'application/x-ndjson': 'ndjson', 'application/xml': 'xml', 'text/xml': 'xml', 'application/yaml': 'yaml', 'text/yaml': 'yaml',
     'text/x-yaml': 'yaml', 'application/toml': 'toml', 'text/vtt': 'vtt', 'application/x-subrip': 'srt',
     'text/css': 'css', 'text/x-diff': 'diff', 'text/x-patch': 'patch', 'application/javascript': 'js', 'text/javascript': 'js', 'application/sql': 'sql',
   };

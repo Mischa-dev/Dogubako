@@ -38,7 +38,10 @@ async fn convert_compress() {
             Ok(o) => o,
             // FFmpeg builds differ (e.g. Homebrew ships without libvorbis):
             // the tool must say so clearly rather than fail obscurely.
-            Err(e) if e.code() == "unsupported" && !common::has_encoder_for(fmt) => {
+            Err(e)
+                if matches!(e.code(), "unsupported" | "invalid_input")
+                    && !common::has_encoder_for(fmt) =>
+            {
                 assert!(e.to_string().contains("encoder"), "{fmt}: {e}");
                 continue;
             }
@@ -54,6 +57,8 @@ async fn convert_compress() {
     let j = probe_json(&out.artifacts[0].path);
     assert_eq!(j["streams"][0]["codec_name"], "pcm_s24le");
     assert_eq!(j["streams"][0]["channels"], 1);
+    assert_eq!(out.data["files"][0]["encoder"], "pcm_s24le");
+    assert_eq!(out.data["files"][0]["bit_depth"], 24);
     assert_eq!(sr(&out.artifacts[0].path), "16000");
     let out = h
         .run(
@@ -466,6 +471,28 @@ async fn visuals_info_tags() {
         .await
         .unwrap();
     assert_eq!(out.artifacts[0].mime, "image/png");
+    let pix = |p: &std::path::Path| {
+        probe_json(p)["streams"][0]["pix_fmt"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string()
+    };
+    let out = h
+        .run(
+            "audio.waveform",
+            json!({"input": [s(&t)], "background": "#00000080"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pix(&out.artifacts[0].path), "rgba");
+    let out = h
+        .run(
+            "audio.waveform",
+            json!({"input": [s(&t)], "background": "#000000"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pix(&out.artifacts[0].path), "rgb24");
     let out = h
         .run(
             "audio.spectrogram",

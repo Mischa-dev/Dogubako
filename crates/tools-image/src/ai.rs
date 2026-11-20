@@ -25,6 +25,24 @@ async fn temp_png(ctx: &ToolContext, f: &InputFile) -> ToolResult<(std::path::Pa
     .await
 }
 
+/// Tesseract names its input image in hOCR; show the user's file, not the staged copy.
+fn hocr_without_temp_path(html: &str, staged: &std::path::Path, name: &str) -> String {
+    let esc = name
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;");
+    let mut html = html.to_string();
+    for path in [arg_path(staged), staged.as_os_str().to_os_string()] {
+        let path = path.to_string_lossy().to_string();
+        html = html
+            .replace(&path, &esc)
+            .replace(&path.replace('&', "&amp;"), &esc);
+    }
+    html
+}
+
 fn valid_langs(s: &str) -> ToolResult<String> {
     let s = s.trim();
     if s.is_empty()
@@ -152,7 +170,7 @@ fn ocr() -> Arc<dyn Tool> {
                     .arg("hocr")
                     .run()
                     .await?;
-                let html = h.stdout_text();
+                let html = hocr_without_temp_path(&h.stdout_text(), &png, &f.name);
                 let a = ctx.write_output(&format!("{stem}.hocr.html"), html.as_bytes())?;
                 ToolOutput::text(html).with_artifact(a)
             }
@@ -351,4 +369,21 @@ fn upscale() -> Arc<dyn Tool> {
         ctx.progress(1.0, "done");
         Ok(ToolOutput::files(arts))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hocr_names_the_users_file() {
+        let staged = std::env::temp_dir().join("job").join("in-ab12.png");
+        let html = format!(
+            "<div class='ocr_page' title='image \"{}\"; bbox 0 0 9 9'>",
+            arg_path(&staged).to_string_lossy()
+        );
+        let out = hocr_without_temp_path(&html, &staged, "scan <1>.png");
+        assert!(!out.contains("in-ab12"), "{out}");
+        assert!(out.contains("image \"scan &lt;1&gt;.png\""), "{out}");
+    }
 }

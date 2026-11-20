@@ -44,6 +44,25 @@ fn test_tools() -> Vec<Arc<dyn Tool>> {
             },
         ),
         sync_tool(
+            ToolSpec::new("data.nested", "Nested", Category::Data)
+                .describe("Writes the same file name in two folders")
+                .output(OutputKind::Files),
+            |c, _p| {
+                let mut arts = vec![];
+                for (dir, body) in [("one", "first"), ("two", "second")] {
+                    let out = c.output_path("same.txt");
+                    std::fs::write(&out, body)?;
+                    let mut a = c.artifact(&out)?;
+                    a.rel_path = Some(format!("{dir}/same.txt"));
+                    arts.push(a);
+                }
+                let out = c.output_path("top.txt");
+                std::fs::write(&out, "top")?;
+                arts.push(c.artifact(&out)?);
+                Ok(ToolOutput::files(arts))
+            },
+        ),
+        sync_tool(
             ToolSpec::new("system.secret_info", "Secret info", Category::System)
                 .describe("Needs system_info")
                 .permission(Permission::SystemInfo),
@@ -186,7 +205,7 @@ async fn setup_login_and_csrf() {
     )
     .await;
     assert_eq!(r.status, StatusCode::OK);
-    assert_eq!(r.body["count"], 5);
+    assert_eq!(r.body["count"], 6);
     // POST without CSRF header is rejected
     let r = call(
         &t.app,
@@ -936,4 +955,60 @@ async fn enabling_auth_after_no_auth_offers_setup() {
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+}
+
+#[tokio::test]
+async fn job_zip_keeps_folders() {
+    let t = setup(AuthMode::Required);
+    let (cookie, csrf) = owner_session(&t).await;
+    let token = create_agent_token(
+        &t,
+        &cookie,
+        &csrf,
+        "zipbot",
+        json!({"allow": ["data.*"], "permissions": []}),
+    )
+    .await;
+    let bearer = format!("Bearer {token}");
+    let auth = [("authorization", bearer.as_str())];
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/data.nested/run",
+        &auth,
+        Some(json!({"params": {}, "wait_seconds": 10})),
+    )
+    .await;
+    assert_eq!(r.body["status"], "succeeded", "{:?}", r.body);
+    let arts = r.body["result"]["artifacts"].as_array().unwrap();
+    assert_eq!(arts[0]["rel_path"], "one/same.txt");
+    assert!(arts[2].get("rel_path").is_none());
+    let id = r.body["id"].as_str().unwrap();
+    let r = call(
+        &t.app,
+        Method::GET,
+        &format!("/api/v1/jobs/{id}/artifacts.zip"),
+        &auth,
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(r.raw)).unwrap();
+    let mut entries: Vec<(String, String)> = (0..z.len())
+        .map(|i| {
+            let mut f = z.by_index(i).unwrap();
+            let mut s = String::new();
+            std::io::Read::read_to_string(&mut f, &mut s).unwrap();
+            (f.name().unwrap().to_string(), s)
+        })
+        .collect();
+    entries.sort();
+    assert_eq!(
+        entries,
+        vec![
+            ("one/same.txt".into(), "first".into()),
+            ("top.txt".into(), "top".into()),
+            ("two/same.txt".into(), "second".into()),
+        ]
+    );
 }

@@ -129,7 +129,7 @@ async fn run_tool(app: AppHandle, state: State<'_, Desktop>, run_id: String, too
                 artifacts: out
                     .artifacts
                     .into_iter()
-                    .map(|a| ArtifactView { id: None, name: a.name, mime: a.mime, size: a.size, label: a.label, url: None, path: Some(a.path.to_string_lossy().to_string()) })
+                    .map(|a| ArtifactView { id: None, name: a.name, mime: a.mime, size: a.size, label: a.label, url: None, path: Some(a.path.to_string_lossy().to_string()), rel_path: a.rel_path })
                     .collect(),
                 warnings: out.warnings,
                 duration_ms: stats.duration_ms,
@@ -190,6 +190,31 @@ fn save_artifact(state: State<'_, Desktop>, src: String, dest: String) -> Result
         return Err("can only save files produced by Dogubako".into());
     }
     std::fs::copy(&src, &dest).map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[derive(serde::Deserialize)]
+struct SaveItem {
+    path: String,
+    name: String,
+    rel_path: Option<String>,
+}
+
+/// Copy a whole result set into a folder the user picked, keeping the
+/// folders in `rel_path`. Returns how many files were saved.
+#[tauri::command]
+fn save_artifacts(state: State<'_, Desktop>, items: Vec<SaveItem>, dest_dir: String) -> Result<usize, String> {
+    let out = std::fs::canonicalize(&state.output_dir).map_err(|e| e.to_string())?;
+    let mut pairs = Vec::with_capacity(items.len());
+    for it in items {
+        let src = std::fs::canonicalize(&it.path).map_err(|e| e.to_string())?;
+        if !src.starts_with(&out) {
+            return Err("can only save files produced by Dogubako".into());
+        }
+        pairs.push((src, it.rel_path.unwrap_or(it.name)));
+    }
+    dogubako_core::util::copy_files_into(&pairs, std::path::Path::new(&dest_dir))
+        .map(|w| w.len())
+        .map_err(|e| e.to_string())
 }
 
 /// Remove the output folder of one run (plain-words Undo). Only run folders
@@ -366,6 +391,7 @@ pub fn run() {
             stage_file,
             file_info,
             save_artifact,
+            save_artifacts,
             reveal_path,
             deps_status,
             deps_refresh,

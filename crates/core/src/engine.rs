@@ -5,13 +5,13 @@
 //! support, permission grants, dependency availability, parameter
 //! validation, isolated scratch directories, timeouts and cancellation.
 
-use crate::deps::DepRegistry;
+use crate::deps::{DepRegistry, Unmet};
 use crate::error::{ToolError, ToolResult};
 use crate::models::ModelRegistry;
-use crate::params::{validate, FileResolver};
+use crate::params::{validate, FileResolver, Params};
 use crate::policy::{ExecLimits, FsPolicy, NetPolicy, PermissionSet};
 use crate::registry::Registry;
-use crate::spec::ToolSpec;
+use crate::spec::{ParamKind, Requirement, ToolSpec};
 use crate::tool::{ContextBuilder, Environment, ProgressFn, ToolOutput};
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -157,10 +157,74 @@ impl Engine {
     }
 
     pub fn info(&self, spec: &ToolSpec) -> ToolInfo {
-        ToolInfo {
-            spec: spec.clone(),
-            availability: self.availability(spec),
+        let mut spec = spec.clone();
+        for p in &mut spec.params {
+            p.unavailable = p
+                .requires
+                .as_ref()
+                .and_then(|r| self.deps.check(r).err())
+                .map(|u| u.message());
+            if let ParamKind::Enum { options, .. } = &mut p.kind {
+                for o in options {
+                    o.unavailable = o
+                        .requires
+                        .as_ref()
+                        .and_then(|r| self.deps.check(r).err())
+                        .map(|u| u.message());
+                }
+            }
         }
+        ToolInfo {
+            availability: self.availability(&spec),
+            spec,
+        }
+    }
+
+    /// Reject chosen options this install cannot do, before the tool runs.
+    fn check_requirements(&self, spec: &ToolSpec, params: &Params) -> ToolResult<()> {
+        let unmet = |param: &str, req: &Requirement| match self.deps.check(req) {
+            Ok(()) => Ok(()),
+            Err(Unmet::MissingDependency {
+                dependency, hint, ..
+            }) => Err(ToolError::MissingDependency { dependency, hint }),
+            Err(Unmet::Unsupported(m)) => Err(ToolError::invalid(param, m)),
+        };
+        for p in &spec.params {
+            let Some(v) = params.get(&p.name) else {
+                continue;
+            };
+            if let Some(cond) = &p.show_if {
+                let cur = params.get(&cond.param);
+                let shown = cond.values.iter().any(|want| match cur {
+                    Some(Value::Array(a)) => a.iter().any(|c| loose_eq(c, want)),
+                    Some(c) => loose_eq(c, want),
+                    None => false,
+                });
+                if !shown {
+                    continue;
+                }
+            }
+            if let Some(req) = &p.requires {
+                if !matches!(v, Value::Bool(false)) && v.as_str() != Some("") {
+                    unmet(&p.name, req)?;
+                }
+            }
+            if let ParamKind::Enum { options, .. } = &p.kind {
+                let chosen: Vec<&str> = match v {
+                    Value::Array(a) => a.iter().filter_map(|x| x.as_str()).collect(),
+                    other => other.as_str().into_iter().collect(),
+                };
+                for o in options
+                    .iter()
+                    .filter(|o| chosen.contains(&o.value.as_str()))
+                {
+                    if let Some(req) = &o.requires {
+                        unmet(&p.name, req)?;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn list(&self) -> Vec<ToolInfo> {
@@ -215,6 +279,7 @@ impl Engine {
 
         let fs = req.fs.clone().unwrap_or_else(|| self.config.fs.clone());
         let params = validate(&spec, &req.params, req.resolver, &fs)?;
+        self.check_requirements(&spec, &params)?;
 
         std::fs::create_dir_all(&self.config.temp_root)?;
         let work = tempfile::Builder::new()
@@ -302,6 +367,18 @@ impl Engine {
     }
 }
 
+fn loose_eq(a: &Value, b: &Value) -> bool {
+    a == b
+        || match (a, b) {
+            (Value::String(x), y) | (y, Value::String(x)) => match y {
+                Value::Number(n) => x.parse::<f64>().ok() == n.as_f64(),
+                Value::Bool(v) => x.parse::<bool>().ok() == Some(*v),
+                _ => false,
+            },
+            _ => false,
+        }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::prelude::*;
@@ -368,6 +445,21 @@ mod tests {
                 |_c, _p| Ok(ToolOutput::text("ok")),
             ),
             sync_tool(
+                ToolSpec::new("dev.caps", "Caps", Category::Dev)
+                    .describe("options that need missing engines")
+                    .param(
+                        ParamSpec::choice_of("mode", &["a", "b"])
+                            .default_str("a")
+                            .option_needs("b", Requirement::program("definitely-not-a-dep", "x")),
+                    )
+                    .param(
+                        ParamSpec::boolean("extra")
+                            .show_if("mode", &["a"])
+                            .needs(Requirement::program("definitely-not-a-dep", "y")),
+                    ),
+                |_c, p| Ok(ToolOutput::text(p.str("mode")?)),
+            ),
+            sync_tool(
                 ToolSpec::new("dev.types", "Types", Category::Dev)
                     .describe("coercion")
                     .param(ParamSpec::integer("n").range(1.0, 10.0).required())
@@ -381,6 +473,39 @@ mod tests {
                 },
             ),
         ]
+    }
+
+    #[tokio::test]
+    async fn options_needing_missing_engines_are_marked_and_rejected() {
+        let h = TestHarness::new(tools());
+        let spec = h.engine.registry.get("dev.caps").unwrap().spec().clone();
+        let info = h.engine.info(&spec);
+        assert!(info.availability.available);
+        let mode = info.spec.params.iter().find(|p| p.name == "mode").unwrap();
+        let crate::spec::ParamKind::Enum { options, .. } = &mode.kind else {
+            panic!("mode is an enum");
+        };
+        assert_eq!(options[0].unavailable, None);
+        assert_eq!(
+            options[1].unavailable.as_deref(),
+            Some("Requires definitely-not-a-dep")
+        );
+        let extra = info.spec.params.iter().find(|p| p.name == "extra").unwrap();
+        assert!(extra.unavailable.is_some());
+
+        let ok = h.run("dev.caps", json!({"mode": "a"})).await.unwrap();
+        assert_eq!(ok.text.as_deref(), Some("a"));
+        let e = h.run("dev.caps", json!({"mode": "b"})).await.unwrap_err();
+        assert_eq!(e.code(), "missing_dependency");
+        let e = h
+            .run("dev.caps", json!({"mode": "a", "extra": true}))
+            .await
+            .unwrap_err();
+        assert_eq!(e.code(), "missing_dependency");
+        // Turned off, or hidden by show_if, it doesn't block the run.
+        h.run("dev.caps", json!({"mode": "a", "extra": false}))
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

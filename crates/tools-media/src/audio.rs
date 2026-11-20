@@ -210,6 +210,49 @@ fn format_args(
     }
 }
 
+/// FFmpeg encoder each target format needs (PCM encoders are always built in).
+const FORMAT_ENCODERS: &[(&str, &str)] = &[
+    ("mp3", "libmp3lame"),
+    ("m4a", "aac"),
+    ("ogg", "libvorbis"),
+    ("opus", "libopus"),
+    ("flac", "flac"),
+    ("alac", "alac"),
+    ("wma", "wmav2"),
+    ("ac3", "ac3"),
+];
+
+/// Target formats, each marked with the encoder it needs so UIs can
+/// disable the ones this FFmpeg build lacks.
+fn format_choice() -> ParamSpec {
+    FORMAT_ENCODERS.iter().fold(
+        ParamSpec::choice("format", FORMATS).default_str("mp3"),
+        |p, (f, enc)| p.option_needs(f, Requirement::ffmpeg_encoder(enc)),
+    )
+}
+
+/// Sample rates, each limited to the target formats that can encode it.
+fn rate_choice_for_format(name: &str) -> ParamSpec {
+    let mut p = rate_choice(name);
+    let rates: Vec<String> = match &p.kind {
+        dogubako_core::spec::ParamKind::Enum { options, .. } => {
+            options.iter().map(|o| o.value.clone()).collect()
+        }
+        _ => vec![],
+    };
+    for r in rates.iter().filter_map(|r| r.parse::<u32>().ok()) {
+        let ok: Vec<&str> = FORMATS
+            .iter()
+            .map(|f| f.0)
+            .filter(|f| unsupported_rate(f, r).is_none())
+            .collect();
+        if ok.len() < FORMATS.len() {
+            p = p.option_only_if(&r.to_string(), "format", &ok);
+        }
+    }
+    p
+}
+
 fn depth_choice() -> ParamSpec {
     ParamSpec::choice(
         "bit_depth",
@@ -293,10 +336,10 @@ fn convert() -> Arc<dyn Tool> {
         .describe("Convert audio (or the soundtrack of videos) to MP3, AAC/M4A, Ogg Vorbis, Opus, FLAC, WAV, AIFF, ALAC, WMA or AC-3 with bitrate, VBR, sample rate, channel and bit-depth control")
         .keywords(&["mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "aiff", "alac", "wma", "transcode", "format"])
         .param(audio_input(true))
-        .param(ParamSpec::choice("format", FORMATS).default_str("mp3"))
+        .param(format_choice())
         .param(ParamSpec::integer("bitrate").label("Bitrate (kbit/s)").range(32.0, 640.0).default_int(192).show_if("format", &["mp3", "m4a", "ogg", "opus", "wma", "ac3"]))
         .param(ParamSpec::integer("vbr_quality").label("VBR quality (0 = best, 9 = smallest)").range(0.0, 9.0).describe("Use variable bitrate instead of a fixed bitrate (MP3 / Vorbis)").show_if("format", &["mp3", "ogg"]).advanced())
-        .param(rate_choice("sample_rate").advanced())
+        .param(rate_choice_for_format("sample_rate").advanced())
         .param(ParamSpec::choice("channels", &[("keep", "Keep"), ("1", "Mono"), ("2", "Stereo")]).default_str("keep").advanced())
         .param(depth_choice().show_if("format", &["wav", "flac", "aiff"]).advanced());
     async_tool(spec, |ctx, p| async move {
@@ -378,7 +421,20 @@ fn convert() -> Arc<dyn Tool> {
                 .span(span(i, files.len()), format!("Converting {}", f.name))
                 .run(&ctx)
                 .await?;
-            rep.file(&ctx, f, &out, vec![json!(enc)], json!({"encoder": enc}))?;
+            let opr = probe(&ctx, &out).await?;
+            let codec = opr.audio_codec().unwrap_or(enc).to_string();
+            let depth = opr.audio_bit_depth();
+            let label = match opr.audio_depth_label() {
+                Some(d) => format!("{codec} ({d})"),
+                None => codec.clone(),
+            };
+            rep.file(
+                &ctx,
+                f,
+                &out,
+                vec![json!(label)],
+                json!({"encoder": codec, "bit_depth": depth}),
+            )?;
         }
         Ok(rep.finish())
     })
@@ -962,8 +1018,8 @@ fn normalize() -> Arc<dyn Tool> {
         .param(ParamSpec::choice("mode", &[("loudness", "Loudness (EBU R128)"), ("peak", "Peak")]).default_str("loudness"))
         .param(ParamSpec::choice("preset", &[("streaming", "Streaming (−14 LUFS)"), ("podcast", "Podcast (−16 LUFS)"), ("broadcast", "Broadcast EBU R128 (−23 LUFS)"), ("custom", "Custom")]).default_str("streaming").show_if("mode", &["loudness"]))
         .param(ParamSpec::number("target_lufs").range(-70.0, -5.0).default_num(-16.0).show_if("preset", &["custom"]))
-        .param(ParamSpec::number("true_peak").label("True peak (dBTP)").range(-9.0, 0.0).default_num(-1.5).show_if("mode", &["loudness"]).advanced())
-        .param(ParamSpec::number("lra").label("Loudness range (LU)").range(1.0, 50.0).default_num(11.0).show_if("mode", &["loudness"]).advanced())
+        .param(ParamSpec::number("true_peak").label("True peak (dBTP)").range(-9.0, 0.0).default_num(-1.5).describe("Ceiling for peaks after normalizing; only changes the result when the louder audio would peak above it").show_if("mode", &["loudness"]).advanced())
+        .param(ParamSpec::number("lra").label("Loudness range (LU)").range(1.0, 50.0).default_num(11.0).describe("Only applies when normalization has to compress dynamics (shown as \"dynamic\" in the result); a plain gain change keeps the original range").show_if("mode", &["loudness"]).advanced())
         .param(ParamSpec::number("peak_db").label("Peak level (dBFS)").range(-30.0, 0.0).default_num(-1.0).show_if("mode", &["peak"]));
     async_tool(spec, |ctx, p| async move {
         let files = p.files("input").to_vec();
@@ -1231,13 +1287,10 @@ fn sample_rate() -> Arc<dyn Tool> {
                 .run(&ctx)
                 .await?;
             let opr = probe(&ctx, &out).await?;
-            let desc = format!(
-                "{} Hz {}",
-                opr.sample_rate().unwrap_or(0),
-                opr.audio()
-                    .and_then(|a| a["sample_fmt"].as_str())
-                    .unwrap_or("")
-            );
+            let desc = match opr.audio_depth_label() {
+                Some(d) => format!("{} Hz {d}", opr.sample_rate().unwrap_or(0)),
+                None => format!("{} Hz", opr.sample_rate().unwrap_or(0)),
+            };
             rep.file(
                 &ctx,
                 f,
@@ -1401,6 +1454,12 @@ fn detect_silence() -> Arc<dyn Tool> {
 // ---------------------------------------------------------------------------
 // Visualizations
 
+/// `#rrggbbaa` with an alpha below `ff`.
+fn color_has_alpha(hex: &str) -> bool {
+    let h = hex.trim_start_matches('#');
+    h.len() == 8 && !h[6..].eq_ignore_ascii_case("ff")
+}
+
 fn waveform() -> Arc<dyn Tool> {
     let spec = audio_spec("audio.waveform", "Audio Waveform")
         .describe("Render a waveform image (PNG) of audio with custom size, colors and scale, and optionally export min/max peak data as JSON")
@@ -1409,7 +1468,7 @@ fn waveform() -> Arc<dyn Tool> {
         .param(ParamSpec::integer("width").range(64.0, 8000.0).default_int(1800))
         .param(ParamSpec::integer("height").range(32.0, 4000.0).default_int(280))
         .param(ParamSpec::color("color").default_str("#3b82f6"))
-        .param(ParamSpec::color("background").default_str("#ffffff"))
+        .param(ParamSpec::color("background").default_str("#ffffff").describe("Background colour; #rrggbbaa sets its opacity. Ignored when Transparent is on"))
         .param(ParamSpec::boolean("transparent").describe("Transparent background instead of a color"))
         .param(ParamSpec::boolean("split_channels").describe("Draw each channel separately"))
         .param(ParamSpec::choice("scale", &[("lin", "Linear"), ("log", "Logarithmic"), ("sqrt", "Square root"), ("cbrt", "Cube root")]).default_str("lin").advanced())
@@ -1429,10 +1488,13 @@ fn waveform() -> Arc<dyn Tool> {
                 ff_color(p.str_or("color", "#3b82f6")),
                 p.str_or("scale", "lin")
             );
+            let bg = p.str_or("background", "#ffffff");
             let fc = if p.bool("transparent") {
                 format!("{wave}[out]")
+            } else if color_has_alpha(bg) {
+                format!("{wave}[w];color=c={}:s={w}x{h},format=rgba[b];[b][w]overlay=format=auto:shortest=1,format=rgba[out]", ff_color(bg))
             } else {
-                format!("{wave}[w];color=c={}:s={w}x{h}[b];[b][w]overlay=format=auto:shortest=1,format=rgb24[out]", ff_color(p.str_or("background", "#ffffff")))
+                format!("{wave}[w];color=c={}:s={w}x{h}[b];[b][w]overlay=format=auto:shortest=1,format=rgb24[out]", ff_color(bg))
             };
             let out = out_path(&ctx, f, "waveform", "png");
             Ff::new()
@@ -2160,6 +2222,45 @@ mod tests {
         assert_eq!(vorbis_kbps_range(96000, 2), None);
         assert_eq!(vorbis_kbps_range(64000, 6), Some((84, 1440)));
         assert_eq!(vorbis_kbps_range(6000, 1), None);
+    }
+
+    #[test]
+    fn format_and_rate_options_carry_their_limits() {
+        use dogubako_core::spec::{ParamKind, Requirement};
+        let opts = |p: ParamSpec| match p.kind {
+            ParamKind::Enum { options, .. } => options,
+            _ => panic!("enum"),
+        };
+        let fmts = opts(format_choice());
+        let mp3 = fmts.iter().find(|o| o.value == "mp3").unwrap();
+        assert_eq!(
+            mp3.requires,
+            Some(Requirement::ffmpeg_encoder("libmp3lame"))
+        );
+        assert!(fmts
+            .iter()
+            .find(|o| o.value == "wav")
+            .unwrap()
+            .requires
+            .is_none());
+
+        let rates = opts(rate_choice_for_format("sample_rate"));
+        let allowed = |r: &str| -> Option<Vec<String>> {
+            let o = rates.iter().find(|o| o.value == r).unwrap();
+            o.only_if.as_ref().map(|c| {
+                assert_eq!(c.param, "format");
+                c.values
+                    .iter()
+                    .map(|v| v.as_str().unwrap().to_string())
+                    .collect()
+            })
+        };
+        assert_eq!(allowed("keep"), None);
+        assert_eq!(allowed("48000"), None);
+        let hi = allowed("96000").unwrap();
+        assert!(hi.contains(&"flac".to_string()) && hi.contains(&"m4a".to_string()));
+        assert!(!hi.contains(&"mp3".to_string()) && !hi.contains(&"opus".to_string()));
+        assert!(!allowed("44100").unwrap().contains(&"opus".to_string()));
     }
 
     #[test]

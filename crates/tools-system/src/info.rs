@@ -586,7 +586,7 @@ fn network_interfaces() -> Arc<dyn Tool> {
 
 fn processes() -> Arc<dyn Tool> {
     let spec = ToolSpec::new("system.processes", "Top Processes", Category::System)
-        .describe("Top running processes by CPU or memory with PID, user, status and start time (command lines only on request)")
+        .describe("Top running processes by CPU (% of one core, so busy multi-threaded processes can exceed 100%) or memory with PID, user, status and start time (command lines only on request)")
         .keywords(&["process", "task manager", "top", "htop", "cpu hog", "memory usage", "running programs", "pid"])
         .param(ParamSpec::choice("sort_by", &[("cpu", "CPU usage"), ("memory", "Memory"), ("name", "Name"), ("pid", "PID"), ("start", "Newest first")]).default_str("cpu"))
         .param(ParamSpec::integer("limit").label("Number of processes").range(1.0, 500.0).default_int(25))
@@ -685,7 +685,13 @@ fn processes() -> Arc<dyn Tool> {
             items.push(item);
         }
         let mut cols = vec![
-            "pid", "name", "cpu %", "memory", "status", "user", "started",
+            "pid",
+            "name",
+            "cpu % (per core)",
+            "memory",
+            "status",
+            "user",
+            "started",
         ];
         if include_cmd {
             cols.push("command");

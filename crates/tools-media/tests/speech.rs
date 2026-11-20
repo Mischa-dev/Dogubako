@@ -168,6 +168,21 @@ async fn transcript_convert_and_shift() {
         .await
         .unwrap();
     assert!(out.text.unwrap().contains("00:00:01.500 --> 00:00:02.250"));
+    for half in [json!({"fps_from": 25}), json!({"fps_to": 25})] {
+        let mut params = json!({"text": srt});
+        params
+            .as_object_mut()
+            .unwrap()
+            .extend(half.as_object().unwrap().clone());
+        let e = h.run("speech.subtitle_shift", params).await.unwrap_err();
+        assert_eq!(e.code(), "invalid_input");
+    }
+    let e = h
+        .run("speech.subtitle_shift", json!({"text": srt, "offset": -60}))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "invalid_input");
+    assert!(e.to_string().contains("empty"), "{e}");
 }
 
 #[tokio::test]
@@ -414,6 +429,19 @@ async fn video_subtitle_tools() {
         let out = h.run("video.subtitles_burn", json!({"input": [s(&v)], "subtitles": s(&srt), "font_size": 18, "color": "#ffff00", "position": "top"})).await.unwrap();
         assert!(codec(&out.artifacts[0].path, "subtitle").is_none());
         assert_eq!(dims(&out.artifacts[0].path), (320, 240));
+        assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+        let out = h
+            .run(
+                "video.subtitles_burn",
+                json!({"input": [s(&with_subs)], "subtitles": s(&srt), "stream": 0}),
+            )
+            .await
+            .unwrap();
+        assert!(
+            out.warnings.iter().any(|w| w.contains("track number")),
+            "{:?}",
+            out.warnings
+        );
         let out = h
             .run(
                 "video.subtitles_burn",

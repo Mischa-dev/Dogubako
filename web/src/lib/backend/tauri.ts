@@ -206,6 +206,16 @@ export class TauriBackend implements Backend {
     if (dest) await invoke('save_artifact', { src: a.path, dest });
   }
 
+  async saveArtifacts(artifacts: Artifact[]) {
+    const items = artifacts.filter((a) => a.path).map((a) => ({ path: a.path, name: a.name, rel_path: a.rel_path ?? null }));
+    if (!items.length) return null;
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const dir = await open({ directory: true, multiple: false, title: 'Save all to folder' });
+    if (!dir) return null;
+    const saved = await invoke<number>('save_artifacts', { items, destDir: String(dir) });
+    return { saved, dir: String(dir) };
+  }
+
   // ---------------------------------------------------------------- assistant
   async assistantInfo(): Promise<AssistantInfo> {
     return { enabled: true, server_provider: null, private_network: true };

@@ -289,6 +289,26 @@ async fn compress_png_and_jpeg() {
         .unwrap();
     assert_eq!(open(&out.artifacts[0].path).dimensions(), (64, 64));
     assert!(out.data["saved_percent"].as_f64().unwrap() > 0.0);
+    let tiny = save(
+        &h,
+        "tiny.png",
+        &RgbaImage::from_pixel(8, 8, Rgba([0, 0, 0, 255])),
+    );
+    let out = h
+        .run(
+            "image.compress",
+            json!({"input": [s(&tiny)], "format": "jpg"}),
+        )
+        .await
+        .unwrap();
+    assert!(out.artifacts[0].name.ends_with(".jpg"));
+    assert!(
+        out.warnings
+            .iter()
+            .any(|w| w.contains("format stays the same")),
+        "{:?}",
+        out.warnings
+    );
 }
 
 #[tokio::test]
@@ -796,4 +816,51 @@ async fn imagemagick_fallback_for_input_formats() {
         .await
         .unwrap();
     assert_eq!(open(&out.artifacts[0].path).dimensions(), (20, 10));
+}
+
+#[tokio::test]
+async fn imagemagick_formats_this_install_cannot_write_are_marked_and_rejected() {
+    let h = harness();
+    let spec = h
+        .engine
+        .registry
+        .get("image.convert")
+        .unwrap()
+        .spec()
+        .clone();
+    let info = h.engine.info(&spec);
+    let format = info
+        .spec
+        .params
+        .iter()
+        .find(|p| p.name == "format")
+        .unwrap();
+    let dogubako_core::spec::ParamKind::Enum { options, .. } = &format.kind else {
+        panic!("format is an enum");
+    };
+    let a = save(&h, "a.png", &pattern(16, 16, false));
+    for fmt in ["heic", "jxl", "jp2", "psd"] {
+        let o = options.iter().find(|o| o.value == fmt).unwrap();
+        assert!(
+            o.requires.is_some(),
+            "{fmt} not marked as needing ImageMagick"
+        );
+        let Some(reason) = &o.unavailable else {
+            continue;
+        };
+        let e = h
+            .run("image.convert", json!({"input": s(&a), "format": fmt}))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(e.code(), "invalid_input" | "missing_dependency"),
+            "{fmt}: {e}"
+        );
+        if e.code() == "invalid_input" {
+            assert!(
+                e.to_string().contains(&fmt.to_uppercase()),
+                "{fmt}: {e} / {reason}"
+            );
+        }
+    }
 }
