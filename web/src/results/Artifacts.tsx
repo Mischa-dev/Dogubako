@@ -28,6 +28,7 @@ export const ArtifactList = memo(function ArtifactList({ artifacts, jobId, input
   const autoOpen = !collapsed && artifacts.length <= 4;
   const [saving, setSaving] = useState(false);
   const hasFolders = artifacts.some((a) => a.rel_path?.includes('/'));
+  const canZip = !!server && !!jobId && artifacts.length > 1;
   const canSaveAll = artifacts.length > 1 && !server && !!backend.saveArtifacts && artifacts.some((a) => a.path);
   const saveAll = async () => {
     setSaving(true);
@@ -44,7 +45,7 @@ export const ArtifactList = memo(function ArtifactList({ artifacts, jobId, input
     <div className="artifacts">
       <div className="output-head">
         <span className="output-title">{artifacts.length === 1 ? 'Output file' : `${artifacts.length} output files`}</span>
-        {server && jobId && artifacts.length > 1 && (
+        {server && jobId && canZip && (
           <a className="btn btn-secondary btn-sm" href={server.zipUrl(jobId)} download title={hasFolders ? 'The zip keeps the folders shown on each file' : undefined}>
             <Archive size={14} aria-hidden /><span>Download all (.zip)</span>
           </a>
@@ -54,7 +55,7 @@ export const ArtifactList = memo(function ArtifactList({ artifacts, jobId, input
         )}
       </div>
       {hasFolders && (
-        <p className="muted small">{server && jobId ? 'Download all keeps these folders.' : canSaveAll ? 'Save all keeps these folders.' : 'Saving one file at a time saves it without its folder.'}</p>
+        <p className="muted small">{canZip ? 'Download all keeps these folders.' : canSaveAll ? 'Save all keeps these folders.' : 'Saving one file at a time saves it without its folder.'}</p>
       )}
       <ul className="artifact-list">
         {artifacts.map((a, i) => (

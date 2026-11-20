@@ -49,4 +49,13 @@ describe('ArtifactList save all', () => {
     expect(screen.getByText('Download all keeps these folders.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Save all/ })).toBeNull();
   });
+
+  it('server: a single foldered output explains the flat per-file save', () => {
+    backend.mode = 'server';
+    backend.zipUrl = (id: string) => `/api/v1/jobs/${id}/artifacts.zip`;
+    backend.downloadUrl = () => '/x';
+    render(<ArtifactList artifacts={arts.slice(2)} jobId="job1" collapsed />);
+    expect(screen.queryByRole('link', { name: /Download all/ })).toBeNull();
+    expect(screen.getByText('Saving one file at a time saves it without its folder.')).toBeTruthy();
+  });
 });
