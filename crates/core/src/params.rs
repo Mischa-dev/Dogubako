@@ -328,7 +328,50 @@ pub fn validate(
             }
         }
     }
+    for p in &spec.params {
+        check_max_if(p, &out.values)?;
+    }
     Ok(out)
+}
+
+fn check_max_if(p: &ParamSpec, values: &Map<String, Value>) -> ToolResult<()> {
+    let Some(n) = values.get(&p.name).and_then(Value::as_f64) else {
+        return Ok(());
+    };
+    let as_text = |v: &Value| match v {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
+    };
+    for cap in &p.max_if {
+        let Some(cur) = values.get(&cap.param) else {
+            continue;
+        };
+        let lifted = cap
+            .unless_set
+            .iter()
+            .any(|q| values.get(q).is_some_and(|v| !v.is_null()));
+        let cur = as_text(cur);
+        if !lifted && n > cap.max && cap.values.iter().any(|v| as_text(v) == cur) {
+            return Err(ToolError::invalid(
+                &p.name,
+                format!(
+                    "must be at most {} when {} is {cur}{}",
+                    cap.max,
+                    cap.param,
+                    unless_text(cap)
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn unless_text(cap: &crate::spec::MaxIf) -> String {
+    if cap.unless_set.is_empty() {
+        String::new()
+    } else {
+        format!(" (unless {} is set)", cap.unless_set.join(" or "))
+    }
 }
 
 fn is_text(p: &ParamSpec) -> bool {

@@ -9979,7 +9979,19 @@
        "wma",
        "ac3"
       ]
-     }
+     },
+     "max_if": [
+      {
+       "param": "format",
+       "values": [
+        "mp3"
+       ],
+       "max": 320,
+       "unless_set": [
+        "vbr_quality"
+       ]
+      }
+     ]
     },
     {
      "name": "vbr_quality",

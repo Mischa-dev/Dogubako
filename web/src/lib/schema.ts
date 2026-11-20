@@ -72,6 +72,24 @@ function matches(cond: ShowIf, values: FormValues): boolean {
   return Array.isArray(cur) ? cur.some((c) => vals.some((v) => looseEq(c, v))) : vals.some((v) => looseEq(cur, v));
 }
 
+/** A numeric param's maximum under the current values (its max_if caps applied). */
+export function effectiveMax(p: ParamSpec, values: FormValues): number | undefined {
+  if (p.type !== 'integer' && p.type !== 'number') return undefined;
+  let max = p.max;
+  for (const cap of p.max_if ?? []) {
+    const lifted = cap.unless_set?.some((q) => values[q] != null && values[q] !== '');
+    if (!lifted && matches(cap, values) && (max == null || cap.max < max)) max = cap.max;
+  }
+  return max;
+}
+
+/** The param as the form should show it now: numeric maximums lowered by max_if. */
+export function withLimits(p: ParamSpec, values: FormValues): ParamSpec {
+  if ((p.type !== 'integer' && p.type !== 'number') || !p.max_if?.length) return p;
+  const max = effectiveMax(p, values);
+  return max === p.max ? p : { ...p, max };
+}
+
 /** Why an enum option can't be used right now (install capability or another param's value), or null. */
 export function optionIssue(o: EnumOption, values: FormValues, all?: ParamSpec[]): string | null {
   if (o.unavailable) return o.unavailable;
@@ -151,7 +169,8 @@ export function validate(tool: Pick<ToolInfo, 'params'>, values: FormValues): Fo
       if (!Number.isFinite(n)) { errs[p.name] = 'Enter a number'; continue; }
       if (p.type === 'integer' && !Number.isInteger(n)) { errs[p.name] = 'Enter a whole number'; continue; }
       if (p.min != null && n < p.min) { errs[p.name] = `Must be at least ${p.min}`; continue; }
-      if (p.max != null && n > p.max) { errs[p.name] = `Must be at most ${p.max}`; continue; }
+      const max = effectiveMax(p, values);
+      if (max != null && n > max) { errs[p.name] = `Must be at most ${max}`; continue; }
     }
     if (p.type === 'json') {
       try { JSON.parse(String(v)); } catch (e) { errs[p.name] = `Invalid JSON: ${(e as Error).message}`; }

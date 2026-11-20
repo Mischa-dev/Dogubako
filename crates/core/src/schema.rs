@@ -103,6 +103,20 @@ pub fn param_schema(p: &ParamSpec, file_mode: &str) -> Value {
     if let Some(existing) = s.get("description").and_then(|d| d.as_str()) {
         desc = format!("{desc} ({existing})");
     }
+    for cap in &p.max_if {
+        let vals: Vec<String> = cap.values.iter().map(value_text).collect();
+        desc = format!(
+            "{desc} At most {} when {} is {}{}.",
+            cap.max,
+            cap.param,
+            vals.join(" or "),
+            if cap.unless_set.is_empty() {
+                String::new()
+            } else {
+                format!(" (unless {} is set)", cap.unless_set.join(" or "))
+            }
+        );
+    }
     s["description"] = json!(desc);
     if let Some(d) = &p.default {
         if !p.is_file() {
@@ -110,6 +124,13 @@ pub fn param_schema(p: &ParamSpec, file_mode: &str) -> Value {
         }
     }
     s
+}
+
+fn value_text(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
+    }
 }
 
 /// Schema for the common tool result envelope.
