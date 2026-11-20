@@ -994,6 +994,25 @@ async fn office_conversion() {
     assert!(std::fs::read(&out.artifacts[0].path)
         .unwrap()
         .starts_with(b"%PDF"));
+    let out = h
+        .run(
+            "pdf.convert_document",
+            json!({"input": [s(&txt)], "format": "odt"}),
+        )
+        .await
+        .unwrap();
+    assert!(out.artifacts[0].name.ends_with("letter.odt"));
+    for fmt in ["xlsx", "ods", "csv", "pptx", "odp"] {
+        let err = h
+            .run(
+                "pdf.convert_document",
+                json!({"input": [s(&txt)], "format": fmt}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "invalid_input", "{fmt}");
+        assert!(err.to_string().contains("text document"), "{err}");
+    }
     if h.available("pdf.markup_to_pdf") {
         let out = h
             .run(
