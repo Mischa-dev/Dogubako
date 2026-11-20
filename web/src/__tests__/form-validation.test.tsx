@@ -102,6 +102,25 @@ describe('tool form validation', () => {
     expect(result.current.stale).toBe(false);
     expect(Object.keys(result.current.shownErrors)).toEqual([]);
   });
+
+  it('shows a tool check error when another field makes untouched content invalid', () => {
+    const qr = tool({
+      id: 'dev.qr_generate', name: 'QR',
+      params: [
+        { name: 'text', label: 'Content', type: 'text', multiline: true, required: true },
+        { name: 'error_correction', label: 'Error correction', type: 'choice', options: [{ value: 'M', label: 'M' }, { value: 'H', label: 'H' }], default: 'M' },
+      ],
+    } as never);
+    const check = (v: Record<string, unknown>): Record<string, string> => (String(v.text ?? '').length > (v.error_correction === 'H' ? 10 : 20) ? { text: 'Too long' } : {});
+    const { result } = renderHook(() => useToolForm(qr, { check }));
+    // Restored values (a reopened job or remembered params) do not mark fields touched.
+    act(() => result.current.setValues((v) => ({ ...v, text: 'x'.repeat(15) })));
+    expect(result.current.shownErrors.text).toBeUndefined();
+    act(() => result.current.setValue('error_correction', 'H'));
+    expect(result.current.valid).toBe(false);
+    expect(result.current.shownErrors.text).toBe('Too long');
+  });
+
   it('keeps over-long text, shows it is too long and blocks Run instead of truncating', () => {
     const rename = tool({ id: 'file.rename', name: 'Rename', params: [
       { name: 'pattern', label: 'Pattern', type: 'text', max_len: 10 },

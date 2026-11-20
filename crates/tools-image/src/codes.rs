@@ -32,6 +32,42 @@ impl Matrix {
     }
 }
 
+/// Longest content a version-40 QR code holds at each error-correction level
+/// (L, M, Q, H): digits only, uppercase alphanumeric, and UTF-8 bytes.
+const QR_CAPACITY: [(&str, &str, [usize; 3]); 4] = [
+    ("L", "Low", [7089, 4296, 2953]),
+    ("M", "Medium", [5596, 3391, 2331]),
+    ("Q", "Quartile", [3993, 2420, 1663]),
+    ("H", "High", [3057, 1852, 1273]),
+];
+
+/// Absolute maximum content length of any QR code (digits at Low).
+pub const QR_MAX_LEN: usize = QR_CAPACITY[0].2[0];
+
+fn qr_too_long(text: &str, ec: &str) -> ToolError {
+    let (_, name, [digits, alnum, bytes]) = QR_CAPACITY
+        .iter()
+        .find(|c| c.0 == ec)
+        .copied()
+        .unwrap_or(QR_CAPACITY[1]);
+    let msg = if text.bytes().all(|b| b.is_ascii_digit()) {
+        format!("{} digits", text.len())
+    } else if text
+        .bytes()
+        .all(|b| b.is_ascii_digit() || b.is_ascii_uppercase() || b" $%*+-./:".contains(&b))
+    {
+        format!("{} characters", text.len())
+    } else {
+        format!("{} bytes", text.len())
+    };
+    ToolError::invalid(
+        "text",
+        format!(
+            "content is too long for a QR code at {name} error correction ({msg}); it holds up to {bytes} bytes of text ({alnum} uppercase letters and digits, or {digits} digits only). Shorten it or choose a lower error correction level"
+        ),
+    )
+}
+
 pub fn qr_matrix(text: &str, ec: &str) -> ToolResult<Matrix> {
     let level = match ec {
         "L" => qrcode::EcLevel::L,
@@ -39,8 +75,12 @@ pub fn qr_matrix(text: &str, ec: &str) -> ToolResult<Matrix> {
         "H" => qrcode::EcLevel::H,
         _ => qrcode::EcLevel::M,
     };
-    let code = qrcode::QrCode::with_error_correction_level(text.as_bytes(), level)
-        .map_err(|e| ToolError::invalid("text", format!("cannot encode as QR code: {e}")))?;
+    let code = qrcode::QrCode::with_error_correction_level(text.as_bytes(), level).map_err(
+        |e| match e {
+            qrcode::types::QrError::DataTooLong => qr_too_long(text, ec),
+            e => ToolError::invalid("text", format!("cannot encode as QR code: {e}")),
+        },
+    )?;
     let w = code.width();
     let bits = code
         .to_colors()
@@ -303,7 +343,7 @@ fn qr_common_params() -> Vec<ParamSpec> {
             .required()
             .primary()
             .placeholder("https://example.com")
-            .max_len(4296),
+            .max_len(QR_MAX_LEN),
         ParamSpec::integer("size")
             .describe("Image size in pixels")
             .range(64.0, 4096.0)
@@ -343,7 +383,20 @@ fn render_qr_outputs(
     } else {
         p.str_or("error_correction", "M")
     };
-    let m = qr_matrix(text, ec)?;
+    let m = qr_matrix(text, ec).map_err(|e| match e {
+        ToolError::InvalidInput { message, .. }
+            if logo.is_some() && message.starts_with("content is too long") =>
+        {
+            ToolError::invalid(
+                "text",
+                message.replace(
+                    "Shorten it or choose a lower error correction level",
+                    "A logo needs High error correction; shorten the content or remove the logo",
+                ),
+            )
+        }
+        e => e,
+    })?;
     let r = QrRender {
         size: p.int_or("size", 512) as u32,
         margin: p.int_or("margin", 4) as u32,
