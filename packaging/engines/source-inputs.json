@@ -1,0 +1,509 @@
+{
+  "ca-certificates": {
+    "bottle_sha256": "8589f4e61b3afcc5ea375aab11af1c891ec4c94421c699c2a5a4765078de4443",
+    "recipe_sha256": "4abe22fb50b45cd5e113747a92a115e0479c4017502d7e8a87132a340b742d84",
+    "inputs": [],
+    "source": {
+      "url": "https://curl.se/ca/cacert-2026-10-20.pem",
+      "sha256": "796f1389bfea13c0ed78f663b765baaff54a508e5483786bd6ece73c5e3e3cbe"
+    }
+  },
+  "cairo": {
+    "bottle_sha256": "2eb1ea8f47088a4bddf68c052eef3ef5e52a5bc1369118d432db6bea2e363853",
+    "recipe_sha256": "9f872499482a41849cf1a706b7b1287e3f30242fbd5f95c17da74aac595ac725",
+    "inputs": [],
+    "source": {
+      "url": "https://cairographics.org/releases/cairo-1.18.6.tar.xz",
+      "sha256": "1c767308174337a74694da0f3ec069c271452163a1ef4540964c50c301f157d4"
+    }
+  },
+  "exiftool": {
+    "bottle_sha256": "d349210864b16b26f0896e5dc6869a065b6b32434519765f2b6ab25012d53e10",
+    "recipe_sha256": "4b151ae8d3cc48ff482c0e9ca24ad00995f0a87b8c376cd92da6d9823af94b2a",
+    "inputs": [
+      {
+        "url": "https://cpan.metacpan.org/authors/id/P/PH/PHRED/Archive-Zip-1.68.tar.gz",
+        "sha256": "984e185d785baf6129c6e75f8eb44411745ac00bf6122fb1c8e822a3861ec650"
+      },
+      {
+        "url": "https://cpan.metacpan.org/authors/id/P/PM/PMQS/Compress-Raw-Lzma-2.225.tar.gz",
+        "sha256": "1292b126d831822f6b45c6c02c4fc69cc5ffbf6dc8f2515ff4f301cfcfcf684d"
+      },
+      {
+        "url": "https://cpan.metacpan.org/authors/id/L/LE/LEONT/File-Slurper-0.014.tar.gz",
+        "sha256": "d5a36487339888c3cd758e648160ee1d70eb4153cacbaff57846dbcefb344b0c"
+      },
+      {
+        "url": "https://cpan.metacpan.org/authors/id/T/TI/TIMLEGGE/IO-Compress-Brotli-0.022.tar.gz",
+        "sha256": "364d2f4131548d6fac5f2df7750d0bd8ebfee10a7c28eb05e7b98ce6ac7facc1"
+      },
+      {
+        "url": "https://cpan.metacpan.org/authors/id/G/GO/GOZER/POSIX-strptime-0.13.tar.gz",
+        "sha256": "a818109829e35a4ac79677d68063865f40c87c99ca7f3a20890177a8f8e5c277"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/Homebrew/homebrew-core/046433224d7dab924cb05164a4b78aa7292f6f89/Patches/exiftool/unbundle-brotli.diff",
+        "sha256": "34ddadcaf596066a5fb8e95f8034ccc1bf9e01cb6652fb6248a1bdfacf9b4ebe"
+      }
+    ],
+    "source": {
+      "url": "https://downloads.sourceforge.net/project/exiftool/Image-ExifTool-13.55.tar.gz",
+      "sha256": "5f4c81d34ad406538c2871ad72dbfceb5d9b412b2f16cbbeb4d712d270846667"
+    }
+  },
+  "ffmpeg": {
+    "bottle_sha256": "65ba8ccb4778a0554346f416cd9a64c6cce2f92c7af5effb48deb6b757f01678",
+    "recipe_sha256": "af2c76ee6026cda4df125d2245cff9d24731d54fb969c193e53d4b0a94f63362",
+    "inputs": [],
+    "source": {
+      "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
+      "sha256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e"
+    }
+  },
+  "fribidi": {
+    "bottle_sha256": "a6b2601a1cfa7c14ecc0b98a2018a5ec1b11a8ca939918442b770964abf601ca",
+    "recipe_sha256": "aebb8b26fdaacbc188660b4b765705c1f22b45fc30914ca3e027a7de545704c3",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/fribidi/fribidi/releases/download/v1.0.18/fribidi-1.0.18.tar.xz",
+      "sha256": "1de5e8073d035388b71d0b2d452b1da1f8caeea8a7702997b401fe1b6250727f"
+    }
+  },
+  "gettext": {
+    "bottle_sha256": "98a116d35792ccd730360ffc8c0d8fc5799b2282b96bb7696192c573f064a331",
+    "recipe_sha256": "74dbc9cbf1c427c148b5d5247adfb43957b5d02be20a4e1d162aa903f0dd614e",
+    "inputs": [],
+    "source": {
+      "url": "https://ftpmirror.gnu.org/gettext/gettext-1.0.tar.gz",
+      "sha256": "85d99b79c981a404874c02e0342176cf75c7698e2b51fe41031cf6526d974f1a"
+    }
+  },
+  "ghostscript": {
+    "bottle_sha256": "e2ef1284b4e8818c789f968ffa2193b9d4f51c0879ca1d2a93be5239efc2bc95",
+    "recipe_sha256": "ea188b4003cad4dca3ac7b46dd56391d04cfe506da0a7c074dbf0a7b9ed86277",
+    "inputs": [
+      {
+        "url": "https://downloads.sourceforge.net/project/gs-fonts/gs-fonts/8.11%20%28base%2035%2C%20GPL%29/ghostscript-fonts-std-8.11.tar.gz",
+        "sha256": "0eb6f356119f2e49b2563210852e17f57f9dcc5755f350a69a46a0d641a0c401"
+      }
+    ],
+    "source": {
+      "url": "https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10080/ghostpdl-10.08.0.tar.xz",
+      "sha256": "94943e3c4adb7115d132b3c28b913672f2e62e6a9d802f7e754e716b1634174a"
+    }
+  },
+  "glib": {
+    "bottle_sha256": "ce9568a335281cb6bd12c48fd89d7a118a046f9df16761c120826fdae116e468",
+    "recipe_sha256": "7352a67a6a1a15554d996d38886812e858bebbbcbf3985901724cab444ee3b3b",
+    "inputs": [
+      {
+        "url": "https://download.gnome.org/sources/gobject-introspection/1.86/gobject-introspection-1.86.0.tar.xz",
+        "sha256": "920d1a3fcedeadc32acff95c2e203b319039dd4b4a08dd1a2dfd283d19c0b9ae"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/Homebrew/homebrew-core/046433224d7dab924cb05164a4b78aa7292f6f89/Patches/glib/hardcoded-paths.diff",
+        "sha256": "d846efd0bf62918350da94f850db33b0f8727fece9bfaf8164566e3094e80c97"
+      }
+    ],
+    "source": {
+      "url": "https://download.gnome.org/sources/glib/2.90/glib-2.90.1.tar.xz",
+      "sha256": "93c941aa17d5eb1d53fe838365f29a8b4e539c222a256d974ec8f30fc413e396"
+    }
+  },
+  "gmp": {
+    "bottle_sha256": "b30bf31c50c294e0981d2a7cb4c149e9c43f50f3cf4f7f552c3dcf9da66b95b5",
+    "recipe_sha256": "48e3695140b8b9ce2cba663bf47e2015cf2c4b489d1ce5728f4c719afc65adc8",
+    "inputs": [],
+    "source": {
+      "url": "https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz",
+      "sha256": "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
+    }
+  },
+  "gnupg": {
+    "bottle_sha256": "91163072d2759706aa41c014bc865019900eaa815ab5bd017263ab059694addf",
+    "recipe_sha256": "cb39cf745dea2547a67bb6e78175a6b29c0faa6f4c7ea5f0ad367a7e01f44d00",
+    "inputs": [
+      {
+        "url": "https://github.com/gpg/gnupg/commit/42386bcf8861f04c1bdec5cbb139a03da83d8ef9.patch?full_index=1",
+        "sha256": "93817449be3f93dcade3d79960e33e72959f54f95ff6108f22176bef28111f2b"
+      },
+      {
+        "url": "https://github.com/gpg/gnupg/commit/5523cec6913bcbd1a374d183899a6f298d2c0e32.patch?full_index=1",
+        "sha256": "0a0acd2f7f25723f3f84ec5c4ecf03b786d73ca61c48487d4d00c0559be89d66"
+      }
+    ],
+    "source": {
+      "url": "https://gnupg.org/ftp/gcrypt/gnupg/gnupg-2.5.24.tar.bz2",
+      "sha256": "bf149d01a2b9fcc0e4589b8ae8697d3d5c557ea48ed95a3fa55dd3b1187e6039"
+    }
+  },
+  "gnutls": {
+    "bottle_sha256": "0c8ba0cb42636a98b28a2c173b33c4298a286972a9838d27602f0bbc860acdbb",
+    "recipe_sha256": "1fd64640421eff9fa1508491c82279832647b1bf4475abfc6ead4fea2534f7d0",
+    "inputs": [
+      {
+        "url": "https://gitlab.com/gnutls/gnutls/-/commit/29c2027c963cf559817d0da37c1fc2efd0c1bd6a.diff",
+        "sha256": "c0bfc0164ff131c9d2e1c4d0367430f8b767b64c9c21e0f408bd634d21fb0302"
+      }
+    ],
+    "source": {
+      "url": "https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.13.tar.xz",
+      "sha256": "ffed8ec1bf09c2426d4f14aae377de4753b53e537d685e604e99a8b16ca9c97e"
+    }
+  },
+  "gpgme": {
+    "bottle_sha256": "1b998805d11e6020682577dd8b817e7ff771bac1d6e289c142f8b079308475b4",
+    "recipe_sha256": "52a601311da12ef2587462a4b95237f98d987da442d9ee26d71e52bbf500a0fb",
+    "inputs": [],
+    "source": {
+      "url": "https://www.gnupg.org/ftp/gcrypt/gpgme/gpgme-2.2.0.tar.bz2",
+      "sha256": "7160e80e84dafd00d956c84891c533bb7ab16a6a54fbe1574b2f3acf0496977b"
+    }
+  },
+  "gpgmepp": {
+    "bottle_sha256": "bc1ad2a64e672863fe6501a4877e9f2f5d7cabdd4111cf4093badfa1e6928e3a",
+    "recipe_sha256": "e5d7f4aa009e5ad5616e1729984d33e11148a29f150880b2f99f02503018b91c",
+    "inputs": [],
+    "source": {
+      "url": "https://www.gnupg.org/ftp/gcrypt/gpgmepp/gpgmepp-2.2.0.tar.xz",
+      "sha256": "6651c5f7f801543d5b676719df9fec8053b0a6f5aba40b98ca0d2bee11136f30"
+    }
+  },
+  "graphite2": {
+    "bottle_sha256": "bcbf8282acc59c6ed6a0c9a7cf076935735c21de1495bb4e22c3d6bf32f31ee0",
+    "recipe_sha256": "dc60f1784330fbf36c320a92dbf31b0f4f5ed83bab6b252963cdade7b87f6d49",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/silnrsi/graphite/releases/download/1.3.15/graphite2-1.3.15.tgz",
+      "sha256": "c6bc8b4252724665297f7cad0c55897285c673f9b8e6db3522ace833593fe0b1"
+    }
+  },
+  "jbig2dec": {
+    "bottle_sha256": "f581562914f78e334b62715f38a94884e133a0f5fd9f865bd51a6404250a650b",
+    "recipe_sha256": "a3ccaa378c82d224669a94bed3604e38754df9ba06fc1b7559d3a6fb29695ffd",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/ArtifexSoftware/jbig2dec/archive/refs/tags/0.20.tar.gz",
+      "sha256": "a9705369a6633aba532693450ec802c562397e1b824662de809ede92f67aff21"
+    }
+  },
+  "lame": {
+    "bottle_sha256": "552d24d56ff0d3255e9a3519a368d0ce45de86b5b2967b338209c1a22cd12969",
+    "recipe_sha256": "54e93fd2d82f830c4a53f56f61afb352c465ea96d37f7e34db48257c78bb5478",
+    "inputs": [],
+    "source": {
+      "url": "https://downloads.sourceforge.net/project/lame/lame/4.0/lame-4.0.tar.gz",
+      "sha256": "3df5124d5ad3a98312ffd7ba6a9b36230e4f8a3e66d3ce0f425e336c32d216eb"
+    }
+  },
+  "libassuan": {
+    "bottle_sha256": "1430611fe9f337d6a7568a12321f125c567ca8d4d2bdcd7ff0717bdcd82a32dc",
+    "recipe_sha256": "6a1486e8358153b2f6ed1f1618b5f3f3c98b7b5cbeafdac82b10f89995267268",
+    "inputs": [],
+    "source": {
+      "url": "https://gnupg.org/ftp/gcrypt/libassuan/libassuan-3.0.2.tar.bz2",
+      "sha256": "d2931cdad266e633510f9970e1a2f346055e351bb19f9b78912475b8074c36f6"
+    }
+  },
+  "libdatrie": {
+    "bottle_sha256": "59dcf66f922dd1edaa379fb0ef30034585a7a1760ad0887c95afc0ff00ea667c",
+    "recipe_sha256": "f804d166063a33d6865d00ba1efccc802ce3b362903d9b7e32a933eaa00afbfb",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/tlwg/libdatrie/releases/download/v0.2.14/libdatrie-0.2.14.tar.xz",
+      "sha256": "f04095010518635b51c2313efa4f290b7db828d6273e39b2b8858f859dfe81d5"
+    }
+  },
+  "libde265": {
+    "bottle_sha256": "12810efc8cf343799cc9619ebe99f41248c5a5c07efcfa3c73d7c5488a976cbe",
+    "recipe_sha256": "b6006f46b601402e5502956b757d9aefc4b2eca43f14eb48cc0457b83ac882aa",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/strukturag/libde265/releases/download/v1.1.3/libde265-1.1.3.tar.gz",
+      "sha256": "554228bd17788c99a7e63b37ab5634722190e6e2bf60c1dcb01cef328e133905"
+    }
+  },
+  "libgcrypt": {
+    "bottle_sha256": "c314eec8280f768dba978c7c55a569d3944505d7d709285e4721f24ae765748c",
+    "recipe_sha256": "3385548916b16224540d08673d6b24a52ab1ada87550ba8913867c93d5db6529",
+    "inputs": [],
+    "source": {
+      "url": "https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.12.4.tar.bz2",
+      "sha256": "d77f68f48879510e79a2f65977ccc68981781ea0923e5bdffac2a193ea3d660e"
+    }
+  },
+  "libgpg-error": {
+    "bottle_sha256": "d209486b1890cf8194a71c00d976bdb4708ff82336232e4b7b38c64f7686de6d",
+    "recipe_sha256": "ff00ce9602dbbd948f58e26009c038f1e33dec1223bc2f5c89e088c296973d09",
+    "inputs": [],
+    "source": {
+      "url": "https://gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.61.tar.bz2",
+      "sha256": "7a85413f2bc354f4f8aa832b718af122e48965e9e0eb9012ee659c13c6385c93"
+    }
+  },
+  "libheif": {
+    "bottle_sha256": "e9b55aa4e52656b23436826996bfaa1f42f9d27f6126b6694ab216f2b0aac656",
+    "recipe_sha256": "a1e1dda0891c69e93e36802ed9d6b22f5e6fb8978e8067bc68a20d1cc931457d",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/strukturag/libheif/releases/download/v1.23.7/libheif-1.23.7.tar.gz",
+      "sha256": "f7483e818503ea6224c8863e4a56ac02c7089021a98472c811c12aa19faf2475"
+    }
+  },
+  "libidn": {
+    "bottle_sha256": "cca2f1b581655791c18cfb0384074b78c49ff32b3c13d9ccab12f5fbc949cb4d",
+    "recipe_sha256": "dc2ab871075c6ce8493270a2ff93e64e2414dde5bea2a9f58b9a12bc83db3ec7",
+    "inputs": [],
+    "source": {
+      "url": "https://ftpmirror.gnu.org/libidn/libidn-1.44.tar.gz",
+      "sha256": "499608bab3a65650a0ea52888c13a8deebe3f71408e319acd9ec52e02eb13959"
+    }
+  },
+  "libidn2": {
+    "bottle_sha256": "1eb02bfa40ec00b7ea64d8608fcf2115069d99de5a35eb3e2b3ac444a695ea46",
+    "recipe_sha256": "8994e093d93d516c9942a8f13039011b5743f9f30d4ba2cb5ab40de7ca28ec4e",
+    "inputs": [],
+    "source": {
+      "url": "https://ftpmirror.gnu.org/libidn/libidn2-2.3.8.tar.gz",
+      "sha256": "f557911bf6171621e1f72ff35f5b1825bb35b52ed45325dcdee931e5d3c0787a"
+    }
+  },
+  "libksba": {
+    "bottle_sha256": "cc1bfa116e5e7550d0caeee4aba27203aa15ceb485083f5a6e91e6ab9c7011dd",
+    "recipe_sha256": "b6e3b564f61e965fcd695d2680faa19e8e93d60d99a7a1f349d9e9866ca53e6e",
+    "inputs": [],
+    "source": {
+      "url": "https://gnupg.org/ftp/gcrypt/libksba/libksba-1.8.1.tar.bz2",
+      "sha256": "c2f84393011827219ae117131dba8e7684c2bed0961eed11b0642c2acba440b5"
+    }
+  },
+  "libtasn1": {
+    "bottle_sha256": "973e0fd7d529808f53fa9ae281020bcbcc750a1dff60e5e5bc37c0da274cca5e",
+    "recipe_sha256": "751ed417e412362cc0764381e59f342bf860c06cf6aea840cd3ab7d84c538bfe",
+    "inputs": [],
+    "source": {
+      "url": "https://ftpmirror.gnu.org/libtasn1/libtasn1-4.21.0.tar.gz",
+      "sha256": "1d8a444a223cc5464240777346e125de51d8e6abf0b8bac742ac84609167dc87"
+    }
+  },
+  "libthai": {
+    "bottle_sha256": "428726b804e7bb80faef7381ba27b0be1a0087e54746d0f355c0af7575220ac6",
+    "recipe_sha256": "6d3f3561d438da721136b22e15b18f567e0c35c266c5ea5ed0090e2de9479b99",
+    "inputs": [],
+    "source": {
+      "url": "https://linux.thai.net/pub/thailinux/software/libthai/libthai-0.1.30.tar.xz",
+      "sha256": "ddba8b53dfe584c3253766030218a88825488a51a7deef041d096e715af64bdd"
+    }
+  },
+  "libtool": {
+    "bottle_sha256": "86f6495e08630095d0a0a4a8be76d8ba0350985a55ec13fb43a73f5473d2a410",
+    "recipe_sha256": "725532b53263fa67aa5e9a660bcd498b312c13da54d34d42788e073ced587031",
+    "inputs": [],
+    "source": {
+      "url": "https://ftpmirror.gnu.org/libtool/libtool-2.6.2.tar.xz",
+      "sha256": "2ef1067c16c97db930fd740cc9bc3d3ba9a583804ae5ac42cc3e8719e49e191e"
+    }
+  },
+  "libunistring": {
+    "bottle_sha256": "5001abe192babcfaf0f97ad322e2e59958d0d991de3da9f2e941b24924b8a2b8",
+    "recipe_sha256": "5a0ff014063865e7acebbe3b0e1e5b4434773b8124975898e235e78440279d6d",
+    "inputs": [],
+    "source": {
+      "url": "https://ftpmirror.gnu.org/libunistring/libunistring-1.5.tar.gz",
+      "sha256": "5b0ecd46cbf225375f20ab4056197e66a7ac590e2684c069af407ae3383c9d81"
+    }
+  },
+  "libusb": {
+    "bottle_sha256": "a8d271bd5d9e7065987960caa52a9130d7fe6321ff1bad751499e465d0413e38",
+    "recipe_sha256": "fad2c080e3d107b6c1e453864992fd26b89202e7b894aabc4d2facfed2193340",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/libusb/libusb/releases/download/v1.0.30/libusb-1.0.30.tar.bz2",
+      "sha256": "fea36f34f9156400209595e300840767ab1a385ede1dc7ee893015aea9c6dbaf"
+    }
+  },
+  "lzo": {
+    "bottle_sha256": "6bb0401c41a18fd37071ec9591fe053a808f07552ff7ea22542faa470eb8e589",
+    "recipe_sha256": "2c3b7ea57aa5fa1db58bba9eb9f7a77768882322e15071e0ca3aad5d02295932",
+    "inputs": [],
+    "source": {
+      "url": "https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz",
+      "sha256": "c0f892943208266f9b6543b3ae308fab6284c5c90e627931446fb49b4221a072"
+    }
+  },
+  "m4": {
+    "bottle_sha256": "80f871ba39104ef553d5a15e2c70639c69dd4fb76568842f5dc1ef451918c6a8",
+    "recipe_sha256": "97c9736f5cf78fd30ce27a7e570ae8e77c15a227612418fe2f03cf4ab49e0e2f",
+    "inputs": [],
+    "source": {
+      "url": "https://ftpmirror.gnu.org/m4/m4-1.4.21.tar.xz",
+      "sha256": "f25c6ab51548a73a75558742fb031e0625d6485fe5f9155949d6486a2408ab66"
+    }
+  },
+  "mpg123": {
+    "bottle_sha256": "80869bcfed43252f222be16fd652b8e691cb4a144778681853ed76e1d45a7143",
+    "recipe_sha256": "309cb93b622f9eaedb587e3e2f2263a21f59177c18c49349936f3bf4d1aa9e88",
+    "inputs": [],
+    "source": {
+      "url": "https://www.mpg123.de/download/mpg123-1.33.7.tar.bz2",
+      "sha256": "31d0e35a4ca567ec9b5ebda6c3062bb4435d6d3eacd6ef0d95cadd7854dc03ee"
+    }
+  },
+  "nettle": {
+    "bottle_sha256": "01050aa13ce3825fc1b81f1a3c5994a165301b9d5223a9fb9015d122bde5ca3e",
+    "recipe_sha256": "b1ed3c65911e70e6d51807f3b55ef59d893cb1f6172d6889b55bd90f7641ae35",
+    "inputs": [],
+    "source": {
+      "url": "https://ftpmirror.gnu.org/nettle/nettle-4.0.tar.gz",
+      "sha256": "3addbc00da01846b232fb3bc453538ea5468da43033f21bb345cb1e9073f5094"
+    }
+  },
+  "npth": {
+    "bottle_sha256": "7836af0109be87ab2b8155b533cd33508eb3b738190031c8ca2e2b94df6f5c2b",
+    "recipe_sha256": "34af3a04400c18e41b4a085a6f564d99fa967cc7b36cf565a979043aeaa58ff1",
+    "inputs": [],
+    "source": {
+      "url": "https://gnupg.org/ftp/gcrypt/npth/npth-1.8.tar.bz2",
+      "sha256": "8bd24b4f23a3065d6e5b26e98aba9ce783ea4fd781069c1b35d149694e90ca3e"
+    }
+  },
+  "nspr": {
+    "bottle_sha256": "afa910ba680a2a951e5e624ff83f756ba7a53a2647cb1aabdf602cb94468eee2",
+    "recipe_sha256": "9c6909e003d0ffd513a520423d97491ab4ca9a083009ca76fcc739096941f154",
+    "inputs": [],
+    "source": {
+      "url": "https://archive.mozilla.org/pub/nspr/releases/v4.40/src/nspr-4.40.tar.gz",
+      "sha256": "c0c1884c627f3db7a783f7c7314c695226b2043696791d15519e7e0578c19bdc"
+    }
+  },
+  "nss": {
+    "bottle_sha256": "4fd8e58614e3fa0071cb70d0a9f8c16e56e956d900831a08ac1bd5bb8786048a",
+    "recipe_sha256": "2ae180b8c377b181f1ee9186fd6fc4260ebfd3ee86f29ec16dc38ce3b9cc14c6",
+    "inputs": [],
+    "source": {
+      "url": "https://ftp.mozilla.org/pub/security/nss/releases/NSS_3_132_RTM/src/nss-3.132.tar.gz",
+      "sha256": "ee9cf4837ba801141a804321c4462ad8f452ff4314275c6d5108a6b05af227ff"
+    }
+  },
+  "pandoc": {
+    "bottle_sha256": "edf323d702a29b36d6fc516a9515c2155c5da517e86adf1b8000557a006906ad",
+    "recipe_sha256": "0970df0b08b76ea4e47934bb8eb689d10a1187761071cc93ea1c13463e9dde11",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/jgm/pandoc/archive/refs/tags/3.13.tar.gz",
+      "sha256": "fbf6044766b0c9be5ccbf18ffe657124449e8563a177d85662ecb6f031f9c308"
+    }
+  },
+  "pango": {
+    "bottle_sha256": "4fa58f7090be47c43b3d7411aa961bd0a67cf84850554f08eb7b0a41cab0b0e9",
+    "recipe_sha256": "76a53ae335049f16d35ec276bcc72d31f03a8e159bac858e4d0fdb911fb10d78",
+    "inputs": [],
+    "source": {
+      "url": "https://download.gnome.org/sources/pango/1.58/pango-1.58.2.tar.xz",
+      "sha256": "342385b6ca3b7c73455d7c80a13b7dbe4489e00bc3bd4c5bd6ed4dce421e374a"
+    }
+  },
+  "pinentry": {
+    "bottle_sha256": "eb7ffd4b8a4f31ce85cf0395656bbc1fd5241fdc1b9f92d9900e813993d4e1e0",
+    "recipe_sha256": "bf13d19c1ae0f0049ac8dad28a260fc94298d74a8376a579c0108ba1257afe32",
+    "inputs": [],
+    "source": {
+      "url": "https://www.gnupg.org/ftp/gcrypt/pinentry/pinentry-1.3.3.tar.bz2",
+      "sha256": "c2970f16d6afb66ecddfca767d743936c86239bff936eed7fd7597a678414b63"
+    }
+  },
+  "poppler": {
+    "bottle_sha256": "22f3925ca1c4338daae2775b48a7e4f658e340360b4c61d06b7835daf992e4ee",
+    "recipe_sha256": "0acc1b332a9cbc3fdda67863db7f917ddd070c408a194d33e9ba695d00326f9e",
+    "inputs": [
+      {
+        "url": "https://poppler.freedesktop.org/poppler-data-0.4.12.tar.gz",
+        "sha256": "c835b640a40ce357e1b83666aabd95edffa24ddddd49b8daff63adb851cdab74"
+      }
+    ],
+    "source": {
+      "url": "https://poppler.freedesktop.org/poppler-26.10.0.tar.xz",
+      "sha256": "6792cb7c69205007ad87d2e936cecc5b3a31fac29ab54ffc3175fdb6b2a6ce35"
+    }
+  },
+  "readline": {
+    "bottle_sha256": "461763fa21c050a59e5bbceedf67dcacf24e4aa4604490d73f0c9fa0f40e7fe5",
+    "recipe_sha256": "a65ebe6faf79ab5f39e02d263cac7ec93d9813c4617658453f0ca341922555a0",
+    "inputs": [
+      {
+        "url": "https://ftpmirror.gnu.org/readline/readline-8.3-patches/readline83-001",
+        "sha256": "21f0a03106dbe697337cd25c70eb0edbaa2bdb6d595b45f83285cdd35bac84de"
+      },
+      {
+        "url": "https://ftpmirror.gnu.org/readline/readline-8.3-patches/readline83-002",
+        "sha256": "e27364396ba9f6debf7cbaaf1a669e2b2854241ae07f7eca74ca8a8ba0c97472"
+      },
+      {
+        "url": "https://ftpmirror.gnu.org/readline/readline-8.3-patches/readline83-003",
+        "sha256": "72dee13601ce38f6746eb15239999a7c56f8e1ff5eb1ec8153a1f213e4acdb29"
+      },
+      {
+        "url": "https://ftpmirror.gnu.org/readline/readline-8.3-patches/readline83-004",
+        "sha256": "1f189c4566aa35950964647b9ec3be1a821e42b86048129c63eb7f9d4d2f5a74"
+      },
+      {
+        "url": "https://ftpmirror.gnu.org/readline/readline-8.3-patches/readline83-005",
+        "sha256": "5481adbe161c9f6ba972c74db9e18c7aa351d3df3035cc4a673a1aa06247d1c6"
+      },
+      {
+        "url": "https://ftpmirror.gnu.org/readline/readline-8.3-patches/readline83-006",
+        "sha256": "4ebd261a608287796e171af0ea9af5a1e3122e46672accda2484b6698c47c1a4"
+      }
+    ],
+    "source": {
+      "url": "https://ftpmirror.gnu.org/readline/readline-8.3.tar.gz",
+      "sha256": "fe5383204467828cd495ee8d1d3c037a7eba1389c22bc6a041f627976f9061cc"
+    }
+  },
+  "sevenzip": {
+    "bottle_sha256": "e124aa458799b02323904f800b05a5442f79efb7818ee3cd654a745c501116a2",
+    "recipe_sha256": "cd5219f77038ab4b1867483fd6f60f2f05d43d9ca5f93134a0fba3cffeb73e9f",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/ip7z/7zip/archive/refs/tags/26.05.tar.gz",
+      "sha256": "989c658cef4c13124ed1f4ff7330a6ce5ab22cefdbbc9daae9b2c110dde9a63b"
+    }
+  },
+  "x264": {
+    "bottle_sha256": "a613d44ead5d3999270970f41283eadfad8001061faf063945def6b8fb5145f4",
+    "recipe_sha256": "9165e288b689999b374401c1045a1904102ff279fb534f514d6569fcb608e264",
+    "inputs": [],
+    "source": {
+      "git": "https://code.videolan.org/videolan/x264.git",
+      "revision": "b35605ace3ddf7c1a5d67a2eb553f034aef41d55",
+      "tag": null
+    }
+  },
+  "x265": {
+    "bottle_sha256": "18e89a5822e2f4f91f919c5bf2fbac31433a561c48174fc15e13b4911a1232ac",
+    "recipe_sha256": "e7bb844d3fb9a1ac402a41d21a507cdc0f532455479b3467a58335541c27ea98",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/Multicorewareinc/x265/releases/download/4.3/x265_4.3.tar.gz",
+      "sha256": "83c53e4c8bbb8f1e33ed59e10a7d621d1d7801ca853910c3eb41f038b8ffb121"
+    }
+  },
+  "xz": {
+    "bottle_sha256": "c2724c0db0398134694b8366d30d14f4de376115fb54c559c331d5fd0474af76",
+    "recipe_sha256": "0a0ec0394575eadc853cdb509c8ababc01c8926b973bd76841a1f6f254e1ebdf",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/tukaani-project/xz/releases/download/v5.8.4/xz-5.8.4.tar.gz",
+      "sha256": "0014c7886930454fe8bd4228665b51af55eeae560ea135c9c4cd33f55b2591d9"
+    }
+  },
+  "zstd": {
+    "bottle_sha256": "d72adf48460a8384b256f88061cd7b9df4977df7fa2e0794051d427db754a565",
+    "recipe_sha256": "9a9b0183896886e82b915af4db576f27d34d1cee7757d6c5beb0e1eb74c68e0d",
+    "inputs": [],
+    "source": {
+      "url": "https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz",
+      "sha256": "37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3"
+    }
+  }
+}
