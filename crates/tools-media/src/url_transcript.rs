@@ -7,7 +7,7 @@ use crate::speech::{default_threads, language_name, model_param, run_whisper, Wh
 use crate::subtitles::{
     detect_format, format_segments, parse_any, segments_table, to_json, to_md, Segment,
 };
-use dogubako_core::net::check_url;
+use dogubako_core::net::{check_url, resolve_checked};
 use dogubako_core::prelude::*;
 use dogubako_core::process::Exec;
 use std::path::{Path, PathBuf};
@@ -150,7 +150,13 @@ pub fn pick_track(info: &Value, lang: &str, allow_auto: bool) -> Option<Track> {
 pub fn dedupe_rolling(segs: &[Segment]) -> Vec<Segment> {
     let mut out = vec![];
     let mut last = String::new();
+    let mut last_end = f64::NEG_INFINITY;
     for s in segs {
+        // Roll-up cues follow on directly; after a gap, repeated text is new speech.
+        if s.start - last_end > 0.05 {
+            last.clear();
+        }
+        last_end = s.end;
         let text = s.plain_text();
         let lines: Vec<&str> = text
             .lines()
@@ -227,7 +233,9 @@ pub fn ytdlp_error(stderr: &str) -> ToolError {
         "login",
         "members",
         "--cookies",
-        "age",
+        "age-restricted",
+        "age restricted",
+        "confirm your age",
     ]) {
         "the video needs a signed-in account: add a cookies.txt exported from a browser that can play it under Cookies"
     } else if has(&["your country", "geo", "region"]) {
@@ -521,9 +529,15 @@ fn transcribe_url() -> Arc<dyn Tool> {
             ToolError::PermissionDenied { message } => ToolError::denied(message),
             other => ToolError::invalid("url", other.to_string()),
         })?;
-        if url.host_str().is_none_or(str::is_empty) {
+        let Some(host) = url.host_str().filter(|h| !h.is_empty()) else {
             return Err(ToolError::invalid("url", "the URL has no host"));
-        }
+        };
+        resolve_checked(
+            ctx.net_policy(),
+            host,
+            url.port_or_known_default().unwrap_or(443),
+        )
+        .await?;
         let source = p.str_or("source", "auto").to_string();
         let lang = p.str_or("language", "auto").trim().to_string();
         let lang = if lang.is_empty() {
@@ -646,7 +660,7 @@ fn transcribe_url() -> Arc<dyn Tool> {
                     None,
                 )
             }
-            None if source == "captions" || (lang != "auto" && has_any) => {
+            None if source == "captions" || (source != "whisper" && lang != "auto" && has_any) => {
                 return Err(if !has_any && !manual.is_empty() {
                     ToolError::input(
                         "the video only has published captions when auto-generated ones are off",
@@ -858,6 +872,14 @@ mod tests {
     }
 
     #[test]
+    fn repeated_speech_after_a_gap_is_kept() {
+        let vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nthank you\n\n\
+00:00:10.000 --> 00:00:11.000\nthank you\n";
+        let segs = crate::subtitles::parse_vtt(vtt).unwrap();
+        assert_eq!(dedupe_rolling(&segs).len(), 2);
+    }
+
+    #[test]
     fn hls_fragment_duplicates_are_split() {
         let vtt =
             "WEBVTT\n\n1\n00:00:23.997 --> 00:00:28.467\nOne is the extraordinary\nevidence\n\n\
@@ -908,6 +930,11 @@ mod tests {
         assert!(ytdlp_error("ERROR: something odd")
             .to_string()
             .contains("something odd"));
+        assert!(
+            !ytdlp_error("ERROR: [youtube] x: Unable to download webpage: timed out")
+                .to_string()
+                .contains("cookies")
+        );
         assert!(ytdlp_error("").to_string().contains("without a message"));
     }
 
