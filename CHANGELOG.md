@@ -59,6 +59,19 @@ campaign are added here as they merge.
 - Convert Markup to ODT works when Pandoc runs with `--sandbox`.
 - Tool forms show validation errors before Run, disable Run until they are
   fixed, mark a result as stale once its inputs change, and always offer Reset.
+- PDF to Images with a transparent PNG background works: it renders with
+  `pdftocairo`, since `pdftoppm` has no `-transp` flag.
+- Add Subtitles rejects WebM output for sources WebM can't hold as-is (such
+  as h264/aac) before running FFmpeg, instead of failing with `Error: external`.
+- Convert Audio rejects a sample rate the target encoder can't use (MP3 tops
+  out at 48 kHz) as invalid input on `sample_rate`.
+- Create Archive and Compress check the compression level against the format
+  (zip level 0, gzip above 9) and reject an out-of-range level instead of
+  failing at run time or clamping it silently.
+- Extract Subtitles rejects a `track` past the last subtitle track instead of
+  succeeding with no output.
+- Regex Tester's Pattern field accepts multi-line verbose patterns, and an
+  empty pattern or test text hides the previous matches.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 
