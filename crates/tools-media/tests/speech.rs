@@ -161,6 +161,54 @@ async fn video_subtitle_tools() {
         .await
         .unwrap_err();
     assert_eq!(e.code(), "invalid_input");
+    let e = h
+        .run(
+            "video.subtitles_add",
+            json!({"input": s(&v), "subtitles": [s(&srt)], "format": "webm"}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "invalid_input");
+    let msg = e.to_string();
+    assert!(
+        msg.contains("'format'") && msg.contains("WebM cannot hold h264 video"),
+        "{msg}"
+    );
+    let webm = gen(
+        &h,
+        "clip.webm",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=s=160x120:d=2:r=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=f=440:d=2",
+            "-c:v",
+            "libvpx-vp9",
+            "-deadline",
+            "realtime",
+            "-cpu-used",
+            "8",
+            "-c:a",
+            "libopus",
+            "-shortest",
+        ],
+    );
+    let out = h
+        .run(
+            "video.subtitles_add",
+            json!({"input": s(&webm), "subtitles": [s(&srt)], "format": "webm"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.data["subtitle_tracks"][0]["codec"], "webvtt");
+    assert_eq!(
+        codec(&out.artifacts[0].path, "video").as_deref(),
+        Some("vp9")
+    );
     let bad = h.write("bad.srt", b"not subtitles at all");
     let e = h
         .run(
