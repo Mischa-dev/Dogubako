@@ -630,7 +630,7 @@ Also found by: hardsub, hard subtitles, open captions, burn subtitles, render ca
 |---|---|---|---|---|
 | `input` *(required)* | positional | files |  | Videos. Accepts video/\*, .mkv .mp4 .mov .webm .avi .m4v +10 more. |
 | `subtitles` | `--subtitles` | file |  | Accepts .srt .vtt .ass .ssa. |
-| `stream` | `--stream` | integer 0–99 |  | …or burn this embedded subtitle track (0 = first). |
+| `stream` | `--stream` | integer 0–99 |  | …or burn this embedded subtitle track (0 = first; ignored when a subtitle file is chosen). |
 | `font_size` | `--font-size` | integer 0–200 | `0` | 0 = automatic. |
 | `color` | `--color` | color | `#ffffff` |  |
 | `outline_color` | `--outline-color` | color | `#000000` | *Advanced.* |

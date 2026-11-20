@@ -135,7 +135,7 @@ Also found by: compress, optimize, reduce size, smaller, oxipng, tinypng, shrink
 | `format` | `--format` | choice | `same` | One of: `same` (Same as input), `jpg` (JPEG), `webp`, `avif`, `png` (PNG (lossless)). |
 | `max_dimension` | `--max-dimension` | integer 1–100000 |  | Also downscale so the longest edge is at most this many pixels. |
 | `png_level` | `--png-level` | integer 0–6 | `2` | Lossless PNG optimization effort (0–6). *Advanced.* |
-| `keep_if_larger` | `--keep-if-larger` | boolean | `true` | Return the original file when re-encoding would make it larger. |
+| `keep_if_larger` | `--keep-if-larger` | boolean | `true` | Return the original file when re-encoding would make it larger (only when the format and size stay the same). |
 
 ## Image Info
 

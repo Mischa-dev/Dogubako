@@ -167,8 +167,8 @@ Also found by: loudness, lufs, ebu r128, loudnorm, volume leveling, peak, podcas
 | `mode` | `--mode` | choice | `loudness` | One of: `loudness` (Loudness (EBU R128)), `peak`. |
 | `preset` | `--preset` | choice | `streaming` | One of: `streaming` (Streaming (−14 LUFS)), `podcast` (Podcast (−16 LUFS)), `broadcast` (Broadcast EBU R128 (−23 LUFS)), `custom`. Only used when `mode` is `loudness`. |
 | `target_lufs` | `--target-lufs` | number -70–-5 | `-16` | Only used when `preset` is `custom`. |
-| `true_peak` | `--true-peak` | number -9–0 | `-1.5` | True peak (dBTP). Only used when `mode` is `loudness`. *Advanced.* |
-| `lra` | `--lra` | number 1–50 | `11` | Loudness range (LU). Only used when `mode` is `loudness`. *Advanced.* |
+| `true_peak` | `--true-peak` | number -9–0 | `-1.5` | Ceiling for peaks after normalizing; only changes the result when the louder audio would peak above it. Only used when `mode` is `loudness`. *Advanced.* |
+| `lra` | `--lra` | number 1–50 | `11` | Only applies when normalization has to compress dynamics (shown as "dynamic" in the result); a plain gain change keeps the original range. Only used when `mode` is `loudness`. *Advanced.* |
 | `peak_db` | `--peak-db` | number -30–0 | `-1` | Peak level (dBFS). Only used when `mode` is `peak`. |
 
 ## Change Volume
@@ -293,7 +293,7 @@ Also found by: waveform, visualize, peaks, soundwave, image, showwavespic, podca
 | `width` | `--width` | integer 64–8000 | `1800` |  |
 | `height` | `--height` | integer 32–4000 | `280` |  |
 | `color` | `--color` | color | `#3b82f6` |  |
-| `background` | `--background` | color | `#ffffff` |  |
+| `background` | `--background` | color | `#ffffff` | Background colour; #rrggbbaa sets its opacity. Ignored when Transparent is on. |
 | `transparent` | `--transparent` | boolean | `false` | Transparent background instead of a color. |
 | `split_channels` | `--split-channels` | boolean | `false` | Draw each channel separately. |
 | `scale` | `--scale` | choice | `lin` | One of: `lin` (Linear), `log` (Logarithmic), `sqrt` (Square root), `cbrt` (Cube root). *Advanced.* |
