@@ -7,6 +7,7 @@ import {
 } from '../lib/schema';
 import { clearToolParams, loadToolParams, pendingInput, pendingParams, prefs, saveToolParams } from '../lib/store';
 import { acceptMatches } from '../form/FileField';
+import { useStillImage } from '../results/MediaPreview';
 import type { Setter } from '../form/Field';
 import type { InputContext } from '../results/DataViews';
 import { useJob } from './useJob';
@@ -185,20 +186,21 @@ export function useToolForm(
     resetJob();
   }, [tool, resetJob]);
 
-  const input = useMemo<InputContext>(() => {
-    let imageUrl: string | undefined;
+  const inputFile = useMemo(() => {
     for (const p of tool.params) {
       if (p.type !== 'file') continue;
       const it = ((values[p.name] as FileItem[]) ?? []).find((i) => i.status === 'ready' && i.mime.startsWith('image/') && i.mime !== 'image/svg+xml');
-      if (it) {
-        imageUrl = it.localUrl ?? backend.fileUrl({ ref: it.ref!, name: it.name, size: it.size, mime: it.mime });
-        break;
-      }
+      if (it) return { url: it.localUrl ?? backend.fileUrl({ ref: it.ref!, name: it.name, size: it.size, mime: it.mime }), mime: it.mime, name: it.name };
     }
+    return undefined;
+  }, [tool, values, backend]);
+  // TIFF/TGA/QOI/Netpbm inputs are redrawn as PNG so compare, crop and overlays can use them.
+  const { src: imageUrl } = useStillImage(inputFile?.url, inputFile?.mime ?? '', inputFile?.name ?? '');
+  const input = useMemo<InputContext>(() => {
     const textParam = tool.params.find((p) => p.name === 'text' && p.type === 'text') ?? tool.params.find((p) => p.type === 'text' && p.multiline);
     const text = textParam ? String(values[textParam.name] ?? '') : undefined;
     return { imageUrl, text };
-  }, [tool, values, backend]);
+  }, [tool, values, imageUrl]);
 
   // Tell the tool row what this tool is working on (its files, and what came out).
   const firstFile = tool.params.find((p) => p.type === 'file');

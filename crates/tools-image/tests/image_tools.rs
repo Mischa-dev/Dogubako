@@ -26,6 +26,11 @@ async fn convert_many_formats_and_batch() {
             assert_eq!(&b[4..12], b"ftypavif");
             continue;
         }
+        if fmt == "ppm" {
+            // A real binary PPM, not PAM (P7) under a .ppm name.
+            let b = std::fs::read(&out.artifacts[0].path).unwrap();
+            assert_eq!(&b[..2], b"P6");
+        }
         let img = open(&out.artifacts[0].path);
         assert_eq!(img.dimensions(), (64, 48), "{fmt}");
         assert!(

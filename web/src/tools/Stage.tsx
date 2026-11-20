@@ -7,18 +7,21 @@ import { formatBytes } from '../lib/format';
 import { FileThing } from '../components/BenchObject';
 import { ArrowDown } from 'lucide-react';
 import { Button, Spinner, cx } from '../components/ui';
+import { PlayableMedia, StillImage } from '../results/MediaPreview';
 
 const ext = (name: string) => (name.includes('.') ? name.split('.').pop()!.toUpperCase() : '');
 
 function Media({ name, mime, url, controls }: { name: string; mime: string; url: string; controls?: boolean }) {
   const kind = kindOf(mime, name);
-  if (url && kind === 'image') return <img className="stage-img" src={url} alt="" decoding="async" />;
-  if (url && kind === 'video') return <video className="stage-video" src={url} controls={controls} muted preload="metadata" playsInline />;
+  if (url && kind === 'image') {
+    return <StillImage className="stage-img" url={url} mime={mime} name={name} alt="" decoding="async" fallback={<span className="stage-thing"><span className="bo-thing"><FileThing kind={kind} name={name} /></span></span>} />;
+  }
+  if (url && kind === 'video') return <PlayableMedia kind="video" className="stage-video" url={url} name={name} controls={controls} muted playsInline />;
   if (url && kind === 'audio') {
     return (
       <span className="stage-audio">
         <span className="bo-thing"><FileThing kind="audio" name={name} /></span>
-        {controls && <audio src={url} controls preload="metadata" />}
+        {controls && <PlayableMedia kind="audio" url={url} name={name} controls />}
       </span>
     );
   }

@@ -7,6 +7,7 @@ import { formatBytes, formatRelative, formatDateTime } from '../lib/format';
 import { Badge, Button, Callout, EmptyState, IconButton, Meter, Modal, PageHeader, ProgressBar, Segmented, Spinner, useConfirm } from '../components/ui';
 import { fileKindIcon } from '../form/FileField';
 import { previewKind } from '../results/Artifacts';
+import { PlayableMedia, StillImage } from '../results/MediaPreview';
 import { toast } from '../components/toast';
 import { errorText } from '../lib/errors';
 import { pendingInput } from '../lib/store';
@@ -186,9 +187,9 @@ function FilePreview({ f }: { f: FileView }) {
   useEffect(() => {
     if (k === 'text') fetch(url, { credentials: 'same-origin' }).then((r) => r.text()).then(setText).catch(() => setText('(preview unavailable)'));
   }, [k, url]);
-  if (k === 'image') return <div className="img-preview checker"><img src={url} alt={f.name} /></div>;
-  if (k === 'audio') return <audio controls src={url} className="media" />;
-  if (k === 'video') return <video controls src={url} className="media media-video" />;
+  if (k === 'image') return <div className="img-preview checker"><StillImage url={url} mime={f.mime} name={f.name} alt={f.name} /></div>;
+  if (k === 'audio') return <PlayableMedia kind="audio" controls url={url} name={f.name} className="media" />;
+  if (k === 'video') return <PlayableMedia kind="video" controls url={url} name={f.name} className="media media-video" />;
   if (k === 'pdf') return <iframe className="pdf-preview" src={url} title={f.name} />;
   if (k === 'text') return text == null ? <Spinner /> : <pre className="code-view mono preview-text">{text}</pre>;
   return <p className="muted">No preview for this file type.</p>;

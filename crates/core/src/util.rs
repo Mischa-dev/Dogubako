@@ -5,10 +5,24 @@ use std::path::{Component, Path, PathBuf};
 
 /// MIME type for a path, by extension, falling back to content sniffing.
 pub fn mime_for_path(path: &Path) -> String {
+    if let Some(m) = mime_override(path) {
+        return m.to_string();
+    }
     if let Some(m) = mime_guess::from_path(path).first_raw() {
         return m.to_string();
     }
     sniff_mime(path).unwrap_or_else(|| "application/octet-stream".to_string())
+}
+
+/// Types `mime_guess` lacks or gets wrong for files the tools write.
+fn mime_override(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    Some(match ext.as_str() {
+        "qoi" => "image/qoi",
+        "ass" | "ssa" => "text/x-ssa",
+        "m4a" => "audio/mp4",
+        _ => return None,
+    })
 }
 
 /// Detect common formats from magic bytes.
@@ -55,6 +69,8 @@ pub fn sniff_bytes(b: &[u8]) -> Option<&'static str> {
             b"qt  " => "video/quicktime",
             _ => "video/mp4",
         }
+    } else if starts(b"qoif") {
+        "image/qoi"
     } else if starts(b"\x1A\x45\xDF\xA3") {
         "video/webm"
     } else {
@@ -189,6 +205,25 @@ pub fn copy_files_into(items: &[(PathBuf, String)], dest: &Path) -> std::io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mime_for_formats_mime_guess_lacks() {
+        for (name, want) in [
+            ("a.qoi", "image/qoi"),
+            ("subs.ass", "text/x-ssa"),
+            ("subs.SSA", "text/x-ssa"),
+            ("song.m4a", "audio/mp4"),
+            ("a.tga", "image/x-tga"),
+            ("a.ppm", "image/x-portable-pixmap"),
+            ("a.tiff", "image/tiff"),
+        ] {
+            assert_eq!(mime_for_path(Path::new(name)), want, "{name}");
+        }
+        assert_eq!(
+            sniff_bytes(b"qoif\0\0\0\x01\0\0\0\x01\x04\0"),
+            Some("image/qoi")
+        );
+    }
 
     #[test]
     fn plain_rel_path_rejects_escapes() {
