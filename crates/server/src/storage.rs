@@ -164,6 +164,7 @@ impl Storage {
             label: a.label.clone(),
             url: v.url,
             path: None,
+            rel_path: a.rel_path.clone(),
         })
     }
 

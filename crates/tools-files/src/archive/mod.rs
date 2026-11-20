@@ -254,7 +254,11 @@ fn archive_extract() -> Arc<dyn Tool> {
                     .unwrap_or_else(|| "file".into());
                 let out = ctx.output_path(&base);
                 std::fs::rename(&src, &out).or_else(|_| std::fs::copy(&src, &out).map(|_| ()))?;
-                arts.push(ctx.artifact_labeled(&out, &e.rel)?);
+                let mut a = ctx.artifact_labeled(&out, &e.rel)?;
+                if e.rel.contains('/') {
+                    a.rel_path = Some(e.rel.clone());
+                }
+                arts.push(a);
             }
         } else {
             let stem = Path::new(&f.name)
