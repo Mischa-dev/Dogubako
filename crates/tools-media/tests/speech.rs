@@ -209,6 +209,46 @@ async fn video_subtitle_tools() {
         codec(&out.artifacts[0].path, "video").as_deref(),
         Some("vp9")
     );
+    let mixed = gen(
+        &h,
+        "mixed.mkv",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=s=160x120:d=2:r=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=f=440:d=2",
+            "-map",
+            "0",
+            "-map",
+            "1",
+            "-map",
+            "1",
+            "-c:v",
+            "libvpx-vp9",
+            "-deadline",
+            "realtime",
+            "-cpu-used",
+            "8",
+            "-c:a:0",
+            "libopus",
+            "-c:a:1",
+            "aac",
+            "-shortest",
+        ],
+    );
+    let e = h
+        .run(
+            "video.subtitles_add",
+            json!({"input": s(&mixed), "subtitles": [s(&srt)], "format": "webm"}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "invalid_input");
+    assert!(e.to_string().contains("aac audio"), "{e}");
     let bad = h.write("bad.srt", b"not subtitles at all");
     let e = h
         .run(

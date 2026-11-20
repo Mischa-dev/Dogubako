@@ -690,15 +690,20 @@ fn webm_copy_problem(fmt: &str, pr: &Probe) -> Option<String> {
     if fmt != "webm" {
         return None;
     }
-    let mut bad = vec![];
-    if let Some(c) = pr.video_codec() {
-        if !VCodec::from_probe(c).is_some_and(|v| video_ok_in(fmt, v)) {
-            bad.push(format!("{c} video (it needs VP8, VP9 or AV1)"));
-        }
-    }
-    if let Some(c) = pr.audio_codec() {
-        if !audio_copy_ok(fmt, c) {
-            bad.push(format!("{c} audio (it needs Opus or Vorbis)"));
+    let mut bad: Vec<String> = vec![];
+    for st in pr.streams() {
+        let c = st["codec_name"].as_str().unwrap_or("unknown");
+        let problem = match st["codec_type"].as_str() {
+            Some("video") if !VCodec::from_probe(c).is_some_and(|v| video_ok_in(fmt, v)) => {
+                format!("{c} video (it needs VP8, VP9 or AV1)")
+            }
+            Some("audio") if !audio_copy_ok(fmt, c) => {
+                format!("{c} audio (it needs Opus or Vorbis)")
+            }
+            _ => continue,
+        };
+        if !bad.contains(&problem) {
+            bad.push(problem);
         }
     }
     if bad.is_empty() {
