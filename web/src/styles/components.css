@@ -114,6 +114,7 @@
   border: 1px solid var(--border); max-width: 100%; overflow-x: auto; scrollbar-width: none;
 }
 .segmented::-webkit-scrollbar { display: none; }
+.segmented-wrap { flex-wrap: wrap; overflow: visible; }
 .segment {
   display: inline-flex; align-items: center; gap: 5px; height: calc(var(--control-h) - 6px); padding: 0 11px; border-radius: 5px;
   font-size: var(--fs-md); font-weight: 500; color: var(--text-2); white-space: nowrap;
