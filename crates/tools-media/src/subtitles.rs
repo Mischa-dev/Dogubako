@@ -689,8 +689,8 @@ fn subtitle_shift() -> Arc<dyn Tool> {
         .keywords(&["sync subtitles", "delay", "offset", "subtitle timing", "resync", "framerate", "srt"])
         .param(ParamSpec::number("offset").label("Offset (seconds, negative = earlier)").range(-86400.0, 86400.0).default_num(0.0))
         .param(ParamSpec::number("factor").label("Speed factor").range(0.1, 10.0).default_num(1.0).describe("Multiply all times (e.g. 1.001 or 25/23.976)").advanced())
-        .param(ParamSpec::number("fps_from").label("Convert from frame rate").range(1.0, 240.0).describe("Sets the factor to fps_from / fps_to").advanced())
-        .param(ParamSpec::number("fps_to").label("…to frame rate").range(1.0, 240.0).advanced())
+        .param(ParamSpec::number("fps_from").label("Convert from frame rate").range(1.0, 240.0).describe("Sets the factor to fps_from / fps_to (give both; replaces the speed factor)").advanced())
+        .param(ParamSpec::number("fps_to").label("…to frame rate").range(1.0, 240.0).describe("Give together with the 'from' frame rate").advanced())
         .param(ParamSpec::text("from_time").placeholder("00:10:00").describe("Only shift cues starting at or after this time").advanced())
         .param(ParamSpec::choice("output_format", &[("same", "Same as input"), ("srt", "SRT"), ("vtt", "WebVTT")]).default_str("same"))
         .text_output("text/plain")
@@ -701,13 +701,32 @@ fn subtitle_shift() -> Arc<dyn Tool> {
             return Err(ToolError::input("the input has no timing to shift"));
         }
         let mut factor = p.num_or("factor", 1.0);
-        if let (Some(a), Some(b)) = (p.opt_num("fps_from"), p.opt_num("fps_to")) {
-            factor = a / b;
+        match (p.opt_num("fps_from"), p.opt_num("fps_to")) {
+            (Some(a), Some(b)) => factor = a / b,
+            (Some(_), None) => {
+                return Err(ToolError::invalid(
+                    "fps_to",
+                    "give the frame rate to convert to as well",
+                ))
+            }
+            (None, Some(_)) => {
+                return Err(ToolError::invalid(
+                    "fps_from",
+                    "give the frame rate to convert from as well",
+                ))
+            }
+            (None, None) => {}
         }
         let from = opt_time(p, "from_time")?.unwrap_or(0.0);
         let offset = p.num_or("offset", 0.0);
         let shifted = shift(&segs, offset, factor, from);
         let dropped = segs.len() - shifted.len();
+        if shifted.is_empty() && !segs.is_empty() {
+            return Err(ToolError::invalid(
+                "offset",
+                format!("all {dropped} cue(s) would move before 0:00, leaving an empty file"),
+            ));
+        }
         let to = match p.str("output_format")? {
             "same" if from_fmt == "vtt" => "vtt",
             "same" if from_fmt == "json" => "json",
@@ -1011,7 +1030,7 @@ pub(crate) async fn burn_subtitles(
     let ext = out_ext_hint.unwrap_or(re.ext);
     let out = out_path(ctx, f, "burned", ext);
     let mut ff = Ff::new().input(&f.path).cwd(&dir);
-    let bitmap_stream = stream.and_then(|k| {
+    let bitmap_stream = stream.filter(|_| sub_file.is_none()).and_then(|k| {
         let s = pr
             .subtitle_streams()
             .get(k)
@@ -1144,7 +1163,7 @@ fn subtitles_burn() -> Arc<dyn Tool> {
             .keywords(&["hardsub", "hard subtitles", "open captions", "burn subtitles", "render captions"])
             .param(video_input(true))
             .param(ParamSpec::file("subtitles").accept(SUB_ACCEPT))
-            .param(ParamSpec::integer("stream").range(0.0, 99.0).describe("…or burn this embedded subtitle track (0 = first)")),
+            .param(ParamSpec::integer("stream").range(0.0, 99.0).describe("…or burn this embedded subtitle track (0 = first; ignored when a subtitle file is chosen)")),
         None,
     )
     .param(ParamSpec::boolean("override_ass_style").describe("Apply the style options to ASS files too").advanced())
@@ -1168,6 +1187,12 @@ fn subtitles_burn() -> Arc<dyn Tool> {
         }
         let style = burn_style(&p);
         let mut rep = Report::files(&[]);
+        if let (Some(s), Some(k)) = (&sub, stream) {
+            rep.warnings.push(format!(
+                "burned '{}'; the embedded track number ({k}) only applies without a subtitle file",
+                s.name
+            ));
+        }
         for (i, f) in files.iter().enumerate() {
             let pr = probe_video(&ctx, f).await?;
             let out = burn_subtitles(

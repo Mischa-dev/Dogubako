@@ -88,6 +88,8 @@ export interface Artifact {
   label?: string;
   url?: string;
   path?: string;
+  /** Path with folders inside the result set ("docs/a.txt"); Save all and the zip keep it. */
+  rel_path?: string;
 }
 
 export interface JobResult {

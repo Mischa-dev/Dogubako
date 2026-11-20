@@ -611,6 +611,48 @@ async fn archive_roundtrips() {
 }
 
 #[tokio::test]
+async fn archive_extract_reports_folders() {
+    let h = harness();
+    let arc = h.path("nested.zip");
+    {
+        let mut w = zip::ZipWriter::new(std::fs::File::create(&arc).unwrap());
+        let opts = zip::write::SimpleFileOptions::default();
+        for (name, body) in [
+            ("docs/top.txt", "nested"),
+            ("top.txt", "top"),
+            ("docs/sub/deep.txt", "deep"),
+        ] {
+            w.start_file(name, opts).unwrap();
+            std::io::Write::write_all(&mut w, body.as_bytes()).unwrap();
+        }
+        w.finish().unwrap();
+    }
+    let out = h
+        .run("files.archive_extract", json!({"input": s(&arc)}))
+        .await
+        .unwrap();
+    let mut rels: Vec<(Option<String>, String)> = out
+        .artifacts
+        .iter()
+        .map(|a| {
+            (
+                a.rel_path.clone(),
+                std::fs::read_to_string(&a.path).unwrap(),
+            )
+        })
+        .collect();
+    rels.sort();
+    assert_eq!(
+        rels,
+        vec![
+            (Some("docs/sub/deep.txt".to_string()), "deep".to_string()),
+            (Some("docs/top.txt".to_string()), "nested".to_string()),
+            (Some("top.txt".to_string()), "top".to_string()),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn compression_levels_follow_format_ranges() {
     let h = harness();
     let data: Vec<u8> = (0..20_000u32)

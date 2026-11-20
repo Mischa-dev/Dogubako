@@ -263,8 +263,9 @@ fn vad_tool() -> Arc<dyn Tool> {
                     .enumerate()
                     .map(|(i, (a, b))| format!("{a:.6}\t{b:.6}\tspeech {}\n", i + 1))
                     .collect();
-                out = out
-                    .with_artifact(ctx.write_output(&format!("{stem}-labels.txt"), s.as_bytes())?);
+                out = out.with_artifact(
+                    ctx.write_output(&format!("{stem}-speech-labels.txt"), s.as_bytes())?,
+                );
             }
             _ => {}
         }

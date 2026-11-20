@@ -229,6 +229,8 @@ mark.match.alt { background: var(--mark-2); box-shadow: 0 0 0 1px color-mix(in s
 .stat-title { font-size: var(--fs-sm); font-weight: 650; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stat-meter { display: flex; flex-direction: column; gap: 5px; }
 .stat-meter-head { display: flex; justify-content: space-between; font-size: var(--fs-sm); color: var(--text-2); }
+/* Readings change every poll; animating each meter keeps WebKitGTK repainting between polls. */
+.dash .meter-fill { transition: none; }
 .stat-meter-head .num { font-weight: 600; color: var(--text); }
 .stat-kv { display: grid; grid-template-columns: 1fr; gap: 4px; font-size: var(--fs-sm); }
 .stat-kv > div { display: flex; justify-content: space-between; gap: 12px; }

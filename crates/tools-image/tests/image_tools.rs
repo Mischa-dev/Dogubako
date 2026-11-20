@@ -289,6 +289,26 @@ async fn compress_png_and_jpeg() {
         .unwrap();
     assert_eq!(open(&out.artifacts[0].path).dimensions(), (64, 64));
     assert!(out.data["saved_percent"].as_f64().unwrap() > 0.0);
+    let tiny = save(
+        &h,
+        "tiny.png",
+        &RgbaImage::from_pixel(8, 8, Rgba([0, 0, 0, 255])),
+    );
+    let out = h
+        .run(
+            "image.compress",
+            json!({"input": [s(&tiny)], "format": "jpg"}),
+        )
+        .await
+        .unwrap();
+    assert!(out.artifacts[0].name.ends_with(".jpg"));
+    assert!(
+        out.warnings
+            .iter()
+            .any(|w| w.contains("format stays the same")),
+        "{:?}",
+        out.warnings
+    );
 }
 
 #[tokio::test]

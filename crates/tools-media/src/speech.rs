@@ -174,6 +174,15 @@ fn parse_language(p: &Params) -> ToolResult<String> {
 }
 
 /// Pick the whisper model to use.
+/// Speaker turn detection always runs on the tinydiarize model; say so
+/// unless that is what was picked.
+fn tdrz_note(tdrz: bool, choice: &str) -> Option<String> {
+    (tdrz && choice != TDRZ).then(|| {
+        let picked = if choice == "auto" { "the automatic choice".to_string() } else { format!("'{choice}'") };
+        format!("speaker turns need the '{TDRZ}' model (English only), so it was used instead of {picked}")
+    })
+}
+
 fn select_model(
     ctx: &ToolContext,
     choice: &str,
@@ -364,6 +373,9 @@ pub async fn run_whisper(
     }
     let (model, model_path) = select_model(ctx, &o.model, &o.language, tdrz)?;
     res.model = model.id.to_string();
+    if let Some(note) = tdrz_note(tdrz, &o.model) {
+        res.warnings.push(note);
+    }
     if model.languages == "en" && o.language != "en" && o.language != "auto" {
         res.warnings.push(format!(
             "{} is English-only; the language setting is ignored",
@@ -578,7 +590,7 @@ fn transcribe() -> Arc<dyn Tool> {
             .param(ParamSpec::multi_choice("formats", &[("txt", "Text"), ("srt", "SRT"), ("vtt", "WebVTT"), ("json", "JSON"), ("md", "Markdown")]).default_value(json!(["txt", "srt"]))),
     )
     .param(ParamSpec::boolean("word_timestamps").describe("Include per-word timings in the JSON / data").advanced())
-    .param(ParamSpec::choice("diarize", &[("none", "Off"), ("tinydiarize", "Speaker turns (tinydiarize model)"), ("stereo", "Stereo: one speaker per channel")]).default_str("none").advanced())
+    .param(ParamSpec::choice("diarize", &[("none", "Off"), ("tinydiarize", "Speaker turns (uses whisper-small.en-tdrz)"), ("stereo", "Stereo: one speaker per channel")]).default_str("none").advanced())
     .text_output("text/plain");
     async_tool(spec, |ctx, p| async move {
         let o = WhisperOpts::from_params(&p)?;
@@ -749,11 +761,11 @@ fn subtitles() -> Arc<dyn Tool> {
                     l
                 }
             });
-            let suffix = lang.as_deref().map(|l| format!(".{l}")).unwrap_or_default();
+            let sub_stem = subtitle_stem(&stem, lang.as_deref());
             let mut first_sub = None;
             for fmt in fmts {
                 let (body, ext, _) = format_segments(&r.segments, fmt, "");
-                let a = ctx.write_output(&format!("{stem}{suffix}.{ext}"), body.as_bytes())?;
+                let a = ctx.write_output(&format!("{sub_stem}.{ext}"), body.as_bytes())?;
                 if first_sub.is_none() {
                     first_sub = Some(a.path.clone());
                 }
@@ -814,6 +826,21 @@ fn subtitles() -> Arc<dyn Tool> {
 }
 
 /// ISO 639-1 → 639-2 (as used in MKV/MP4 language tags) for common languages.
+/// Subtitle file stem: `{stem}.{lang}` (the tag players read), unless the
+/// stem already ends with that tag, as with subtitles made from subtitle output.
+pub fn subtitle_stem(stem: &str, lang: Option<&str>) -> String {
+    match lang {
+        Some(l)
+            if !stem
+                .to_lowercase()
+                .ends_with(&format!(".{}", l.to_lowercase())) =>
+        {
+            format!("{stem}.{l}")
+        }
+        _ => stem.to_string(),
+    }
+}
+
 fn iso639_2(code: &str) -> &str {
     match code {
         "en" => "eng",
@@ -998,6 +1025,14 @@ pub fn wav_duration(path: &Path) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn subtitle_stem_adds_language_tag_once() {
+        assert_eq!(subtitle_stem("speech_en", Some("en")), "speech_en.en");
+        assert_eq!(subtitle_stem("speech_en.en", Some("en")), "speech_en.en");
+        assert_eq!(subtitle_stem("talk.EN", Some("en")), "talk.EN");
+        assert_eq!(subtitle_stem("talk", None), "talk");
+    }
+
     use super::*;
 
     #[test]
@@ -1007,6 +1042,15 @@ mod tests {
             Some(("de".into(), 0.912345))
         );
         assert_eq!(parse_detected("nothing"), None);
+    }
+
+    #[test]
+    fn tinydiarize_discloses_model_swap() {
+        assert_eq!(tdrz_note(false, "auto"), None);
+        assert_eq!(tdrz_note(true, TDRZ), None);
+        assert!(tdrz_note(true, "auto").unwrap().contains(TDRZ));
+        let n = tdrz_note(true, "whisper-base").unwrap();
+        assert!(n.contains(TDRZ) && n.contains("'whisper-base'"), "{n}");
     }
 
     #[test]

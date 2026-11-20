@@ -378,7 +378,20 @@ fn convert() -> Arc<dyn Tool> {
                 .span(span(i, files.len()), format!("Converting {}", f.name))
                 .run(&ctx)
                 .await?;
-            rep.file(&ctx, f, &out, vec![json!(enc)], json!({"encoder": enc}))?;
+            let opr = probe(&ctx, &out).await?;
+            let codec = opr.audio_codec().unwrap_or(enc).to_string();
+            let depth = opr.audio_bit_depth();
+            let label = match opr.audio_depth_label() {
+                Some(d) => format!("{codec} ({d})"),
+                None => codec.clone(),
+            };
+            rep.file(
+                &ctx,
+                f,
+                &out,
+                vec![json!(label)],
+                json!({"encoder": codec, "bit_depth": depth}),
+            )?;
         }
         Ok(rep.finish())
     })
@@ -962,8 +975,8 @@ fn normalize() -> Arc<dyn Tool> {
         .param(ParamSpec::choice("mode", &[("loudness", "Loudness (EBU R128)"), ("peak", "Peak")]).default_str("loudness"))
         .param(ParamSpec::choice("preset", &[("streaming", "Streaming (−14 LUFS)"), ("podcast", "Podcast (−16 LUFS)"), ("broadcast", "Broadcast EBU R128 (−23 LUFS)"), ("custom", "Custom")]).default_str("streaming").show_if("mode", &["loudness"]))
         .param(ParamSpec::number("target_lufs").range(-70.0, -5.0).default_num(-16.0).show_if("preset", &["custom"]))
-        .param(ParamSpec::number("true_peak").label("True peak (dBTP)").range(-9.0, 0.0).default_num(-1.5).show_if("mode", &["loudness"]).advanced())
-        .param(ParamSpec::number("lra").label("Loudness range (LU)").range(1.0, 50.0).default_num(11.0).show_if("mode", &["loudness"]).advanced())
+        .param(ParamSpec::number("true_peak").label("True peak (dBTP)").range(-9.0, 0.0).default_num(-1.5).describe("Ceiling for peaks after normalizing; only changes the result when the louder audio would peak above it").show_if("mode", &["loudness"]).advanced())
+        .param(ParamSpec::number("lra").label("Loudness range (LU)").range(1.0, 50.0).default_num(11.0).describe("Only applies when normalization has to compress dynamics (shown as \"dynamic\" in the result); a plain gain change keeps the original range").show_if("mode", &["loudness"]).advanced())
         .param(ParamSpec::number("peak_db").label("Peak level (dBFS)").range(-30.0, 0.0).default_num(-1.0).show_if("mode", &["peak"]));
     async_tool(spec, |ctx, p| async move {
         let files = p.files("input").to_vec();
@@ -1231,13 +1244,10 @@ fn sample_rate() -> Arc<dyn Tool> {
                 .run(&ctx)
                 .await?;
             let opr = probe(&ctx, &out).await?;
-            let desc = format!(
-                "{} Hz {}",
-                opr.sample_rate().unwrap_or(0),
-                opr.audio()
-                    .and_then(|a| a["sample_fmt"].as_str())
-                    .unwrap_or("")
-            );
+            let desc = match opr.audio_depth_label() {
+                Some(d) => format!("{} Hz {d}", opr.sample_rate().unwrap_or(0)),
+                None => format!("{} Hz", opr.sample_rate().unwrap_or(0)),
+            };
             rep.file(
                 &ctx,
                 f,
@@ -1401,6 +1411,12 @@ fn detect_silence() -> Arc<dyn Tool> {
 // ---------------------------------------------------------------------------
 // Visualizations
 
+/// `#rrggbbaa` with an alpha below `ff`.
+fn color_has_alpha(hex: &str) -> bool {
+    let h = hex.trim_start_matches('#');
+    h.len() == 8 && !h[6..].eq_ignore_ascii_case("ff")
+}
+
 fn waveform() -> Arc<dyn Tool> {
     let spec = audio_spec("audio.waveform", "Audio Waveform")
         .describe("Render a waveform image (PNG) of audio with custom size, colors and scale, and optionally export min/max peak data as JSON")
@@ -1409,7 +1425,7 @@ fn waveform() -> Arc<dyn Tool> {
         .param(ParamSpec::integer("width").range(64.0, 8000.0).default_int(1800))
         .param(ParamSpec::integer("height").range(32.0, 4000.0).default_int(280))
         .param(ParamSpec::color("color").default_str("#3b82f6"))
-        .param(ParamSpec::color("background").default_str("#ffffff"))
+        .param(ParamSpec::color("background").default_str("#ffffff").describe("Background colour; #rrggbbaa sets its opacity. Ignored when Transparent is on"))
         .param(ParamSpec::boolean("transparent").describe("Transparent background instead of a color"))
         .param(ParamSpec::boolean("split_channels").describe("Draw each channel separately"))
         .param(ParamSpec::choice("scale", &[("lin", "Linear"), ("log", "Logarithmic"), ("sqrt", "Square root"), ("cbrt", "Cube root")]).default_str("lin").advanced())
@@ -1429,10 +1445,13 @@ fn waveform() -> Arc<dyn Tool> {
                 ff_color(p.str_or("color", "#3b82f6")),
                 p.str_or("scale", "lin")
             );
+            let bg = p.str_or("background", "#ffffff");
             let fc = if p.bool("transparent") {
                 format!("{wave}[out]")
+            } else if color_has_alpha(bg) {
+                format!("{wave}[w];color=c={}:s={w}x{h},format=rgba[b];[b][w]overlay=format=auto:shortest=1,format=rgba[out]", ff_color(bg))
             } else {
-                format!("{wave}[w];color=c={}:s={w}x{h}[b];[b][w]overlay=format=auto:shortest=1,format=rgb24[out]", ff_color(p.str_or("background", "#ffffff")))
+                format!("{wave}[w];color=c={}:s={w}x{h}[b];[b][w]overlay=format=auto:shortest=1,format=rgb24[out]", ff_color(bg))
             };
             let out = out_path(&ctx, f, "waveform", "png");
             Ff::new()

@@ -353,6 +353,15 @@ const RISKY_META: &[&str] = &[
 /// Replace images pointing at files/URLs with their alt text and drop
 /// metadata that makes writers read files, so a document cannot embed
 /// arbitrary local files in the output.
+/// Without a title Pandoc names an EPUB after its input, here a temp AST file.
+pub fn default_title(ast: &mut Value, title: &str) {
+    let title = title.trim();
+    if title.is_empty() || !ast["meta"].is_object() || !ast["meta"]["title"].is_null() {
+        return;
+    }
+    ast["meta"]["title"] = json!({"t": "MetaString", "c": title});
+}
+
 pub fn sanitize_ast(v: &mut Value) {
     match v {
         Value::Object(m) => {
@@ -392,6 +401,13 @@ pub fn sanitize_ast(v: &mut Value) {
 /// work under `--sandbox` in some Pandoc builds (e.g. Debian's, which keep
 /// the data files on disk); for those the document is read in the sandbox
 /// into Pandoc's AST, sanitized, and then written.
+fn title_of(name: &str) -> String {
+    Path::new(name)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
 async fn pandoc(
     ctx: &ToolContext,
     input: &Path,
@@ -399,6 +415,7 @@ async fn pandoc(
     to: &str,
     standalone: bool,
     out: &Path,
+    title: &str,
 ) -> ToolResult<Vec<String>> {
     let two_step = writer_needs_data_files(to);
     let mut warnings = vec![];
@@ -424,6 +441,9 @@ async fn pandoc(
         let mut v: Value =
             serde_json::from_slice(&std::fs::read(&ast)?).ctx("parsing Pandoc AST")?;
         sanitize_ast(&mut v);
+        if to == "epub" {
+            default_title(&mut v, title);
+        }
         std::fs::write(&ast, serde_json::to_vec(&v)?)?;
         (ast, "json")
     } else {
@@ -531,7 +551,18 @@ fn convert_markup() -> Arc<dyn Tool> {
             ctx.check_cancelled()?;
             progress_files(&ctx, i, inputs.len(), name);
             let out = ctx.output_path(&with_extension(name, ext_for_writer(&to)));
-            warnings.extend(pandoc(&ctx, path, reader, &to, p.bool("standalone"), &out).await?);
+            warnings.extend(
+                pandoc(
+                    &ctx,
+                    path,
+                    reader,
+                    &to,
+                    p.bool("standalone"),
+                    &out,
+                    &title_of(name),
+                )
+                .await?,
+            );
             if inputs.len() == 1 && !matches!(to.as_str(), "docx" | "odt" | "epub") {
                 preview = std::fs::read_to_string(&out)
                     .ok()
@@ -575,7 +606,7 @@ fn markup_to_pdf() -> Arc<dyn Tool> {
             let docx = mid_dir.join(dogubako_core::policy::sanitize_filename(&format!(
                 "{stem}.docx"
             )));
-            warnings.extend(pandoc(&ctx, path, reader, "docx", true, &docx).await?);
+            warnings.extend(pandoc(&ctx, path, reader, "docx", true, &docx, "").await?);
             let produced =
                 soffice_convert(&ctx, &docx, "pdf", &ctx.temp_path(&format!("pdf{i}"))).await?;
             let out = ctx.output_path(&with_extension(name, "pdf"));
@@ -591,6 +622,17 @@ fn markup_to_pdf() -> Arc<dyn Tool> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn default_title_only_fills_missing_titles() {
+        let mut ast = serde_json::json!({"meta": {}, "blocks": []});
+        super::default_title(&mut ast, "Field Notes");
+        assert_eq!(ast["meta"]["title"]["c"], "Field Notes");
+        let mut titled =
+            serde_json::json!({"meta": {"title": {"t": "MetaInlines", "c": []}}, "blocks": []});
+        super::default_title(&mut titled, "other");
+        assert_eq!(titled["meta"]["title"]["t"], "MetaInlines");
+    }
+
     use super::*;
     #[test]
     fn urls() {
