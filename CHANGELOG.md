@@ -88,6 +88,13 @@ campaign are added here as they merge.
 - Compress Audio keeps M4A levels distinct on low-rate audio by scaling them
   under the AAC encoder's ceiling (with a warning), fixes the Voice label and
   caps MP3 at 320 kbit/s.
+- Number fields keep typed decimals and a minus sign on WebKitGTK (Linux
+  desktop), and reject non-decimal text such as `0x3`.
+- Live system dashboards mark the last reading out of date when a setting is
+  invalid, instead of staying on Loading.
+- Same-named tools have distinct titles (Reduce Image Noise / Reduce Audio
+  Noise, Extract Audio / Extract Audio from Video), and tool search shows
+  categories.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 
