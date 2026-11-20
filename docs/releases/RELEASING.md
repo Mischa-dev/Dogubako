@@ -55,9 +55,13 @@ workflow with the version. It:
 2. pushes the tested image as `ghcr.io/mischa-dev/dogubako:<version>`;
 3. publishes the release, which creates tag `v<version>` at the draft's
    commit;
-4. deploys dogubako.app with downloads pointing at the release.
+4. deploys dogubako.app with downloads pointing at the release, and
+   docs.dogubako.app.
 
-The docs site already deploys on every push to main (docs.yml).
+The docs site deploys on every push to main (docs.yml), but only while
+main's version is a published release. From the bump merging until Ship
+release, docs.dogubako.app keeps the previous release's pages; docs fixes
+merged in that window go live with the release.
 
 To make the run also wait for an approval click, add Mischa as a required
 reviewer on the `release` environment (Settings › Environments).
