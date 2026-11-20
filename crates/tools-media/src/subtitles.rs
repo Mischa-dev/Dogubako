@@ -33,6 +33,51 @@ pub struct Segment {
     /// escaped literal tag text is not turned back into markup on output.
     #[serde(skip)]
     pub vtt_markup: Option<String>,
+    /// WebVTT cue settings after the end time (`align:start position:10%`).
+    #[serde(skip)]
+    pub vtt_settings: Option<String>,
+    /// The text came from SRT, where `<i>`/`<b>`/`<u>`/`<font>` are
+    /// formatting tags rather than literal text.
+    #[serde(skip)]
+    pub srt_markup: bool,
+}
+
+impl Segment {
+    /// The cue text without inline formatting tags, for plain text, JSON
+    /// and Markdown output.
+    pub fn plain_text(&self) -> String {
+        match &self.vtt_markup {
+            Some(m) => decode_char_refs(&remove_tags(m, |_| true)),
+            None if !self.srt_markup => self.text.clone(),
+            None => remove_tags(&self.text, |t| {
+                let name = t.trim_start_matches('/');
+                let name = name.split([' ', '\t']).next().unwrap_or("");
+                ["i", "b", "u", "s", "font"]
+                    .iter()
+                    .any(|n| n.eq_ignore_ascii_case(name))
+            }),
+        }
+    }
+}
+
+/// Remove `<tag>`s for which `drop` returns true; other text is kept as is.
+fn remove_tags(s: &str, drop: impl Fn(&str) -> bool) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find('<') {
+        out.push_str(&rest[..i]);
+        match rest[i + 1..].find(['>', '<']) {
+            Some(j) if rest.as_bytes()[i + 1 + j] == b'>' && drop(&rest[i + 1..i + 1 + j]) => {
+                rest = &rest[i + j + 2..];
+            }
+            _ => {
+                out.push('<');
+                rest = &rest[i + 1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -71,12 +116,18 @@ fn fmt_time(t: f64, sep: char) -> String {
     )
 }
 
-fn parse_timing(line: &str) -> Option<(f64, f64)> {
+/// Returns (start, end, WebVTT cue settings following the end time).
+fn parse_timing(line: &str) -> Option<(f64, f64, Option<String>)> {
     let (a, b) = line.split_once("-->")?;
     let start = parse_cue_time(a)?;
-    // WebVTT cue settings may follow the end time.
-    let end = parse_cue_time(b.split_whitespace().next()?)?;
-    Some((start, end.max(start)))
+    let mut rest = b.split_whitespace();
+    let end = parse_cue_time(rest.next()?)?;
+    let settings = rest.collect::<Vec<_>>().join(" ");
+    Some((
+        start,
+        end.max(start),
+        Some(settings).filter(|s| !s.is_empty()),
+    ))
 }
 
 fn normalize(s: &str) -> String {
@@ -113,7 +164,7 @@ pub fn parse_srt(input: &str) -> Result<Vec<Segment>, String> {
         let Some(ti) = b.iter().position(|l| l.contains("-->")) else {
             continue;
         };
-        let Some((start, end)) = parse_timing(b[ti]) else {
+        let Some((start, end, _)) = parse_timing(b[ti]) else {
             return Err(format!("invalid timing line: '{}'", b[ti].trim()));
         };
         let text = b[ti + 1..].join("\n").trim().to_string();
@@ -121,6 +172,7 @@ pub fn parse_srt(input: &str) -> Result<Vec<Segment>, String> {
             start,
             end,
             text,
+            srt_markup: true,
             ..Default::default()
         });
     }
@@ -238,7 +290,7 @@ pub fn parse_vtt(input: &str) -> Result<Vec<Segment>, String> {
         let Some(ti) = b.iter().position(|l| l.contains("-->")) else {
             continue;
         };
-        let Some((start, end)) = parse_timing(b[ti]) else {
+        let Some((start, end, settings)) = parse_timing(b[ti]) else {
             return Err(format!("invalid timing line: '{}'", b[ti].trim()));
         };
         let (text, speaker, markup) = strip_vtt_tags(b[ti + 1..].join("\n").trim());
@@ -248,6 +300,7 @@ pub fn parse_vtt(input: &str) -> Result<Vec<Segment>, String> {
             text,
             speaker,
             vtt_markup: Some(markup),
+            vtt_settings: settings,
             ..Default::default()
         });
     }
@@ -394,8 +447,13 @@ pub fn to_vtt(segs: &[Segment]) -> String {
             None if marks[i] => format!("- {esc}"),
             None => esc,
         };
+        let settings = s
+            .vtt_settings
+            .as_deref()
+            .map(|v| format!(" {v}"))
+            .unwrap_or_default();
         out.push_str(&format!(
-            "{}\n{} --> {}\n{}\n\n",
+            "{}\n{} --> {}{settings}\n{}\n\n",
             i + 1,
             fmt_time(s.start, '.'),
             fmt_time(s.end, '.'),
@@ -409,7 +467,8 @@ fn paragraphs(segs: &[Segment]) -> Vec<(f64, Option<String>, String)> {
     let marks = turn_marks(segs);
     let mut out: Vec<(f64, Option<String>, String)> = vec![];
     for (i, s) in segs.iter().enumerate() {
-        let t = s.text.trim();
+        let t = s.plain_text();
+        let t = t.trim();
         if t.is_empty() {
             continue;
         }
@@ -461,9 +520,16 @@ pub fn to_md(segs: &[Segment], title: &str) -> String {
 }
 
 pub fn to_json(segs: &[Segment], extra: Value) -> String {
+    let segs: Vec<Segment> = segs
+        .iter()
+        .map(|s| Segment {
+            text: s.plain_text().trim().to_string(),
+            ..s.clone()
+        })
+        .collect();
     let text = segs
         .iter()
-        .map(|s| s.text.trim())
+        .map(|s| s.text.as_str())
         .filter(|t| !t.is_empty())
         .collect::<Vec<_>>()
         .join(" ");
@@ -1303,7 +1369,7 @@ mod tests {
         assert_eq!(s[1].start, 3.5);
         let out = to_vtt(&s);
         assert!(out
-            .starts_with("WEBVTT\n\n1\n00:00:01.000 --> 00:00:02.000\n<v Alice>Hi &amp; welcome"));
+            .starts_with("WEBVTT\n\n1\n00:00:01.000 --> 00:00:02.000 align:start position:10%\n<v Alice>Hi &amp; welcome"));
         assert_eq!(parse_vtt(&out).unwrap(), s);
         assert!(parse_vtt("1\n00:00:01,000 --> 00:00:02,000\nx").is_err());
         // Cue identifiers that merely start with a block keyword are cues;
@@ -1351,6 +1417,40 @@ mod tests {
         assert_eq!(parse_cue_time("00:01:02,500"), Some(62.5));
         assert_eq!(parse_cue_time("abc"), None);
         assert_eq!(parse_cue_time("-1:00"), None);
+    }
+
+    #[test]
+    fn vtt_settings_and_markup() {
+        let v = "WEBVTT\n\n00:01.000 --> 00:02.000 align:start position:10%  line:0\n<b>Bold</b> &lt;b&gt;kept&lt;/b&gt; <i>it</i>\n\n00:03.000 --> 00:04.000\nplain\n";
+        let s = parse_vtt(v).unwrap();
+        assert_eq!(
+            s[0].vtt_settings.as_deref(),
+            Some("align:start position:10% line:0")
+        );
+        assert_eq!(s[0].plain_text(), "Bold <b>kept</b> it");
+        let out = to_vtt(&s);
+        assert!(
+            out.contains(
+                "00:00:01.000 --> 00:00:02.000 align:start position:10% line:0\n<b>Bold</b>"
+            ),
+            "{out}"
+        );
+        assert!(
+            out.contains("00:00:03.000 --> 00:00:04.000\nplain"),
+            "{out}"
+        );
+        assert_eq!(parse_vtt(&out).unwrap(), s);
+        assert_eq!(to_txt(&s), "Bold <b>kept</b> it plain\n");
+        assert!(!to_md(&s, "T").contains("<i>"));
+        let j: Value = serde_json::from_str(&to_json(&s, json!({}))).unwrap();
+        assert_eq!(j["segments"][0]["text"], "Bold <b>kept</b> it");
+        // SRT formatting tags are dropped from plain output too.
+        let s = parse_srt(
+            "1\n00:00:01,000 --> 00:00:02,000\n<B>Hi</B> <font color=\"red\">there</font> a<b\n",
+        )
+        .unwrap();
+        assert_eq!(s[0].plain_text(), "Hi there a<b");
+        assert!(to_srt(&s).contains("<B>Hi</B>"));
     }
 
     #[test]

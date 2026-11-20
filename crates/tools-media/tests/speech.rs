@@ -73,6 +73,52 @@ async fn transcript_convert_and_shift() {
         .await
         .unwrap();
     assert_eq!(out.text.as_deref(), Some("Hello World\n"));
+    let vtt = "WEBVTT\n\n00:01.000 --> 00:02.000 align:start line:10%\n<b>Bold</b> words\n";
+    let out = h
+        .run(
+            "speech.transcript_convert",
+            json!({"text": vtt, "output_format": "vtt"}),
+        )
+        .await
+        .unwrap();
+    assert!(out
+        .text
+        .unwrap()
+        .contains("00:00:01.000 --> 00:00:02.000 align:start line:10%\n<b>Bold</b> words"));
+    for (fmt, want) in [
+        ("txt", "Bold words"),
+        ("md", "Bold words"),
+        ("json", "Bold words"),
+    ] {
+        let out = h
+            .run(
+                "speech.transcript_convert",
+                json!({"text": vtt, "output_format": fmt}),
+            )
+            .await
+            .unwrap();
+        let t = out.text.unwrap();
+        assert!(t.contains(want) && !t.contains("<b>"), "{fmt}: {t}");
+    }
+
+    // Plain text and JSON input have no markup: tag-like text is literal.
+    for (input, from) in [
+        ("Use <b>bold</b> tags", "txt"),
+        (
+            r#"{"segments": [{"start": 0, "end": 1, "text": "Use <b>bold</b> tags"}]}"#,
+            "json",
+        ),
+    ] {
+        let out = h
+            .run(
+                "speech.transcript_convert",
+                json!({"text": input, "output_format": "txt"}),
+            )
+            .await
+            .unwrap();
+        let t = out.text.unwrap();
+        assert!(t.contains("Use <b>bold</b> tags"), "{from}: {t}");
+    }
     let e = h
         .run(
             "speech.transcript_convert",
