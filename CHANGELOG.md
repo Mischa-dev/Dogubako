@@ -77,6 +77,11 @@ campaign are added here as they merge.
   LibreOffice still fails, the error shows only its `Error` lines.
 - Compare Text's whitespace option now applies at word and character
   granularity, not only per line.
+- Failed engine runs show the engine's reason (the first failure line of its
+  output) instead of "Error: external" in the GUI.
+- Compress Audio keeps M4A levels distinct on low-rate audio by scaling them
+  under the AAC encoder's ceiling (with a warning), fixes the Voice label and
+  caps MP3 at 320 kbit/s.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 
