@@ -44,11 +44,6 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match the version on that commit ($version)."; exit 1
           fi
-          # A tag pushed earlier fixes the release's commit: build that, not a later one.
-          tagged="$(git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" | tail -n1 | cut -f1)"
-          if [ -n "$tagged" ] && [ "$tagged" != "$GITHUB_SHA" ]; then
-            echo "::error::Tag $tag already exists at $tagged, not $GITHUB_SHA. Run Release on the tag, or bump the version."; exit 1
-          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           draft="$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || echo none)"
@@ -58,6 +53,11 @@ jobs:
               echo "prepare=false" >> "$GITHUB_OUTPUT"; exit 0
             fi
             echo "::error::$tag is already published. Bump the version (release.py bump) to make a new release."; exit 1
+          fi
+          # A tag pushed earlier fixes the release's commit: build that, not a later one.
+          tagged="$(git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" | tail -n1 | cut -f1)"
+          if [ -n "$tagged" ] && [ "$tagged" != "$GITHUB_SHA" ]; then
+            echo "::error::Tag $tag already exists at $tagged, not $GITHUB_SHA. Run Release on the tag, or bump the version."; exit 1
           fi
           echo "prepare=true" >> "$GITHUB_OUTPUT"
       - name: Release is complete (versions, changelog, notes, generated docs, pages)
