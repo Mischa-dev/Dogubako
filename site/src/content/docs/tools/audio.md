@@ -75,9 +75,9 @@ Also found by: reduce size, smaller, shrink, bitrate, voice memo, podcast
 | Option | CLI | Type | Default | Description |
 |---|---|---|---|---|
 | `input` *(required)* | positional | files |  | Audio files. Accepts audio/\*, video/\*, .mp3 .m4a .aac .wav .flac .ogg +24 more. |
-| `level` | `--level` | choice | `balanced` | One of: `light` (Light (160 kbit/s)), `balanced` (Balanced (128 kbit/s)), `strong` (Strong (96 kbit/s)), `voice` (Voice (48 kbit/s mono)). |
+| `level` | `--level` | choice | `balanced` | One of: `light` (Light (160 kbit/s)), `balanced` (Balanced (128 kbit/s)), `strong` (Strong (96 kbit/s)), `voice` (Voice (32 kbit/s mono)). |
 | `format` | `--format` | choice | `mp3` | One of: `mp3`, `m4a` (AAC (M4A)), `opus` (Opus (best quality per size)). |
-| `mono` | `--mono` | boolean | `false` | Downmix to mono (halves the size of stereo audio). |
+| `mono` | `--mono` | boolean | `false` | Downmix to mono at two thirds of the level's bitrate (ideal for voice). |
 
 ## Trim Audio
 

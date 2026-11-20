@@ -34,11 +34,14 @@ export function describeError(e: ToolErrorView | null | undefined): FriendlyErro
     case 'limit_exceeded':
     case 'too_large':
       return { title: 'Limit exceeded', message: msg || 'The input is larger than this instance allows.' };
+    case 'external':
     case 'external_failure': {
       const stderr = (e.stderr ?? '').trim();
+      const reason = stderrReason(stderr) || (msg && msg !== 'Error: external' ? msg : '');
+      const program = e.program || 'External program';
       return {
-        title: `${e.program ?? 'External program'} failed`,
-        message: e.exit_code != null ? `It exited with code ${e.exit_code}.` : 'It stopped unexpectedly.',
+        title: e.exit_code != null ? `${program} failed (exit code ${e.exit_code})` : `${program} failed`,
+        message: reason || (e.exit_code != null ? 'It exited without printing a reason.' : 'It stopped unexpectedly.'),
         details: stderr || undefined,
       };
     }
@@ -55,6 +58,21 @@ export function describeError(e: ToolErrorView | null | undefined): FriendlyErro
     default:
       return { title: 'Something went wrong', message: msg || `Error: ${e.code}` };
   }
+}
+
+const GENERIC_TRAILERS = /^(conversion failed!?|exiting\.?|aborted\.?)$/i;
+const FAILURE_WORDS = /\b(error|errors|invalid|failed|failure|fatal|cannot|can't|could not|couldn't|unable|unsupported|not supported|not found|no such|denied|incorrect|unknown|unrecognized|missing|not an?|bad|no (?:decode|encode) delegate|too (?:large|long|big|many)|out of memory|panicked|segmentation fault)\b/i;
+const REASON_MAX = 300;
+
+/** The most telling line of a program's stderr, for a one-line summary. */
+export function stderrReason(stderr: string | undefined | null): string {
+  const lines = (stderr ?? '')
+    .split(/\r?\n/)
+    .map((l) => l.trim().replace(/^\[([\w.-]+) @ 0x[0-9a-f]+\]\s*/i, '$1: ').replace(/\s+@ (?:error|warning)\/\S+$/, ''))
+    .filter((l) => l && !GENERIC_TRAILERS.test(l));
+  if (!lines.length) return '';
+  const line = lines.find((l) => FAILURE_WORDS.test(l)) ?? lines[lines.length - 1];
+  return line.length > REASON_MAX ? `${line.slice(0, REASON_MAX - 1)}…` : line;
 }
 
 export function errorText(e: unknown): string {
