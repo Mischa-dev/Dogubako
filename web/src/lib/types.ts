@@ -6,7 +6,14 @@ export type CategoryId =
 
 export type PermissionId = 'host_fs_read' | 'host_fs_write' | 'network' | 'system_info' | 'process_info';
 
-export interface EnumOption { value: string; label: string }
+export interface EnumOption {
+  value: string;
+  label: string;
+  /** Only usable while another param has one of these values. */
+  only_if?: ShowIf | null;
+  /** Why this option can't work on this install (set by the engine). */
+  unavailable?: string | null;
+}
 export interface ShowIf { param: string; values: unknown[] }
 
 interface ParamBase {
@@ -18,6 +25,8 @@ interface ParamBase {
   advanced?: boolean;
   primary?: boolean;
   show_if?: ShowIf | null;
+  /** Why this param can't be turned on here (set by the engine). */
+  unavailable?: string | null;
 }
 
 export type ParamSpec = ParamBase & (

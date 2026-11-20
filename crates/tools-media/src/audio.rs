@@ -206,6 +206,49 @@ fn format_args(
     }
 }
 
+/// FFmpeg encoder each target format needs (PCM encoders are always built in).
+const FORMAT_ENCODERS: &[(&str, &str)] = &[
+    ("mp3", "libmp3lame"),
+    ("m4a", "aac"),
+    ("ogg", "libvorbis"),
+    ("opus", "libopus"),
+    ("flac", "flac"),
+    ("alac", "alac"),
+    ("wma", "wmav2"),
+    ("ac3", "ac3"),
+];
+
+/// Target formats, each marked with the encoder it needs so UIs can
+/// disable the ones this FFmpeg build lacks.
+fn format_choice() -> ParamSpec {
+    FORMAT_ENCODERS.iter().fold(
+        ParamSpec::choice("format", FORMATS).default_str("mp3"),
+        |p, (f, enc)| p.option_needs(f, Requirement::ffmpeg_encoder(enc)),
+    )
+}
+
+/// Sample rates, each limited to the target formats that can encode it.
+fn rate_choice_for_format(name: &str) -> ParamSpec {
+    let mut p = rate_choice(name);
+    let rates: Vec<String> = match &p.kind {
+        dogubako_core::spec::ParamKind::Enum { options, .. } => {
+            options.iter().map(|o| o.value.clone()).collect()
+        }
+        _ => vec![],
+    };
+    for r in rates.iter().filter_map(|r| r.parse::<u32>().ok()) {
+        let ok: Vec<&str> = FORMATS
+            .iter()
+            .map(|f| f.0)
+            .filter(|f| unsupported_rate(f, r).is_none())
+            .collect();
+        if ok.len() < FORMATS.len() {
+            p = p.option_only_if(&r.to_string(), "format", &ok);
+        }
+    }
+    p
+}
+
 fn depth_choice() -> ParamSpec {
     ParamSpec::choice(
         "bit_depth",
@@ -289,10 +332,10 @@ fn convert() -> Arc<dyn Tool> {
         .describe("Convert audio (or the soundtrack of videos) to MP3, AAC/M4A, Ogg Vorbis, Opus, FLAC, WAV, AIFF, ALAC, WMA or AC-3 with bitrate, VBR, sample rate, channel and bit-depth control")
         .keywords(&["mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "aiff", "alac", "wma", "transcode", "format"])
         .param(audio_input(true))
-        .param(ParamSpec::choice("format", FORMATS).default_str("mp3"))
+        .param(format_choice())
         .param(ParamSpec::integer("bitrate").label("Bitrate (kbit/s)").range(32.0, 640.0).default_int(192).show_if("format", &["mp3", "m4a", "ogg", "opus", "wma", "ac3"]))
         .param(ParamSpec::integer("vbr_quality").label("VBR quality (0 = best, 9 = smallest)").range(0.0, 9.0).describe("Use variable bitrate instead of a fixed bitrate (MP3 / Vorbis)").show_if("format", &["mp3", "ogg"]).advanced())
-        .param(rate_choice("sample_rate").advanced())
+        .param(rate_choice_for_format("sample_rate").advanced())
         .param(ParamSpec::choice("channels", &[("keep", "Keep"), ("1", "Mono"), ("2", "Stereo")]).default_str("keep").advanced())
         .param(depth_choice().show_if("format", &["wav", "flac", "aiff"]).advanced());
     async_tool(spec, |ctx, p| async move {
@@ -2156,6 +2199,45 @@ mod tests {
         assert_eq!(vorbis_kbps_range(96000, 2), None);
         assert_eq!(vorbis_kbps_range(64000, 6), Some((84, 1440)));
         assert_eq!(vorbis_kbps_range(6000, 1), None);
+    }
+
+    #[test]
+    fn format_and_rate_options_carry_their_limits() {
+        use dogubako_core::spec::{ParamKind, Requirement};
+        let opts = |p: ParamSpec| match p.kind {
+            ParamKind::Enum { options, .. } => options,
+            _ => panic!("enum"),
+        };
+        let fmts = opts(format_choice());
+        let mp3 = fmts.iter().find(|o| o.value == "mp3").unwrap();
+        assert_eq!(
+            mp3.requires,
+            Some(Requirement::ffmpeg_encoder("libmp3lame"))
+        );
+        assert!(fmts
+            .iter()
+            .find(|o| o.value == "wav")
+            .unwrap()
+            .requires
+            .is_none());
+
+        let rates = opts(rate_choice_for_format("sample_rate"));
+        let allowed = |r: &str| -> Option<Vec<String>> {
+            let o = rates.iter().find(|o| o.value == r).unwrap();
+            o.only_if.as_ref().map(|c| {
+                assert_eq!(c.param, "format");
+                c.values
+                    .iter()
+                    .map(|v| v.as_str().unwrap().to_string())
+                    .collect()
+            })
+        };
+        assert_eq!(allowed("keep"), None);
+        assert_eq!(allowed("48000"), None);
+        let hi = allowed("96000").unwrap();
+        assert!(hi.contains(&"flac".to_string()) && hi.contains(&"m4a".to_string()));
+        assert!(!hi.contains(&"mp3".to_string()) && !hi.contains(&"opus".to_string()));
+        assert!(!allowed("44100").unwrap().contains(&"opus".to_string()));
     }
 
     #[test]
