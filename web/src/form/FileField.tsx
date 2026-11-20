@@ -8,6 +8,7 @@ import { formatBytes } from '../lib/format';
 import { errorText } from '../lib/errors';
 import type { Backend, FileRef } from '../lib/backend';
 import { cx } from '../components/ui';
+import { StillImage } from '../results/MediaPreview';
 import type { Setter } from './Field';
 
 let keySeq = 0;
@@ -261,7 +262,7 @@ function FileChip({ item, onRemove, onReplace }: { item: FileItem; onRemove: () 
   return (
     <li className={cx('file-item', item.status === 'error' && 'is-error')}>
       <span className="file-thumb" aria-hidden>
-        {thumb ? <img src={thumb} alt="" loading="lazy" /> : <Icon size={16} />}
+        {thumb ? <StillImage url={thumb} mime={item.mime} name={item.name} alt="" loading="lazy" fallback={<Icon size={16} />} /> : <Icon size={16} />}
       </span>
       <span className="file-meta">
         <span className="file-name" title={item.name}>{item.name}</span>

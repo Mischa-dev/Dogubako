@@ -13,6 +13,7 @@ import {
 import { Kbd, cx, modKey } from '../components/ui';
 import { nextUses, useNextUses } from './nextUses';
 import { useToolSubject } from './subject';
+import { StillImage } from '../results/MediaPreview';
 
 const KIND_WORDS: Partial<Record<BenchKind, RegExp>> = {
   image: /\b(images?|photos?)\b/gi,
@@ -144,7 +145,9 @@ export function ToolTopRow({ tool }: { tool: ToolInfo }) {
 
       {files.length ? (
         <span className="tool-subject" title={files.map((f) => f.name).join('\n')}>
-          {thumb ? <img className="tool-subject-thumb" src={thumb} alt="" /> : <span className={`tool-subject-kind k-${kind}`} aria-hidden />}
+          {thumb
+            ? <StillImage className="tool-subject-thumb" url={thumb} mime={files[0].mime} name={files[0].name} alt="" fallback={<span className={`tool-subject-kind k-${kind}`} aria-hidden />} />
+            : <span className={`tool-subject-kind k-${kind}`} aria-hidden />}
           <span className="tool-subject-name">{files[0].name}</span>
           {files.length > 1 && <span className="tool-subject-more">+{files.length - 1}</span>}
         </span>
