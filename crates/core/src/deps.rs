@@ -719,13 +719,30 @@ fn run_listing(path: &Path, args: &[&str], env: &[(String, std::ffi::OsString)])
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
     }
-    let child = cmd.spawn().ok()?;
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(child.wait_with_output());
+    let mut child = cmd.spawn().ok()?;
+    let mut stdout = child.stdout.take()?;
+    // Drain stdout on a thread so a long listing can't fill the pipe.
+    let reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = std::io::Read::read_to_end(&mut stdout, &mut buf);
+        buf
     });
-    let out = rx.recv_timeout(Duration::from_secs(10)).ok()?.ok()?;
-    Some(String::from_utf8_lossy(&out.stdout).into_owned())
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let ok = loop {
+        match child.try_wait() {
+            Ok(Some(st)) => break st.success(),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20))
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break false;
+            }
+        }
+    };
+    let buf = reader.join().ok()?;
+    ok.then(|| String::from_utf8_lossy(&buf).into_owned())
 }
 
 /// Format names ImageMagick can write, from `-list format`
@@ -998,6 +1015,15 @@ mod capability_tests {
         let e = parse_ffmpeg_encoders(text);
         assert!(e.contains("aac") && e.contains("libx264") && e.contains("pcm_s16le"));
         assert!(!e.contains("libmp3lame") && !e.contains("="));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hung_listing_is_killed() {
+        let start = std::time::Instant::now();
+        let out = run_listing(Path::new("/bin/sleep"), &["30"], &[]);
+        assert!(out.is_none());
+        assert!(start.elapsed() < Duration::from_secs(20));
     }
 
     #[test]
