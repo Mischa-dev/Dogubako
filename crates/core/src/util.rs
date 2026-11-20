@@ -144,6 +144,7 @@ pub fn plain_rel_path(rel: &str) -> Option<PathBuf> {
 /// existing files are never overwritten (`a.txt` becomes `a-2.txt`).
 /// Returns where each file was written.
 pub fn copy_files_into(items: &[(PathBuf, String)], dest: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let root = std::fs::canonicalize(dest)?;
     let mut written = Vec::with_capacity(items.len());
     for (src, rel) in items {
         let rel = plain_rel_path(rel)
@@ -152,6 +153,12 @@ pub fn copy_files_into(items: &[(PathBuf, String)], dest: &Path) -> std::io::Res
         let target = dest.join(&rel);
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;
+            if !std::fs::canonicalize(parent)?.starts_with(&root) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("{} leads outside the chosen folder", rel.display()),
+                ));
+            }
         }
         let name = rel
             .file_name()
@@ -205,6 +212,20 @@ mod tests {
         ] {
             assert_eq!(plain_rel_path(bad), None, "{bad:?}");
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_files_into_refuses_symlinked_folders() {
+        let src = tempfile::tempdir().unwrap();
+        let dest = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let a = src.path().join("a.txt");
+        std::fs::write(&a, "x").unwrap();
+        std::os::unix::fs::symlink(outside.path(), dest.path().join("docs")).unwrap();
+        let err = copy_files_into(&[(a, "docs/a.txt".into())], dest.path()).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(!outside.path().join("a.txt").exists());
     }
 
     #[test]

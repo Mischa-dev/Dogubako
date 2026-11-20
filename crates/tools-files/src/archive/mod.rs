@@ -255,7 +255,7 @@ fn archive_extract() -> Arc<dyn Tool> {
                 let out = ctx.output_path(&base);
                 std::fs::rename(&src, &out).or_else(|_| std::fs::copy(&src, &out).map(|_| ()))?;
                 let mut a = ctx.artifact_labeled(&out, &e.rel)?;
-                if e.rel.contains('/') {
+                if e.rel.contains('/') || e.rel != a.name {
                     a.rel_path = Some(e.rel.clone());
                 }
                 arts.push(a);

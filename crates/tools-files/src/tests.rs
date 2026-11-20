@@ -618,8 +618,8 @@ async fn archive_extract_reports_folders() {
         let mut w = zip::ZipWriter::new(std::fs::File::create(&arc).unwrap());
         let opts = zip::write::SimpleFileOptions::default();
         for (name, body) in [
-            ("top.txt", "top"),
             ("docs/top.txt", "nested"),
+            ("top.txt", "top"),
             ("docs/sub/deep.txt", "deep"),
         ] {
             w.start_file(name, opts).unwrap();
@@ -645,9 +645,9 @@ async fn archive_extract_reports_folders() {
     assert_eq!(
         rels,
         vec![
-            (None, "top".to_string()),
             (Some("docs/sub/deep.txt".to_string()), "deep".to_string()),
             (Some("docs/top.txt".to_string()), "nested".to_string()),
+            (Some("top.txt".to_string()), "top".to_string()),
         ]
     );
 }
