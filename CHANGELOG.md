@@ -14,6 +14,7 @@ campaign are added here as they merge.
 
 ### Added
 
+- yt-dlp's redirects and media downloads in Transcribe Video URL now follow the network policy (private addresses are refused on servers that allow only public ones).
 - **Transcribe Video URL** (`speech.transcribe_url`): paste a YouTube, TED,
   Vimeo or other video-site link and get the full transcript. It uses the
   site's published or auto-generated captions (pick the language), or

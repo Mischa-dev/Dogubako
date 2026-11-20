@@ -40,6 +40,10 @@ Markdown under **Formats**.
   whisper.cpp and FFmpeg (Settings → Engines) and a Whisper model
   (Settings → Models). Captions alone need neither.
 - The tool needs the **network** permission.
+- All of yt-dlp's traffic, redirects and media downloads included, goes
+  through Dogubako's network policy. On a server that allows only public
+  addresses, a video that points at a private address fails with a
+  permission error. Media is fetched over HTTP(S) or HLS only.
 
 ## Supported sites
 

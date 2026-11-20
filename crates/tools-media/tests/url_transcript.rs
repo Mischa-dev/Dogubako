@@ -310,3 +310,62 @@ async fn cookies_are_passed_as_a_copy() {
     assert!(line.contains("--use-extractors default,-generic"), "{line}");
     assert!(std::fs::read(&c).is_ok());
 }
+
+#[tokio::test]
+async fn ytdlp_runs_through_the_policy_proxy() {
+    let h = harness();
+    h.run("speech.transcribe_url", json!({"url": TED}))
+        .await
+        .unwrap();
+    let log = std::fs::read_to_string(fake_dir().join("argv.log")).unwrap();
+    for line in log.lines().filter(|l| !l.contains("--version")) {
+        assert!(line.contains("--proxy http://127.0.0.1:"), "{line}");
+        assert!(line.contains("--downloader native"), "{line}");
+    }
+}
+
+/// Real yt-dlp (when installed): redirects and fetches to private addresses
+/// are refused by the proxy, and the error says so.
+#[tokio::test]
+async fn real_ytdlp_cannot_reach_private_addresses() {
+    use dogubako_core::net::PolicyProxy;
+    use dogubako_core::policy::NetPolicy;
+    let Some(bin) = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|d| d.join("yt-dlp"))
+        .find(|p| p.is_file())
+    else {
+        eprintln!("skipping: yt-dlp not installed");
+        return;
+    };
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = l.local_addr().unwrap().port();
+    let proxy = PolicyProxy::start(NetPolicy::public_only()).await.unwrap();
+    for target in [
+        format!("http://127.0.0.1:{port}/v"),
+        format!("https://127.0.0.1:{port}/v"),
+    ] {
+        let out = tokio::process::Command::new(&bin)
+            .args([
+                "--ignore-config",
+                "--no-cache-dir",
+                "--use-extractors",
+                "generic",
+            ])
+            .args([
+                "--retries",
+                "0",
+                "--extractor-retries",
+                "0",
+                "--socket-timeout",
+                "10",
+            ])
+            .args(["--dump-single-json", "--proxy", &proxy.url(), "--", &target])
+            .output()
+            .await
+            .unwrap();
+        let err = String::from_utf8_lossy(&out.stderr);
+        let mapped = dogubako_tools_media::url_transcript::ytdlp_error(&err);
+        assert_eq!(mapped.code(), "permission_denied", "{target}: {err}");
+    }
+    drop(l);
+}
