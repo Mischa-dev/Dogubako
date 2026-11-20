@@ -106,6 +106,11 @@ campaign are added here as they merge.
   names no longer repeat the language code.
 - Live system dashboards stop animating between polls (much lower CPU on
   WebKitGTK), run one poll at a time, and Pause stops polling.
+- Option buttons wrap instead of being clipped, format dropdowns support
+  type-ahead, and the ICC drop zone ignores clicks that started elsewhere.
+- Text fields no longer truncate silently at their length limit; the field
+  shows the error instead.
+- Watermark Video clamps the margin so the watermark stays on the frame.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 
