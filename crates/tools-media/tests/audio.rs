@@ -38,7 +38,10 @@ async fn convert_compress() {
             Ok(o) => o,
             // FFmpeg builds differ (e.g. Homebrew ships without libvorbis):
             // the tool must say so clearly rather than fail obscurely.
-            Err(e) if e.code() == "unsupported" && !common::has_encoder_for(fmt) => {
+            Err(e)
+                if matches!(e.code(), "unsupported" | "invalid_input")
+                    && !common::has_encoder_for(fmt) =>
+            {
                 assert!(e.to_string().contains("encoder"), "{fmt}: {e}");
                 continue;
             }
