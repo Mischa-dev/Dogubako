@@ -69,6 +69,9 @@ campaign are added here as they merge.
   `pdftocairo`, since `pdftoppm` has no `-transp` flag.
 - Add Subtitles rejects WebM output for sources WebM can't hold as-is (such
   as h264/aac) before running FFmpeg, instead of failing with `Error: external`.
+  The app shows the warning under Format as soon as WebM is picked, before Run:
+  tools can now check their inputs ahead of a run (`POST /tools/{id}/check`,
+  the desktop `check_tool` command).
 - Convert Audio rejects a sample rate the target encoder can't use (MP3 tops
   out at 48 kHz) as invalid input on `sample_rate`.
 - Create Archive and Compress check the compression level against the format

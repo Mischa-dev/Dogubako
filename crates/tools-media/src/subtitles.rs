@@ -769,6 +769,25 @@ fn sub_codec_for(fmt: &str, src_ext: &str) -> &'static str {
     }
 }
 
+/// Output container for Add Subtitles.
+fn subtitles_format(p: &Params, f: &InputFile) -> ToolResult<String> {
+    Ok(match p.str("format")? {
+        "same" => match same_container(f) {
+            "avi" => "mkv",
+            c => c,
+        },
+        o => o,
+    }
+    .to_string())
+}
+
+fn webm_copy_check(fmt: &str, pr: &Probe) -> ToolResult<()> {
+    match webm_copy_problem(fmt, pr) {
+        Some(msg) => Err(ToolError::invalid("format", msg)),
+        None => Ok(()),
+    }
+}
+
 /// Why the probed streams cannot be stream-copied into WebM, which only
 /// holds VP8/VP9/AV1 video and Opus/Vorbis audio.
 fn webm_copy_problem(fmt: &str, pr: &Probe) -> Option<String> {
@@ -867,64 +886,63 @@ fn subtitles_add() -> Arc<dyn Tool> {
         .param(ParamSpec::text("languages").placeholder("eng, deu").describe("ISO 639 language codes, one per subtitle file"))
         .param(ParamSpec::boolean("default_track").default_bool(true).describe("Mark the first added track as default"))
         .param(ParamSpec::choice("format", &[("same", "Same as input (AVI → MKV)"), ("mkv", "MKV"), ("mp4", "MP4"), ("mov", "MOV"), ("webm", "WebM")]).default_str("same"));
-    async_tool(spec, |ctx, p| async move {
-        let f = p.file("input")?.clone();
-        let pr = probe_video(&ctx, &f).await?;
-        let subs = p.files("subtitles").to_vec();
-        let langs: Vec<String> = p
-            .opt_str("languages")
-            .unwrap_or("")
-            .split([',', ' ', ';'])
-            .map(|s| s.trim().to_lowercase())
-            .filter(|s| !s.is_empty())
-            .collect();
-        for l in &langs {
-            if !lang_ok(l) {
-                return Err(ToolError::invalid(
-                    "languages",
-                    format!("'{l}' is not an ISO 639 code like 'en' or 'eng'"),
-                ));
+    checked_tool(
+        spec,
+        |ctx, p| async move {
+            let f = p.file("input")?;
+            let pr = probe_video(&ctx, f).await?;
+            webm_copy_check(&subtitles_format(&p, f)?, &pr)
+        },
+        |ctx, p| async move {
+            let f = p.file("input")?.clone();
+            let pr = probe_video(&ctx, &f).await?;
+            let subs = p.files("subtitles").to_vec();
+            let langs: Vec<String> = p
+                .opt_str("languages")
+                .unwrap_or("")
+                .split([',', ' ', ';'])
+                .map(|s| s.trim().to_lowercase())
+                .filter(|s| !s.is_empty())
+                .collect();
+            for l in &langs {
+                if !lang_ok(l) {
+                    return Err(ToolError::invalid(
+                        "languages",
+                        format!("'{l}' is not an ISO 639 code like 'en' or 'eng'"),
+                    ));
+                }
             }
-        }
-        let fmt = match p.str("format")? {
-            "same" => match same_container(&f) {
-                "avi" => "mkv",
-                c => c,
-            },
-            o => o,
-        }
-        .to_string();
-        if let Some(msg) = webm_copy_problem(&fmt, &pr) {
-            return Err(ToolError::invalid("format", msg));
-        }
-        // validate subtitle files by parsing text formats
-        let mut list = vec![];
-        for (k, s) in subs.iter().enumerate() {
-            let ext = s.extension();
-            if matches!(ext.as_str(), "srt" | "vtt") {
-                let text = String::from_utf8_lossy(&std::fs::read(&s.path)?).to_string();
-                parse_any(&text, &ext)
-                    .map_err(|e| ToolError::invalid("subtitles", format!("{}: {e}", s.name)))?;
+            let fmt = subtitles_format(&p, &f)?;
+            webm_copy_check(&fmt, &pr)?;
+            // validate subtitle files by parsing text formats
+            let mut list = vec![];
+            for (k, s) in subs.iter().enumerate() {
+                let ext = s.extension();
+                if matches!(ext.as_str(), "srt" | "vtt") {
+                    let text = String::from_utf8_lossy(&std::fs::read(&s.path)?).to_string();
+                    parse_any(&text, &ext)
+                        .map_err(|e| ToolError::invalid("subtitles", format!("{}: {e}", s.name)))?;
+                }
+                list.push((s.path.clone(), langs.get(k).cloned()));
             }
-            list.push((s.path.clone(), langs.get(k).cloned()));
-        }
-        let out = out_path(&ctx, &f, "subtitled", &fmt);
-        mux_subtitles(
-            &ctx,
-            &f.path,
-            &pr,
-            &list,
-            &fmt,
-            p.bool("default_track"),
-            &out,
-            (0.0, 1.0),
-        )
-        .await?;
-        let npr = probe(&ctx, &out).await?;
-        let tracks: Vec<Value> = npr.subtitle_streams().iter().map(|s| json!({"index": s["index"], "codec": s["codec_name"], "language": s["tags"]["language"]})).collect();
-        Ok(ToolOutput::files(vec![ctx.artifact(&out)?])
-            .with_data(json!({"subtitle_tracks": tracks})))
-    })
+            let out = out_path(&ctx, &f, "subtitled", &fmt);
+            mux_subtitles(
+                &ctx,
+                &f.path,
+                &pr,
+                &list,
+                &fmt,
+                p.bool("default_track"),
+                &out,
+                (0.0, 1.0),
+            )
+            .await?;
+            let npr = probe(&ctx, &out).await?;
+            let tracks: Vec<Value> = npr.subtitle_streams().iter().map(|s| json!({"index": s["index"], "codec": s["codec_name"], "language": s["tags"]["language"]})).collect();
+            Ok(ToolOutput::files(vec![ctx.artifact(&out)?])
+                .with_data(json!({"subtitle_tracks": tracks})))
+        },
+    )
 }
 
 fn subtitles_remove() -> Arc<dyn Tool> {

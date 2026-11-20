@@ -13,6 +13,19 @@ use tower::ServiceExt;
 
 fn test_tools() -> Vec<Arc<dyn Tool>> {
     vec![
+        checked_tool(
+            ToolSpec::new("text.checked", "Checked", Category::Text)
+                .describe("Rejects 'bad' before Run")
+                .param(ParamSpec::text("text").required())
+                .text_output("text/plain"),
+            |_c, p| async move {
+                if p.text("text") == "bad" {
+                    return Err(ToolError::invalid("text", "bad is not allowed"));
+                }
+                Ok(())
+            },
+            |_c, p| async move { Ok(ToolOutput::text(p.text("text"))) },
+        ),
         sync_tool(
             ToolSpec::new("text.upper", "Upper", Category::Text)
                 .describe("Uppercase text")
@@ -205,7 +218,7 @@ async fn setup_login_and_csrf() {
     )
     .await;
     assert_eq!(r.status, StatusCode::OK);
-    assert_eq!(r.body["count"], 6);
+    assert_eq!(r.body["count"], 7);
     // POST without CSRF header is rejected
     let r = call(
         &t.app,
@@ -554,6 +567,52 @@ async fn files_isolated_between_principals() {
     // Path traversal in upload names is neutralized
     let f2 = upload(&t, &[("authorization", &ba)], "..%2F..%2Fevil.sh", b"x").await;
     assert_eq!(f2["name"], "evil.sh");
+}
+
+#[tokio::test]
+async fn precheck_reports_problems_before_run() {
+    let t = setup(AuthMode::None);
+    let tools = call(&t.app, Method::GET, "/api/v1/tools", &[], None).await;
+    let find = |id: &str| {
+        tools.body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["id"] == id)
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(find("text.checked")["prechecks"], true);
+    assert!(find("text.upper").get("prechecks").is_none());
+    let check = |id: &str, params: Value| {
+        let uri = format!("/api/v1/tools/{id}/check");
+        let app = t.app.clone();
+        async move {
+            call(
+                &app,
+                Method::POST,
+                &uri,
+                &[],
+                Some(json!({ "params": params })),
+            )
+            .await
+        }
+    };
+    let r = check("text.checked", json!({"text": "bad"})).await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.body["ok"], false);
+    assert_eq!(r.body["error"]["code"], "invalid_input");
+    assert_eq!(r.body["error"]["param"], "text");
+    let r = check("text.checked", json!({"text": "fine"})).await;
+    assert_eq!(r.body, json!({"ok": true}));
+    // Spec validation runs too, and tools without a check pass.
+    let r = check("text.checked", json!({})).await;
+    assert_eq!(r.body["error"]["code"], "invalid_input");
+    let r = check("text.upper", json!({"text": "x"})).await;
+    assert_eq!(r.body["ok"], true);
+    // Nothing ran.
+    let jobs = call(&t.app, Method::GET, "/api/v1/jobs", &[], None).await;
+    assert_eq!(jobs.body["jobs"], json!([]));
 }
 
 #[tokio::test]

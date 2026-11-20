@@ -96,6 +96,38 @@ impl JobManager {
     }
 
     /// Validate and enqueue a job; returns immediately with the queued view.
+    /// Check a tool's inputs before Run (`Engine::check`), with the same
+    /// authorization and file access a run would get.
+    pub async fn check(
+        &self,
+        p: &Principal,
+        tool_id: &str,
+        params: Map<String, Value>,
+    ) -> Result<(), ToolError> {
+        let resolver = self.storage.resolver(&p.user_id);
+        let principal = p.clone();
+        let authorize = move |s: &dogubako_core::spec::ToolSpec| principal.can_use(s);
+        let fs = if self.host_fs_enabled {
+            None
+        } else {
+            Some(FsPolicy::deny_all())
+        };
+        self.engine
+            .check(RunRequest {
+                tool_id,
+                params,
+                resolver: &resolver,
+                out_dir: self.jobs_dir.clone(),
+                permissions: p.permissions(self.host_fs_enabled),
+                authorize: Some(&authorize),
+                progress: None,
+                cancel: CancellationToken::new(),
+                timeout: Some(self.max_job),
+                fs,
+            })
+            .await
+    }
+
     pub fn submit(
         self: &Arc<Self>,
         principal: &Principal,
