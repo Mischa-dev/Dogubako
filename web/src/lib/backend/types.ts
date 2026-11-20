@@ -52,6 +52,8 @@ export interface Backend {
   artifactUrl(a: Artifact): string;
   downloadArtifact(a: Artifact): Promise<void>;
   revealArtifact?(a: Artifact): Promise<void>;
+  /** Save a whole result set into a folder the user picks (desktop). Null when cancelled. */
+  saveArtifacts?(artifacts: Artifact[]): Promise<{ saved: number; dir: string } | null>;
   zipUrl?(jobId: string): string;
 
   listJobs(limit?: number): Promise<JobView[]>;

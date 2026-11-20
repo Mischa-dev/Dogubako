@@ -582,10 +582,24 @@ async fn job_zip(
     p: Principal,
     Path(id): Path<String>,
 ) -> ApiResult<Response> {
-    let _ = s
+    let job = s
         .jobs
         .get(&p.user_id, &id)
         .ok_or_else(|| ApiError::not_found("job not found"))?;
+    let folders: std::collections::HashMap<String, String> = job
+        .result
+        .iter()
+        .flat_map(|r| &r.artifacts)
+        .filter_map(|a| {
+            let rel = dogubako_core::util::plain_rel_path(a.rel_path.as_deref()?)?;
+            let rel = rel
+                .iter()
+                .map(|c| c.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/");
+            Some((a.id.clone()?, rel))
+        })
+        .collect();
     let files: Vec<_> =
         s.db.files_for_job(&id)
             .into_iter()
@@ -604,10 +618,22 @@ async fn job_zip(
             .compression_method(zip::CompressionMethod::Deflated);
         let mut used = std::collections::HashSet::new();
         for file in &files2 {
-            let mut name = file.view.name.clone();
+            let base = folders
+                .get(&file.view.id)
+                .cloned()
+                .unwrap_or_else(|| file.view.name.clone());
+            let mut name = base.clone();
             let mut i = 2;
             while !used.insert(name.clone()) {
-                name = dogubako_core::util::suffixed(&file.view.name, &i.to_string(), None);
+                name = match base.rsplit_once('/') {
+                    Some((dir, leaf)) => {
+                        format!(
+                            "{dir}/{}",
+                            dogubako_core::util::suffixed(leaf, &i.to_string(), None)
+                        )
+                    }
+                    None => dogubako_core::util::suffixed(&base, &i.to_string(), None),
+                };
                 i += 1;
             }
             z.start_file(name, opts).map_err(std::io::Error::other)?;
