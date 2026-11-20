@@ -298,6 +298,12 @@ fn convert() -> Arc<dyn Tool> {
     async_tool(spec, |ctx, p| async move {
         let fmt = p.str("format")?.to_string();
         let kbps = p.int_or("bitrate", 192) as u32;
+        if fmt == "mp3" && p.opt_int("vbr_quality").is_none() && kbps > 320 {
+            return Err(ToolError::invalid(
+                "bitrate",
+                format!("MP3 allows at most 320 kbit/s; {kbps} was requested"),
+            ));
+        }
         let (ext, enc, args) = format_args(
             &fmt,
             kbps,
@@ -374,25 +380,36 @@ fn convert() -> Arc<dyn Tool> {
     })
 }
 
+/// Bitrate for an audio.compress level; mono uses two thirds of it.
+fn compress_kbps(level: &str, mono: bool) -> u32 {
+    let kbps = match level {
+        "light" => 160,
+        "strong" => 96,
+        "voice" => 48,
+        _ => 128,
+    };
+    if mono { kbps * 2 / 3 } else { kbps }.max(32)
+}
+
+/// Roughly the most FFmpeg's native AAC encoder spends on noise-like audio
+/// (about 4.5 bits per sample per channel); it ignores higher bitrates.
+fn aac_ceiling_kbps(rate: u32, channels: u32) -> u32 {
+    rate * channels * 9 / 2000
+}
+
 fn compress() -> Arc<dyn Tool> {
     let spec = audio_spec("audio.compress", "Compress Audio")
         .describe("Make audio files smaller by re-encoding to an efficient codec at a lower bitrate, optionally in mono (ideal for voice)")
         .keywords(&["reduce size", "smaller", "shrink", "bitrate", "voice memo", "podcast"])
         .param(audio_input(true))
-        .param(ParamSpec::choice("level", &[("light", "Light (160 kbit/s)"), ("balanced", "Balanced (128 kbit/s)"), ("strong", "Strong (96 kbit/s)"), ("voice", "Voice (48 kbit/s mono)")]).default_str("balanced"))
+        .param(ParamSpec::choice("level", &[("light", "Light (160 kbit/s)"), ("balanced", "Balanced (128 kbit/s)"), ("strong", "Strong (96 kbit/s)"), ("voice", "Voice (32 kbit/s mono)")]).default_str("balanced"))
         .param(ParamSpec::choice("format", &[("mp3", "MP3"), ("m4a", "AAC (M4A)"), ("opus", "Opus (best quality per size)")]).default_str("mp3"))
-        .param(ParamSpec::boolean("mono").describe("Downmix to mono (halves the size of stereo audio)"));
+        .param(ParamSpec::boolean("mono").describe("Downmix to mono at two thirds of the level's bitrate (ideal for voice)"));
     async_tool(spec, |ctx, p| async move {
         let level = p.str("level")?;
-        let kbps = match level {
-            "light" => 160,
-            "strong" => 96,
-            "voice" => 48,
-            _ => 128,
-        };
         let mono = p.bool("mono") || level == "voice";
         let fmt = p.str("format")?.to_string();
-        let kbps = if mono { kbps * 2 / 3 } else { kbps }.max(32);
+        let kbps = compress_kbps(level, mono);
         let (ext, enc, args) = format_args(&fmt, kbps, None, "keep");
         need_encoder(&ctx, enc).await?;
         let files = p.files("input").to_vec();
@@ -400,6 +417,26 @@ fn compress() -> Arc<dyn Tool> {
         for (i, f) in files.iter().enumerate() {
             let pr = probe_audio(&ctx, f).await?;
             let out = out_path(&ctx, f, "compressed", ext);
+            let mut args = args.clone();
+            let mut kbps = kbps;
+            if fmt == "m4a" && level != "voice" {
+                let rate = pr.sample_rate().unwrap_or(44100);
+                let ch = if mono { 1 } else { pr.channels().unwrap_or(2) };
+                let ceiling = aac_ceiling_kbps(rate, ch);
+                let top = compress_kbps("light", mono);
+                if ceiling < top {
+                    // The AAC encoder can't spend more than this on low-rate audio, so
+                    // scale the levels down together to keep them apart.
+                    kbps = (kbps * ceiling / top).max(16);
+                    args = format_args(&fmt, kbps, None, "keep").2;
+                    rep.warnings.push(format!(
+                        "{}: AAC uses at most about {ceiling} kbit/s for {} kHz {}; encoded at {kbps} kbit/s",
+                        f.name,
+                        rate as f64 / 1000.0,
+                        if ch == 1 { "mono".to_string() } else { format!("{ch}-channel audio") },
+                    ));
+                }
+            }
             let mut ff = Ff::new()
                 .input(&f.path)
                 .args(audio_maps(&pr, ext))

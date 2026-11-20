@@ -10154,7 +10154,7 @@
       },
       {
        "value": "voice",
-       "label": "Voice (48 kbit/s mono)"
+       "label": "Voice (32 kbit/s mono)"
       }
      ],
      "multi": false,
@@ -10190,7 +10190,7 @@
     {
      "name": "mono",
      "label": "Mono",
-     "description": "Downmix to mono (halves the size of stereo audio)",
+     "description": "Downmix to mono at two thirds of the level's bitrate (ideal for voice)",
      "type": "boolean",
      "required": false,
      "default": false,

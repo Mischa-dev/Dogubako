@@ -542,3 +542,114 @@ async fn visuals_info_tags() {
         assert_eq!(e.code(), "invalid_input");
     }
 }
+
+#[tokio::test]
+async fn compress_m4a_levels_differ_on_low_rate_audio() {
+    let h = harness();
+    need!(h, "audio.compress");
+    // AAC tops out far below 96 kbit/s for 16 kHz mono, so fixed level bitrates collapse.
+    let src = gen(
+        &h,
+        "noise16.wav",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "anoisesrc=d=3:a=0.3:r=16000",
+            "-ac",
+            "1",
+        ],
+    );
+    let mut sizes = Vec::new();
+    for level in ["light", "balanced", "strong"] {
+        let out = h
+            .run(
+                "audio.compress",
+                json!({"input": [s(&src)], "level": level, "format": "m4a"}),
+            )
+            .await
+            .unwrap();
+        assert!(
+            out.warnings.iter().any(|w| w.contains("AAC uses at most")),
+            "{level}: {:?}",
+            out.warnings
+        );
+        let size = out.artifacts[0].size;
+        std::fs::remove_file(&out.artifacts[0].path).unwrap();
+        sizes.push(size);
+    }
+    assert!(sizes[0] > sizes[1] && sizes[1] > sizes[2], "{sizes:?}");
+
+    // Full-rate stereo keeps the labelled bitrates and needs no warning.
+    let t = tone(&h, "tone.wav");
+    let out = h
+        .run(
+            "audio.compress",
+            json!({"input": [s(&t)], "level": "light", "format": "m4a"}),
+        )
+        .await
+        .unwrap();
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+}
+
+#[tokio::test]
+async fn compress_voice_matches_label() {
+    let tools = dogubako_tools_media::tools();
+    let spec = tools
+        .iter()
+        .find(|t| t.spec().id == "audio.compress")
+        .unwrap()
+        .spec();
+    let level = spec.params.iter().find(|p| p.name == "level").unwrap();
+    let label = serde_json::to_value(level).unwrap()["options"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["value"] == "voice")
+        .unwrap()["label"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(label.contains("32 kbit/s mono"), "{label}");
+
+    let h = harness();
+    need!(h, "audio.compress");
+    let t = tone(&h, "tone.wav");
+    let out = h
+        .run(
+            "audio.compress",
+            json!({"input": [s(&t)], "level": "voice", "format": "mp3"}),
+        )
+        .await
+        .unwrap();
+    let j = probe_json(&out.artifacts[0].path);
+    assert_eq!(j["streams"][0]["bit_rate"], "32000");
+    assert_eq!(j["streams"][0]["channels"], 1);
+}
+
+#[tokio::test]
+async fn convert_mp3_bitrate_capped_at_320() {
+    let h = harness();
+    need!(h, "audio.convert");
+    let t = tone(&h, "tone.wav");
+    let e = h
+        .run(
+            "audio.convert",
+            json!({"input": [s(&t)], "format": "mp3", "bitrate": 640}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "invalid_input");
+    assert!(e.to_string().contains("320"), "{e}");
+    let out = h
+        .run(
+            "audio.convert",
+            json!({"input": [s(&t)], "format": "mp3", "bitrate": 320}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        probe_json(&out.artifacts[0].path)["streams"][0]["bit_rate"],
+        "320000"
+    );
+}
