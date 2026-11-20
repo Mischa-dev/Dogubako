@@ -100,6 +100,25 @@ async fn transcript_convert_and_shift() {
         let t = out.text.unwrap();
         assert!(t.contains(want) && !t.contains("<b>"), "{fmt}: {t}");
     }
+
+    // Plain text and JSON input have no markup: tag-like text is literal.
+    for (input, from) in [
+        ("Use <b>bold</b> tags", "txt"),
+        (
+            r#"{"segments": [{"start": 0, "end": 1, "text": "Use <b>bold</b> tags"}]}"#,
+            "json",
+        ),
+    ] {
+        let out = h
+            .run(
+                "speech.transcript_convert",
+                json!({"text": input, "output_format": "txt"}),
+            )
+            .await
+            .unwrap();
+        let t = out.text.unwrap();
+        assert!(t.contains("Use <b>bold</b> tags"), "{from}: {t}");
+    }
     let e = h
         .run(
             "speech.transcript_convert",

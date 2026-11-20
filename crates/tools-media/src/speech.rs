@@ -450,7 +450,7 @@ pub async fn run_whisper(
         clamp_to_duration(&mut res.segments, &mut res.words, d);
     }
     if o.translate {
-        strip_stray_quotes(&mut res.segments);
+        strip_stray_quotes(&mut res.segments, &mut res.words);
     }
     res.language = detected.lock().unwrap().clone().or(lang);
     let _ = std::fs::remove_file(&wav);
@@ -473,10 +473,10 @@ pub fn clamp_to_duration(segs: &mut Vec<Segment>, words: &mut Vec<Value>, durati
 }
 
 /// Whisper's translate task often wraps its English output in quotation
-/// marks it never balances. Drop an unpaired opening quote at the start of
-/// the transcript (and its unpaired closing quote), and a pair that only
-/// wraps the whole transcript.
-pub fn strip_stray_quotes(segs: &mut [Segment]) {
+/// marks it never balances. Drop the only quote of the transcript when it
+/// opens it, and a pair that only wraps the whole transcript, from the cues
+/// and the matching words. Any other quotes are left alone.
+pub fn strip_stray_quotes(segs: &mut [Segment], words: &mut [Value]) {
     let is_q = |c: char| matches!(c, '"' | '\u{201c}' | '\u{201d}');
     let count: usize = segs
         .iter()
@@ -491,31 +491,31 @@ pub fn strip_stray_quotes(segs: &mut [Segment]) {
         .unwrap_or(first);
     let starts = segs[first].text.trim_start().starts_with(is_q);
     let ends = segs[last].text.trim_end().ends_with(is_q);
-    let strip_start = |s: &mut Segment| {
-        s.text = s
-            .text
-            .trim_start()
+    let strip_start = |t: &str| {
+        t.trim_start()
             .trim_start_matches(is_q)
             .trim_start()
-            .to_string();
+            .to_string()
     };
-    let strip_end = |s: &mut Segment| {
-        s.text = s
-            .text
-            .trim_end()
-            .trim_end_matches(is_q)
-            .trim_end()
-            .to_string();
-    };
-    if starts && count % 2 == 1 {
-        strip_start(&mut segs[first]);
-    } else if starts
-        && ends
-        && count == 2
-        && (first != last || segs[first].text.trim().chars().count() > 1)
-    {
-        strip_start(&mut segs[first]);
-        strip_end(&mut segs[last]);
+    let strip_end = |t: &str| t.trim_end().trim_end_matches(is_q).trim_end().to_string();
+    let wraps =
+        count == 2 && ends && (first != last || segs[first].text.trim().chars().count() > 1);
+    if !starts || !(count == 1 || wraps) {
+        return;
+    }
+    segs[first].text = strip_start(&segs[first].text);
+    if let Some(w) = words.first_mut() {
+        if let Some(t) = w["text"].as_str().filter(|t| t.starts_with(is_q)) {
+            w["text"] = json!(strip_start(t));
+        }
+    }
+    if wraps {
+        segs[last].text = strip_end(&segs[last].text);
+        if let Some(w) = words.last_mut() {
+            if let Some(t) = w["text"].as_str().filter(|t| t.ends_with(is_q)) {
+                w["text"] = json!(strip_end(t));
+            }
+        }
     }
 }
 
@@ -1079,24 +1079,43 @@ mod tests {
             seg(0.0, 1.0, "\"Hello there."),
             seg(1.0, 2.0, "How are you?"),
         ];
-        strip_stray_quotes(&mut s);
+        strip_stray_quotes(&mut s, &mut []);
         assert_eq!(texts(&s), ["Hello there.", "How are you?"]);
         let mut s = vec![
             seg(0.0, 1.0, "\"Hello there."),
             seg(1.0, 2.0, "How are you?\""),
         ];
-        strip_stray_quotes(&mut s);
+        strip_stray_quotes(&mut s, &mut []);
         assert_eq!(texts(&s), ["Hello there.", "How are you?"]);
         // A quote that is part of the text stays.
         let mut s = vec![
             seg(0.0, 1.0, "\"The cloud\" is tested."),
             seg(1.0, 2.0, "He said \"hi\"."),
         ];
-        strip_stray_quotes(&mut s);
+        strip_stray_quotes(&mut s, &mut []);
         assert_eq!(texts(&s), ["\"The cloud\" is tested.", "He said \"hi\"."]);
         let mut s = vec![seg(0.0, 1.0, "Plain text.")];
-        strip_stray_quotes(&mut s);
+        strip_stray_quotes(&mut s, &mut []);
         assert_eq!(texts(&s), ["Plain text."]);
+        // With an unmatched quote later on, the first quote may be a real one.
+        let mut s = vec![
+            seg(0.0, 1.0, "\"Hello\" she said."),
+            seg(1.0, 2.0, "Then \"wait"),
+        ];
+        strip_stray_quotes(&mut s, &mut []);
+        assert_eq!(texts(&s), ["\"Hello\" she said.", "Then \"wait"]);
+        // Words lose the same quotes as the cues.
+        let mut s = vec![seg(0.0, 1.0, "\"Hello there.\"")];
+        let mut w = vec![
+            json!({"text": "\"Hello", "start": 0.0, "end": 0.5}),
+            json!({"text": "there.\"", "start": 0.5, "end": 1.0}),
+        ];
+        strip_stray_quotes(&mut s, &mut w);
+        assert_eq!(texts(&s), ["Hello there."]);
+        assert_eq!(
+            (w[0]["text"].as_str(), w[1]["text"].as_str()),
+            (Some("Hello"), Some("there."))
+        );
     }
 
     #[test]

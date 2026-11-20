@@ -36,6 +36,10 @@ pub struct Segment {
     /// WebVTT cue settings after the end time (`align:start position:10%`).
     #[serde(skip)]
     pub vtt_settings: Option<String>,
+    /// The text came from SRT, where `<i>`/`<b>`/`<u>`/`<font>` are
+    /// formatting tags rather than literal text.
+    #[serde(skip)]
+    pub srt_markup: bool,
 }
 
 impl Segment {
@@ -44,6 +48,7 @@ impl Segment {
     pub fn plain_text(&self) -> String {
         match &self.vtt_markup {
             Some(m) => decode_char_refs(&remove_tags(m, |_| true)),
+            None if !self.srt_markup => self.text.clone(),
             None => remove_tags(&self.text, |t| {
                 let name = t.trim_start_matches('/');
                 let name = name.split([' ', '\t']).next().unwrap_or("");
@@ -167,6 +172,7 @@ pub fn parse_srt(input: &str) -> Result<Vec<Segment>, String> {
             start,
             end,
             text,
+            srt_markup: true,
             ..Default::default()
         });
     }
