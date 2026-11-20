@@ -215,18 +215,28 @@ impl Ff {
     }
 
     pub async fn run(self, ctx: &ToolContext) -> ToolResult<FfOut> {
-        ctx.check_cancelled()?;
-        let mut cmd = ctx
-            .command("ffmpeg")?
-            .args([
-                "-hide_banner",
-                "-nostdin",
-                "-y",
-                "-nostats",
-                "-loglevel",
-                if self.verbose { "info" } else { "error" },
-            ])
-            .args(&self.pre);
+        let (res, log) = self.run_logged(ctx).await;
+        res.map(|_| FfOut { log })
+    }
+
+    /// Like `run`, but returns the captured log even when ffmpeg fails.
+    pub async fn run_logged(self, ctx: &ToolContext) -> (ToolResult<()>, Vec<String>) {
+        if let Err(e) = ctx.check_cancelled() {
+            return (Err(e), vec![]);
+        }
+        let mut cmd = match ctx.command("ffmpeg") {
+            Ok(c) => c,
+            Err(e) => return (Err(e), vec![]),
+        }
+        .args([
+            "-hide_banner",
+            "-nostdin",
+            "-y",
+            "-nostats",
+            "-loglevel",
+            if self.verbose { "info" } else { "error" },
+        ])
+        .args(&self.pre);
         if self.progress {
             cmd = cmd.args(["-progress", "pipe:1"]);
             let c = ctx.clone();
@@ -274,9 +284,9 @@ impl Ff {
         if let Some(c) = &self.cwd {
             cmd = cmd.current_dir(c);
         }
-        cmd.args(&self.args).run().await?;
+        let res = cmd.args(&self.args).run().await.map(|_| ());
         let log = std::mem::take(&mut *log.lock().unwrap());
-        Ok(FfOut { log })
+        (res, log)
     }
 }
 

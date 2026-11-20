@@ -1720,7 +1720,7 @@ fn extract_frames() -> Arc<dyn Tool> {
                 }
                 vf.push("showinfo".into());
                 let pattern = dir.join(format!("frame-%06d.{fmt}"));
-                let out = Ff::new()
+                let (res, log) = Ff::new()
                     .args(&pre)
                     .input(&f.path)
                     .args(["-an", "-sn", "-vf", &vf.join(",")])
@@ -1731,10 +1731,9 @@ fn extract_frames() -> Arc<dyn Tool> {
                     .verbose()
                     .duration(pr.duration())
                     .span(sp, format!("Extracting frames from {}", f.name))
-                    .run(&ctx)
-                    .await?;
-                let times: Vec<f64> = out
-                    .log
+                    .run_logged(&ctx)
+                    .await;
+                let times: Vec<f64> = log
                     .iter()
                     .filter(|l| l.contains("Parsed_showinfo") && l.contains("pts_time:"))
                     .filter_map(|l| {
@@ -1746,6 +1745,27 @@ fn extract_frames() -> Arc<dyn Tool> {
                             .ok()
                     })
                     .collect();
+                if let Err(e) = res {
+                    // Encoders such as mjpeg and libwebp fail at EOF when the
+                    // scene filter passed no frames. Confirm the video decodes
+                    // with a null-output pass before calling it an empty result.
+                    let maybe_empty = mode == "scene"
+                        && times.is_empty()
+                        && matches!(e, ToolError::External { .. })
+                        && std::fs::read_dir(&dir)?.next().is_none();
+                    let empty = maybe_empty
+                        && Ff::new()
+                            .input(&f.path)
+                            .args(["-an", "-sn", "-vf", &vf.join(",")])
+                            .null_out()
+                            .no_progress()
+                            .run(&ctx)
+                            .await
+                            .is_ok();
+                    if !empty {
+                        return Err(e);
+                    }
+                }
                 let mut names: Vec<PathBuf> = std::fs::read_dir(&dir)?
                     .filter_map(|e| e.ok().map(|e| e.path()))
                     .collect();
