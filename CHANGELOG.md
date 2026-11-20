@@ -117,6 +117,8 @@ campaign are added here as they merge.
   error correction level's capacity before Run.
 - Extract Frames in scene mode reports "no frames matched" for JPEG/WebP
   instead of an FFmpeg encoder error.
+- Video to GIF accepts 2 colours, the field's minimum, instead of failing in
+  FFmpeg's palette generator.
 
 ## [0.1.0-alpha.1] - 2026-11-02
 
