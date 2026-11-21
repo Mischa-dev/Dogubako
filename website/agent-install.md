@@ -4,7 +4,7 @@ You are an AI coding agent running on a Linux machine. A person asked you to ins
 Dogubako here with Docker (or Podman) and, usually, to connect yourself to it over MCP. Follow
 these steps in order. Each step ends with a check; do not continue until it passes.
 
-Dogubako is an open-source toolbox (AGPL-3.0-or-later): 249 tools for images, video,
+Dogubako is an open-source toolbox (AGPL-3.0-or-later): 250 tools for images, video,
 audio, speech, PDFs, files, text, data and more, run locally by one server and used
 from a browser, an HTTP API, a CLI or MCP. Source: https://github.com/Mischa-dev/Dogubako
 

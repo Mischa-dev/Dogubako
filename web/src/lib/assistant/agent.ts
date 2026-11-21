@@ -9,7 +9,7 @@
  * run through the normal `Backend.run`, so every step is validated and
  * authorized exactly like a manual run.
  *
- * Instead of 249 function definitions (most endpoints cap tools at 128 and
+ * Instead of one function definition per tool (most endpoints cap tools at 128 and
  * small models drown in them) the model gets a one-line catalog in the system
  * prompt and three functions: `tool_details`, `run_tool` and `find_tools`.
  */

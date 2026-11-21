@@ -7,7 +7,7 @@ sidebar:
 
 ## Discovery modes
 
-A catalog of 249 tools would flood an agent's context, so there are two
+A catalog of 250 tools would flood an agent's context, so there are two
 modes.
 
 - **`full`** (default): `tools/list` returns every tool this agent is

@@ -3,7 +3,7 @@
 <h1 align="center">Dogubako</h1>
 
 <p align="center"><b>道具箱 — a local-first, open-source utility toolbox.</b><br>
-249 tools for images, video, audio, speech, PDFs, files, text, developers, data, networks, design and system info —<br>
+250 tools for images, video, audio, speech, PDFs, files, text, developers, data, networks, design and system info —<br>
 as a desktop app, a self-hosted web service, a CLI, an HTTP API and an MCP server.</p>
 
 ---
@@ -43,7 +43,7 @@ More in [docs/screenshots](docs/screenshots).
 | Images | 30 | convert (HEIC/AVIF/WebP/…), batch resize/compress, crop, watermark, metadata inspect/strip, compare (SSIM/PSNR), contact & sprite sheets, SVG → PNG, SVG optimize, icons & favicon packs, face detect/blur with manual correction, redact regions, OCR, background removal, upscaling |
 | Video | 27 | convert/compress (incl. target size, hardware encoders), trim/cut/merge, crop/rotate, GIF ⇄ video, speed, stabilize, frames & thumbnails, previews, subtitles add/burn/extract, inspect |
 | Audio | 21 | convert, EBU R128 normalize, trim/split/merge, silence detect/remove, waveform & spectrogram, tags & cover art, denoise, EQ, speed, fades |
-| Speech | 9 | offline transcription (whisper.cpp) to TXT/SRT/VTT/JSON/MD, language detection, speaker turns, VAD segmentation, TTS (Piper), subtitle convert/shift |
+| Speech | 10 | offline transcription (whisper.cpp) to TXT/SRT/VTT/JSON/MD, language detection, speaker turns, VAD segmentation, TTS (Piper), subtitle convert/shift |
 | PDF & documents | 27 | merge/split/reorder/rotate, compress, OCR to searchable PDF, text & image extraction, PDF ⇄ images, watermark, page numbers, metadata, encrypt/decrypt, forms, Office/Markdown conversion |
 | Files | 23 | hashes & checksum verify, archives (zip/tar/7z/… with bomb & traversal protection), duplicates, large files, folder compare, batch rename with preview, type detection, binary inspection |
 | Text | 27 | case, counts, sort/dedupe, diff, regex replace, encodings, escaping, Markdown → HTML, HTML → text/Markdown, extraction from Office/EPUB/PDF |
