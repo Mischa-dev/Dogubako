@@ -72,6 +72,15 @@ TOOL_COUNT = re.compile(
 )
 # Category rows in the introduction's table: "| [Speech & Voice](/tools/speech/) | 9 |".
 CATEGORY_COUNT = re.compile(r"(\|\s*\[[^\]]+\]\(/tools/([a-z]+)/\)\s*\|\s*)\d+(?=\s*\|)")
+# The README's table names categories without links: "| Speech | 9 |".
+README_CATEGORIES = {
+    "Images": "image", "Video": "video", "Audio": "audio", "Speech": "speech", "PDF & documents": "pdf",
+    "Files": "files", "Text": "text", "Developer": "dev", "Data": "data", "Network": "network",
+    "Design": "design", "System": "system",
+}
+README_CATEGORY_COUNT = re.compile(
+    r"^(\|\s*(" + "|".join(re.escape(k) for k in README_CATEGORIES) + r")\s*\|\s*)\d+(?=\s*\|)", re.M
+)
 
 # Pages that describe the current release. Once a version is bumped, none of
 # them may still name an older release: `check` lists every line that does.
@@ -266,7 +275,12 @@ def sync_tool_counts() -> None:
     for rel in TOOL_COUNT_PAGES:
         text = read(rel)
         new = TOOL_COUNT.sub(str(len(tools)), text)
-        new = CATEGORY_COUNT.sub(lambda m: m.group(1) + str(per_category.get(m.group(2), 0)), new)
+        new = CATEGORY_COUNT.sub(lambda m: m.group(1) + str(per_category[m.group(2)]), new)
+        if rel == "README.md":
+            new, rows = README_CATEGORY_COUNT.subn(
+                lambda m: m.group(1) + str(per_category[README_CATEGORIES[m.group(2)]]), new)
+            if rows != len(README_CATEGORIES):
+                raise SystemExit(f"README.md: found {rows} of {len(README_CATEGORIES)} category rows in the tools table")
         if not TOOL_COUNT.search(text):
             raise SystemExit(f"{rel}: no tool count found; drop it from TOOL_COUNT_PAGES")
         if new != text:
