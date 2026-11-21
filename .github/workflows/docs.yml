@@ -7,10 +7,12 @@ on:
   pull_request:
     paths: ["site/**", ".github/workflows/docs.yml"]
   workflow_dispatch:
-  # ship.yml deploys the docs for the release it just published.
+  # ship.yml deploys the docs for the release it just published (deploy: true),
+  # so missing Cloudflare secrets or an unpublished release fail the run there.
   workflow_call:
     inputs:
       ref: { type: string, default: "" }
+      deploy: { type: boolean, default: false }
 
 permissions:
   contents: read
@@ -48,9 +50,10 @@ jobs:
     # and the version on main is a published release. While a bumped version
     # waits for Ship release, the docs (which name it as current) stay as they
     # are; ship.yml deploys them once it publishes. Otherwise nothing is deployed.
+    # Pushes skip quietly when a check fails; a Ship deploy (deploy: true) fails.
     name: Deploy to Cloudflare Pages
     needs: build
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: inputs.deploy || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -66,13 +69,18 @@ jobs:
         id: creds
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUIRED: ${{ inputs.deploy && '1' || '' }}
         run: |
+          skip() {
+            if [ -n "$REQUIRED" ]; then echo "::error::$1"; exit 1; fi
+            echo "::notice::$1; skipping deploy."; exit 0
+          }
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set; skipping deploy."; exit 0
+            skip "CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set"
           fi
           tag="v$(python3 -I packaging/release/release.py current)"
           if [ "$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null)" != false ]; then
-            echo "::notice::$tag is not published yet; the docs deploy when Ship release publishes it."; exit 0
+            skip "$tag is not published yet; the docs deploy when Ship release publishes it"
           fi
           echo "ok=true" >> "$GITHUB_OUTPUT"
         working-directory: .
