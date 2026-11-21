@@ -93,6 +93,16 @@ def rewrite(text: str, docs: bool, release: str | None) -> tuple[str, int]:
             text,
         )
         n += k
+        # Every other file of a release (CLIs, checksums) follows the same tag.
+        def asset(m: re.Match) -> str:
+            nonlocal n
+            tag, file = m.group(1), m.group(2)
+            if tag == release:
+                return m.group(0)
+            n += 1
+            return f"{REPO}/releases/download/{release}/{file.replace(tag.removeprefix('v'), version)}"
+
+        text = re.sub(re.escape(REPO) + r'/releases/download/([^/"]+)/([^"#?\s]+)', asset, text)
         text, k = re.subn(re.escape(REPO) + r'/releases(?=["/]?")', f"{REPO}/releases/tag/{release}", text)
         n += k
     return text, n

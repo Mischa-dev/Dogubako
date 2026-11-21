@@ -16,14 +16,23 @@ python3 -I packaging/release/notices.py --fetch-sources
 `tauri.conf.json` and the web UI's package files, turns `[Unreleased]` in
 CHANGELOG.md into the new version's section, and scaffolds
 `docs/releases/v<version>.md` (the GitHub release body). `regen` rebuilds
-`docs/CAPABILITIES.md` and the docs site's tool pages.
+`docs/CAPABILITIES.md`, the docs site's tool pages, the website's tool list,
+and every "N tools" on both sites (a count with no "tools" after it is
+marked `<!-- tools:count -->N`).
 
 Then write the release note (everything below its `---` line is published),
 and update the pages that name the current release.
 `python3 -I packaging/release/release.py check` lists everything still
 behind: version fields, the changelog entry, comments left in the note,
 generated docs, and every line of README.md, website/ and the docs
-install pages that still names an older release. Open the PR when it passes.
+install pages that still names an older release. It also runs
+`release.py site`, which PR CI runs on every change: it fails when a tool
+count on dogubako.app or docs.dogubako.app, or the website's tool list,
+differs from `site/public/tools.json`, or when the release note's Downloads
+table, the website's download links or the docs alpha page miss (or add)
+an app, CLI, image or file that release.yml builds. A new build target means
+a line in `APP_BUNDLES` / `CLI_TARGETS` in release.py and a download on
+the site. Open the PR when it passes.
 
 ## 2. Draft (automatic)
 

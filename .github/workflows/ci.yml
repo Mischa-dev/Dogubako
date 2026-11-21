@@ -98,7 +98,12 @@ jobs:
       - run: npm ci
         working-directory: site
       - run: cargo build -p dogubako-cli --locked
+      - name: Release script tests
+        run: python3 -I -m unittest discover -s packaging/release -p 'test_release_site.py'
+      - name: Websites match the release (release.py site)
+        run: python3 -I packaging/release/release.py site
       - name: Generated docs (release.py regen)
+        if: success() || failure()
         run: python3 -I packaging/release/release.py regen --check
       - name: Third-party notices (notices.py --check)
         if: success() || failure()
