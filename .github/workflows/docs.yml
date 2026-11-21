@@ -7,6 +7,11 @@ on:
   pull_request:
     paths: ["site/**", ".github/workflows/docs.yml"]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Release tag or commit to deploy (e.g. v0.1.0-alpha.1); empty deploys main if published
+        type: string
+        default: ""
   # ship.yml deploys the docs for the release it just published (deploy: true),
   # so missing Cloudflare secrets or an unpublished release fail the run there.
   workflow_call:
@@ -50,10 +55,13 @@ jobs:
     # and the version on main is a published release. While a bumped version
     # waits for Ship release, the docs (which name it as current) stay as they
     # are; ship.yml deploys them once it publishes. Otherwise nothing is deployed.
-    # Pushes skip quietly when a check fails; a Ship deploy (deploy: true) fails.
+    # Pushes skip quietly when a check fails; a Ship deploy (deploy: true) or a
+    # manual run given a ref fails.
     name: Deploy to Cloudflare Pages
     needs: build
-    if: inputs.deploy || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
+    if: >-
+      inputs.deploy || (github.event_name == 'workflow_dispatch' && inputs.ref != '') ||
+      (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -69,7 +77,7 @@ jobs:
         id: creds
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REQUIRED: ${{ inputs.deploy && '1' || '' }}
+          REQUIRED: ${{ (inputs.deploy || (github.event_name == 'workflow_dispatch' && inputs.ref)) && '1' || '' }}
         run: |
           skip() {
             if [ -n "$REQUIRED" ]; then echo "::error::$1"; exit 1; fi
@@ -78,7 +86,8 @@ jobs:
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             skip "CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set"
           fi
-          tag="v$(python3 -I packaging/release/release.py current)"
+          # Read like release.py current, which older release tags don't have.
+          tag="v$(python3 -I -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
           if [ "$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null)" != false ]; then
             skip "$tag is not published yet; the docs deploy when Ship release publishes it"
           fi
