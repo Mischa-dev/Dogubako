@@ -70,6 +70,18 @@ Ship release fails its website and docs jobs instead.
 To make the run also wait for an approval click, add Mischa as a required
 reviewer on the `release` environment (Settings › Environments).
 
+## A deploy failed after publishing
+
+By the time the website or docs job runs, the release is published, so a
+new Ship release run for that version stops at "already published". Fix the
+cause (for missing Cloudflare secrets, add `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` under Settings › Secrets and variables › Actions),
+then open the failed Ship release run and use **Re-run failed jobs**. Only
+the failed deploy jobs run again, from the same commit and inputs, with the
+current secrets; the image push and publish are not repeated. GitHub allows
+re-runs for 30 days; after that, run **Website** by hand with deploy ticked
+and the release tag, and **Docs site** by hand on main.
+
 ## Rollback
 
 A published tag is never moved. Mark the release as a pre-release or
