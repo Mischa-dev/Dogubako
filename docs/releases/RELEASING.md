@@ -64,6 +64,8 @@ The docs site deploys on every push to main (docs.yml), but only while
 main's version is a published release. From the bump merging until Ship
 release, docs.dogubako.app keeps the previous release's pages; docs fixes
 merged in that window go live with the release.
+Pushes skip the deploy quietly while the Cloudflare secrets are missing;
+Ship release fails its website and docs jobs instead.
 
 To make the run also wait for an approval click, add Mischa as a required
 reviewer on the `release` environment (Settings › Environments).

@@ -4,7 +4,8 @@ name: Ship release
 # checks the draft is complete and its checksums match, pushes the tested
 # homelab image to ghcr.io, publishes the release (which creates the tag at
 # the commit the draft was built from), then deploys dogubako.app pointing at it
-# and docs.dogubako.app (which holds back while the release is unpublished).
+# and docs.dogubako.app. Either deploy fails when the Cloudflare secrets are
+# missing.
 #
 # Only ever run by hand. The `release` environment is where required
 # reviewers go, so the run also waits for an approval click when set.
@@ -134,5 +135,6 @@ jobs:
     needs: [verify, publish]
     uses: ./.github/workflows/docs.yml
     with:
+      deploy: true
       ref: ${{ needs.verify.outputs.sha }}
     secrets: inherit
