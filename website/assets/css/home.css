@@ -389,7 +389,7 @@ html:not(.js) .demo-stage { display: none; }
 .cv-c .nul { color: #b8382b; }
 @keyframes flash { 0% { background: #f6e3a6; } 100% { background: transparent; } }
 
-/* ---------------------------------------------------------------- finder (249) */
+/* ---------------------------------------------------------------- finder (every tool) */
 .finder-sec { overflow: clip; }
 .big-n { font-variant-numeric: tabular-nums; }
 .finder { position: relative; display: grid; place-items: center; padding: 40px var(--gut) 40px; min-height: 640px; }

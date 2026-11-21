@@ -3,7 +3,7 @@
 <h1 align="center">Dogubako</h1>
 
 <p align="center"><b>道具箱 — a local-first, open-source utility toolbox.</b><br>
-249 tools for images, video, audio, speech, PDFs, files, text, developers, data, networks, design and system info —<br>
+250 tools for images, video, audio, speech, PDFs, files, text, developers, data, networks, design and system info —<br>
 as a desktop app, a self-hosted web service, a CLI, an HTTP API and an MCP server.</p>
 
 ---

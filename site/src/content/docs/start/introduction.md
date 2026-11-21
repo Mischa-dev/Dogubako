@@ -16,14 +16,14 @@ desktop use, no telemetry and no paywalls.
 
 ## What it can do
 
-Dogubako ships 249 tools in twelve categories:
+Dogubako ships 250 tools in twelve categories:
 
 | Category | Tools | Highlights |
 |---|---:|---|
 | [Images](/tools/image/) | 30 | Convert (HEIC, AVIF, WebP…), batch resize and compress, crop, watermark, metadata, compare, icons and favicons, face blur with manual correction, redaction, OCR, background removal, upscaling |
 | [Video](/tools/video/) | 27 | Convert and compress (including to a target size and with hardware encoders), trim, cut, merge, crop, rotate, GIF ⇄ video, stabilize, frames, subtitles |
 | [Audio](/tools/audio/) | 21 | Convert, EBU R128 loudness normalization, trim, split, merge, silence removal, waveforms, spectrograms, tags, denoise, EQ |
-| [Speech & Voice](/tools/speech/) | 9 | Offline transcription with whisper.cpp to TXT, SRT, VTT, JSON or Markdown, language detection, speaker turns, text to speech with Piper |
+| [Speech & Voice](/tools/speech/) | 10 | Offline transcription with whisper.cpp to TXT, SRT, VTT, JSON or Markdown, language detection, speaker turns, text to speech with Piper |
 | [PDF & Documents](/tools/pdf/) | 27 | Merge, split, reorder, rotate, compress, OCR to searchable PDF, extract text and images, watermark, page numbers, encrypt, forms, Office and Markdown conversion |
 | [Files](/tools/files/) | 23 | Hashes and checksum checks, archives with bomb and traversal protection, duplicates, large files, folder compare, batch rename with preview |
 | [Text](/tools/text/) | 27 | Case, counts, sort and dedupe, diff, regex replace, encodings, escaping, Markdown ⇄ HTML, text extraction from Office, EPUB and PDF |

@@ -11,7 +11,8 @@
 tauri.conf.json, the web UI's package files), turns `[Unreleased]` in
 CHANGELOG.md into the new version's section and scaffolds
 docs/releases/v<version>.md. `regen` rebuilds the docs that are generated from
-the tool registry. `check` is what the Release workflow runs before it builds
+the tool registry, the website's tool list, and every tool count written in
+the README, website and docs pages. `check` is what the Release workflow runs before it builds
 anything: it fails while any version field, changelog entry, release note,
 generated doc or page that names the current release is behind.
 
@@ -43,6 +44,34 @@ NOTES_DIR = ROOT / "docs" / "releases"
 CAPABILITIES = ROOT / "docs" / "CAPABILITIES.md"
 TOOLS_JSON = ROOT / "site" / "public" / "tools.json"
 TOOL_PAGES = ROOT / "site" / "src" / "content" / "docs" / "tools"
+WEBSITE_TOOLS = ["website/assets/js/tools-data.js", "website/tools/index.html"]
+
+# Hand-written pages that state how many tools there are. `regen` rewrites the
+# number from site/public/tools.json, so adding a tool can't leave them behind.
+TOOL_COUNT_PAGES = [
+    "README.md",
+    "docs/PERFORMANCE.md",
+    "website/index.html",
+    "website/tools/index.html",
+    "website/agents/index.html",
+    "website/download/index.html",
+    "website/404.html",
+    "website/llms.txt",
+    "website/agent-install.md",
+    "site/src/content/docs/index.mdx",
+    "site/src/content/docs/start/introduction.md",
+    "site/src/content/docs/agents/overview.md",
+    "site/src/content/docs/agents/discovery-and-results.md",
+    "site/src/content/docs/project/performance.md",
+]
+# "249 tools", "249 free, open-source file tools", "<!-- tools:count -->249".
+TOOL_COUNT = re.compile(
+    r"(?<![\w.,])\d+(?=(?:&nbsp;|\s)(?:free, open-source (?:file )?|everyday |Dogubako )?tools\b)"
+    r"|(?<=<!-- tools:count -->)\d+",
+    re.I,
+)
+# Category rows in the introduction's table: "| [Speech & Voice](/tools/speech/) | 9 |".
+CATEGORY_COUNT = re.compile(r"(\|\s*\[[^\]]+\]\(/tools/([a-z]+)/\)\s*\|\s*)\d+(?=\s*\|)")
 
 # Pages that describe the current release. Once a version is bumped, none of
 # them may still name an older release: `check` lists every line that does.
@@ -229,6 +258,21 @@ def find_bin() -> str:
     raise SystemExit("no dogubako binary: run `cargo build -p dogubako-cli` or set DOGUBAKO_BIN")
 
 
+def sync_tool_counts() -> None:
+    tools = json.loads(read(TOOLS_JSON))["tools"]
+    per_category: dict[str, int] = {}
+    for t in tools:
+        per_category[t["category"]] = per_category.get(t["category"], 0) + 1
+    for rel in TOOL_COUNT_PAGES:
+        text = read(rel)
+        new = TOOL_COUNT.sub(str(len(tools)), text)
+        new = CATEGORY_COUNT.sub(lambda m: m.group(1) + str(per_category.get(m.group(2), 0)), new)
+        if not TOOL_COUNT.search(text):
+            raise SystemExit(f"{rel}: no tool count found; drop it from TOOL_COUNT_PAGES")
+        if new != text:
+            write(rel, new)
+
+
 def regen(check: bool) -> int:
     binary = find_bin()
     env = {**os.environ, "DOGUBAKO_BIN": binary, "DOGUBAKO_LOG": "error"}
@@ -242,9 +286,13 @@ def regen(check: bool) -> int:
     matrix = subprocess.run([*pin, binary, "tools", "matrix"], check=True, capture_output=True, text=True, env=env).stdout
     CAPABILITIES.write_text(matrix if matrix.endswith("\n") else matrix + "\n", encoding="utf-8")
     subprocess.run([*pin, "npm", "run", "--silent", "gen:tools"], cwd=ROOT / "site", check=True, env=env)
+    subprocess.run(["node", "website/scripts/tools-data.mjs", str(TOOLS_JSON)], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["node", "website/scripts/build-tools-page.mjs"], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
+    sync_tool_counts()
     if not check:
         return 0
-    paths = ["docs/CAPABILITIES.md", "site/src/content/docs/tools", "site/src/data", "site/public/tools.json"]
+    paths = ["docs/CAPABILITIES.md", "site/src/content/docs/tools", "site/src/data", "site/public/tools.json",
+             *WEBSITE_TOOLS, *TOOL_COUNT_PAGES]
     diff = subprocess.run(["git", "status", "--porcelain", "--", *paths], cwd=ROOT, capture_output=True, text=True, check=True).stdout
     if diff.strip():
         print("Generated docs are stale; run `release.py regen` and commit:\n" + diff, file=sys.stderr)

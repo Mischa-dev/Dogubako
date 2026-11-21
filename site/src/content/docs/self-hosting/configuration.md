@@ -51,7 +51,7 @@ DOGUBAKO_USER_QUOTA_MB=20480
 Many agents, mostly short jobs, tight isolation:
 
 ```sh
-DOGUBAKO_MCP_DISCOVERY=compact          # agents search for tools instead of listing all 249
+DOGUBAKO_MCP_DISCOVERY=compact          # agents search for tools instead of listing every tool
 DOGUBAKO_PER_USER_CONCURRENCY=1
 DOGUBAKO_USER_QUOTA_MB=2048
 DOGUBAKO_FILE_RETENTION_HOURS=6

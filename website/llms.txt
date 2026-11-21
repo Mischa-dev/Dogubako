@@ -1,6 +1,6 @@
 # Dogubako
 
-> Dogubako is a local-first, open-source toolbox (AGPL-3.0-or-later): 249 tools for images, video, audio, speech, PDFs, files, text, developer tasks, data, network, design and system information. One engine runs every tool, used from a desktop app, a self-hosted web server, an HTTP API, a CLI, or MCP for AI agents. Files are processed on the machine that runs it; network tools make the outbound requests they describe.
+> Dogubako is a local-first, open-source toolbox (AGPL-3.0-or-later): 250 tools for images, video, audio, speech, PDFs, files, text, developer tasks, data, network, design and system information. One engine runs every tool, used from a desktop app, a self-hosted web server, an HTTP API, a CLI, or MCP for AI agents. Files are processed on the machine that runs it; network tools make the outbound requests they describe.
 
 Status: 0.1.0-alpha.2, the second alpha, is out (https://github.com/Mischa-dev/Dogubako/releases/tag/v0.1.0-alpha.2). It is a macOS app for Apple silicon (macOS 15 or later). There are no Windows or Linux desktop builds in the alpha, and no public prebuilt server image yet; a server is built from source with Docker Compose.
 
@@ -18,7 +18,7 @@ Status: 0.1.0-alpha.2, the second alpha, is out (https://github.com/Mischa-dev/D
 ## Site
 
 - [Home](https://dogubako.app/): what Dogubako is.
-- [All tools](https://dogubako.app/tools/): the 249 tools with ids and CLI commands.
+- [All tools](https://dogubako.app/tools/): the 250 tools with ids and CLI commands.
 - [Self-hosting](https://dogubako.app/self-hosting/): one server for a household or team, accounts, quotas, audit log.
 - [Agents](https://dogubako.app/agents/): MCP, scoped agent accounts and tokens, HTTP API and CLI.
 - [Download](https://dogubako.app/download/): release status, building from source, hosting on a server.

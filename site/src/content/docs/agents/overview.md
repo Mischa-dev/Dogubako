@@ -45,7 +45,7 @@ however the agent found out about it.
   `openWorldHint`) so clients can decide what needs confirmation.
 - **Meta-tools** to search, describe and run tools by id, and to manage jobs
   and files. With **compact discovery**, these are the only tools listed, so a
-  catalog of 249 tools doesn't flood the agent's context. See
+  catalog of 250 tools doesn't flood the agent's context. See
   [Discovery and results](/agents/discovery-and-results/).
 - **Resources** for output files, as `dogubako://files/<id>`.
 

@@ -1,4 +1,4 @@
-/* finder.js: all 249 tools, searchable. A frosted palette over a wall of every tool name;
+/* finder.js: every tool, searchable. A frosted palette over a wall of every tool name;
  * matches light up as you type. Until the visitor types, it searches by itself. */
 (function () {
   'use strict';
@@ -170,7 +170,7 @@
       const t0 = performance.now();
       const step = (now) => {
         const p = Math.min(1, (now - t0) / 1100);
-        bigN.textContent = String(Math.round(249 * (1 - Math.pow(1 - p, 3))));
+        bigN.textContent = String(Math.round(TOOLS.length * (1 - Math.pow(1 - p, 3))));
         if (p < 1) requestAnimationFrame(step);
       };
       requestAnimationFrame(step);

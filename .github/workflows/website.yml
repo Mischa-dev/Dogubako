@@ -1,15 +1,20 @@
 name: Website
 
-# Builds the dogubako.app site into _site and, only when run by hand with
-# deploy ticked (or by ship.yml when Mischa ships a release) and the
-# Cloudflare secrets present, publishes it to the Cloudflare Pages project
-# "dogubako-website". Pull requests only build.
+# Builds the dogubako.app site into _site and publishes it to the Cloudflare
+# Pages project "dogubako-website" when run by hand with deploy ticked, by
+# ship.yml when Mischa ships a release, or on a push to main once main's
+# version is a published release (so fixes like a new tool count go live
+# without waiting for the next release). While a bumped version waits for
+# Ship release, pushes only build. Pull requests only build.
 #
 # It publishes website/ (the design concepts in design/website-concepts/ are
 # never published). Inputs flip the links once things are live:
 #   docs_live docs.dogubako.app is deployed: point docs links there
 #   release   the published release tag: point downloads at its assets
 on:
+  push:
+    branches: [main]
+    paths: ["website/**", "deploy/website/**", "packaging/release/website_links.py", ".github/workflows/website.yml"]
   pull_request:
     paths: ["website/**", "deploy/website/**", "packaging/release/website_links.py", ".github/workflows/website.yml"]
   workflow_dispatch:
@@ -45,6 +50,8 @@ jobs:
   build:
     name: Build site
     runs-on: ubuntu-latest
+    outputs:
+      deploy: ${{ steps.published.outputs.deploy }}
     env:
       DOCS_LIVE: ${{ inputs.docs_live && '1' || '' }}
       RELEASE: ${{ inputs.release }}
@@ -52,6 +59,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha }}
+      - name: On a push to main, deploy for the published release
+        id: published
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v$(python3 -I packaging/release/release.py current)"
+          if [ "$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null)" != false ]; then
+            echo "::notice::$tag is not published yet; the site deploys when Ship release publishes it."
+            exit 0
+          fi
+          { echo "DOCS_LIVE=1"; echo "RELEASE=$tag"; } >> "$GITHUB_ENV"
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
       - name: Assemble _site
         run: |
           set -eu
@@ -110,7 +130,7 @@ jobs:
   deploy:
     name: Deploy to Cloudflare Pages
     needs: build
-    if: inputs.deploy
+    if: inputs.deploy || needs.build.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     environment:
       name: website
