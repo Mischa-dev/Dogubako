@@ -41,15 +41,22 @@ class WorkflowAssets(unittest.TestCase):
         self.assertEqual(sorted(a.file for a in assets if a.download), sorted(DOWNLOADS))
 
     def test_unknown_cli_target_is_an_error(self):
-        text = release.RELEASE_WORKFLOW.read_text(encoding="utf-8").replace(
-            "target: x86_64-pc-windows-msvc, ext: .exe", "target: aarch64-pc-windows-msvc, ext: .exe")
+        wf_text = """jobs:
+  cli:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+    steps:
+      - run: cargo build -p dogubako-cli --locked && gh release upload x
+"""
         with tempfile.TemporaryDirectory() as d:
             wf = Path(d) / "release.yml"
-            wf.write_text(text, encoding="utf-8")
+            wf.write_text(wf_text, encoding="utf-8")
             with patch.object(release, "RELEASE_WORKFLOW", wf), patch.object(release, "ROOT", Path(d)):
                 _, errors = release.release_assets(V)
         self.assertTrue(any("aarch64-pc-windows-msvc" in e for e in errors), errors)
-
 
     def test_block_style_matrix_rows(self):
         job = """    strategy:
