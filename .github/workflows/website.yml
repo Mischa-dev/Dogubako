@@ -26,6 +26,10 @@ on:
         description: Publish to Cloudflare Pages (production)
         type: boolean
         default: false
+      ref:
+        description: Tag or commit to build (e.g. the release tag), or empty for this branch
+        type: string
+        default: ""
   # ship.yml deploys the site for the release it just published.
   workflow_call:
     inputs:

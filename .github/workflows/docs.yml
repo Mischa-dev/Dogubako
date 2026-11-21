@@ -59,7 +59,9 @@ jobs:
     # manual run given a ref fails.
     name: Deploy to Cloudflare Pages
     needs: build
-    if: inputs.deploy || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
+    if: >-
+      inputs.deploy || (github.event_name == 'workflow_dispatch' && inputs.ref != '') ||
+      (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -84,7 +86,8 @@ jobs:
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             skip "CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set"
           fi
-          tag="v$(python3 -I packaging/release/release.py current)"
+          # Read like release.py current, which older release tags don't have.
+          tag="v$(python3 -I -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
           if [ "$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null)" != false ]; then
             skip "$tag is not published yet; the docs deploy when Ship release publishes it"
           fi

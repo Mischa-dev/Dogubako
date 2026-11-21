@@ -84,10 +84,10 @@ then redeploy that release:
    Only the failed deploy jobs run again, from the same commit and inputs,
    with the current secrets; the image push and publish are not repeated.
    After 14 days the website build it reuses has expired.
-3. After that, run the failed workflows by hand from main: **Website** with
-   "docs.dogubako.app is live" and deploy ticked and the release tag, and
-   **Docs site** with the release tag as the ref (a manual run on main alone
-   skips the deploy once main's version is ahead of the release).
+3. After that, run the failed workflows by hand with the release tag as
+   the ref, so they build that release rather than main: **Website** with
+   "docs.dogubako.app is live" and deploy ticked and the tag also entered as
+   the release, and **Docs site**.
 
 ## Rollback
 
