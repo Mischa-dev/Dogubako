@@ -101,6 +101,7 @@ jobs:
       - name: Websites match the release (release.py site)
         run: python3 -I packaging/release/release.py site
       - name: Generated docs (release.py regen)
+        if: success() || failure()
         run: python3 -I packaging/release/release.py regen --check
       - name: Third-party notices (notices.py --check)
         if: success() || failure()

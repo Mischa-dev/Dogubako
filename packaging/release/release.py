@@ -230,6 +230,16 @@ def workflow_jobs(text: str) -> dict[str, str]:
     return dict(zip(parts[1::2], parts[2::2]))
 
 
+def matrix_include(job: str) -> list[dict[str, str]]:
+    """A job's `strategy.matrix.include` rows, flow (`- { a: b }`) or block style."""
+    inc = re.search(r"^([ \t]*)include:[ \t]*\n((?:\1[ \t]+\S.*\n?|[ \t]*\n)*)", job, re.M)
+    if not inc:
+        return []
+    rows = re.split(r"^[ \t]*-[ \t]+", inc.group(2), flags=re.M)[1:]
+    return [{k: v.strip().strip("'\"") for k, v in re.findall(r"(\w+):[ \t]*([^,}\n]+)", row.split("#")[0])}
+            for row in rows]
+
+
 def release_assets(v: str) -> tuple[list[Asset], list[str]]:
     """Every file the Release workflow puts in the draft, read from release.yml."""
     rel = RELEASE_WORKFLOW.relative_to(ROOT)
@@ -248,8 +258,7 @@ def release_assets(v: str) -> tuple[list[Asset], list[str]]:
                 label, file, note = APP_BUNDLES[t]
                 assets.append(Asset(label, file.format(v=v), note, label.replace(",", ""), download=True))
         if "-p dogubako-cli" in job and "gh release upload" in job:
-            for row in re.findall(r"^\s*- \{([^}]*)\}", job, re.M):
-                fields = dict(re.findall(r"(\w+):\s*([^,]+?)\s*(?:,|$)", row))
+            for fields in matrix_include(job):
                 t = fields.get("target")
                 if not t:
                     continue
@@ -344,9 +353,9 @@ def site_errors(v: str) -> list[str]:
 
     page = ROOT / DOWNLOAD_PAGE
     if page.exists():
-        text = page.read_text(encoding="utf-8")
+        text = re.sub(r"<!--.*?-->", "", page.read_text(encoding="utf-8"), flags=re.S)
         for a in assets:
-            if a.download and f"{REPO}/releases/download/v{v}/{a.file}" not in text:
+            if (a.download or a.file == "SHA256SUMS.txt") and f"{REPO}/releases/download/v{v}/{a.file}" not in text:
                 errors.append(f"{DOWNLOAD_PAGE}: no download link for {a.label} ({a.file})")
         for tag, f in re.findall(re.escape(REPO) + r"/releases/download/([^/\"']+)/([^\"'#?<\s]+)", text):
             if tag != f"v{v}" or f not in files:
@@ -356,7 +365,7 @@ def site_errors(v: str) -> list[str]:
     if page.exists():
         text = page.read_text(encoding="utf-8")
         for a in assets:
-            if a.file not in text and not (a.platform and a.platform in text):
+            if a.file not in text and not (a.label.startswith("CLI") and a.platform in text):
                 errors.append(f"{ALPHA_PAGE}: doesn't mention {a.label} ({a.file}), which Release builds")
     return errors
 

@@ -10,9 +10,14 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location("release", ROOT / "packaging/release/release.py")
-release = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(release)
+def load(name, path):
+    spec = importlib.util.spec_from_file_location(name, ROOT / path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+release = load("release", "packaging/release/release.py")
 
 V = "1.2.3"
 DL = f"https://github.com/Mischa-dev/Dogubako/releases/download/v{V}"
@@ -46,6 +51,34 @@ class WorkflowAssets(unittest.TestCase):
         self.assertTrue(any("aarch64-pc-windows-msvc" in e for e in errors), errors)
 
 
+    def test_block_style_matrix_rows(self):
+        job = """    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, ext: .exe }  # flow row
+    steps:
+"""
+        self.assertEqual(release.matrix_include(job), [
+            {"os": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu"},
+            {"os": "windows-latest", "target": "x86_64-pc-windows-msvc", "ext": ".exe"},
+        ])
+
+
+class RollbackLinks(unittest.TestCase):
+    def test_rollback_retargets_every_release_download(self):
+        links = load("website_links", "packaging/release/website_links.py")
+        new = "https://github.com/Mischa-dev/Dogubako/releases/download/v0.2.0"
+        page = (f'<a class="plat" data-os="mac" href="{new}/Dogubako_0.2.0_aarch64.dmg">'
+                f'<a href="{new}/dogubako-x86_64-unknown-linux-gnu"><a href="{new}/SHA256SUMS.txt">')
+        out, _ = links.rewrite(page, docs=False, release="v0.1.0")
+        self.assertNotIn("0.2.0", out)
+        old = "https://github.com/Mischa-dev/Dogubako/releases/download/v0.1.0"
+        for f in ("Dogubako_0.1.0_aarch64.dmg", "dogubako-x86_64-unknown-linux-gnu", "SHA256SUMS.txt"):
+            self.assertIn(f"{old}/{f}", out)
+
+
 class SiteErrors(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -58,9 +91,9 @@ class SiteErrors(unittest.TestCase):
         self.put("README.md", "Dogubako has 120 tools.\n")
         self.put("website/index.html", '<b><!-- tools:count -->120</b> tools in one app\n')
         self.put("site/src/content/docs/index.mdx", "All 120 Dogubako tools.\n")
-        self.put("website/download/index.html", "\n".join(f'<a href="{DL}/{f}">' for f in DOWNLOADS))
+        self.put("website/download/index.html", "\n".join(f'<a href="{DL}/{f}">' for f in [*DOWNLOADS, "SHA256SUMS.txt"]))
         self.put("site/src/content/docs/start/alpha.md",
-                 "macOS, Apple silicon; homelab / server; Linux x86-64, macOS Apple silicon, Windows x86-64; "
+                 f"Dogubako_{V}_aarch64.dmg; homelab / server; Linux x86-64, macOS Apple silicon, Windows x86-64; "
                  f"SHA256SUMS.txt; engine-sources-{V}.tar; ghcr.io/mischa-dev/dogubako:{V}\n")
         self.put(f"docs/releases/v{V}.md", f"---\ntitle: x\n---\n## Downloads\n\n{release.downloads_table(V)}\n\n## Notes\n")
         shutil.copy(release.RELEASE_WORKFLOW, root / "release.yml")
@@ -102,6 +135,19 @@ class SiteErrors(unittest.TestCase):
         self.edit("website/download/index.html", f'<a href="{DL}/dogubako-x86_64-pc-windows-msvc.exe">', "")
         errors = release.site_errors(V)
         self.assertTrue(any("no download link for CLI, Windows x86-64" in e for e in errors), errors)
+
+    def test_commented_out_or_missing_checksum_links_fail(self):
+        self.edit("website/download/index.html", f'<a href="{DL}/dogubako-aarch64-apple-darwin">',
+                  f'<!-- <a href="{DL}/dogubako-aarch64-apple-darwin"> -->')
+        self.edit("website/download/index.html", f'<a href="{DL}/SHA256SUMS.txt">', "")
+        errors = release.site_errors(V)
+        self.assertTrue(any("no download link for CLI, macOS Apple silicon" in e for e in errors), errors)
+        self.assertTrue(any("no download link for Checksums" in e for e in errors), errors)
+
+    def test_docs_alpha_page_missing_the_app_despite_mac_cli(self):
+        self.edit("site/src/content/docs/start/alpha.md", f"Dogubako_{V}_aarch64.dmg; ", "")
+        errors = release.site_errors(V)
+        self.assertTrue(any("alpha.md: doesn't mention macOS, Apple silicon" in e for e in errors), errors)
 
     def test_download_page_links_an_old_release(self):
         self.edit("website/download/index.html", f"v{V}/Dogubako_{V}", f"v1.2.2/Dogubako_1.2.2")
