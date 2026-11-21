@@ -5,6 +5,7 @@
   python3 -I packaging/release/release.py bump 0.1.0-alpha.3 # version fields, changelog, notes scaffold
   python3 -I packaging/release/release.py regen [--check]    # generated docs from a built CLI
   python3 -I packaging/release/release.py check [--version V]
+  python3 -I packaging/release/release.py site [--version V]   # websites agree with the release
   python3 -I packaging/release/release.py notes-body V       # GitHub release body
 
 `bump` rewrites every version field (both Cargo workspaces and lockfiles,
@@ -14,7 +15,10 @@ docs/releases/v<version>.md. `regen` rebuilds the docs that are generated from
 the tool registry, the website's tool list, and every tool count written in
 the README, website and docs pages. `check` is what the Release workflow runs before it builds
 anything: it fails while any version field, changelog entry, release note,
-generated doc or page that names the current release is behind.
+generated doc or page that names the current release is behind. `site` is the
+part of `check` about dogubako.app and docs.dogubako.app (tool counts, the
+website's tool list, and a download for every file the Release workflow
+builds), which CI also runs on every pull request.
 
 Nothing here tags, pushes or publishes.
 """
@@ -70,6 +74,8 @@ TOOL_COUNT = re.compile(
     r"|(?<=<!-- tools:count -->)\d+",
     re.I,
 )
+# "200 tools per page" is not the catalog's size.
+PER_PAGE = re.compile(r"(?:&nbsp;|\s)\S*\s*tools per\b")
 # Category rows in the introduction's table: "| [Speech & Voice](/tools/speech/) | 9 |".
 CATEGORY_COUNT = re.compile(r"(\|\s*\[[^\]]+\]\(/tools/([a-z]+)/\)\s*\|\s*)\d+(?=\s*\|)")
 # The README's table names categories without links: "| Speech | 9 |".
@@ -81,6 +87,13 @@ README_CATEGORIES = {
 README_CATEGORY_COUNT = re.compile(
     r"^(\|\s*(" + "|".join(re.escape(k) for k in README_CATEGORIES) + r")\s*\|\s*)\d+(?=\s*\|)", re.M
 )
+SITE_DATA = ROOT / "site" / "src" / "data"
+WEBSITE = ROOT / "website"
+TOOLS_DATA = WEBSITE / "assets" / "js" / "tools-data.js"
+RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
+DOWNLOAD_PAGE = "website/download/index.html"
+ALPHA_PAGE = "site/src/content/docs/start/alpha.md"
+
 
 # Pages that describe the current release. Once a version is bumped, none of
 # them may still name an older release: `check` lists every line that does.
@@ -189,6 +202,165 @@ def roll_changelog(old: str, new: str) -> None:
     write(CHANGELOG, text)
 
 
+# ------------------------------------------------------------------ artifacts
+
+# What the Release workflow builds, per Rust target. A new target in
+# release.yml fails `check` until it is described here, so the notes and the
+# websites can offer it.
+APP_BUNDLES = {
+    "aarch64-apple-darwin": ("macOS, Apple silicon", "Dogubako_{v}_aarch64.dmg", "macOS 15 (Sequoia) or newer"),
+}
+CLI_TARGETS = {
+    "x86_64-unknown-linux-gnu": ("Linux x86-64", "glibc 2.28 or newer (Debian 10+, Ubuntu 20.04+, RHEL 8+); uses engines installed on the system"),
+    "aarch64-apple-darwin": ("macOS Apple silicon", "Uses engines installed on the system"),
+    "x86_64-pc-windows-msvc": ("Windows x86-64", "Uses engines installed on the system"),
+}
+
+
+class Asset:
+    """One thing a release offers. `download` ones are files people install."""
+
+    def __init__(self, label: str, file: str, note: str = "", platform: str = "", download: bool = False):
+        self.label, self.file, self.note, self.platform, self.download = label, file, note, platform, download
+
+
+def workflow_jobs(text: str) -> dict[str, str]:
+    body = text.split("\njobs:\n", 1)[-1]
+    parts = re.split(r"^  ([A-Za-z][\w-]*):[ \t]*$", body, flags=re.M)
+    return dict(zip(parts[1::2], parts[2::2]))
+
+
+def release_assets(v: str) -> tuple[list[Asset], list[str]]:
+    """Every file the Release workflow puts in the draft, read from release.yml."""
+    rel = RELEASE_WORKFLOW.relative_to(ROOT)
+    assets: list[Asset] = []
+    errors: list[str] = []
+    jobs = workflow_jobs(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
+    for name, job in jobs.items():
+        if "tauri-apps/tauri-action" in job:
+            targets = re.findall(r"--target\s+([\w-]+)", job)
+            if not targets:
+                errors.append(f"{rel}: job {name} builds an app bundle without --target")
+            for t in targets:
+                if t not in APP_BUNDLES:
+                    errors.append(f"{rel}: job {name} builds an app for {t}; describe it in APP_BUNDLES in release.py")
+                    continue
+                label, file, note = APP_BUNDLES[t]
+                assets.append(Asset(label, file.format(v=v), note, label.replace(",", ""), download=True))
+        if "-p dogubako-cli" in job and "gh release upload" in job:
+            for row in re.findall(r"^\s*- \{([^}]*)\}", job, re.M):
+                fields = dict(re.findall(r"(\w+):\s*([^,]+?)\s*(?:,|$)", row))
+                t = fields.get("target")
+                if not t:
+                    continue
+                if t not in CLI_TARGETS:
+                    errors.append(f"{rel}: job {name} builds the CLI for {t}; describe it in CLI_TARGETS in release.py")
+                    continue
+                platform, note = CLI_TARGETS[t]
+                assets.append(Asset(f"CLI, {platform}", f"dogubako-{t}{fields.get('ext', '')}", note, platform, download=True))
+        if "docker/build-push-action" in job:
+            image = re.search(r"IMAGE:\s*(\S+?):\$\{\{", job)
+            platforms = re.search(r"platforms:\s*(\S+)", job)
+            if not image or not platforms:
+                errors.append(f"{rel}: job {name} builds an image, but its IMAGE or platforms are not where release.py looks")
+                continue
+            assets.append(Asset("Homelab / server", f"{image.group(1)}:{v}",
+                                f"Docker or Podman, {platforms.group(1)}; every engine included"))
+    text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    if "engine_sources.py" in text:
+        assets.append(Asset("Engine sources", f"engine-sources-{v}.tar", "Corresponding source for the GPL/LGPL/AGPL/MPL engines"))
+    if "SHA256SUMS.txt" in text:
+        assets.append(Asset("Checksums", "SHA256SUMS.txt"))
+    order = {"Homelab / server": 1, "Checksums": 3, "Engine sources": 4}
+    assets.sort(key=lambda a: order.get(a.label, 2 if a.label.startswith("CLI") else 0))
+    if not any(a.download for a in assets):
+        errors.append(f"{rel}: found no app or CLI downloads; release.py can't read the workflow any more")
+    return assets, errors
+
+
+def downloads_table(v: str) -> str:
+    assets, _ = release_assets(v)
+    rows = ["| | File | Notes |", "|---|---|---|"]
+    rows += [f"| {a.label} | `{a.file}` | {a.note} |".replace("|  |", "| |") for a in assets]
+    return "\n".join(rows)
+
+
+# ---------------------------------------------------------------- tool counts
+
+
+def release_tools() -> list[dict]:
+    return json.loads(read(TOOLS_JSON))["tools"]
+
+
+def count_pages() -> list[Path]:
+    """Hand-written pages that may say how many tools there are."""
+    pages = [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]
+    pages += [p for p in sorted(WEBSITE.rglob("*"))
+              if p.suffix in (".html", ".md", ".txt", ".js") and "scripts" not in p.relative_to(WEBSITE).parts]
+    pages += [p for p in sorted((ROOT / "site" / "src").rglob("*"))
+              if p.suffix in (".md", ".mdx", ".astro") and not p.is_relative_to(TOOL_PAGES) and not p.is_relative_to(SITE_DATA)]
+    return [p for p in pages if p.is_file()]
+
+
+def site_errors(v: str) -> list[str]:
+    """Where dogubako.app or docs.dogubako.app disagree with release v."""
+    errors: list[str] = []
+    tools = release_tools()
+    n = len(tools)
+    for page in count_pages():
+        rel = page.relative_to(ROOT)
+        for i, line in enumerate(page.read_text(encoding="utf-8").splitlines(), 1):
+            for m in TOOL_COUNT.finditer(line):
+                if int(m.group(0)) != n and not PER_PAGE.match(line, m.end()):
+                    fix = "run `release.py regen`" if str(rel) in TOOL_COUNT_PAGES else "add the page to TOOL_COUNT_PAGES in release.py and run `release.py regen`"
+                    errors.append(f"{rel}:{i}: says {m.group(0)} tools, the release has {n} ({fix})")
+
+    m = re.search(r"^window\.DGB_TOOLS=(.*);$", TOOLS_DATA.read_text(encoding="utf-8"), re.M)
+    listed = {t[2]: t[1] for t in json.loads(m.group(1))} if m else {}
+    expected = {t["id"]: t["name"] for t in tools}
+    if listed != expected:
+        rel = TOOLS_DATA.relative_to(ROOT)
+        missing = sorted(set(expected) - set(listed))
+        extra = sorted(set(listed) - set(expected))
+        renamed = sorted(k for k in set(expected) & set(listed) if expected[k] != listed[k])
+        detail = "; ".join(f"{what}: {', '.join(ids[:5])}{' …' if len(ids) > 5 else ''}"
+                           for what, ids in (("missing", missing), ("not in the release", extra), ("renamed", renamed)) if ids)
+        errors.append(f"{rel}: the website's tool list is not the release's ({detail}) (run `release.py regen`)")
+
+    assets, asset_errors = release_assets(v)
+    errors += asset_errors
+    files = {a.file for a in assets}
+
+    notes = notes_path(v)
+    if notes.exists():
+        section = re.search(r"^## Downloads\n(.*?)(?=^## |\Z)", notes_body(v), re.M | re.S)
+        listed_files = set(re.findall(r"^\|[^|\n]*\|\s*`([^`]+)`", section.group(1), re.M)) if section else set()
+        rel_notes = notes.relative_to(ROOT)
+        for a in assets:
+            if a.file not in listed_files:
+                errors.append(f"{rel_notes}: Downloads doesn't list {a.label} (`{a.file}`), which Release builds")
+        for f in sorted(listed_files - files):
+            errors.append(f"{rel_notes}: Downloads lists `{f}`, which Release doesn't build")
+
+    page = ROOT / DOWNLOAD_PAGE
+    if page.exists():
+        text = page.read_text(encoding="utf-8")
+        for a in assets:
+            if a.download and f"{REPO}/releases/download/v{v}/{a.file}" not in text:
+                errors.append(f"{DOWNLOAD_PAGE}: no download link for {a.label} ({a.file})")
+        for tag, f in re.findall(re.escape(REPO) + r"/releases/download/([^/\"']+)/([^\"'#?<\s]+)", text):
+            if tag != f"v{v}" or f not in files:
+                errors.append(f"{DOWNLOAD_PAGE}: links {tag}/{f}, which release v{v} doesn't have")
+
+    page = ROOT / ALPHA_PAGE
+    if page.exists():
+        text = page.read_text(encoding="utf-8")
+        for a in assets:
+            if a.file not in text and not (a.platform and a.platform in text):
+                errors.append(f"{ALPHA_PAGE}: doesn't mention {a.label} ({a.file}), which Release builds")
+    return errors
+
+
 # --------------------------------------------------------------------- notes
 
 
@@ -226,15 +398,7 @@ may change before 1.0. Please [report problems]({REPO}/issues).
 
 ## Downloads
 
-| | File | Notes |
-|---|---|---|
-| macOS, Apple silicon | `Dogubako_{version}_aarch64.dmg` | macOS 15 (Sequoia) or newer |
-| Homelab / server | `ghcr.io/mischa-dev/dogubako:{version}` | Docker or Podman, linux/amd64; every engine included |
-| CLI, Linux x86-64 | `dogubako-x86_64-unknown-linux-gnu` | glibc 2.28 or newer (Debian 10+, Ubuntu 20.04+, RHEL 8+); uses engines installed on the system |
-| CLI, macOS Apple silicon | `dogubako-aarch64-apple-darwin` | Uses engines installed on the system |
-| CLI, Windows x86-64 | `dogubako-x86_64-pc-windows-msvc.exe` | Uses engines installed on the system |
-| Checksums | `SHA256SUMS.txt` | |
-| Engine sources | `engine-sources-{version}.tar` | Corresponding source for the GPL/LGPL/AGPL/MPL engines |
+{downloads_table(version)}
 
 ## What's new
 
@@ -358,6 +522,8 @@ def check(version: str | None) -> int:
         if f"from Dogubako {v}." not in page.read_text(encoding="utf-8"):
             errors.append(f"{page.relative_to(ROOT)}: not generated from {v} (run `release.py regen`)")
 
+    errors += site_errors(v)
+
     older = [o for o in changelog_versions() if o != v]
     for rel in CURRENT_RELEASE_PAGES:
         if not (ROOT / rel).exists():
@@ -374,7 +540,7 @@ def check(version: str | None) -> int:
         for e in errors:
             print(f"  - {e}", file=sys.stderr)
         return 1
-    print(f"release {v}: version fields, changelog, notes, generated docs and current-release pages agree")
+    print(f"release {v}: version fields, changelog, notes, generated docs, current-release pages and websites agree")
     return 0
 
 
@@ -391,6 +557,8 @@ def main() -> int:
     r.add_argument("--check", action="store_true", help="fail if that changes anything")
     c = sub.add_parser("check", help="fail unless everything names the same release")
     c.add_argument("--version", help="the release being made (default: the checkout's version)")
+    s = sub.add_parser("site", help="fail unless the websites agree with the release (tool counts, downloads)")
+    s.add_argument("--version", help="the release being made (default: the checkout's version)")
     n = sub.add_parser("notes-body", help="print the GitHub release body")
     n.add_argument("version")
     a = ap.parse_args()
@@ -417,6 +585,16 @@ def main() -> int:
         return regen(a.check)
     if a.cmd == "check":
         return check(a.version.removeprefix("v") if a.version else None)
+    if a.cmd == "site":
+        v = a.version.removeprefix("v") if a.version else current()
+        errors = site_errors(v)
+        if errors:
+            print(f"The websites don't match release {v}:", file=sys.stderr)
+            for e in errors:
+                print(f"  - {e}", file=sys.stderr)
+            return 1
+        print(f"release {v}: tool counts, the website's tool list and every download agree")
+        return 0
     if a.cmd == "notes-body":
         body = notes_body(a.version.removeprefix("v"))
         if not body:
