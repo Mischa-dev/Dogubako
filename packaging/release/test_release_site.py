@@ -54,7 +54,7 @@ class WorkflowAssets(unittest.TestCase):
     def test_block_style_matrix_rows(self):
         job = """    strategy:
       matrix:
-        include:
+        include:  # one row per target
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           - { os: windows-latest, target: x86_64-pc-windows-msvc, ext: .exe }  # flow row

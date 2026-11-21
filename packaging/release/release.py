@@ -232,7 +232,7 @@ def workflow_jobs(text: str) -> dict[str, str]:
 
 def matrix_include(job: str) -> list[dict[str, str]]:
     """A job's `strategy.matrix.include` rows, flow (`- { a: b }`) or block style."""
-    inc = re.search(r"^([ \t]*)include:[ \t]*\n((?:\1[ \t]+\S.*\n?|[ \t]*\n)*)", job, re.M)
+    inc = re.search(r"^([ \t]*)include:[ \t]*(?:#.*)?\n((?:\1[ \t]+\S.*\n?|[ \t]*\n)*)", job, re.M)
     if not inc:
         return []
     rows = re.split(r"^[ \t]*-[ \t]+", inc.group(2), flags=re.M)[1:]
