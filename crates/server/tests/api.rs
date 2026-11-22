@@ -1161,7 +1161,10 @@ async fn admin_reload_swaps_tools_and_notifies_clients() {
         ("accept", "application/json, text/event-stream"),
     ];
     let r = call(&t.app, Method::POST, "/mcp", &mcp, Some(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}}))).await;
-    assert_eq!(r.body["result"]["capabilities"]["tools"]["listChanged"], true);
+    assert_eq!(
+        r.body["result"]["capabilities"]["tools"]["listChanged"],
+        true
+    );
     let sid = r.headers["mcp-session-id"].to_str().unwrap().to_string();
     let stream_req = |uri: &str, sid: Option<&str>| {
         let mut b = Request::builder()
@@ -1229,6 +1232,13 @@ async fn admin_reload_swaps_tools_and_notifies_clients() {
     let r = reload().await;
     assert_eq!(r.body["reload"]["added"], json!([]));
     assert_eq!(r.body["reload"]["changed"], json!([]));
+    let quiet = std::time::Duration::from_millis(300);
+    assert!(tokio::time::timeout(quiet, mcp_events.frame())
+        .await
+        .is_err());
+    assert!(tokio::time::timeout(quiet, ui_events.frame())
+        .await
+        .is_err());
 
     // Changed hash
     std::fs::write(ext.join("echo.toml"), manifest("second")).unwrap();
@@ -1244,4 +1254,26 @@ async fn admin_reload_swaps_tools_and_notifies_clients() {
     assert!(!tool_ids().await.contains(&"text.ext_echo".to_string()));
     let ev = next_sse_frame(&mut mcp_events).await;
     assert!(ev.contains("notifications/tools/list_changed"), "{ev}");
+
+    // Ending the MCP session closes its stream; shutdown closes the rest.
+    let r = call(
+        &t.app,
+        Method::DELETE,
+        "/mcp",
+        &[
+            ("authorization", bearer.as_str()),
+            ("mcp-session-id", sid.as_str()),
+        ],
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    let end = tokio::time::timeout(std::time::Duration::from_secs(5), mcp_events.frame()).await;
+    assert!(matches!(end, Ok(None)), "MCP stream still open");
+    t.state.shutdown.cancel();
+    let drained = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while ui_events.frame().await.is_some() {}
+    })
+    .await;
+    assert!(drained.is_ok(), "tools stream still open");
 }

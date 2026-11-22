@@ -1221,13 +1221,15 @@ async fn admin_reload(
 /// open catalogs refresh without a page reload.
 async fn tools_events(State(s): State<AppState>, _p: Principal) -> Response {
     let rx = s.engine.subscribe();
-    let stream = tokio_stream::wrappers::WatchStream::from_changes(rx).map(|generation| {
-        Ok::<_, std::convert::Infallible>(
-            Event::default()
-                .event("tools")
-                .data(json!({ "generation": generation }).to_string()),
-        )
-    });
+    let stream = tokio_stream::wrappers::WatchStream::from_changes(rx)
+        .take_until(s.shutdown.clone().cancelled_owned())
+        .map(|generation| {
+            Ok::<_, std::convert::Infallible>(
+                Event::default()
+                    .event("tools")
+                    .data(json!({ "generation": generation }).to_string()),
+            )
+        });
     Sse::new(stream)
         .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
         .into_response()

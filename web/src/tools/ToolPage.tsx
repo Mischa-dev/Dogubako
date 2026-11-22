@@ -37,7 +37,11 @@ export function specialUiFor(tool: ToolInfo): string | null {
 
 export default function ToolPage({ toolId }: { toolId: string }) {
   const { toolMap } = useApp();
-  const tool = toolMap.get(toolId);
+  // Keep a tool a reload removed on screen, so a run in progress isn't cancelled by unmounting.
+  const last = useRef<ToolInfo | undefined>(undefined);
+  const live = toolMap.get(toolId);
+  if (live) last.current = live;
+  const tool = live ?? (last.current?.id === toolId ? last.current : undefined);
   const route = useRoute();
   const jobId = route.query.get('job');
   useEffect(() => { if (tool) pushRecent(tool.id); }, [tool]);

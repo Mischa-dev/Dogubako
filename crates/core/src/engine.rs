@@ -956,7 +956,12 @@ mod tests {
         assert_eq!(r.changed, vec!["text.ext_a"]);
         assert!(r.added.is_empty() && r.removed.is_empty());
         assert_eq!(
-            engine.registry().get("text.ext_a").unwrap().spec().description,
+            engine
+                .registry()
+                .get("text.ext_a")
+                .unwrap()
+                .spec()
+                .description,
             "edited"
         );
 
@@ -978,7 +983,11 @@ mod tests {
         assert_eq!(r.tools, n);
     }
 
-    fn gate(text: &'static str, started: Arc<tokio::sync::Notify>, release: Arc<tokio::sync::Notify>) -> Arc<dyn Tool> {
+    fn gate(
+        text: &'static str,
+        started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    ) -> Arc<dyn Tool> {
         async_tool(
             ToolSpec::new("dev.gate", "Gate", Category::Dev).describe(text),
             move |_c, _p| {

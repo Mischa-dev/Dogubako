@@ -273,6 +273,33 @@ pub fn spec(engine: &Engine) -> Value {
         op("Security & execution audit log (admin)", "admin", json!({})),
     );
     add(
+        "/api/v1/admin/reload",
+        "post",
+        op(
+            "Rebuild the tool registry without a restart; reports added, removed and changed tools (admin)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/tools/events",
+        "get",
+        op(
+            "Server-sent `tools` event each time a reload changes the tool set",
+            "tools",
+            json!({}),
+        ),
+    );
+    add(
+        "/mcp",
+        "get",
+        op(
+            "MCP server-initiated stream (notifications/tools/list_changed)",
+            "mcp",
+            json!({}),
+        ),
+    );
+    add(
         "/mcp",
         "post",
         op(

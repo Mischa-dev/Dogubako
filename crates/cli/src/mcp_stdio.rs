@@ -97,13 +97,8 @@ impl McpBackend for LocalBackend {
         progress: Option<ProgressFn>,
         wait: Duration,
     ) -> Result<JobView, ToolError> {
-        let spec = self
-            .engine
-            .registry()
-            .find(tool_id)
-            .ok_or_else(|| ToolError::NotFound { id: tool_id.into() })?
-            .spec()
-            .clone();
+        let tool = self.engine.find(tool_id)?;
+        let spec = tool.spec().clone();
         if !self.permitted(&spec) {
             return Err(ToolError::denied(format!(
                 "'{}' is not permitted for this MCP server",
@@ -162,18 +157,21 @@ impl McpBackend for LocalBackend {
                 allow.iter().any(|p| matches(p, s)) && !deny.iter().any(|p| matches(p, s))
             };
             let res = engine
-                .run(RunRequest {
-                    tool_id: &spec.id,
-                    params: args,
-                    resolver: &resolver,
-                    out_dir,
-                    permissions,
-                    authorize: Some(&authorize),
-                    progress: Some(progress_fn),
-                    cancel,
-                    timeout: None,
-                    fs: Some(fs),
-                })
+                .run_tool(
+                    tool,
+                    RunRequest {
+                        tool_id: &spec.id,
+                        params: args,
+                        resolver: &resolver,
+                        out_dir,
+                        permissions,
+                        authorize: Some(&authorize),
+                        progress: Some(progress_fn),
+                        cancel,
+                        timeout: None,
+                        fs: Some(fs),
+                    },
+                )
                 .await;
             let mut v = tx2.borrow().clone();
             v.finished_at = Some(now());

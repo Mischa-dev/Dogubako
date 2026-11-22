@@ -318,6 +318,9 @@ export class HttpBackend implements Backend {
     if (typeof EventSource === 'undefined') return () => {};
     const source = new EventSource(this.url('/tools/events'), { withCredentials: true });
     source.addEventListener('tools', () => cb());
+    // A reload while disconnected sends nothing on reconnect: refresh then.
+    let opened = false;
+    source.addEventListener('open', () => { if (opened) cb(); opened = true; });
     return () => source.close();
   }
   extensions() { return this.get<{ extensions: any[]; dir?: string }>('/extensions'); }

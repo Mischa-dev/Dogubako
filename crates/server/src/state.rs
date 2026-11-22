@@ -27,6 +27,8 @@ pub struct McpSession {
     pub token_id: Option<String>,
     pub created: Instant,
     pub last_used: Instant,
+    /// Cancelled when the session ends, closing its server-initiated stream.
+    pub closed: tokio_util::sync::CancellationToken,
 }
 
 #[derive(Clone)]
@@ -43,6 +45,8 @@ pub struct AppState {
     pub assistant_inflight: Arc<Mutex<HashMap<String, u32>>>,
     pub setup_token: Arc<Mutex<Option<String>>>,
     pub mcp_sessions: Arc<Mutex<HashMap<String, McpSession>>>,
+    /// Cancelled on server shutdown so long-lived event streams end.
+    pub shutdown: tokio_util::sync::CancellationToken,
     pub downloads: Arc<Mutex<HashMap<String, DownloadState>>>,
     pub started: Instant,
 }
@@ -162,6 +166,7 @@ impl AppState {
             assistant_inflight: Arc::new(Mutex::new(HashMap::new())),
             setup_token: Arc::new(Mutex::new(setup_token)),
             mcp_sessions: Arc::new(Mutex::new(HashMap::new())),
+            shutdown: tokio_util::sync::CancellationToken::new(),
             downloads: Arc::new(Mutex::new(HashMap::new())),
             started: Instant::now(),
         })

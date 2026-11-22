@@ -277,6 +277,7 @@ pub async fn mcp_post(
                 token_id: principal.token_id.clone(),
                 created: Instant::now(),
                 last_used: Instant::now(),
+                closed: Default::default(),
             },
         );
         new_session = Some(sid);
@@ -372,23 +373,27 @@ pub async fn mcp_get(
         )
             .into_response());
     };
-    {
+    let closed = {
         let mut sessions = state.mcp_sessions.lock().unwrap();
         match sessions.get_mut(sid) {
             Some(s) if s.user_id == principal.user_id && s.token_id == principal.token_id => {
-                s.last_used = Instant::now()
+                s.last_used = Instant::now();
+                s.closed.clone()
             }
             _ => return Err(ApiError::not_found("unknown MCP session; re-initialize")),
         }
-    }
+    };
     let rx = state.engine.subscribe();
-    let stream = tokio_stream::wrappers::WatchStream::from_changes(rx).map(|_| {
-        Ok::<_, std::convert::Infallible>(
-            Event::default()
-                .event("message")
-                .data(McpServer::tools_list_changed().to_string()),
-        )
-    });
+    let stream = tokio_stream::wrappers::WatchStream::from_changes(rx)
+        .take_until(closed.cancelled_owned())
+        .take_until(state.shutdown.clone().cancelled_owned())
+        .map(|_| {
+            Ok::<_, std::convert::Infallible>(
+                Event::default()
+                    .event("message")
+                    .data(McpServer::tools_list_changed().to_string()),
+            )
+        });
     Ok(Sse::new(stream)
         .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
         .into_response())
@@ -405,7 +410,9 @@ pub async fn mcp_delete(
             .map(|x| x.user_id == principal.user_id)
             .unwrap_or(false)
         {
-            s.remove(sid);
+            if let Some(gone) = s.remove(sid) {
+                gone.closed.cancel();
+            }
         }
     }
     StatusCode::NO_CONTENT.into_response()

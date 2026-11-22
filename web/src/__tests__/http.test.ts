@@ -156,6 +156,10 @@ describe('HttpBackend registry reload', () => {
     expect(es.url).toBe('/api/v1/tools/events');
     es.listeners.tools.forEach((l) => l({ data: '{"generation":1}' } as MessageEvent));
     expect(cb).toHaveBeenCalledTimes(1);
+    es.listeners.open.forEach((l) => l({} as MessageEvent));
+    expect(cb).toHaveBeenCalledTimes(1);
+    es.listeners.open.forEach((l) => l({} as MessageEvent));
+    expect(cb).toHaveBeenCalledTimes(2);
     stop();
     expect(es.closed).toBe(true);
   });
