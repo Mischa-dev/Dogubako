@@ -343,6 +343,25 @@ pub static KNOWN_DEPS: &[DepSpec] = &[
         ),
     },
     DepSpec {
+        id: "cups",
+        name: "CUPS",
+        purpose: "Printing and printer status (lp, lpstat)",
+        binaries: &["lp", "lpstat"],
+        unix_only_binaries: &[],
+        // lp and lpstat have no version flag.
+        version_args: &[],
+        version_regex: "",
+        license: "Apache-2.0",
+        install: hints!(
+            Some("cups-client"),
+            Some("cups-client"),
+            Some("cups"),
+            Some("cups"),
+            None,
+            "https://openprinting.github.io/cups/"
+        ),
+    },
+    DepSpec {
         id: "bwrap",
         name: "Bubblewrap",
         purpose: "Optional sandbox for external programs (Linux)",
@@ -658,9 +677,14 @@ impl DepRegistry {
 }
 
 /// Whether a dependency means anything on this platform (Bubblewrap is a
-/// Linux sandbox, so it isn't listed as missing elsewhere).
+/// Linux sandbox and CUPS is not used on Windows, so they aren't listed as
+/// missing elsewhere).
 fn applies_here(spec: &DepSpec) -> bool {
-    spec.id != "bwrap" || cfg!(target_os = "linux")
+    match spec.id {
+        "bwrap" => cfg!(target_os = "linux"),
+        "cups" => !cfg!(windows),
+        _ => true,
+    }
 }
 
 /// The app's own directories first, then PATH, then the platform's
@@ -807,6 +831,9 @@ pub fn parse_ffmpeg_encoders(text: &str) -> HashSet<String> {
 
 fn probe_version(path: &Path, spec: &DepSpec) -> Option<String> {
     use std::process::{Command, Stdio};
+    if spec.version_args.is_empty() {
+        return None;
+    }
     let mut child = Command::new(path)
         .args(spec.version_args)
         .stdin(Stdio::null())
@@ -996,6 +1023,7 @@ mod managed_tests {
             ids.contains(&"bwrap".to_string()),
             cfg!(target_os = "linux")
         );
+        assert_eq!(ids.contains(&"cups".to_string()), !cfg!(windows));
         assert!(ids.contains(&"ffmpeg".to_string()));
     }
 }

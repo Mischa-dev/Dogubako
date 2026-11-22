@@ -37,7 +37,13 @@
 //! * Manifests are only loaded when their SHA-256 is listed in the trust
 //!   store (`trusted.toml`), so dropping a file into the folder is not enough.
 //! * Declared permissions are enforced by the engine like builtin tools.
+//!
+//! `requires = ["cups"]` in `[tool]` names dependencies from
+//! [`crate::deps::KNOWN_DEPS`], checked like a Rust tool's `.requires(..)`. A
+//! `program` that is one of their executables is found through the
+//! dependency registry (managed engines, `DOGUBAKO_<ID>_PATH`).
 
+use crate::deps::dep_spec;
 use crate::error::{ToolError, ToolResult};
 use crate::params::Params;
 use crate::spec::{
@@ -88,6 +94,9 @@ struct ToolSection {
     platforms: Vec<Platform>,
     #[serde(default = "default_timeout")]
     timeout_secs: u64,
+    /// Dependency ids from [`crate::deps::KNOWN_DEPS`].
+    #[serde(default)]
+    requires: Vec<String>,
 }
 
 fn default_version() -> String {
@@ -131,6 +140,9 @@ struct Manifest {
 pub struct ExternalTool {
     spec: ToolSpec,
     program: String,
+    /// The required dependency `program` belongs to, if any; the program is
+    /// then found through the dependency registry.
+    dep: Option<String>,
     args: Vec<ArgItem>,
     output: OutputSection,
 }
@@ -178,6 +190,14 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     if !m.tool.platforms.is_empty() {
         spec.platforms = m.tool.platforms.clone();
     }
+    for d in &m.tool.requires {
+        if dep_spec(d).is_none() {
+            return Err(format!("unknown dependency '{d}' in requires"));
+        }
+    }
+    let reqs: Vec<&str> = m.tool.requires.iter().map(String::as_str).collect();
+    spec = spec.requires(&reqs);
+    let dep = program_dep(&m.command.program, &m.tool.requires);
     for p in &m.tool.permissions {
         let perm = Permission::parse(p).ok_or_else(|| format!("unknown permission '{p}'"))?;
         spec = spec.permission(perm);
@@ -225,9 +245,30 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     Ok(ExternalTool {
         spec,
         program: m.command.program,
+        dep,
         args: m.command.args,
         output: m.output,
     })
+}
+
+/// The required dependency whose id or executable names match `program`.
+fn program_dep(program: &str, requires: &[String]) -> Option<String> {
+    if Path::new(program).components().count() != 1 {
+        return None;
+    }
+    let name = program.to_ascii_lowercase();
+    let name = name.strip_suffix(".exe").unwrap_or(&name);
+    requires
+        .iter()
+        .filter_map(|d| dep_spec(d))
+        .find(|d| {
+            d.id == name
+                || d.binaries
+                    .iter()
+                    .chain(d.unix_only_binaries)
+                    .any(|b| *b == name)
+        })
+        .map(|d| d.id.to_string())
 }
 
 fn placeholders(s: &str) -> Vec<String> {
@@ -309,13 +350,18 @@ impl Tool for ExternalTool {
     }
 
     async fn run(&self, ctx: ToolContext, params: Params) -> ToolResult<ToolOutput> {
-        let program = if Path::new(&self.program).is_absolute() {
-            PathBuf::from(&self.program)
+        let mut cmd = if let Some(dep) = &self.dep {
+            let name = self.program.strip_suffix(".exe").unwrap_or(&self.program);
+            ctx.command_sibling(dep, name)?
+        } else if Path::new(&self.program).is_absolute() {
+            ctx.command_path(PathBuf::from(&self.program), &self.program)
         } else {
-            which::which(&self.program).map_err(|_| ToolError::MissingDependency {
-                dependency: self.program.clone(),
-                hint: format!("'{}' was not found on PATH", self.program),
-            })?
+            let program =
+                which::which(&self.program).map_err(|_| ToolError::MissingDependency {
+                    dependency: self.program.clone(),
+                    hint: format!("'{}' was not found on PATH", self.program),
+                })?;
+            ctx.command_path(program, &self.program)
         };
         let output_path = match &self.output.file {
             Some(t) => {
@@ -343,7 +389,7 @@ impl Tool for ExternalTool {
                 }
             }
         }
-        let mut cmd = ctx.command_path(program, &self.program).args(&argv);
+        cmd = cmd.args(&argv);
         if self.spec.permissions.contains(&Permission::Network) {
             cmd = cmd.allow_network();
         }
@@ -528,6 +574,85 @@ type = "boolean"
             .await
             .unwrap_err();
         assert_eq!(err.code(), "invalid_input");
+    }
+
+    const LPSTAT: &str = r#"
+[tool]
+id = "system.ext_printers"
+name = "Printers (extension)"
+category = "system"
+requires = ["cups"]
+[command]
+program = "lpstat"
+args = ["-a"]
+[output]
+stdout = "text/plain"
+"#;
+
+    #[test]
+    fn requires_accepts_known_deps_only() {
+        let t = parse_manifest(LPSTAT, "x").unwrap();
+        assert_eq!(t.spec.requires, vec!["cups".to_string()]);
+        assert_eq!(t.dep.as_deref(), Some("cups"));
+        let multi = LPSTAT.replace(r#"["cups"]"#, r#"["ffmpeg", "cups"]"#);
+        assert_eq!(
+            parse_manifest(&multi, "x").unwrap().dep.as_deref(),
+            Some("cups")
+        );
+        let bad = LPSTAT.replace(r#"["cups"]"#, r#"["cups", "nope"]"#);
+        assert!(parse_manifest(&bad, "x")
+            .err()
+            .unwrap()
+            .contains("unknown dependency 'nope'"));
+        // A program outside the required deps keeps the PATH lookup.
+        assert_eq!(parse_manifest(M, "x").unwrap().dep, None);
+        let other = LPSTAT.replace(r#"["cups"]"#, r#"["ffmpeg"]"#);
+        assert_eq!(parse_manifest(&other, "x").unwrap().dep, None);
+        let abs = LPSTAT.replace(r#""lpstat""#, r#""/opt/x/lpstat""#);
+        assert_eq!(parse_manifest(&abs, "x").unwrap().dep, None);
+    }
+
+    #[test]
+    fn missing_requirement_matches_a_rust_tool() {
+        // Whichever of these is missing here, the manifest tool must report
+        // it exactly like a Rust tool with the same `.requires(..)`.
+        let deps = ["cups", "piper", "realesrgan"];
+        let text = LPSTAT.replace(r#"["cups"]"#, r#"["cups", "piper", "realesrgan"]"#);
+        let ext = parse_manifest(&text, "x").unwrap();
+        let rust =
+            ToolSpec::new("system.rust_printers", "Printers", Category::System).requires(&deps);
+        let h = crate::testing::TestHarness::new(vec![std::sync::Arc::new(ext)]);
+        let ext_spec = h.engine.registry.get("system.ext_printers").unwrap().spec();
+        let a = serde_json::to_value(h.engine.availability(ext_spec)).unwrap();
+        let b = serde_json::to_value(h.engine.availability(&rust)).unwrap();
+        assert_eq!(a, b);
+        if a["available"] == false {
+            let hint = &a["missing"][0]["hint"];
+            assert!(hint.as_str().is_some_and(|s| !s.is_empty()));
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn program_is_resolved_through_the_dependency_registry() {
+        use std::os::unix::fs::PermissionsExt;
+        let bin = tempfile::tempdir().unwrap();
+        for name in ["lp", "lpstat"] {
+            let p = bin.path().join(name);
+            std::fs::write(&p, format!("#!/bin/sh\necho fake-{name} \"$@\"\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let tool = parse_manifest(LPSTAT, "test.toml").unwrap();
+        let h = crate::testing::TestHarness::with_bin_dirs(
+            vec![std::sync::Arc::new(tool)],
+            vec![bin.path().to_path_buf()],
+        );
+        assert!(h.available("system.ext_printers"));
+        let out = h
+            .run("system.ext_printers", serde_json::json!({}))
+            .await
+            .unwrap();
+        assert_eq!(out.text.as_deref(), Some("fake-lpstat -a\n"));
     }
 
     #[test]
