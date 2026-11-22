@@ -149,6 +149,7 @@ All codes and HTTP statuses are in [Errors](/reference/errors/).
 | `GET /tools[?q=&category=]` | Permitted tools with their specs, availability and input schemas |
 | `GET /tools/{id}` | One tool |
 | `GET /categories` | Categories with tool counts |
+| `GET /packs` | Built-in tool packs with tool count, on/off state, engines and models used |
 | `POST /tools/{id}/run` | Run a tool (see above) |
 
 ### Jobs

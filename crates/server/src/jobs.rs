@@ -162,11 +162,10 @@ impl JobManager {
         via: &str,
         quota_default_mb: u64,
     ) -> ApiResult<JobView> {
-        let tool = self
-            .engine
-            .registry
-            .find(tool_id)
-            .ok_or_else(|| ApiError::not_found(format!("unknown tool '{tool_id}'")))?;
+        let tool = self.engine.find(tool_id).map_err(|e| match e {
+            ToolError::NotInstalled { .. } => ApiError::from(e),
+            _ => ApiError::not_found(format!("unknown tool '{tool_id}'")),
+        })?;
         let spec = tool.spec().clone();
         if !principal.can_use(&spec) {
             self.db.audit(

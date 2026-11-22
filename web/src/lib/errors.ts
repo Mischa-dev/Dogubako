@@ -45,6 +45,8 @@ export function describeError(e: ToolErrorView | null | undefined): FriendlyErro
         details: stderr || undefined,
       };
     }
+    case 'not_installed':
+      return { title: 'Tool not installed', message: msg || "This tool's pack is turned off. Turn it on to use it." };
     case 'not_found':
       return { title: 'Not found', message: msg || 'The requested item does not exist.' };
     case 'unauthorized':

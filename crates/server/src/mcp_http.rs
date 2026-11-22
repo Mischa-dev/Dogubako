@@ -37,6 +37,9 @@ impl McpBackend for ServerBackend {
             .collect()
     }
 
+    fn not_installed(&self, name: &str) -> Option<ToolError> {
+        self.state.engine.not_installed(name)
+    }
     fn file_mode(&self) -> &'static str {
         "id"
     }
@@ -60,7 +63,11 @@ impl McpBackend for ServerBackend {
             )
             .map_err(|e| match e.status {
                 StatusCode::FORBIDDEN => ToolError::denied(e.message),
-                StatusCode::NOT_FOUND => ToolError::NotFound { id: tool_id.into() },
+                StatusCode::NOT_FOUND => self
+                    .state
+                    .engine
+                    .not_installed(tool_id)
+                    .unwrap_or_else(|| ToolError::NotFound { id: tool_id.into() }),
                 StatusCode::PAYLOAD_TOO_LARGE => ToolError::limit(e.message),
                 _ => ToolError::failed(e.message),
             })?;

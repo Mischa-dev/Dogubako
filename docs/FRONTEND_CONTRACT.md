@@ -24,6 +24,7 @@ The React app in `web/` runs in two hosts with one codebase:
 ## Desktop mode (Tauri commands; `invoke` from `@tauri-apps/api/core`)
 - `app_info()` → `{version, platform, tools, output_dir, data_dir}`
 - `list_tools()` → `ToolInfo[]` (same shape as server, `permitted` always true, includes `input_schema`)
+- `list_packs()` → `PackInfo[]` (same shape as `GET /api/v1/packs` entries)
 - `run_tool({runId, toolId, params})` → final `JobView` (artifacts have `path` instead of `url`/`id`). File params take **absolute local paths**. Progress: `listen('dogubako://progress', e => e.payload = {run_id, progress?, message?})`.
 - `cancel_run({runId})`
 - `stage_file({name, bytes: number[]})` → `{path, name, size}` — for browser `File` objects (paste, in-page drag) that have no path.

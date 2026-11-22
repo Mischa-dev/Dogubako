@@ -15,6 +15,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use dogubako_core::engine::ToolInfo;
+use dogubako_core::error::ToolError;
 use dogubako_core::spec::{Category, Permission};
 use dogubako_mcp::FileView;
 use dogubako_mcp::{JobView, ResultView};
@@ -40,6 +41,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/tools/{id}/run", post(run_tool))
         .route("/tools/{id}/check", post(check_tool))
         .route("/categories", get(categories))
+        .route("/packs", get(packs))
         .route("/jobs", get(list_jobs))
         .route("/jobs/{id}", get(get_job).delete(delete_job))
         .route("/jobs/{id}/events", get(job_events))
@@ -356,15 +358,19 @@ async fn get_tool(
     p: Principal,
     Path(id): Path<String>,
 ) -> ApiResult<Json<Value>> {
-    let t = s
-        .engine
-        .registry
-        .find(&id)
-        .ok_or_else(|| ApiError::not_found("unknown tool"))?;
+    let t = s.engine.find(&id).map_err(|e| match e {
+        ToolError::NotInstalled { .. } => ApiError::from(e),
+        _ => ApiError::not_found("unknown tool"),
+    })?;
     if !p.can_use(t.spec()) && !p.is_admin() {
         return Err(ApiError::not_found("unknown tool"));
     }
     Ok(Json(tool_json(&s, &p, &s.engine.info(t.spec()))))
+}
+
+/// Built-in tool packs: tool count, on/off, and the engines and models used.
+async fn packs(State(s): State<AppState>, _p: Principal) -> Json<Value> {
+    Json(json!({"packs": s.engine.packs()}))
 }
 
 async fn categories(State(s): State<AppState>, p: Principal) -> Json<Value> {

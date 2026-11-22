@@ -1117,3 +1117,108 @@ async fn job_zip_keeps_folders() {
         ]
     );
 }
+
+#[tokio::test]
+async fn turned_off_packs_hide_tools_everywhere() {
+    let t = setup_with(AuthMode::None, |c| {
+        c.packs = dogubako_core::packs::PackSelection::parse("image")
+    });
+    let r = call(&t.app, Method::GET, "/api/v1/tools", &[], None).await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert!(!r.raw.windows(10).any(|w| w == b"text.upper"));
+    let r = call(&t.app, Method::GET, "/api/v1/tools?q=upper", &[], None).await;
+    assert!(!r.raw.windows(10).any(|w| w == b"text.upper"));
+
+    let r = call(&t.app, Method::GET, "/api/v1/tools/text.upper", &[], None).await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    assert_eq!(r.body["error"]["code"], "not_installed");
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/text.upper/run",
+        &[],
+        Some(json!({"params": {"text": "a"}})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    assert_eq!(r.body["error"]["code"], "not_installed");
+    assert!(r.body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("Text pack"));
+
+    let r = call(&t.app, Method::GET, "/api/v1/packs", &[], None).await;
+    assert_eq!(r.status, StatusCode::OK);
+    let packs = r.body["packs"].as_array().unwrap();
+    let text = packs.iter().find(|p| p["id"] == "text").unwrap();
+    assert_eq!(text["enabled"], false);
+    assert!(text["tools"].as_u64().unwrap() >= 2);
+    assert!(text["engines"].is_array() && text["models"].is_array());
+    assert_eq!(
+        packs.iter().find(|p| p["id"] == "image").unwrap()["enabled"],
+        true
+    );
+
+    // MCP: hidden from tools/list and search; direct call says not_installed.
+    let mcp = |id: u64, method: &str, params: Value| json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
+    let accept = [("accept", "application/json, text/event-stream")];
+    let r = call(&t.app, Method::POST, "/mcp", &accept, Some(mcp(1, "initialize", json!({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}})))).await;
+    let sid = r
+        .headers
+        .get("mcp-session-id")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let h = [
+        ("accept", "application/json, text/event-stream"),
+        ("mcp-session-id", sid.as_str()),
+    ];
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &h,
+        Some(mcp(2, "tools/list", json!({}))),
+    )
+    .await;
+    assert!(r.body["result"]["tools"].is_array(), "{:?}", r.body);
+    assert!(!r.raw.windows(10).any(|w| w == b"text_upper"));
+    assert!(!r.raw.windows(10).any(|w| w == b"text.upper"));
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &h,
+        Some(mcp(
+            3,
+            "tools/call",
+            json!({"name": "dogubako_search_tools", "arguments": {"query": "upper"}}),
+        )),
+    )
+    .await;
+    assert!(
+        !r.raw.windows(10).any(|w| w == b"text.upper"),
+        "{:?}",
+        r.body
+    );
+    let r = call(&t.app, Method::POST, "/mcp", &h, Some(mcp(4, "tools/call", json!({"name": "dogubako_run_tool", "arguments": {"tool": "text.upper", "arguments": {"text": "a"}}})))).await;
+    let text = r.body.to_string();
+    assert!(
+        text.contains("not_installed") || text.contains("not installed"),
+        "{text}"
+    );
+}
+
+#[tokio::test]
+async fn packs_default_to_all() {
+    let t = setup(AuthMode::None);
+    let r = call(&t.app, Method::GET, "/api/v1/packs", &[], None).await;
+    assert!(r.body["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|p| p["enabled"] == true));
+    let r = call(&t.app, Method::GET, "/api/v1/tools/text.upper", &[], None).await;
+    assert_eq!(r.status, StatusCode::OK);
+}

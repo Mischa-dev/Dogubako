@@ -3,6 +3,7 @@
 //! Precedence: defaults < config file (`DOGUBAKO_CONFIG` or
 //! `<data_dir>/dogubako.toml`) < environment variables < CLI flags.
 
+use dogubako_core::packs::PackSelection;
 use dogubako_core::policy::SandboxMode;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -48,6 +49,10 @@ pub struct ServerConfig {
     pub mcp_enabled: bool,
     /// Default MCP discovery mode: "full" or "compact".
     pub mcp_discovery: String,
+    /// Built-in tool packs turned on (`DOGUBAKO_PACKS`, or `packs = [...]`
+    /// in the config file); unset means every pack.
+    #[serde(default, deserialize_with = "packs_de")]
+    pub packs: PackSelection,
     /// Extra allowed Origins for browser requests / MCP (besides same-origin).
     pub allowed_origins: Vec<String>,
     pub sandbox: SandboxMode,
@@ -101,6 +106,7 @@ impl Default for ServerConfig {
             allow_private_network: false,
             mcp_enabled: true,
             mcp_discovery: "full".into(),
+            packs: PackSelection::all(),
             allowed_origins: vec![],
             sandbox: SandboxMode::None,
             worker_exe: None,
@@ -225,6 +231,9 @@ impl ServerConfig {
         if let Some(v) = env("MCP_DISCOVERY") {
             cfg.mcp_discovery = v;
         }
+        if let Some(v) = env("PACKS") {
+            cfg.packs = PackSelection::parse(&v);
+        }
         if let Some(v) = env_list("ALLOWED_ORIGINS") {
             cfg.allowed_origins = v;
         }
@@ -279,6 +288,18 @@ impl ServerConfig {
             return Err(anyhow_lite::Error(format!(
                 "refusing to run without authentication on non-loopback address {}. Use DOGUBAKO_AUTH=required, bind to 127.0.0.1, or set DOGUBAKO_ALLOW_INSECURE_NO_AUTH=1 if you really mean it.",
                 self.bind
+            )));
+        }
+        let unknown = self.packs.unknown();
+        if !unknown.is_empty() {
+            return Err(anyhow_lite::Error(format!(
+                "unknown tool pack(s) {}; known packs: {}",
+                unknown.join(", "),
+                dogubako_core::packs::builtin_packs()
+                    .iter()
+                    .map(|p| p.id)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )));
         }
         if !["full", "compact"].contains(&self.mcp_discovery.as_str()) {
@@ -349,4 +370,21 @@ pub mod anyhow_lite {
             Error(format!("database: {e}"))
         }
     }
+}
+
+/// `packs` in the config file: a list (`["image", "pdf"]`) or a string
+/// (`"all,-speech"`).
+fn packs_de<'de, D: serde::Deserializer<'de>>(d: D) -> Result<PackSelection, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        List(Vec<String>),
+        Text(String),
+        Selection(PackSelection),
+    }
+    Ok(match Raw::deserialize(d)? {
+        Raw::List(v) => PackSelection::parse(&v.join(",")),
+        Raw::Text(t) => PackSelection::parse(&t),
+        Raw::Selection(s) => s,
+    })
 }
