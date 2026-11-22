@@ -762,7 +762,12 @@ impl Tool for ExternalTool {
     }
 
     fn fingerprint(&self) -> Option<String> {
-        Some(self.sha256.clone())
+        // Promotion keeps the bytes but changes who may see the tool.
+        Some(match (&self.spec.dev, &self.spec.author) {
+            (true, Some(a)) => format!("{}:dev:{a}", self.sha256),
+            (true, None) => format!("{}:dev", self.sha256),
+            _ => self.sha256.clone(),
+        })
     }
 
     fn unset_settings(&self) -> Vec<String> {

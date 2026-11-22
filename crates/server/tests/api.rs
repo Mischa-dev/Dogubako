@@ -1807,6 +1807,27 @@ expect = { text = "hi" }
     // An owner's scoped token can only use the dev slot.
     let r = install("mine", json!({"manifest": manifest})).await;
     assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.body);
+    // A token scoped away from the tool can't run its tests by installing it.
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tokens",
+        &h,
+        Some(json!({"name": "images", "scope": {"allow": ["image.*"]}})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    let narrow = format!("Bearer {}", r.body["token"].as_str().unwrap());
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/extensions/install",
+        &[("authorization", narrow.as_str())],
+        Some(json!({"manifest": manifest, "dev": true})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.body);
+    assert!(!dir.join("dev/text.wip_echo.toml").exists());
     let r = install("mine", json!({"manifest": manifest, "dev": true})).await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
     assert_eq!(r.body["dev"], true);
