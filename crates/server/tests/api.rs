@@ -1766,6 +1766,28 @@ expect = { text = "hi" }
         "its author's MCP sees it"
     );
 
+    // Its tests run its command: not for anyone else either.
+    for hs in [&h[..], &agent[..]] {
+        let r = call(
+            &t.app,
+            Method::POST,
+            "/api/v1/extensions/text.wip_echo/test",
+            hs,
+            None,
+        )
+        .await;
+        assert_ne!(r.status, StatusCode::OK, "{:?}", r.body);
+    }
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/extensions/text.wip_echo/test",
+        &h,
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND, "{:?}", r.body);
+
     // A dev tool cannot shadow a built-in.
     let r = install(
         "mine",

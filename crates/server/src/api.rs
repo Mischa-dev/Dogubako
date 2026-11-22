@@ -1455,10 +1455,18 @@ async fn extension_uninstall(
 /// Run an installed extension's tests without reinstalling it.
 async fn extension_test(
     State(s): State<AppState>,
-    Admin(_): Admin,
+    Admin(p): Admin,
     Path(id): Path<String>,
 ) -> ApiResult<Json<Value>> {
-    let r = dogubako_core::extensions::test(&s.engine, &s.cfg.extensions_dir(), &id).await?;
+    // Tests run the tool's command: a dev tool only for its author.
+    let dir = s.cfg.extensions_dir();
+    let hidden = s.engine.extensions().iter().any(|st| {
+        st.dev && st.id.as_deref() == Some(id.as_str()) && !p.is_author_key(st.author.as_deref())
+    });
+    if hidden {
+        return Err(ApiError::not_found(format!("no extension '{id}'")));
+    }
+    let r = dogubako_core::extensions::test(&s.engine, &dir, &id).await?;
     Ok(Json(json!(r)))
 }
 

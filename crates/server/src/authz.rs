@@ -164,10 +164,12 @@ impl Principal {
     /// Dev tools are visible only to their author. Hand-placed ones
     /// (author `local`) belong to the owner signed in as a human.
     pub fn is_author(&self, spec: &ToolSpec) -> bool {
-        let author = spec
-            .author
-            .as_deref()
-            .unwrap_or(dogubako_core::manifest::LOCAL_AUTHOR);
+        self.is_author_key(spec.author.as_deref())
+    }
+
+    /// Whether a dev tool recorded as installed by `author` is this principal's.
+    pub fn is_author_key(&self, author: Option<&str>) -> bool {
+        let author = author.unwrap_or(dogubako_core::manifest::LOCAL_AUTHOR);
         author == self.author_key()
             || (author == dogubako_core::manifest::LOCAL_AUTHOR
                 && self.role == Role::Owner
