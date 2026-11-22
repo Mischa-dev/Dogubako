@@ -16,6 +16,7 @@ pub mod llm;
 pub mod manifest;
 pub mod models;
 pub mod net;
+pub mod packs;
 pub mod params;
 pub mod paths;
 pub mod policy;

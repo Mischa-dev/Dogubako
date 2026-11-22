@@ -6,6 +6,7 @@
    "name": "Convert Images",
    "description": "Convert images between PNG, JPEG, WebP, AVIF, GIF, BMP, TIFF, ICO, TGA, QOI and more, in bulk",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "convert",
     "format",
@@ -227,6 +228,7 @@
    "name": "Resize Images",
    "description": "Resize images in bulk by width, height or percentage with contain/cover/fill/exact fit modes",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "resize",
     "scale",
@@ -527,6 +529,7 @@
    "name": "Create Thumbnails",
    "description": "Generate small thumbnails for many images at once (square crop or fit inside a box)",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "thumbnail",
     "thumb",
@@ -665,6 +668,7 @@
    "name": "Compress Images",
    "description": "Reduce image file size: lossy JPEG/WebP/AVIF re-encoding and lossless PNG optimization (oxipng), in bulk",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "compress",
     "optimize",
@@ -825,6 +829,7 @@
    "name": "Image Info",
    "description": "Show image dimensions, format, color type, bit depth, transparency, DPI, frame count, file size and aspect ratio",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "info",
     "dimensions",
@@ -907,6 +912,7 @@
    "name": "Convert Color Space",
    "description": "Convert images between sRGB, CMYK, Lab, grayscale and linear RGB using ImageMagick, optionally with an ICC profile",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "cmyk",
     "rgb",
@@ -1090,6 +1096,7 @@
    "name": "Extract Animation Frames",
    "description": "Extract the frames of an animated GIF, WebP or APNG as PNG images, with their delays",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "gif",
     "frames",
@@ -1162,6 +1169,7 @@
    "name": "Generate Icons",
    "description": "Generate square PNG icons in many sizes plus a multi-resolution .ico from one image or SVG",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "icon",
     "ico",
@@ -1367,6 +1375,7 @@
    "name": "Favicon Generator",
    "description": "Create a complete favicon package: favicon.ico, PNG favicons, Apple touch icon, Android icons, site.webmanifest and HTML tags",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "favicon",
     "ico",
@@ -1511,6 +1520,7 @@
    "name": "Crop Image",
    "description": "Crop images to a rectangle or to an aspect ratio (centered or anchored)",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "crop",
     "trim",
@@ -1818,6 +1828,7 @@
    "name": "Rotate & Flip",
    "description": "Rotate images by 90/180/270 degrees or any angle, and flip horizontally or vertically, in bulk",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "rotate",
     "flip",
@@ -2011,6 +2022,7 @@
    "name": "Adjust & Filter",
    "description": "Adjust brightness, contrast, saturation, hue and gamma; apply grayscale, sepia, invert, blur or sharpen, in bulk",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "brightness",
     "contrast",
@@ -2281,6 +2293,7 @@
    "name": "Watermark Images",
    "description": "Add a text or image watermark to many images, with position, opacity, rotation and tiling",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "watermark",
     "logo",
@@ -2701,6 +2714,7 @@
    "name": "Combine Images",
    "description": "Stitch images side by side, top to bottom or into a grid",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "combine",
     "merge",
@@ -2904,6 +2918,7 @@
    "name": "Split Image into Tiles",
    "description": "Cut an image into a grid of tiles by rows × columns or by tile size (e.g. for Instagram grids)",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "split",
     "slice",
@@ -3146,6 +3161,7 @@
    "name": "Compare Images",
    "description": "Compare two images: highlighted difference image, % of differing pixels, MSE, PSNR and SSIM",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "compare",
     "diff",
@@ -3299,6 +3315,7 @@
    "name": "Contact Sheet",
    "description": "Lay out many images as labeled thumbnails on a single sheet",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "contact sheet",
     "overview",
@@ -3472,6 +3489,7 @@
    "name": "Sprite Sheet",
    "description": "Pack images into a CSS sprite sheet with generated CSS classes and JSON coordinates",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "sprite",
     "spritesheet",
@@ -3628,6 +3646,7 @@
    "name": "Redact Regions",
    "description": "Blur, pixelate or black out rectangular regions of an image (faces, license plates, personal data)",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "redact",
     "blur",
@@ -3877,6 +3896,7 @@
    "name": "Reduce Image Noise",
    "description": "Remove image noise with an edge-preserving bilateral filter or a median filter (great for salt-and-pepper noise)",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "denoise",
     "noise reduction",
@@ -4080,6 +4100,7 @@
    "name": "View Image Metadata",
    "description": "Inspect EXIF metadata (camera, lens, date, GPS location...) natively, or all metadata (XMP, IPTC, ICC, maker notes) with ExifTool",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "exif",
     "metadata",
@@ -4188,6 +4209,7 @@
    "name": "Remove Image Metadata",
    "description": "Remove EXIF, GPS location, XMP, IPTC and comments from photos without re-encoding (JPEG, PNG, WebP natively; other formats via ExifTool)",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "strip",
     "remove exif",
@@ -4291,6 +4313,7 @@
    "name": "SVG to PNG/JPEG/WebP",
    "description": "Rasterize SVG files to PNG, JPEG, WebP or other formats at any size or scale",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "svg",
     "rasterize",
@@ -4432,6 +4455,7 @@
    "name": "Optimize SVG",
    "description": "Safely minify SVG files: strip comments, metadata, editor data (Inkscape, Illustrator, Sketch...) and whitespace, optionally round numbers",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "svg",
     "minify",
@@ -4527,6 +4551,7 @@
    "name": "Detect Faces",
    "description": "Find faces in a photo locally (SeetaFace model) and return their bounding boxes with an annotated preview",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "face",
     "detect",
@@ -4633,6 +4658,7 @@
    "name": "Blur Faces",
    "description": "Automatically detect and blur, pixelate or black out faces in photos; returns the regions for review",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "blur faces",
     "anonymize",
@@ -4832,6 +4858,7 @@
    "name": "Extract Text (OCR)",
    "description": "Recognize text in images with Tesseract OCR: plain text, word boxes with confidence, TSV or hOCR",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "ocr",
     "text recognition",
@@ -5004,6 +5031,7 @@
    "name": "Remove Background",
    "description": "Cut out the subject and make the background transparent using local rembg (U²-Net / IS-Net models)",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "remove background",
     "background eraser",
@@ -5144,6 +5172,7 @@
    "name": "AI Upscale",
    "description": "Enlarge images 2×, 3× or 4× with Real-ESRGAN, restoring detail locally on the GPU (Vulkan)",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "upscale",
     "super resolution",
@@ -5300,6 +5329,7 @@
    "name": "Dominant Colors",
    "description": "Find the dominant colors of an image with their share of the picture (median cut + k-means)",
    "category": "image",
+   "pack": "image",
    "keywords": [
     "dominant color",
     "main colors",
@@ -5392,6 +5422,7 @@
    "name": "Convert Video",
    "description": "Convert videos between containers and codecs (MP4/H.264, H.265, WebM/VP9, AV1, MKV, MOV, AVI, GIF) with quality control and optional GPU encoding",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "transcode",
     "mp4",
@@ -5740,6 +5771,7 @@
    "name": "Compress Video",
    "description": "Shrink videos by quality level or to a target file size (two-pass bitrate), optionally capping the resolution",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "reduce size",
     "smaller",
@@ -6017,6 +6049,7 @@
    "name": "Resize Video",
    "description": "Scale videos to a preset (4K…240p), custom size or percentage, keeping aspect ratio with fit, fill (crop) or pad modes",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "scale",
     "resolution",
@@ -6266,6 +6299,7 @@
    "name": "Change Frame Rate",
    "description": "Change a video's frame rate by dropping/duplicating, blending or motion-interpolating frames",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "framerate",
     "fps",
@@ -6391,6 +6425,7 @@
    "name": "Trim Video",
    "description": "Keep only part of a video by start/end time or duration — fast keyframe stream copy or frame-accurate re-encode",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "cut",
     "clip",
@@ -6533,6 +6568,7 @@
    "name": "Cut / Split Video",
    "description": "Remove a section from a video, or split it into several files at timestamps or every N seconds",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "split",
     "remove part",
@@ -6733,6 +6769,7 @@
    "name": "Crop Video",
    "description": "Crop videos to a rectangle, a centered aspect ratio (16:9, 9:16, 1:1…) or automatically remove black bars (cropdetect)",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "crop",
     "black bars",
@@ -6977,6 +7014,7 @@
    "name": "Rotate / Flip Video",
    "description": "Rotate videos by 90/180/270 degrees or mirror them; optionally change only the rotation metadata (instant, lossless)",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "rotate",
     "flip",
@@ -7119,6 +7157,7 @@
    "name": "Merge Videos",
    "description": "Join videos end to end — lossless stream copy when they match, or re-encode to a common resolution and frame rate",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "join",
     "concatenate",
@@ -7302,6 +7341,7 @@
    "name": "Extract Audio",
    "description": "Save the soundtrack of videos as audio — lossless stream copy or MP3, AAC, WAV, FLAC, Opus or Ogg",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "extract audio from video",
     "rip audio",
@@ -7437,6 +7477,7 @@
    "name": "Remove Audio",
    "description": "Strip all audio tracks from videos without re-encoding the picture",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "mute",
     "silent",
@@ -7499,6 +7540,7 @@
    "name": "Replace Audio",
    "description": "Put a new soundtrack on videos — end at the shorter stream, loop or pad the audio, delay it, or mix it with the original sound",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "add music",
     "background music",
@@ -7678,6 +7720,7 @@
    "name": "Extract Frames",
    "description": "Export frames as images: every N seconds, at a frame rate, at specific timestamps, at scene changes, keyframes only, or every frame — optionally zipped",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "frames",
     "images",
@@ -7902,6 +7945,7 @@
    "name": "Video Thumbnail",
    "description": "Grab a single frame as an image — at a time or percentage, or let FFmpeg's thumbnail filter pick the most representative frame",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "poster",
     "cover",
@@ -8032,6 +8076,7 @@
    "name": "Video to GIF",
    "description": "Turn video clips into high-quality animated GIFs (two-pass palette), animated WebP or APNG with frame rate, width, range, looping and dithering control",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "gif",
     "animated",
@@ -8270,6 +8315,7 @@
    "name": "GIF to Video",
    "description": "Convert animated GIF / WebP / APNG files to MP4 (H.264) or WebM (VP9) — much smaller and widely playable",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "gif to mp4",
     "gif to webm",
@@ -8376,6 +8422,7 @@
    "name": "Change Video Speed",
    "description": "Speed up or slow down videos (0.25×–4×), adjusting the audio tempo without changing pitch",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "fast forward",
     "slow motion",
@@ -8497,6 +8544,7 @@
    "name": "Stabilize Video",
    "description": "Reduce camera shake with two-pass vid.stab (vidstabdetect/vidstabtransform) when available, otherwise FFmpeg's deshake filter",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "shaky",
     "stabilise",
@@ -8654,6 +8702,7 @@
    "name": "Video Info",
    "description": "Inspect media files with ffprobe: container, duration, bitrate, every stream (codec, resolution, frame rate, audio layout, language), chapters and tags",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "metadata",
     "ffprobe",
@@ -8734,6 +8783,7 @@
    "name": "Video Preview Clip",
    "description": "Make a short preview / teaser made of N clips sampled evenly across each video",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "teaser",
     "trailer",
@@ -8885,6 +8935,7 @@
    "name": "Hardware Encoders",
    "description": "List GPU/hardware video encoders and decoders FFmpeg supports here (NVENC, Quick Sync, VA-API, VideoToolbox, AMF) and test which actually work",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "gpu",
     "nvenc",
@@ -8932,6 +8983,7 @@
    "name": "Watermark Video",
    "description": "Overlay a logo image or a text watermark on videos with position, margin, size and opacity control",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "logo",
     "overlay",
@@ -9173,6 +9225,7 @@
    "name": "Video Contact Sheet",
    "description": "Create a screenshot grid (contact sheet) of frames sampled evenly across each video",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "screenshot grid",
     "thumbnails",
@@ -9314,6 +9367,7 @@
    "name": "Add Subtitles",
    "description": "Add one or more soft subtitle tracks (SRT, WebVTT, ASS) to a video with language tags — no re-encoding",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "soft subtitles",
     "captions",
@@ -9447,6 +9501,7 @@
    "name": "Remove Subtitles",
    "description": "Remove embedded subtitle tracks from videos without re-encoding (all, or only selected languages)",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "strip subtitles",
     "delete captions",
@@ -9518,6 +9573,7 @@
    "name": "Burn In Subtitles",
    "description": "Permanently render subtitles into the picture (hard subs) from an SRT/VTT/ASS file or an embedded track, with font size, colour and position options",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "hardsub",
     "hard subtitles",
@@ -9706,6 +9762,7 @@
    "name": "Extract Subtitles",
    "description": "List the subtitle tracks of videos and save them as SRT, WebVTT or ASS (or copy image-based tracks as-is)",
    "category": "video",
+   "pack": "video",
    "keywords": [
     "rip subtitles",
     "export captions",
@@ -9817,6 +9874,7 @@
    "name": "Convert Audio",
    "description": "Convert audio (or the soundtrack of videos) to MP3, AAC/M4A, Ogg Vorbis, Opus, FLAC, WAV, AIFF, ALAC, WMA or AC-3 with bitrate, VBR, sample rate, channel and bit-depth control",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "mp3",
     "wav",
@@ -10289,6 +10347,7 @@
    "name": "Compress Audio",
    "description": "Make audio files smaller by re-encoding to an efficient codec at a lower bitrate, optionally in mono (ideal for voice)",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "reduce size",
     "smaller",
@@ -10429,6 +10488,7 @@
    "name": "Trim Audio",
    "description": "Cut audio to a start/end time or duration, with optional fade in and fade out",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "cut",
     "clip",
@@ -10560,6 +10620,7 @@
    "name": "Split Audio",
    "description": "Split audio into parts: fixed-length chunks, at given timestamps, or automatically at silences",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "chunks",
     "segments",
@@ -10746,6 +10807,7 @@
    "name": "Merge Audio",
    "description": "Join audio files end to end, with optional crossfades or gaps of silence between them",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "join",
     "concatenate",
@@ -10887,6 +10949,7 @@
    "name": "Normalize Audio",
    "description": "Normalize loudness with two-pass EBU R128 (loudnorm: measure, then apply to a target LUFS / true peak / LRA) or peak-normalize to a dBFS level",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "loudness",
     "lufs",
@@ -11092,6 +11155,7 @@
    "name": "Change Volume",
    "description": "Make audio louder or quieter by decibels or a factor, with an optional limiter to prevent clipping",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "louder",
     "quieter",
@@ -11213,6 +11277,7 @@
    "name": "Change Sample Rate",
    "description": "Resample audio to another sample rate (high-quality SoX resampler when available) and change the bit depth of WAV/FLAC/AIFF",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "resample",
     "44.1khz",
@@ -11385,6 +11450,7 @@
    "name": "Audio Channels",
    "description": "Convert to mono or stereo, downmix surround to stereo, extract the left or right channel, or swap channels",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "mono",
     "stereo",
@@ -11501,6 +11567,7 @@
    "name": "Remove Silence",
    "description": "Trim silence from the start and end, or shorten every pause longer than a minimum duration",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "silence",
     "pauses",
@@ -11645,6 +11712,7 @@
    "name": "Detect Silence",
    "description": "Find silent intervals in audio or video (FFmpeg silencedetect) and list their start, end and duration",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "silence",
     "pauses",
@@ -11745,6 +11813,7 @@
    "name": "Audio Waveform",
    "description": "Render a waveform image (PNG) of audio with custom size, colors and scale, and optionally export min/max peak data as JSON",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "waveform",
     "visualize",
@@ -11940,6 +12009,7 @@
    "name": "Audio Spectrogram",
    "description": "Render a spectrogram image (frequency over time) of audio with color scheme, scale and legend options",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "spectrum",
     "frequency",
@@ -12181,6 +12251,7 @@
    "name": "Audio Info",
    "description": "Show audio format, codec, bitrate, sample rate, channels and tags; optionally measure loudness (EBU R128 integrated LUFS, LRA, true peak)",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "metadata",
     "tags",
@@ -12271,6 +12342,7 @@
    "name": "Audio Tags",
    "description": "Read or edit audio tags (title, artist, album, year, genre, track, comment…) and embed or remove cover art — without re-encoding",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "id3",
     "metadata",
@@ -12485,6 +12557,7 @@
    "name": "Reduce Audio Noise",
    "description": "Reduce background hiss and hum with FFmpeg's FFT denoiser (afftdn) or non-local-means (anlmdn), plus optional high-/low-pass filters",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "noise reduction",
     "hiss",
@@ -12649,6 +12722,7 @@
    "name": "Change Audio Speed / Pitch",
    "description": "Change tempo without affecting pitch (0.25×–4×) and/or shift pitch by semitones — uses Rubber Band when available",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "tempo",
     "pitch shift",
@@ -12777,6 +12851,7 @@
    "name": "Equalizer",
    "description": "Shape the sound with presets (bass boost, treble, voice clarity, podcast, loudness) or custom EQ bands, plus high-/low-pass filters",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "eq",
     "bass boost",
@@ -12934,6 +13009,7 @@
    "name": "Fade In / Out",
    "description": "Add a fade-in at the start and/or a fade-out at the end of audio, with selectable fade curves",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "fade in",
     "fade out",
@@ -13070,6 +13146,7 @@
    "name": "Reverse Audio",
    "description": "Play audio backwards (the whole file is buffered in memory)",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "backwards",
     "reverse",
@@ -13146,6 +13223,7 @@
    "name": "Extract Audio from Video",
    "description": "Save the soundtrack of videos as audio — lossless stream copy or MP3, AAC, WAV, FLAC, Opus or Ogg",
    "category": "audio",
+   "pack": "audio",
    "keywords": [
     "extract audio from video",
     "rip audio",
@@ -13281,6 +13359,7 @@
    "name": "Convert Transcript / Subtitles",
    "description": "Convert transcripts and subtitles between SRT, WebVTT, JSON segments, plain text and Markdown",
    "category": "speech",
+   "pack": "speech",
    "keywords": [
     "srt to vtt",
     "vtt to srt",
@@ -13406,6 +13485,7 @@
    "name": "Shift Subtitle Timing",
    "description": "Fix out-of-sync subtitles: shift SRT/WebVTT cues by an offset, stretch them by a factor or frame-rate ratio, optionally from a given time on",
    "category": "speech",
+   "pack": "speech",
    "keywords": [
     "sync subtitles",
     "delay",
@@ -13579,6 +13659,7 @@
    "name": "Transcribe Audio / Video",
    "description": "Offline speech-to-text with whisper.cpp: transcribe or translate audio and video to text, SRT, WebVTT, JSON or Markdown, with optional word timestamps, speaker turns and VAD",
    "category": "speech",
+   "pack": "speech",
    "keywords": [
     "speech to text",
     "whisper",
@@ -13841,6 +13922,7 @@
    "name": "Detect Spoken Language",
    "description": "Identify the language spoken in audio or video with Whisper (analyses 30 seconds from the chosen offset)",
    "category": "speech",
+   "pack": "speech",
    "keywords": [
     "language identification",
     "what language",
@@ -13995,6 +14077,7 @@
    "name": "Generate Subtitles",
    "description": "Automatically create SRT/WebVTT subtitles from speech with whisper.cpp, optionally adding them to the video as a soft track or burning them in",
    "category": "speech",
+   "pack": "speech",
    "keywords": [
     "auto subtitles",
     "captions",
@@ -14365,6 +14448,7 @@
    "name": "Text to Speech",
    "description": "Turn text into natural-sounding speech offline with Piper neural voices; save as WAV, MP3, Ogg, Opus, FLAC or M4A",
    "category": "speech",
+   "pack": "speech",
    "keywords": [
     "tts",
     "read aloud",
@@ -14509,6 +14593,7 @@
    "name": "Voice Activity Detection",
    "description": "Find where people are speaking in audio or video using the WebRTC voice activity detector; returns speech segments and can export JSON, CSV, SRT or Audacity labels",
    "category": "speech",
+   "pack": "speech",
    "keywords": [
     "vad",
     "speech detection",
@@ -14692,6 +14777,7 @@
    "name": "Extract Speech Segments",
    "description": "Detect speech with VAD and save each speech segment as its own file, or join all speech into one file (removes non-speech)",
    "category": "speech",
+   "pack": "speech",
    "keywords": [
     "remove non-speech",
     "speech only",
@@ -14911,6 +14997,7 @@
    "name": "Split at Pauses",
    "description": "Split long recordings into chunks no longer than a maximum length, cutting in pauses between speech (found by VAD) — ideal before transcription or upload limits",
    "category": "speech",
+   "pack": "speech",
    "keywords": [
     "split long audio",
     "chunk",
@@ -15121,6 +15208,7 @@
    "name": "Transcribe Video URL",
    "description": "Full transcript of a YouTube, TED, Vimeo or other video-site URL (sites supported by yt-dlp): the site's captions when it has them, otherwise the audio transcribed offline with Whisper. Shows the source, language and whether the text is captions or generated, with timestamps; export as text, SRT, WebVTT, JSON or Markdown",
    "category": "speech",
+   "pack": "speech",
    "keywords": [
     "youtube",
     "youtube transcript",
@@ -15348,6 +15436,7 @@
    "name": "Merge PDFs",
    "description": "Combine several PDFs into one document in the given order, optionally taking only some pages of each",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "combine",
     "join",
@@ -15414,6 +15503,7 @@
    "name": "Split PDF",
    "description": "Split a PDF into several files: every N pages, single pages, or custom page ranges",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "separate",
     "burst",
@@ -15517,6 +15607,7 @@
    "name": "Extract Pages",
    "description": "Create a new PDF containing only the selected pages",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "select",
     "pick",
@@ -15574,6 +15665,7 @@
    "name": "Reorder Pages",
    "description": "Rearrange the pages of a PDF in a new order, or reverse it (pages may be repeated or left out)",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "order",
     "arrange",
@@ -15641,6 +15733,7 @@
    "name": "Rotate Pages",
    "description": "Rotate all or selected pages of one or more PDFs by 90, 180 or 270 degrees",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "turn",
     "orientation",
@@ -15732,6 +15825,7 @@
    "name": "Delete Pages",
    "description": "Remove selected pages from a PDF",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "remove",
     "drop",
@@ -15787,6 +15881,7 @@
    "name": "Repair PDF",
    "description": "Rebuild damaged PDFs (broken cross-reference tables, bad offsets) into clean, valid files",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "fix",
     "recover",
@@ -15831,6 +15926,7 @@
    "name": "Optimize for Web",
    "description": "Linearize PDFs (fast web view) so the first page displays before the whole file has downloaded",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "linearize",
     "fast web view",
@@ -15877,6 +15973,7 @@
    "name": "Flatten Forms & Annotations",
    "description": "Bake form field values and annotations into the page content so they can no longer be edited",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "flatten",
     "forms",
@@ -15948,6 +16045,7 @@
    "name": "Protect PDF",
    "description": "Encrypt PDFs with AES-256: require a password to open and/or restrict printing, copying and editing",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "encrypt",
     "password",
@@ -16053,6 +16151,7 @@
    "name": "Remove PDF Password",
    "description": "Remove password protection from a document you are authorized to open (the correct password is required)",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "decrypt",
     "unlock",
@@ -16108,6 +16207,7 @@
    "name": "Compress PDF",
    "description": "Shrink PDFs by downsampling images (Ghostscript) and packing objects into compressed streams (qpdf); keeps the smallest result",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "compress",
     "reduce",
@@ -16207,6 +16307,7 @@
    "name": "Extract Text",
    "description": "Extract the text layer of PDFs as plain text, optionally preserving the physical layout",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "text",
     "pdftotext",
@@ -16284,6 +16385,7 @@
    "name": "Extract Images",
    "description": "Save the images embedded in a PDF in their original formats (JPEG, PNG, JPEG 2000, ...)",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "images",
     "pictures",
@@ -16360,6 +16462,7 @@
    "name": "PDF to Images",
    "description": "Render PDF pages to PNG, JPEG or TIFF images at a chosen resolution",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "render",
     "convert",
@@ -16503,6 +16606,7 @@
    "name": "PDF Info",
    "description": "Inspect a PDF: page count and sizes, PDF version, metadata, encryption, fonts, forms and more",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "properties",
     "metadata",
@@ -16553,6 +16657,7 @@
    "name": "Compare PDF Text",
    "description": "Show the textual differences between two PDFs (line by line)",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "diff",
     "compare",
@@ -16615,6 +16720,7 @@
    "name": "Images to PDF",
    "description": "Combine images (JPEG, PNG, WebP, TIFF, GIF, BMP) into a PDF, one image per page; JPEGs are embedded without recompression",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "jpg to pdf",
     "png to pdf",
@@ -16753,6 +16859,7 @@
    "name": "OCR PDF",
    "description": "Make scanned PDFs searchable by adding an invisible OCR text layer (Tesseract), or extract the recognized text",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "ocr",
     "scan",
@@ -16881,6 +16988,7 @@
    "name": "Watermark PDF",
    "description": "Stamp a text or image watermark on all or selected pages, with opacity, rotation, size and colour",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "watermark",
     "stamp",
@@ -17088,6 +17196,7 @@
    "name": "Add Page Numbers",
    "description": "Number the pages of PDFs with a custom format like 'Page {n} of {total}' at a chosen position",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "page numbers",
     "numbering",
@@ -17233,6 +17342,7 @@
    "name": "Edit PDF Metadata",
    "description": "Set or clear document properties (title, author, subject, keywords, creator, producer); can strip all metadata including XMP",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "metadata",
     "properties",
@@ -17350,6 +17460,7 @@
    "name": "List Form Fields",
    "description": "List the fillable form fields of a PDF with their names, types, current values and options",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "form",
     "acroform",
@@ -17395,6 +17506,7 @@
    "name": "Fill PDF Form",
    "description": "Fill text fields, checkboxes, radio buttons and choice fields of a PDF form from a JSON mapping of field names to values",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "form",
     "fill",
@@ -17461,6 +17573,7 @@
    "name": "Convert Office Documents",
    "description": "Convert Word, Excel, PowerPoint and OpenDocument files to PDF or other office formats with LibreOffice (offline)",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "docx to pdf",
     "word to pdf",
@@ -17591,6 +17704,7 @@
    "name": "Convert Markup Documents",
    "description": "Convert between Markdown, HTML, DOCX, ODT, EPUB, reStructuredText, LaTeX, Org and more with Pandoc",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "pandoc",
     "markdown",
@@ -17814,6 +17928,7 @@
    "name": "Markdown to PDF",
    "description": "Turn Markdown, HTML, reStructuredText and other markup into PDF (Pandoc → DOCX → LibreOffice)",
    "category": "pdf",
+   "pack": "pdf",
    "keywords": [
     "markdown to pdf",
     "md to pdf",
@@ -17949,6 +18064,7 @@
    "name": "File Hash",
    "description": "Compute MD5, SHA-1, SHA-256, SHA-512, SHA3-256, BLAKE3, CRC32 or XXH3 checksums of files or text",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "checksum",
     "hash",
@@ -18061,6 +18177,7 @@
    "name": "Verify Checksums",
    "description": "Check files against a pasted checksum list (sha256sum/md5sum/BSD format) or a single expected hash; the algorithm is detected from the hash length",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "verify",
     "checksum",
@@ -18114,6 +18231,7 @@
    "name": "Checksum Manifest",
    "description": "Hash every file in a folder and produce a SHA256SUMS-style manifest (plus JSON) for later verification",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "sha256sums",
     "manifest",
@@ -18232,6 +18350,7 @@
    "name": "Detect File Type",
    "description": "Identify files by their content (magic bytes), show the MIME type and warn when the extension does not match",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "file type",
     "magic",
@@ -18275,6 +18394,7 @@
    "name": "Executable Info",
    "description": "Inspect ELF, PE (Windows .exe/.dll) and Mach-O binaries: architecture, entry point, sections, linked libraries, imports and exports",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "elf",
     "pe",
@@ -18322,6 +18442,7 @@
    "name": "Hex Viewer",
    "description": "Show a hex + ASCII view of any part of a file",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "hex",
     "hexdump",
@@ -18411,6 +18532,7 @@
    "name": "MIME Type Lookup",
    "description": "Look up the MIME type for file extensions, or the extensions for a MIME type",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "mime",
     "content-type",
@@ -18453,6 +18575,7 @@
    "name": "Compare Files",
    "description": "Check whether two files are identical; shows the first differing byte, and a line diff for text files",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "compare",
     "diff",
@@ -18506,6 +18629,7 @@
    "name": "Compare Folders",
    "description": "Compare two folders: files only on one side, files that differ (size or content hash) and identical files",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "compare",
     "folders",
@@ -18608,6 +18732,7 @@
    "name": "List Archive Contents",
    "description": "Show what is inside a zip, tar, 7z or rar archive (sizes, compression ratios, dates) and flag suspicious entries",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "zip",
     "tar",
@@ -18687,6 +18812,7 @@
    "name": "Extract Archive",
    "description": "Safely unpack zip, tar(.gz/.bz2/.xz/.zst), gz/bz2/xz/zst, 7z and rar archives; path traversal, links and decompression bombs are blocked",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "unzip",
     "extract",
@@ -18802,6 +18928,7 @@
    "name": "Create Archive",
    "description": "Pack files into a zip (optionally AES-encrypted), tar, tar.gz, tar.bz2, tar.xz, tar.zst or 7z archive",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "zip",
     "compress",
@@ -18951,6 +19078,7 @@
    "name": "Compress File",
    "description": "Compress individual files with gzip, Zstandard, xz, bzip2 or Brotli",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "gzip",
     "gz",
@@ -19038,6 +19166,7 @@
    "name": "Decompress File",
    "description": "Decompress .gz, .zst, .xz, .bz2 and .br files (detected by content), with decompression-bomb protection",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "gunzip",
     "unzstd",
@@ -19092,6 +19221,7 @@
    "name": "Folder Size",
    "description": "Measure a folder's total size and see which subfolders and files take the most space",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "disk usage",
     "du",
@@ -19165,6 +19295,7 @@
    "name": "Find Large Files",
    "description": "Find the biggest files in a folder (recursively) above a minimum size",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "large files",
     "big files",
@@ -19258,6 +19389,7 @@
    "name": "Find Duplicate Files",
    "description": "Find files with identical content in a folder (size, then BLAKE3 hash) and how much space they waste; nothing is deleted",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "duplicates",
     "dupes",
@@ -19342,6 +19474,7 @@
    "name": "Find Duplicates Among Files",
    "description": "Find which of the given files have identical content (BLAKE3)",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "duplicates",
     "identical",
@@ -19382,6 +19515,7 @@
    "name": "Find Empty Files & Folders",
    "description": "List zero-byte files and folders that contain nothing (or only other empty folders)",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "empty",
     "zero byte",
@@ -19477,6 +19611,7 @@
    "name": "Remove Empty Files & Folders",
    "description": "Delete zero-byte files and empty folders; shows a preview unless 'apply' is enabled",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "delete empty",
     "remove empty folders",
@@ -19583,6 +19718,7 @@
    "name": "Search Files",
    "description": "Search a folder for files by name (glob or regex) and/or by content (regex), with line numbers",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "find",
     "grep",
@@ -19717,6 +19853,7 @@
    "name": "File Manifest",
    "description": "Create a CSV or JSON inventory of a folder: path, size, modification time, MIME type and optional hash",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "inventory",
     "manifest",
@@ -19852,6 +19989,7 @@
    "name": "Batch Rename",
    "description": "Rename many files at once with templates ({name}, {ext}, {n:03}, {date}), regex find/replace, case changes and numbering; previews by default",
    "category": "files",
+   "pack": "files",
    "keywords": [
     "rename",
     "batch rename",
@@ -20033,6 +20171,7 @@
    "name": "Change Case",
    "description": "Convert text to UPPER, lower, Title, Sentence, camelCase, snake_case, kebab-case and more",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "uppercase",
     "lowercase",
@@ -20155,6 +20294,7 @@
    "name": "Word & Character Count",
    "description": "Count characters, words, lines, sentences, paragraphs and bytes; estimate reading and speaking time; list the most frequent words",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "word count",
     "character count",
@@ -20239,6 +20379,7 @@
    "name": "Sort Lines",
    "description": "Sort lines alphabetically, naturally, numerically, by length or shuffle them; optionally reverse and remove duplicates",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "sort",
     "order",
@@ -20351,6 +20492,7 @@
    "name": "Remove Duplicate Lines",
    "description": "Remove duplicate lines while keeping the original order, keeping the first or last occurrence",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "duplicates",
     "unique",
@@ -20440,6 +20582,7 @@
    "name": "Trim & Remove Whitespace",
    "description": "Trim leading/trailing spaces on every line, collapse repeated spaces and remove empty lines",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "trim",
     "whitespace",
@@ -20554,6 +20697,7 @@
    "name": "Line Endings",
    "description": "Detect and convert line endings between LF (Unix), CRLF (Windows) and CR (classic Mac)",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "crlf",
     "lf",
@@ -20637,6 +20781,7 @@
    "name": "Find & Replace",
    "description": "Find and replace plain text, optionally case-insensitive or whole words only",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "find",
     "replace",
@@ -20715,6 +20860,7 @@
    "name": "Regex Replace",
    "description": "Search and replace with a regular expression; use $1 or ${name} in the replacement to insert capture groups",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "regex",
     "regular expression",
@@ -20826,6 +20972,7 @@
    "name": "Compare Text (Diff)",
    "description": "Compare two texts and highlight insertions and deletions by line, word or character; also produces a unified diff",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "diff",
     "compare",
@@ -20937,6 +21084,7 @@
    "name": "Escape / Unescape",
    "description": "Escape or unescape text for JSON, JavaScript, HTML, XML, URLs, CSV, shell, regex, C, Java, Python and SQL string literals",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "escape",
     "unescape",
@@ -21062,6 +21210,7 @@
    "name": "Convert Text Encoding",
    "description": "Detect and convert the character encoding of a file or text (UTF-8, UTF-16, Windows-1252, Latin-1, Shift_JIS, GBK, Big5 ...)",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "charset",
     "encoding",
@@ -21398,6 +21547,7 @@
    "name": "Markdown Preview",
    "description": "Render Markdown (GitHub-flavored: tables, task lists, strikethrough, footnotes) as safe, sanitized HTML",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "markdown",
     "md",
@@ -21442,6 +21592,7 @@
    "name": "Markdown to HTML",
    "description": "Convert Markdown (GitHub-flavored) to HTML, optionally as a complete standalone HTML document",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "markdown",
     "html",
@@ -21533,6 +21684,7 @@
    "name": "HTML to Plain Text",
    "description": "Convert HTML into readable plain text, keeping lists, tables and link targets",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "html",
     "strip tags",
@@ -21610,6 +21762,7 @@
    "name": "HTML to Markdown",
    "description": "Convert HTML into clean Markdown",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "html",
     "markdown",
@@ -21667,6 +21820,7 @@
    "name": "Clean Up Text",
    "description": "Straighten smart quotes, remove invisible characters, normalize Unicode, strip accents, fix mojibake and tidy whitespace",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "smart quotes",
     "zero width",
@@ -21800,6 +21954,7 @@
    "name": "Slugify",
    "description": "Turn text into URL-friendly slugs (each line separately): Crème Brûlée! → creme-brulee",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "slug",
     "url",
@@ -21872,6 +22027,7 @@
    "name": "Reverse Text",
    "description": "Reverse the characters, the word order or the line order of text",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "reverse",
     "backwards",
@@ -21941,6 +22097,7 @@
    "name": "Lorem Ipsum Generator",
    "description": "Generate lorem ipsum placeholder text as words, sentences or paragraphs",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "lorem ipsum",
     "placeholder",
@@ -22026,6 +22183,7 @@
    "name": "Wrap Text",
    "description": "Hard-wrap text at a given line width, or unwrap paragraphs into single lines",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "wrap",
     "word wrap",
@@ -22132,6 +22290,7 @@
    "name": "Extract Columns",
    "description": "Split each line by a delimiter and keep selected columns (like cut / awk '{print $2}')",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "cut",
     "awk",
@@ -22208,6 +22367,7 @@
    "name": "Number Lines",
    "description": "Add line numbers to each line of text",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "line numbers",
     "nl",
@@ -22296,6 +22456,7 @@
    "name": "Add Prefix / Suffix",
    "description": "Add text to the start and/or end of every line (e.g. quotes, commas, bullet points)",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "prefix",
     "suffix",
@@ -22369,6 +22530,7 @@
    "name": "Filter Lines",
    "description": "Keep (or remove) lines that contain a word, start/end with text or match a regular expression (like grep)",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "grep",
     "filter",
@@ -22471,6 +22633,7 @@
    "name": "Unicode Inspector",
    "description": "Show every character's code point, official Unicode name, category and UTF-8/UTF-16 encoding — find hidden or look-alike characters",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "unicode",
     "code point",
@@ -22526,6 +22689,7 @@
    "name": "Word Frequency",
    "description": "Count how often each word appears and list the most frequent ones",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "word frequency",
     "keyword density",
@@ -22607,6 +22771,7 @@
    "name": "Extract Text from Document",
    "description": "Extract plain text from TXT, Markdown, HTML, JSON, CSV, DOCX, ODT, PPTX, ODP, XLSX/XLS/ODS, EPUB, RTF and PDF (PDF needs Poppler)",
    "category": "text",
+   "pack": "text",
    "keywords": [
     "extract text",
     "docx to text",
@@ -22688,6 +22853,7 @@
    "name": "QR Code Generator",
    "description": "Generate QR codes from text or URLs as PNG and SVG with size, error correction, margin and colors",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "qr",
     "qr code",
@@ -22837,6 +23003,7 @@
    "name": "QR Code Reader",
    "description": "Decode one or more QR codes from an image or screenshot",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "qr",
     "scan",
@@ -22919,6 +23086,7 @@
    "name": "Barcode Generator",
    "description": "Generate barcodes (Code 128, EAN-13, EAN-8, UPC-A/E, Code 39/93, ITF, Codabar, Data Matrix, PDF417, Aztec) as PNG and SVG",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "barcode",
     "ean",
@@ -23090,6 +23258,7 @@
    "name": "Barcode Reader",
    "description": "Read 1D and 2D barcodes (EAN, UPC, Code 128/39/93, ITF, Codabar, QR, Data Matrix, PDF417, Aztec) from an image",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "barcode",
     "scan",
@@ -23175,6 +23344,7 @@
    "name": "JSON Formatter & Validator",
    "description": "Format (pretty-print), minify, validate and sort the keys of JSON, with precise error line and column",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "json",
     "pretty print",
@@ -23293,6 +23463,7 @@
    "name": "YAML Formatter & Validator",
    "description": "Validate and re-format YAML (multi-document aware), with error line and column",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "yaml",
     "yml",
@@ -23368,6 +23539,7 @@
    "name": "TOML Formatter & Validator",
    "description": "Validate and re-format TOML with error line and column",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "toml",
     "cargo.toml",
@@ -23433,6 +23605,7 @@
    "name": "XML Formatter & Validator",
    "description": "Pretty-print, minify or check XML for well-formedness (no external entities are ever loaded)",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "xml",
     "pretty print",
@@ -23533,6 +23706,7 @@
    "name": "SQL Formatter",
    "description": "Format SQL queries with consistent indentation and keyword case (dialect-agnostic)",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "sql",
     "format",
@@ -23638,6 +23812,7 @@
    "name": "Convert Data Format",
    "description": "Convert structured data between JSON, YAML, TOML, XML, CSV/TSV, NDJSON and URL query strings",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "json to yaml",
     "yaml to json",
@@ -23795,6 +23970,7 @@
    "name": "Base64 Encode / Decode",
    "description": "Encode text or files to Base64 (standard or URL-safe, with or without padding, data URI) and decode Base64 back to text or a file",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "base64",
     "encode",
@@ -23967,6 +24143,7 @@
    "name": "URL Encode / Decode",
    "description": "Percent-encode or decode text for URLs — a single component (encodeURIComponent) or a full URL (encodeURI)",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "url encode",
     "url decode",
@@ -24065,6 +24242,7 @@
    "name": "HTML Entities Encode / Decode",
    "description": "Escape special characters as HTML entities (optionally all non-ASCII as numeric references) or decode all named and numeric entities",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "html entities",
     "escape html",
@@ -24143,6 +24321,7 @@
    "name": "Hex Encode / Decode",
    "description": "Convert text or files to hexadecimal (with separators), decode hex back to text or bytes, or show a classic hex dump",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "hex",
     "hexadecimal",
@@ -24307,6 +24486,7 @@
    "name": "Number Base Converter",
    "description": "Convert integers of any size between binary, octal, decimal, hexadecimal, base36 or any base 2–36, with two's complement views",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "binary",
     "hex",
@@ -24408,6 +24588,7 @@
    "name": "Text ↔ Binary",
    "description": "Convert text to its UTF-8 bytes written in binary, octal, decimal or hex — and back",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "binary",
     "text to binary",
@@ -24517,6 +24698,7 @@
    "name": "Hash Generator",
    "description": "Compute MD5, SHA-1, SHA-2, SHA-3, Keccak, BLAKE2, BLAKE3 and CRC-32 digests of text or a file, optionally comparing with an expected hash",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "hash",
     "md5",
@@ -24687,6 +24869,7 @@
    "name": "HMAC Generator & Verifier",
    "description": "Compute or verify an HMAC (SHA-1, SHA-256, SHA-384, SHA-512, MD5) of a message with a secret key — e.g. webhook signatures",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "hmac",
     "signature",
@@ -24825,6 +25008,7 @@
    "name": "Password & Random Generator",
    "description": "Generate cryptographically secure passwords (with entropy estimate), passphrases (EFF wordlist), hex/Base64 tokens and random integers",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "password generator",
     "passphrase",
@@ -25101,6 +25285,7 @@
    "name": "UUID Generator & Decoder",
    "description": "Generate UUIDs (v4 random, v7 time-ordered, v1, v6, v3/v5 name-based, nil, max) in bulk, or decode a UUID to see its version, variant and embedded timestamp",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "uuid",
     "guid",
@@ -25316,6 +25501,7 @@
    "name": "JWT Decoder & Verifier",
    "description": "Decode a JSON Web Token's header and claims with readable exp/iat/nbf times. The signature is only verified if you supply a secret (HS*) or a PEM public key (RS*/PS*/ES*/EdDSA)",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "jwt",
     "json web token",
@@ -25386,6 +25572,7 @@
    "name": "Unix Timestamp Converter",
    "description": "Convert Unix timestamps (seconds, ms, µs, ns — auto-detected) to ISO 8601 / RFC 2822 dates in UTC and any time zone, and dates back to timestamps",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "unix time",
     "epoch",
@@ -25475,6 +25662,7 @@
    "name": "Date Calculator & Formatter",
    "description": "Parse dates in many formats, format them with strftime patterns, add or subtract durations, or compute the difference between two dates",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "date",
     "time",
@@ -25615,6 +25803,7 @@
    "name": "Time Zone Converter",
    "description": "Convert a date and time between IANA time zones (DST-aware), or search the list of time zones with their current offsets",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "time zone",
     "timezone",
@@ -25735,6 +25924,7 @@
    "name": "Cron Expression Explainer",
    "description": "Explain a cron expression in plain English and list its next run times in any time zone (5 or 6 fields, @daily-style aliases, L/W/# extensions)",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "cron",
     "crontab",
@@ -25811,6 +26001,7 @@
    "name": "Regex Tester",
    "description": "Test a regular expression against text: highlights every match with numbered and named capture groups, previews a replacement and explains syntax errors",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "regex",
     "regexp",
@@ -25935,6 +26126,7 @@
    "name": "JSONPath Query",
    "description": "Query JSON (or YAML/TOML) with standard RFC 9535 JSONPath expressions, e.g. $.store.book[?@.price < 10].title",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "jsonpath",
     "json query",
@@ -26030,6 +26222,7 @@
    "name": "jq Filter",
    "description": "Transform JSON with jq filters (powered by jaq, a jq clone in Rust): select, map, group_by, reduce and more",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "jq",
     "jaq",
@@ -26155,6 +26348,7 @@
    "name": "JSON Schema Validator",
    "description": "Validate JSON (or YAML/TOML) against a JSON Schema (drafts 4, 6, 7, 2019-09, 2020-12) and list every error with its path. Remote $refs are not fetched",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "json schema",
     "validate",
@@ -26248,6 +26442,7 @@
    "name": "JSON Diff",
    "description": "Compare two JSON (or YAML/TOML) documents structurally and list added, removed and changed values by JSON Pointer path — key order and formatting are ignored",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "json diff",
     "compare json",
@@ -26338,6 +26533,7 @@
    "name": "Color Converter",
    "description": "Convert any CSS color (hex, rgb(), hsl(), hwb(), lab(), lch(), oklch(), named) to HEX, RGB, HSL, HSV, HWB, CMYK, Lab, LCH, OKLab and OKLCH, with WCAG contrast and nearest named color",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "color",
     "colour",
@@ -26389,6 +26585,7 @@
    "name": "HTTP Message Parser",
    "description": "Parse a raw HTTP request or response: method, URL, query parameters, headers, cookies and a pretty-printed body; generate an equivalent curl command",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "http",
     "request",
@@ -26454,6 +26651,7 @@
    "name": "User-Agent Parser",
    "description": "Identify the browser, version, operating system, device type and bots/crawlers from User-Agent strings (one per line)",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "user agent",
     "ua",
@@ -26497,6 +26695,7 @@
    "name": "String Inspector",
    "description": "Inspect a string: length in characters, graphemes, UTF-16 units and bytes, character classes, hidden/invisible characters, line endings and whitespace issues",
    "category": "dev",
+   "pack": "dev",
    "keywords": [
     "string length",
     "byte length",
@@ -26540,6 +26739,7 @@
    "name": "CSV Viewer",
    "description": "Preview a CSV/TSV file or pasted text as a table with automatic delimiter, header and column type detection",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "csv",
     "tsv",
@@ -26683,6 +26883,7 @@
    "name": "Filter & Sort CSV",
    "description": "Filter rows by column conditions (equals, contains, regex, >, <), sort by one or more columns and choose/reorder columns",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "csv",
     "filter",
@@ -26954,6 +27155,7 @@
    "name": "CSV to JSON",
    "description": "Convert CSV/TSV into a JSON array of objects, an array of arrays or NDJSON, with optional type inference",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "csv to json",
     "tsv to json",
@@ -27117,6 +27319,7 @@
    "name": "JSON to CSV",
    "description": "Convert a JSON array (or NDJSON) into CSV, flattening nested objects into dotted column names",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "json to csv",
     "flatten",
@@ -27237,6 +27440,7 @@
    "name": "Spreadsheet Viewer & Export",
    "description": "Open Excel (xlsx, xls, xlsb) and OpenDocument (ods) spreadsheets: list sheets, preview a sheet and export it as CSV or JSON",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "excel",
     "xlsx",
@@ -27366,6 +27570,7 @@
    "name": "Change CSV Delimiter",
    "description": "Convert between comma, tab, semicolon and pipe separated values and change the quoting style",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "csv",
     "tsv",
@@ -27546,6 +27751,7 @@
    "name": "Transform Columns",
    "description": "Rename, drop, reorder, split, merge, change case, trim or find-and-replace in CSV columns, or add a row index",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "csv",
     "columns",
@@ -27876,6 +28082,7 @@
    "name": "Validate CSV / JSON Data",
    "description": "Check CSV rows against rules (required columns, types, unique, regex, ranges, allowed values) or JSON against a JSON Schema; lists every error",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "validate",
     "csv",
@@ -28025,6 +28232,7 @@
    "name": "Find Duplicate Rows",
    "description": "Find or remove duplicate rows in CSV data, comparing all columns or only selected ones",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "duplicates",
     "dedupe",
@@ -28221,6 +28429,7 @@
    "name": "Column Statistics",
    "description": "Summarize each column: count, empty values, distinct values, min/max/mean/median/standard deviation for numbers and top values for text",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "statistics",
     "summary",
@@ -28354,6 +28563,7 @@
    "name": "Clean CSV Data",
    "description": "Tidy CSV data: trim cells, normalize whitespace, blank out placeholder values, standardize dates to ISO 8601, remove empty rows and columns",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "clean",
     "tidy",
@@ -28559,6 +28769,7 @@
    "name": "Convert Table Data",
    "description": "Convert tabular data between CSV, TSV, JSON, NDJSON, YAML, Excel XLSX, Markdown tables, HTML tables and SQL INSERT statements",
    "category": "data",
+   "pack": "data",
    "keywords": [
     "convert",
     "csv to excel",
@@ -28754,6 +28965,7 @@
    "name": "URL Parser",
    "description": "Break a URL into scheme, host, port, path, query parameters and fragment, with IDN/punycode forms",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "url",
     "uri",
@@ -28798,6 +29010,7 @@
    "name": "URL Normalizer",
    "description": "Canonicalize URLs: lowercase scheme/host, drop default ports, resolve dot segments, sort query, strip tracking parameters",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "url",
     "canonical",
@@ -28898,6 +29111,7 @@
    "name": "Query Parameter Editor",
    "description": "Set, replace or remove URL query parameters and rebuild the URL",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "url",
     "query",
@@ -28971,6 +29185,7 @@
    "name": "IP Address Info",
    "description": "Classify an IPv4/IPv6 address (private, loopback, CGNAT, global…) and show its binary, hex, integer and reverse-DNS forms",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "ip",
     "ipv4",
@@ -29018,6 +29233,7 @@
    "name": "CIDR Calculator",
    "description": "Subnet calculator for IPv4/IPv6: network, broadcast, netmask, host range; contains-check, split into subnets, aggregate CIDR lists",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "cidr",
     "subnet",
@@ -29125,6 +29341,7 @@
    "name": "Subnet Planner (VLSM)",
    "description": "Allocate variable-length subnets from a parent block for a list of required host counts",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "vlsm",
     "subnet",
@@ -29180,6 +29397,7 @@
    "name": "Certificate Decoder",
    "description": "Decode PEM/DER X.509 certificates, chains and CSRs: subject, issuer, SANs, validity, key, fingerprints, extensions",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "x509",
     "ssl",
@@ -29246,6 +29464,7 @@
    "name": "Key Inspector",
    "description": "Identify public/private keys (PEM, PKCS#1/#8, SEC1, OpenSSH, SSH public keys): type, size, curve and SHA-256 fingerprints — private key material is never echoed",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "key",
     "public key",
@@ -29310,6 +29529,7 @@
    "name": "DNS Lookup",
    "description": "Query DNS records (A, AAAA, CNAME, MX, TXT, NS, SOA, CAA, SRV, PTR, HTTPS…) with TTLs via the system or a public resolver (optionally DNS-over-HTTPS)",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "dns",
     "dig",
@@ -29482,6 +29702,7 @@
    "name": "Reverse DNS",
    "description": "Look up PTR host names for IP addresses and check forward-confirmation (FCrDNS)",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "reverse dns",
     "ptr",
@@ -29566,6 +29787,7 @@
    "name": "TLS / SSL Inspector",
    "description": "Connect to a TLS server and show protocol, cipher, ALPN, the certificate chain (SANs, validity, key, fingerprints) and whether it is publicly trusted",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "tls",
     "ssl",
@@ -29646,6 +29868,7 @@
    "name": "HTTP Headers & Security Check",
    "description": "Fetch a URL and show status, every redirect hop, response headers and a security-header analysis (HSTS, CSP, frame options, cookies…) with recommendations",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "http",
     "headers",
@@ -29735,6 +29958,7 @@
    "name": "Favicon Fetcher",
    "description": "Find and download a website's favicons: <link rel=icon>, apple-touch-icon, web manifest icons and /favicon.ico",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "favicon",
     "icon",
@@ -29788,6 +30012,7 @@
    "name": "Connectivity Check",
    "description": "Test TCP reachability (host:port) and HTTP(S) availability with latency over several attempts — no ICMP needed",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "ping",
     "reachability",
@@ -29857,6 +30082,7 @@
    "name": "Port Checker",
    "description": "Check which TCP ports are open on a host (common services or up to 50 listed ports) with short timeouts and bounded concurrency",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "port",
     "open port",
@@ -29950,6 +30176,7 @@
    "name": "RDAP Lookup",
    "description": "Registration data for domains, IP networks and ASNs via RDAP (the modern WHOIS), routed through the IANA bootstrap registry",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "rdap",
     "whois",
@@ -29997,6 +30224,7 @@
    "name": "WHOIS Lookup",
    "description": "Classic WHOIS over TCP port 43, following referrals from whois.iana.org to the registry and registrar servers",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "whois",
     "domain",
@@ -30061,6 +30289,7 @@
    "name": "Domain Inspector",
    "description": "All-in-one domain report: DNS records (incl. SPF/DMARC), RDAP registration (registrar, dates, status), TLS certificate and HTTP redirect chain",
    "category": "network",
+   "pack": "network",
    "keywords": [
     "domain",
     "report",
@@ -30151,6 +30380,7 @@
    "name": "Color Palette Generator",
    "description": "Generate harmonious color palettes from a base color: complementary, analogous, triadic, tetradic, monochromatic, shades, tints and a 50–950 scale",
    "category": "design",
+   "pack": "design",
    "keywords": [
     "palette",
     "color scheme",
@@ -30264,6 +30494,7 @@
    "name": "Extract Palette from Image",
    "description": "Extract a color palette from an image, with percentages, CSS variables and a swatch image",
    "category": "design",
+   "pack": "design",
    "keywords": [
     "palette",
     "extract colors",
@@ -30381,6 +30612,7 @@
    "name": "Contrast Checker",
    "description": "Check WCAG 2.x contrast between text and background colors (AA/AAA, normal and large text) and get passing suggestions",
    "category": "design",
+   "pack": "design",
    "keywords": [
     "contrast",
     "wcag",
@@ -30434,6 +30666,7 @@
    "name": "Gradient Generator",
    "description": "Create CSS linear, radial or conic gradients from color stops and render them as PNG",
    "category": "design",
+   "pack": "design",
    "keywords": [
     "gradient",
     "css gradient",
@@ -30542,6 +30775,7 @@
    "name": "Aspect Ratio Calculator",
    "description": "Calculate the aspect ratio of a size, or the missing width/height for a given ratio",
    "category": "design",
+   "pack": "design",
    "keywords": [
     "aspect ratio",
     "ratio",
@@ -30627,6 +30861,7 @@
    "name": "Resize Canvas / Pad",
    "description": "Extend or trim the canvas around images to an exact size, an aspect ratio or by padding, with a color or transparent fill",
    "category": "design",
+   "pack": "design",
    "keywords": [
     "canvas",
     "pad",
@@ -30887,6 +31122,7 @@
    "name": "Overlay Images",
    "description": "Place one image on top of another with position, scale, opacity and blend mode (multiply, screen, overlay...)",
    "category": "design",
+   "pack": "design",
    "keywords": [
     "overlay",
     "compose",
@@ -31202,6 +31438,7 @@
    "name": "Bulk Image Dimensions",
    "description": "List width, height, aspect ratio, megapixels, DPI and format of many images at once (reads headers only, fast)",
    "category": "design",
+   "pack": "design",
    "keywords": [
     "dimensions",
     "size",
@@ -31285,6 +31522,7 @@
    "name": "Styled QR Code",
    "description": "Design branded QR codes: colors, rounded or dot modules, styled eyes and a center logo (uses high error correction)",
    "category": "design",
+   "pack": "design",
    "keywords": [
     "qr",
     "qr code",
@@ -31543,6 +31781,7 @@
    "name": "System Overview",
    "description": "One-glance dashboard: OS, host, kernel, uptime, CPU usage, memory, swap, load average and disks",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "system",
     "overview",
@@ -31580,6 +31819,7 @@
    "name": "CPU Info",
    "description": "CPU brand, vendor, physical/logical cores, per-core usage (sampled ~300 ms), frequencies and instruction-set features",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "cpu",
     "processor",
@@ -31616,6 +31856,7 @@
    "name": "Memory Usage",
    "description": "RAM and swap: total, used, available, free and container (cgroup) limits",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "memory",
     "ram",
@@ -31650,6 +31891,7 @@
    "name": "Disks & Storage",
    "description": "Mounted disks with file system, SSD/HDD kind, capacity, free space and usage",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "disk",
     "storage",
@@ -31687,6 +31929,7 @@
    "name": "Hardware Info",
    "description": "Computer model, vendor, motherboard, BIOS/firmware, CPU, memory and GPUs (serial numbers are omitted for privacy)",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "hardware",
     "model",
@@ -31722,6 +31965,7 @@
    "name": "Operating System",
    "description": "OS name, version, kernel, distribution, hostname, architecture, locale and time zone",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "os",
     "operating system",
@@ -31757,6 +32001,7 @@
    "name": "Network Interfaces",
    "description": "Network adapters with MAC address, IP addresses, MTU, state and traffic counters",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "network",
     "interface",
@@ -31802,6 +32047,7 @@
    "name": "Top Processes",
    "description": "Top running processes by CPU (% of one core, so busy multi-threaded processes can exceed 100%) or memory with PID, user, status and start time (command lines only on request)",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "process",
     "task manager",
@@ -31900,6 +32146,7 @@
    "name": "Uptime",
    "description": "How long the system has been running, boot time and load average",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "uptime",
     "boot time",
@@ -31932,6 +32179,7 @@
    "name": "Temperature Sensors",
    "description": "Hardware temperature sensors (CPU, GPU, drives…) with current, max and critical values",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "temperature",
     "sensors",
@@ -31966,6 +32214,7 @@
    "name": "Environment Diagnostics",
    "description": "Check Dogubako's environment: external programs and versions, temp space, models folder, CPU features and GPU availability",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "diagnostics",
     "dependencies",
@@ -32001,6 +32250,7 @@
    "name": "Battery Health",
    "description": "Battery charge, state, health (full vs design capacity), cycle count, energy, power draw, voltage, temperature and time remaining",
    "category": "system",
+   "pack": "system",
    "keywords": [
     "battery",
     "health",

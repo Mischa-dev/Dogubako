@@ -34,6 +34,7 @@ for precedence and examples.
 | `allow_private_network` | `DOGUBAKO_ALLOW_PRIVATE_NETWORK` | `false` | Let network tools reach private, loopback and link-local addresses |
 | `mcp_enabled` | `DOGUBAKO_MCP_ENABLED` | `true` | Serve MCP at `/mcp` |
 | `mcp_discovery` | `DOGUBAKO_MCP_DISCOVERY` | `full` | `full` or `compact`; see [Discovery](/agents/discovery-and-results/) |
+| `packs` | `DOGUBAKO_PACKS` | all | Built-in tool packs to turn on (`image,video,pdf`, `all,-speech`, or `[]` for none); other packs' tools are hidden, and an unknown pack name stops startup |
 | `allowed_origins` | `DOGUBAKO_ALLOWED_ORIGINS` | `[]` | Extra `Origin`s allowed to call `/mcp` (browser-based clients). Comma-separated |
 | `models_dir` | `DOGUBAKO_MODELS_DIR` | `<data_dir>/models` | Model storage |
 | `extensions_dir` | `DOGUBAKO_EXTENSIONS_DIR` | `<data_dir>/extensions` | Trusted TOML extensions |

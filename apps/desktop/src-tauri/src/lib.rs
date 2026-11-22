@@ -46,6 +46,12 @@ fn app_info(state: State<'_, Desktop>) -> Value {
     })
 }
 
+/// Built-in tool packs (same shape as `GET /api/v1/packs` entries).
+#[tauri::command]
+fn list_packs(state: State<'_, Desktop>) -> Vec<dogubako_core::packs::PackInfo> {
+    state.engine.packs()
+}
+
 #[tauri::command]
 fn list_tools(state: State<'_, Desktop>) -> Vec<Value> {
     state
@@ -384,6 +390,7 @@ pub fn run() {
     cfg.models_dir = dirs.models.clone();
     cfg.temp_root = std::env::temp_dir().join("dogubako");
     cfg.worker_exe = std::env::current_exe().ok();
+    cfg.packs = dogubako_core::packs::PackSelection::local(&dirs);
     // Pinned engines shipped in the app bundle, plus on-demand ones it
     // downloads into its own folder (docs/ENGINES.md).
     let managed = ManagedEngines::load(default_bundled_root(), dirs.data.join("engines"));
@@ -408,6 +415,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info,
             list_tools,
+            list_packs,
             run_tool,
             check_tool,
             cancel_run,

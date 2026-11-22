@@ -207,6 +207,15 @@ pub fn spec(engine: &Engine) -> Value {
         ),
     );
     add(
+        "/api/v1/packs",
+        "get",
+        op(
+            "Built-in tool packs: tool count, on/off, engines and models used",
+            "system",
+            json!({}),
+        ),
+    );
+    add(
         "/api/v1/deps",
         "get",
         op("External dependency status", "system", json!({})),

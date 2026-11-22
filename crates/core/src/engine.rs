@@ -8,6 +8,7 @@
 use crate::deps::{DepRegistry, Unmet};
 use crate::error::{ToolError, ToolResult};
 use crate::models::ModelRegistry;
+use crate::packs::{PackEngine, PackInfo, PackSelection};
 use crate::params::{validate, FileResolver, Params};
 use crate::policy::{ExecLimits, FsPolicy, NetPolicy, PermissionSet};
 use crate::registry::Registry;
@@ -35,6 +36,8 @@ pub struct EngineConfig {
     /// Executable that handles `__dogubako-worker <name>` (normally the host
     /// binary itself); see [`crate::tool::ToolContext::worker`].
     pub worker_exe: Option<PathBuf>,
+    /// Built-in packs turned on; tools of other packs are hidden.
+    pub packs: PackSelection,
 }
 
 impl EngineConfig {
@@ -48,6 +51,7 @@ impl EngineConfig {
             models_dir: dirs.models,
             env,
             worker_exe: None,
+            packs: PackSelection::all(),
         }
     }
 }
@@ -120,7 +124,11 @@ pub struct RunStats {
 }
 
 pub struct Engine {
+    /// Installed tools: those whose pack is turned on. Every interface lists
+    /// and runs tools from here.
     pub registry: Arc<Registry>,
+    /// Every registered tool, including those of turned-off packs.
+    pub catalog: Arc<Registry>,
     pub deps: Arc<DepRegistry>,
     pub models: Arc<ModelRegistry>,
     pub config: EngineConfig,
@@ -134,8 +142,10 @@ impl Engine {
     /// With a prepared dependency registry, e.g. one that uses the app's own
     /// engines ([`DepRegistry::with_managed`]).
     pub fn with_deps(registry: Registry, config: EngineConfig, deps: DepRegistry) -> Self {
+        let installed = registry.filtered(|s| config.packs.is_on(&s.pack));
         Engine {
-            registry: Arc::new(registry),
+            registry: Arc::new(installed),
+            catalog: Arc::new(registry),
             deps: Arc::new(deps),
             models: Arc::new(ModelRegistry::new(config.models_dir.clone())),
             config,
@@ -268,16 +278,70 @@ impl Engine {
         self.registry.specs().map(|s| self.info(s)).collect()
     }
 
+    /// An installed tool by id or MCP name; a known tool of a turned-off pack
+    /// is [`ToolError::NotInstalled`].
+    pub fn find(&self, id: &str) -> ToolResult<&Arc<dyn Tool>> {
+        if let Some(t) = self.registry.find(id) {
+            return Ok(t);
+        }
+        Err(self
+            .not_installed(id)
+            .unwrap_or_else(|| ToolError::NotFound { id: id.to_string() }))
+    }
+
+    /// The error for a tool that exists but whose pack is turned off.
+    pub fn not_installed(&self, id: &str) -> Option<ToolError> {
+        if self.registry.find(id).is_some() {
+            return None;
+        }
+        self.catalog
+            .find(id)
+            .map(|t| ToolError::not_installed(&t.spec().id, &t.spec().pack))
+    }
+
+    /// Every built-in pack, with its tool count, state and what it uses.
+    pub fn packs(&self) -> Vec<PackInfo> {
+        crate::packs::builtin_packs()
+            .into_iter()
+            .map(|p| {
+                let specs: Vec<&ToolSpec> =
+                    self.catalog.specs().filter(|s| s.pack == p.id).collect();
+                let mut deps = std::collections::BTreeSet::new();
+                let mut models = std::collections::BTreeSet::new();
+                for s in &specs {
+                    deps.extend(s.requires.iter().cloned());
+                    for r in s.params.iter().filter_map(|p| p.requires.as_ref()) {
+                        deps.insert(match r {
+                            Requirement::MagickWrite { .. } => "imagemagick".to_string(),
+                            Requirement::FfmpegEncoder { .. } => "ffmpeg".to_string(),
+                            Requirement::Program { dependency, .. } => dependency.clone(),
+                        });
+                    }
+                    models.extend(s.requires_model.iter().cloned());
+                }
+                PackInfo {
+                    id: p.id.to_string(),
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    enabled: self.config.packs.is_on(p.id),
+                    tools: specs.len(),
+                    engines: deps
+                        .into_iter()
+                        .map(|id| PackEngine {
+                            name: self.deps.status(&id).name,
+                            id,
+                        })
+                        .collect(),
+                    models: models.into_iter().collect(),
+                }
+            })
+            .collect()
+    }
+
     /// Checks shared by [`Engine::run`] and [`Engine::check`]: the tool,
     /// authorization, platform, permissions, dependencies and params.
     fn prepare(&self, req: &RunRequest<'_>) -> ToolResult<(Arc<dyn Tool>, Params, FsPolicy)> {
-        let tool = self
-            .registry
-            .find(req.tool_id)
-            .ok_or_else(|| ToolError::NotFound {
-                id: req.tool_id.to_string(),
-            })?
-            .clone();
+        let tool = self.find(req.tool_id)?.clone();
         let spec = tool.spec().clone();
 
         if let Some(auth) = req.authorize {
@@ -812,5 +876,68 @@ mod tests {
             crate::schema::input_schema(h.engine.registry.get("dev.types").unwrap().spec(), "path");
         assert_eq!(json_schema["required"], json!(["n"]));
         assert_eq!(json_schema["properties"]["mode"]["enum"], json!(["a", "b"]));
+    }
+
+    use super::{Engine, EngineConfig, PackSelection, Registry};
+    use crate::tool::Environment;
+
+    fn packs_engine(packs: PackSelection) -> Engine {
+        let mut reg = Registry::new();
+        reg.register_all(vec![
+            sync_tool(
+                ToolSpec::new("text.upper", "Upper", Category::Text).describe("upper"),
+                |_c, _p| Ok(ToolOutput::text("A")),
+            ),
+            sync_tool(
+                ToolSpec::new("image.blur", "Blur", Category::Image)
+                    .describe("blur")
+                    .requires(&["imagemagick"])
+                    .requires_model("upscale"),
+                |_c, _p| Ok(ToolOutput::text("b")),
+            ),
+        ]);
+        let mut cfg = EngineConfig::local(Environment::Cli);
+        cfg.packs = packs;
+        Engine::new(reg, cfg, vec![])
+    }
+
+    #[test]
+    fn every_pack_on_by_default() {
+        let e = packs_engine(PackSelection::default());
+        assert_eq!(e.list().len(), 2);
+        assert!(e.find("text.upper").is_ok() && e.find("image.blur").is_ok());
+        assert!(e.packs().iter().all(|p| p.enabled));
+    }
+
+    #[test]
+    fn turned_off_pack_hides_and_rejects_tools() {
+        let e = packs_engine(PackSelection::only(["image"]));
+        let ids: Vec<String> = e.list().into_iter().map(|t| t.spec.id).collect();
+        assert_eq!(ids, vec!["image.blur"]);
+        assert!(e.registry.search("upper").is_empty());
+        assert_eq!(e.registry.by_category(Category::Text).count(), 0);
+        let err = e.find("text.upper").err().unwrap();
+        assert_eq!(err.code(), "not_installed");
+        assert!(err.to_string().contains("Text pack ('text')"), "{err}");
+        assert!(matches!(
+            e.find("text.nope"),
+            Err(ToolError::NotFound { .. })
+        ));
+        assert!(e.not_installed("image.blur").is_none());
+    }
+
+    #[test]
+    fn packs_report_counts_engines_and_models() {
+        let e = packs_engine(PackSelection::only(["image"]));
+        let packs = e.packs();
+        assert_eq!(packs.len(), Category::ALL.len());
+        let image = packs.iter().find(|p| p.id == "image").unwrap();
+        assert!(image.enabled);
+        assert_eq!(image.tools, 1);
+        assert_eq!(image.engines[0].id, "imagemagick");
+        assert_eq!(image.models, vec!["upscale"]);
+        let text = packs.iter().find(|p| p.id == "text").unwrap();
+        assert!(!text.enabled);
+        assert_eq!(text.tools, 1);
     }
 }
