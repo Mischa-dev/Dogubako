@@ -441,12 +441,12 @@ fn validate(
     Ok((tool, existing))
 }
 
-/// An id that names a file inside the extension folder: no separators,
-/// no `..`, nothing that could step outside it.
+/// An id whose `<id>.toml` is a plain file name inside the extension
+/// folder: only letters, digits, `.`, `_` and `-`, so no path separators.
 fn check_id(id: &str) -> ToolResult<()> {
     let ok = !id.is_empty()
-        && !id.starts_with('.')
-        && !id.contains("..")
+        && id != "."
+        && id != ".."
         && id
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
@@ -905,7 +905,7 @@ http = { json = {} }
         let outside = root.path().join("victim.toml");
         std::fs::write(&outside, "not a manifest").unwrap();
         let e = engine(&dir);
-        for id in ["../victim", "..", "a/b", "a\\b", ".hidden", ""] {
+        for id in ["../victim", "..", "a/b", "a\\b", "a:b", ""] {
             assert!(uninstall(&e, &dir, id, true).is_err(), "{id}");
             assert!(test(&e, &dir, id).await.is_err(), "{id}");
         }
