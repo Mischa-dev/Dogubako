@@ -198,6 +198,28 @@ fn cli(engine: &Engine) -> Command {
         Command::new("deps").about("Show external dependency status and install hints"),
     );
     cmd = cmd.subcommand(
+        Command::new("packs")
+            .about("Turn built-in tool packs on and off")
+            .subcommand_required(true)
+            .subcommand(Command::new("list").about("List packs, their tools and download sizes"))
+            .subcommand(
+                Command::new("enable")
+                    .about("Turn a pack on")
+                    .arg(Arg::new("pack").required(true)),
+            )
+            .subcommand(
+                Command::new("disable")
+                    .about("Turn a pack off and list downloads only it used")
+                    .arg(Arg::new("pack").required(true))
+                    .arg(
+                        Arg::new("remove-unused")
+                            .long("remove-unused")
+                            .action(ArgAction::SetTrue)
+                            .help("Also delete engines and models no turned-on pack uses"),
+                    ),
+            ),
+    );
+    cmd = cmd.subcommand(
         Command::new("models")
             .about("Manage optional local models (speech recognition, face detection, voices)")
             .subcommand_required(true)
@@ -289,6 +311,7 @@ async fn dispatch(engine: Engine, m: &ArgMatches, out: &render::Out) -> i32 {
         },
         Some(("deps", _)) => render::deps(&engine, out),
         Some(("models", sub)) => local::models(&engine, sub, out).await,
+        Some(("packs", sub)) => local::packs(&engine, sub, out),
         Some(("users", sub)) => admin::users(sub, out),
         Some(("tokens", sub)) => admin::tokens(sub, out),
         Some(("extensions", sub)) => admin::extensions(sub, out),

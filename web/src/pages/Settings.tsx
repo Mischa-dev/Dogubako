@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Settings as SettingsIcon, SlidersHorizontal, Package, Brain, Info, Sun, Moon, Monitor, RefreshCw, CircleCheck, CircleDashed,
-  Download, Trash2, ExternalLink, ChevronRight, Sparkles, Puzzle,
+  Download, Trash2, ExternalLink, ChevronRight, Sparkles, Puzzle, Wrench,
 } from 'lucide-react';
 import { AssistantSettingsPanel } from '../components/ModelPicker';
+import { ToolsSettings } from '../components/Packs';
 import type { DepInfo, ExtensionSetting, ExtensionSettings, ModelDownload, ModelInfo } from '../lib/types';
 import { useApp, notifyToolsChanged } from '../lib/app';
 import { asServer } from '../lib/backend';
@@ -18,6 +19,7 @@ import { LogoMark } from '../components/Logo';
 const SECTIONS = [
   { id: 'general', label: 'General', icon: SlidersHorizontal },
   { id: 'assistant', label: 'Plain words', icon: Sparkles },
+  { id: 'tools', label: 'Tools', icon: Wrench },
   { id: 'dependencies', label: 'Dependencies', icon: Package },
   { id: 'models', label: 'Models', icon: Brain },
   { id: 'extensions', label: 'Extensions', icon: Puzzle },
@@ -40,6 +42,7 @@ export default function SettingsPage({ section = 'general' }: { section?: string
         <div className="settings-body">
           {cur.id === 'general' && <General />}
           {cur.id === 'assistant' && <Section title="Plain words" description="Say what you want done instead of picking a tool."><AssistantSettingsPanel /></Section>}
+          {cur.id === 'tools' && <ToolsSection />}
           {cur.id === 'dependencies' && <Dependencies />}
           {cur.id === 'models' && <Models />}
           {cur.id === 'extensions' && <Extensions />}
@@ -238,6 +241,11 @@ function Dependencies() {
       )}
     </Section>
   );
+}
+
+function ToolsSection() {
+  const { backend, isAdmin, isServer } = useApp();
+  return <ToolsSettings backend={backend} canManage={!isServer || isAdmin} />;
 }
 
 function Models() {

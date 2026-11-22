@@ -354,3 +354,64 @@ fn turned_off_packs_hide_tools() {
         .assert()
         .failure();
 }
+
+#[test]
+fn packs_command_turns_packs_on_and_off() {
+    let h = tempfile::tempdir().unwrap();
+    let json = |args: &[&str]| {
+        let out = cmd(&h).args(args).arg("--json").output().unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        serde_json::from_slice::<Value>(&out.stdout).unwrap()
+    };
+    let list = json(&["packs", "list"]);
+    let text = |v: &Value| {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["id"] == "text")
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(text(&list)["enabled"], true);
+    assert!(text(&list)["tools"].as_u64().unwrap() > 0);
+    assert!(text(&list)["download_bytes"].is_u64());
+
+    let v = json(&["packs", "disable", "text"]);
+    assert_eq!(v["ok"], true);
+    assert_eq!(v["enabled"], false);
+    assert!(v["unused"].is_array() && v["freed_bytes"] == 0);
+    assert_eq!(text(&json(&["packs", "list"]))["enabled"], false);
+    let out = cmd(&h)
+        .args([
+            "--json",
+            "run",
+            "text.case",
+            "--set",
+            "text=a",
+            "--set",
+            "case=upper",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(3));
+
+    let out = cmd(&h).args(["packs", "list"]).output().unwrap();
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.lines().any(|l| l.contains(" text ") && !l.contains('✓')),
+        "{s}"
+    );
+
+    let v = json(&["packs", "enable", "text"]);
+    assert_eq!(v["enabled"], true);
+    assert_eq!(text(&json(&["packs", "list"]))["enabled"], true);
+
+    cmd(&h)
+        .args(["packs", "disable", "nope"])
+        .assert()
+        .failure();
+}

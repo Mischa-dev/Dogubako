@@ -350,3 +350,18 @@ a.kv-pill:hover { border-color: var(--border-strong); color: var(--text); }
 
 .get-missing { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .get-missing-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+
+/* Tool packs (Settings → Tools, first-run install choice) */
+.pack-list { list-style: none; margin: 0 0 var(--sp-4); padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.pack-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); padding: 10px 12px; border-radius: 8px; }
+.pack-row:hover { background: var(--bg-hover, rgba(127,127,127,.06)); }
+.pack-row.is-off .pack-name { opacity: .7; }
+.pack-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pack-name { font-weight: 600; cursor: pointer; }
+.pack-meta { color: var(--fg-muted, inherit); opacity: .85; }
+.install-choice { min-height: 100vh; max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 14px; padding: 32px 24px; }
+.install-choice > h1, .install-choice > p, .install-choice > svg { text-align: center; align-self: center; margin: 0; }
+.install-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.install-option { display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--border, rgba(127,127,127,.3)); background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.install-option.is-active { border-color: var(--accent, #6366f1); box-shadow: 0 0 0 1px var(--accent, #6366f1) inset; }
+.install-actions { display: flex; justify-content: flex-end; gap: 8px; }
