@@ -529,13 +529,17 @@ async fn run_test(
         error,
         duration_ms: started.elapsed().as_millis() as u64,
     };
-    let tool: Arc<dyn Tool> = if t.http.is_some() || t.settings.is_some() {
+    let tool: Arc<dyn Tool> = if t.http.is_some() || t.settings.is_some() || t.command.is_some() {
         let own = parse_manifest(src.text, src.file)
             .map_err(|e| ToolError::invalid("manifest", e))
             .and_then(|tool| {
                 let tool = tool.with_settings_store(SettingsStore::for_extensions(src.dir));
                 let tool = match &t.http {
                     Some(fixture) => tool.with_recorded_response(fixture.response()),
+                    None => tool,
+                };
+                let tool = match &t.command {
+                    Some(fixture) => tool.with_recorded_command(fixture.clone()),
                     None => tool,
                 };
                 match &t.settings {
@@ -554,6 +558,9 @@ async fn run_test(
         }
     };
     let mut avail = engine.availability(spec);
+    if !tool.runs_programs() {
+        avail.missing.clear();
+    }
     avail.unset_settings = tool.unset_settings();
     avail.available = avail.platform_supported
         && avail.missing.is_empty()

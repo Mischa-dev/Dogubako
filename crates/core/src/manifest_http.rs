@@ -866,6 +866,11 @@ json = { temp = "$.current.temperature_2m", unit = "$.current_units.temperature_
             ),
             (
                 "url = \"https://example.com/\"",
+                "\n[output]\nextract = { a = \"(.+)\" }\n",
+                "[command] manifests",
+            ),
+            (
+                "url = \"https://example.com/\"",
                 "\n[output]\njson = { a = \"$[\" }\n",
                 "invalid JSON path",
             ),

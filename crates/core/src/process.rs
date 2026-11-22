@@ -287,6 +287,9 @@ impl Exec {
             .env("LANG", "C.UTF-8")
             .env("LC_ALL", "C.UTF-8")
             .env("OMP_THREAD_LIMIT", "8");
+        // macOS CUPS ignores LANG (and answers in the user's language) unless SOFTWARE is set.
+        #[cfg(target_os = "macos")]
+        cmd.env("SOFTWARE", "Dogubako");
         for (k, v) in &self.env {
             cmd.env(k, v);
         }

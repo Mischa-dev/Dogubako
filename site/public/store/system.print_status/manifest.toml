@@ -1,0 +1,65 @@
+[tool]
+id = "system.print_status"
+name = "Print status"
+category = "system"
+description = "Check a print job by the ID print returned: queued, printing, completed (CUPS finished with it, including canceled) or not found. Check before retrying a print that timed out."
+version = "1.0.0"
+keywords = ["print", "printer", "cups", "lpstat", "job", "status", "queue"]
+permissions = ["network"]
+platforms = ["linux", "macos"]
+requires = ["cups"]
+timeout_secs = 30
+
+[command]
+program = "lpstat"
+# Printers, then finished jobs (one line each), then pending jobs with -l
+# (each followed by tab-indented detail lines).
+args = ["-p", "-W", "completed", "-o", "-W", "not-completed", "-l", "-o"]
+
+[output]
+text = "Job {job_id}: {state}"
+
+[output.extract]
+state = [
+  { regex = '(?mi)^printer \S+ now printing {job_id}\.', value = "printing" },
+  { regex = '(?mi)^{job_id}\s.*\n\t', value = "queued" },
+  { regex = '(?mi)^{job_id}\s', value = "completed" },
+  { value = "not found" },
+]
+
+[[params]]
+name = "job_id"
+type = "text"
+required = true
+primary = true
+description = "Job ID from print, e.g. Office-12"
+
+[[tests]]
+name = "printing"
+params = { job_id = "Office-12" }
+command = { stdout = "printer Office now printing Office-12.  enabled since Sun Nov 22 10:00:00 2026\nOffice-12               mischa            1024   Sun Nov 22 10:00:00 2026\n\tStatus: Sending data to printer.\n\tqueued for Office\n" }
+expect = { text = "Job Office-12: printing", json = { "$.state" = "printing" } }
+
+[[tests]]
+name = "queued"
+params = { job_id = "Office-12" }
+command = { stdout = "printer Office is idle.  enabled since Sun Nov 22 10:00:00 2026\nOffice-120              mischa            1024   Sun Nov 22 09:00:00 2026\nOffice-12               mischa            1024   Sun Nov 22 10:00:00 2026\n\tAlerts: none\n\tqueued for Office\n" }
+expect = { json = { "$.state" = "queued" } }
+
+[[tests]]
+name = "completed"
+params = { job_id = "Office-12" }
+command = { stdout = "printer Office is idle.  enabled since Sun Nov 22 10:00:00 2026\nOffice-12               mischa            1024   Sun Nov 22 10:00:00 2026\nOffice-13               mischa            1024   Sun Nov 22 10:01:00 2026\n\tAlerts: none\n\tqueued for Office\n" }
+expect = { json = { "$.state" = "completed" } }
+
+[[tests]]
+name = "matches the queue name in any case"
+params = { job_id = "office-12" }
+command = { stdout = "printer Office is idle.  enabled since Sun Nov 22 10:00:00 2026\nOffice-12               mischa            1024   Sun Nov 22 10:00:00 2026\n" }
+expect = { json = { "$.state" = "completed" } }
+
+[[tests]]
+name = "not found"
+params = { job_id = "Office-12" }
+command = { stdout = "printer Office is idle.  enabled since Sun Nov 22 10:00:00 2026\nOffice-120              mischa            1024   Sun Nov 22 09:00:00 2026\n" }
+expect = { text = "Job Office-12: not found" }

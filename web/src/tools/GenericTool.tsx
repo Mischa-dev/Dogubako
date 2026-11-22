@@ -120,7 +120,7 @@ export function GenericTool({ tool, jobId, head, meta }: { tool: ToolInfo; jobId
         )}
         <RunBar
           form={form}
-          label={live ? 'Run now' : 'Run'}
+          label={tool.action ?? (live ? 'Run now' : 'Run')}
           disabled={!available}
           disabledReason={!available ? (tool.availability.reason ?? 'Unavailable until the missing dependency is installed') : undefined}
         />
