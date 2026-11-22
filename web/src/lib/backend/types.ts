@@ -1,4 +1,4 @@
-import type { ExtensionReport, ExtensionSettings, StoreResult } from '../types';
+import type { AvailableTool, ExtensionReport, ExtensionSettings, StoreResult } from '../types';
 import type {
   Artifact, Category, DepInfo, JobView, Me, ModelDownload, ModelInfo, Status, ToolErrorView, ToolInfo,
 } from '../types';
@@ -85,6 +85,8 @@ export interface Backend {
   /** Store settings; null or '' clears one. Secrets are write-only. */
   configureExtension?(id: string, values: Record<string, unknown>): Promise<ExtensionSettings>;
   /** Official tool store (desktop; admins on a server). Search uses the cached index when offline. */
+  /** Tools not installed here (turned-off packs, store tools), for search. */
+  availableTools?(): Promise<{ tools: AvailableTool[] }>;
   storeSearch?(query?: string): Promise<StoreResult>;
   /** Tools installed from the store, with their version and available updates. */
   storeInstalled?(): Promise<StoreResult>;

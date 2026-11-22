@@ -1,4 +1,4 @@
-import type { Artifact, Category, DepInfo, ExtensionReport, ExtensionSettings, StoreResult, JobView, Me, ModelDownload, ModelInfo, Status, ToolErrorView, ToolInfo } from '../types';
+import type { Artifact, AvailableTool, Category, DepInfo, ExtensionReport, ExtensionSettings, StoreResult, JobView, Me, ModelDownload, ModelInfo, Status, ToolErrorView, ToolInfo } from '../types';
 import { readJson, writeJson } from '../storage';
 import { ApiError, type AssistantInfo, type AssistantTarget, type Backend, type FileRef, type PacksState, type PickOptions, type ReloadResult, type RunHandle, type RunOptions } from './types';
 
@@ -277,6 +277,7 @@ export class TauriBackend implements Backend {
   }
   extensionSettings() { return invoke<ExtensionSettings[]>('extension_settings'); }
   configureExtension(id: string, values: Record<string, unknown>) { return invoke<ExtensionSettings>('configure_extension', { id, values }); }
+  availableTools() { return invoke<{ tools: AvailableTool[] }>('available_tools'); }
   storeSearch(query = '') { return invoke<StoreResult>('store_search', { query }); }
   storeInstalled() { return invoke<StoreResult>('store_installed'); }
   storeInstall(id: string) { return invoke<ExtensionReport>('store_install', { id }); }

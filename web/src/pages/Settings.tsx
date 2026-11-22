@@ -5,13 +5,13 @@ import {
 } from 'lucide-react';
 import { AssistantSettingsPanel } from '../components/ModelPicker';
 import { ToolsSettings } from '../components/Packs';
-import type { DepInfo, ExtensionReport, ExtensionSetting, ExtensionSettings, ModelDownload, ModelInfo, StoreResult, StoreTool } from '../lib/types';
+import type { DepInfo, ExtensionSetting, ExtensionSettings, ModelDownload, ModelInfo, StoreResult, StoreTool } from '../lib/types';
 import { useApp, notifyToolsChanged } from '../lib/app';
 import { asServer } from '../lib/backend';
 import { href } from '../lib/router';
 import { prefs, setPref, useStore, favorites, recents, clearAllToolParams, type ThemePref, type Density } from '../lib/store';
 import { formatBytes } from '../lib/format';
-import { errorText } from '../lib/errors';
+import { errorText, reportError } from '../lib/errors';
 import { Badge, Button, Callout, CopyButton, PageHeader, ProgressBar, Section, Segmented, Spinner, Switch, cx, useConfirm } from '../components/ui';
 import { toast } from '../components/toast';
 import { LogoMark } from '../components/Logo';
@@ -373,11 +373,6 @@ function About() {
   );
 }
 
-function reportError(r: ExtensionReport): string | null {
-  if (r.error) return r.error;
-  const failed = r.tests?.filter((t) => t.status === 'failed') ?? [];
-  return failed.length ? `${failed.length} test${failed.length > 1 ? 's' : ''} failed: ${failed.map((t) => t.name).join(', ')}` : null;
-}
 
 /** Settings → Tool store: install official tools on top of the bundled ones, and update them. */
 export function ToolStore() {
