@@ -1397,6 +1397,7 @@ http = { json = {} }
         assert_eq!(json_path_get(&doc, "a[3]"), None);
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn dev_slot_loads_untrusted_reloads_and_promotes() {
         let tmp = tempfile::tempdir().unwrap();
