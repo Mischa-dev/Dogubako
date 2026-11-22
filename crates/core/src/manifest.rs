@@ -155,8 +155,6 @@ struct OutputSection {
     /// `[command]`: data fields read from stdout with regular expressions.
     #[serde(default)]
     extract: BTreeMap<String, ExtractDecl>,
-    /// `[command]`: plain-text result built from extracted fields and params.
-    text: Option<String>,
     /// `[http]`: return the response body as text with this MIME type.
     body: Option<String>,
     /// `[http]`: data fields picked from a JSON response by JSON path.
@@ -165,7 +163,8 @@ struct OutputSection {
     /// `[http]`: rows picked from a JSON response.
     #[serde(default)]
     table: Option<TableSection>,
-    /// `[http]`: text output filled from the picked fields.
+    /// Plain-text result filled from the picked (`[http]`) or extracted
+    /// (`[command]`) fields and params.
     text: Option<String>,
     /// `[http]`: named value -> label maps for json fields and columns.
     #[serde(default)]
@@ -401,10 +400,9 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     if m.output.body.is_some()
         || !m.output.json.is_empty()
         || m.output.table.is_some()
-        || m.output.text.is_some()
         || !m.output.labels.is_empty()
     {
-        return Err("[output] body, json, table, text and labels are for [http] manifests".into());
+        return Err("[output] body, json, table and labels are for [http] manifests".into());
     }
     if m.output.text.is_some() && m.output.stdout.is_some() {
         return Err("[output] takes stdout or text, not both".into());
@@ -664,9 +662,10 @@ fn parse_http_manifest(
     source: &str,
     text: &str,
 ) -> Result<ExternalTool, String> {
-    if m.output.file.is_some() || m.output.stdout.is_some() {
+    if m.output.file.is_some() || m.output.stdout.is_some() || !m.output.extract.is_empty() {
         return Err(
-            "[output] file and stdout are for [command] manifests; use body or json".into(),
+            "[output] file, stdout and extract are for [command] manifests; use body or json"
+                .into(),
         );
     }
     let mut spec = base_spec(&mut m, category, Execution::Network, source)?;
