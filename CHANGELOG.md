@@ -14,6 +14,13 @@ campaign are added here as they merge.
 
 ### Added
 
+- **Agent skill for adding tools**: `dogubako skill` prints a short `SKILL.md`
+  that takes an agent from "I want my agents to do X" to a working tool: it
+  checks installed tools, packs and the store first, then writes a manifest
+  from the weather (HTTP) or print (command with settings) example, installs it
+  in its dev slot, tests it and asks a human to promote it. The extensions docs
+  now cover packs, settings, `requires`, HTTP, the dev slot, the store and
+  one-step install.
 - **Dev slot for agent-built tools**: manifests in `extensions/dev/` (or
   `dogubako extensions install --dev`) load without a trust pin and reload when
   edited, are marked Dev, and are visible only to the user or token that

@@ -104,6 +104,7 @@ dogubako run text.case --params '{"text":"Hello World","case":"snake"}'
 | `dogubako models list\|download\|remove` | Manage [local models](/app/engines-and-models/#models) |
 | `dogubako users …`, `dogubako tokens …` | Manage server accounts and API tokens offline |
 | `dogubako extensions list\|trust\|untrust` | Manage [extensions](/develop/extensions/) |
+| `dogubako skill` | Print the agent skill for [adding a tool](/develop/extensions/#let-an-agent-build-it) |
 | `dogubako api openapi` | Print the OpenAPI document |
 | `dogubako tools matrix` | Print the Markdown [capability matrix](/reference/capabilities/) |
 
