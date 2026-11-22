@@ -1,3 +1,4 @@
+import type { ExtensionSettings } from '../types';
 import type {
   AdminConfig, Artifact, AuditRow, Category, DepInfo, FileView, JobView, Me, ModelDownload, ModelInfo,
   NewToken, Policy, Role, Status, ToolErrorView, ToolInfo, TokenRow, UserRow,
@@ -323,7 +324,11 @@ export class HttpBackend implements Backend {
     source.addEventListener('open', () => { if (opened) cb(); opened = true; });
     return () => source.close();
   }
-  extensions() { return this.get<{ extensions: any[]; dir?: string }>('/extensions'); }
+  extensions() { return this.get<{ extensions: any[]; dir?: string; settings?: ExtensionSettings[] }>('/extensions'); }
+  async extensionSettings() { return (await this.extensions()).settings ?? []; }
+  configureExtension(id: string, values: Record<string, unknown>) {
+    return this.request<ExtensionSettings>('PUT', `/extensions/${encodeURIComponent(id)}/settings`, values);
+  }
   async openapi() {
     const res = await fetch(this.url('/openapi.json'), { credentials: 'same-origin' });
     if (!res.ok) throw new ApiError(res.status, 'http', 'Could not load the OpenAPI document');

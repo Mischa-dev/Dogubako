@@ -22,6 +22,8 @@ export function describeError(e: ToolErrorView | null | undefined): FriendlyErro
       };
     case 'missing_model':
       return { title: 'Model not installed', message: msg || 'Download the required model in Settings → Models.', hint: 'Open Settings → Models to install it.' };
+    case 'not_configured':
+      return { title: 'Needs setting up', message: msg || 'This tool needs settings before it can run.', hint: 'Open Settings → Extensions to set it up.' };
     case 'unsupported':
       return { title: 'Not supported here', message: msg || 'This operation is not supported on this platform.' };
     case 'permission_denied':

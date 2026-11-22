@@ -1304,6 +1304,100 @@ async fn admin_reload_swaps_tools_and_notifies_clients() {
     assert!(drained.is_ok(), "tools stream still open");
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn extension_settings_are_set_over_http_and_secrets_never_echo() {
+    let dir = tempfile::tempdir().unwrap();
+    let ext = dir.path().join("extensions");
+    std::fs::create_dir_all(&ext).unwrap();
+    let manifest = r#"
+[tool]
+id = "text.ext_say"
+name = "Say"
+category = "text"
+[command]
+program = "echo"
+args = ["{settings.queue}"]
+[output]
+stdout = "text/plain"
+[[settings]]
+name = "queue"
+type = "text"
+required = true
+[[settings]]
+name = "token"
+type = "text"
+secret = true
+"#;
+    std::fs::write(ext.join("say.toml"), manifest).unwrap();
+    let mut trust = dogubako_core::manifest::TrustStore::default();
+    trust.trusted.insert(
+        "text.ext_say".into(),
+        dogubako_core::manifest::sha256_hex(manifest.as_bytes()),
+    );
+    trust.save(&ext.join("trusted.toml")).unwrap();
+    let (tools, status) = dogubako_core::manifest::load_extensions(&ext, false);
+    let mut reg = Registry::new();
+    reg.register_all(tools);
+    let cfg = ServerConfig {
+        data_dir: dir.path().to_path_buf(),
+        auth: AuthMode::Required,
+        setup_token: Some("setup-secret".into()),
+        ..Default::default()
+    };
+    let state = AppState::build_with(cfg, reg, status).unwrap();
+    let t = T {
+        app: app(state.clone()),
+        state,
+        _dir: dir,
+    };
+    let (cookie, csrf) = owner_session(&t).await;
+    let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
+    let tool = call(&t.app, Method::GET, "/api/v1/tools/text.ext_say", &h, None).await;
+    assert_eq!(
+        tool.body["availability"]["available"], false,
+        "{:?}",
+        tool.body
+    );
+    assert_eq!(
+        tool.body["availability"]["reason"],
+        "Set up Say in Settings"
+    );
+    let run = |app| {
+        call(
+            app,
+            Method::POST,
+            "/api/v1/tools/text.ext_say/run",
+            &h,
+            Some(json!({"params": {}, "wait_seconds": 10})),
+        )
+    };
+    let r = run(&t.app).await;
+    assert_eq!(r.body["error"]["code"], "not_configured", "{:?}", r.body);
+
+    let uri = "/api/v1/extensions/text.ext_say/settings";
+    let r = call(
+        &t.app,
+        Method::PUT,
+        uri,
+        &h,
+        Some(json!({"queue": "office", "token": "s3cret"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert!(!String::from_utf8_lossy(&r.raw).contains("s3cret"));
+    let r = call(&t.app, Method::GET, "/api/v1/extensions", &h, None).await;
+    assert!(!String::from_utf8_lossy(&r.raw).contains("s3cret"));
+    assert_eq!(r.body["settings"][0]["settings"][0]["value"], "office");
+    assert_eq!(r.body["settings"][0]["settings"][1]["set"], true);
+    let r = call(&t.app, Method::PUT, uri, &h, Some(json!({"nope": 1}))).await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.body);
+
+    let r = run(&t.app).await;
+    assert_eq!(r.body["status"], "succeeded", "{:?}", r.body);
+    assert_eq!(r.body["result"]["text"], "office\n");
+}
+
 #[tokio::test]
 async fn turned_off_packs_hide_tools_everywhere() {
     let t = setup_with(AuthMode::None, |c| {

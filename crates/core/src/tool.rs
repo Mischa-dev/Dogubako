@@ -44,6 +44,11 @@ pub trait Tool: Send + Sync + 'static {
     fn fingerprint(&self) -> Option<String> {
         None
     }
+
+    /// Required settings ([`ToolSpec::settings`]) that have no value yet.
+    fn unset_settings(&self) -> Vec<String> {
+        vec![]
+    }
 }
 
 /// An output file produced by a tool.

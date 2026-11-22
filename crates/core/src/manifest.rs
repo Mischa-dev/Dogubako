@@ -31,6 +31,19 @@
 //! default = 80
 //! ```
 //!
+//! Settings that belong to one installation (a printer queue, a saved
+//! location, an API key) are declared in `[[settings]]` with the same fields
+//! as `[[params]]` plus `secret = true`, and used as `{settings.<name>}`.
+//! Their values live outside the manifest ([`SettingsStore`]), so editing them
+//! keeps the trust pin and sharing a manifest never shares its settings.
+//!
+//! ```toml
+//! [[settings]]
+//! name = "queue"
+//! type = "text"
+//! required = true
+//! ```
+//!
 //! Security model:
 //! * Every placeholder expands to exactly one argv element; no shell is used.
 //! * Shell interpreters are refused as programs.
@@ -45,8 +58,10 @@
 //! program beside a required dependency's binary is taken from that folder.
 
 use crate::deps::dep_spec;
+use crate::engine::setup_message;
 use crate::error::{ToolError, ToolResult};
 use crate::params::Params;
+use crate::policy::FsPolicy;
 use crate::spec::{
     Category, Execution, OutputKind, ParamKind, ParamSpec, Permission, Platform, ToolSpec,
 };
@@ -136,6 +151,16 @@ struct Manifest {
     output: OutputSection,
     #[serde(default)]
     params: Vec<ParamSpec>,
+    #[serde(default)]
+    settings: Vec<SettingDecl>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SettingDecl {
+    #[serde(flatten)]
+    param: ParamSpec,
+    #[serde(default)]
+    secret: bool,
 }
 
 pub struct ExternalTool {
@@ -148,6 +173,60 @@ pub struct ExternalTool {
     dep: Option<(String, String)>,
     args: Vec<ArgItem>,
     output: OutputSection,
+    store: Option<SettingsStore>,
+}
+
+fn fill_label(p: &mut ParamSpec) {
+    if p.label.is_empty() {
+        let mut l = p.name.replace('_', " ");
+        if let Some(f) = l.get(0..1) {
+            l = f.to_uppercase() + &l[1..];
+        }
+        p.label = l;
+    }
+}
+
+fn parse_settings(decls: Vec<SettingDecl>) -> Result<Vec<ParamSpec>, String> {
+    let mut out: Vec<ParamSpec> = vec![];
+    for d in decls {
+        let mut p = d.param;
+        let name = p.name.clone();
+        if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            return Err(format!(
+                "setting name '{name}' must use only letters, digits and _"
+            ));
+        }
+        if out.iter().any(|o| o.name == name) {
+            return Err(format!("setting '{name}' is declared twice"));
+        }
+        match &p.kind {
+            ParamKind::File { .. } | ParamKind::Json { .. } | ParamKind::Path { .. } => {
+                return Err(format!(
+                    "setting '{name}': file, path and json types cannot be settings"
+                ))
+            }
+            ParamKind::Enum { multi: true, .. } => {
+                return Err(format!(
+                    "setting '{name}': multi-choice enums cannot be settings"
+                ))
+            }
+            ParamKind::Text { .. } | ParamKind::Secret if d.secret => p.kind = ParamKind::Secret,
+            _ if d.secret => {
+                return Err(format!(
+                    "setting '{name}': only text settings can be secret"
+                ))
+            }
+            _ => {}
+        }
+        if p.is_secret() && p.default.is_some() {
+            return Err(format!(
+                "setting '{name}': a secret cannot have a default in the manifest"
+            ));
+        }
+        fill_label(&mut p);
+        out.push(p);
+    }
+    Ok(out)
 }
 
 /// Parse a manifest from TOML text.
@@ -169,14 +248,11 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
             m.command.program
         ));
     }
+    let settings = parse_settings(std::mem::take(&mut m.settings))?;
     for p in &mut m.params {
-        if p.label.is_empty() {
-            let mut l = p.name.replace('_', " ");
-            if let Some(f) = l.get(0..1) {
-                l = f.to_uppercase() + &l[1..];
-            }
-            p.label = l;
-        }
+        fill_label(p);
+    }
+    for p in m.params.iter().chain(&settings) {
         if matches!(p.kind, ParamKind::Path { .. })
             && !m.tool.permissions.iter().any(|x| x == "host_fs_read")
         {
@@ -189,6 +265,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     spec.version = m.tool.version.clone();
     spec.keywords = m.tool.keywords.clone();
     spec.params = m.params.clone();
+    spec.settings = settings;
     spec.timeout_secs = m.tool.timeout_secs;
     if !m.tool.platforms.is_empty() {
         spec.platforms = m.tool.platforms.clone();
@@ -217,10 +294,20 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     spec.pack = spec.source.clone();
     // Validate placeholders reference known params.
     let known: Vec<&str> = m.params.iter().map(|p| p.name.as_str()).collect();
+    let known_settings: Vec<&str> = spec.settings.iter().map(|p| p.name.as_str()).collect();
+    let is_setting = |s: &str| {
+        s.strip_prefix("settings.")
+            .map(|n| known_settings.contains(&n))
+            .unwrap_or(false)
+    };
     let check = |s: &str| -> Result<(), String> {
         for ph in placeholders(s) {
             let base = ph.split('.').next().unwrap_or("");
-            if !["output", "workdir"].contains(&base) && !known.contains(&base) {
+            if base == "settings" && ph.contains('.') {
+                if !is_setting(&ph) {
+                    return Err(format!("placeholder '{{{ph}}}' does not match any setting"));
+                }
+            } else if !["output", "workdir"].contains(&base) && !known.contains(&base) {
                 return Err(format!(
                     "placeholder '{{{ph}}}' does not match any parameter"
                 ));
@@ -232,7 +319,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
         match a {
             ArgItem::Plain(s) => check(s)?,
             ArgItem::Group { when, args } => {
-                if !known.contains(&when.as_str()) {
+                if !known.contains(&when.as_str()) && !is_setting(when) {
                     return Err(format!(
                         "group condition '{when}' does not match any parameter"
                     ));
@@ -253,6 +340,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
         dep,
         args: m.command.args,
         output: m.output,
+        store: None,
     })
 }
 
@@ -304,10 +392,37 @@ fn value_str(v: &Value) -> String {
 }
 
 impl ExternalTool {
+    /// Read setting values from `store` (one installation's settings).
+    pub fn with_settings_store(mut self, store: SettingsStore) -> Self {
+        self.store = Some(store);
+        self
+    }
+
+    /// Effective setting values: stored values, then manifest defaults.
+    fn setting_values(&self) -> BTreeMap<String, Value> {
+        let stored = self
+            .store
+            .as_ref()
+            .map(|s| s.values(&self.spec.id))
+            .unwrap_or_default();
+        self.spec
+            .settings
+            .iter()
+            .filter_map(|p| {
+                stored
+                    .get(&p.name)
+                    .or(p.default.as_ref())
+                    .filter(|v| !v.is_null())
+                    .map(|v| (p.name.clone(), v.clone()))
+            })
+            .collect()
+    }
+
     fn expand(
         &self,
         s: &str,
         params: &Params,
+        settings: &BTreeMap<String, Value>,
         output: &Option<PathBuf>,
         ctx: &ToolContext,
     ) -> ToolResult<String> {
@@ -332,6 +447,13 @@ impl ExternalTool {
                     })?
             } else if base == "workdir" {
                 ctx.work_dir().to_string_lossy().to_string()
+            } else if let (true, Some(name)) = (base == "settings", attr) {
+                settings
+                    .get(name)
+                    .map(value_str)
+                    .ok_or_else(|| ToolError::NotConfigured {
+                        message: format!("{} (missing: {name})", setup_message(&self.spec.name)),
+                    })?
             } else if let Some(f) = params.opt_file(base) {
                 match attr {
                     Some("stem") => f.stem(),
@@ -363,7 +485,18 @@ impl Tool for ExternalTool {
         Some(self.sha256.clone())
     }
 
+    fn unset_settings(&self) -> Vec<String> {
+        let values = self.setting_values();
+        self.spec
+            .settings
+            .iter()
+            .filter(|p| p.required && !values.contains_key(&p.name))
+            .map(|p| p.name.clone())
+            .collect()
+    }
+
     async fn run(&self, ctx: ToolContext, params: Params) -> ToolResult<ToolOutput> {
+        let settings = self.setting_values();
         let mut cmd = if let Some((dep, name)) = &self.dep {
             ctx.command_program(dep, name)?
         } else if Path::new(&self.program).is_absolute() {
@@ -389,7 +522,7 @@ impl Tool for ExternalTool {
         };
         let output_path = match &self.output.file {
             Some(t) => {
-                let name = self.expand(t, &params, &None, &ctx)?;
+                let name = self.expand(t, &params, &settings, &None, &ctx)?;
                 Some(ctx.output_path(&name))
             }
             None => None,
@@ -397,9 +530,15 @@ impl Tool for ExternalTool {
         let mut argv: Vec<String> = vec![];
         for a in &self.args {
             match a {
-                ArgItem::Plain(s) => argv.push(self.expand(s, &params, &output_path, &ctx)?),
+                ArgItem::Plain(s) => {
+                    argv.push(self.expand(s, &params, &settings, &output_path, &ctx)?)
+                }
                 ArgItem::Group { when, args } => {
-                    let on = match params.get(when) {
+                    let cond = match when.strip_prefix("settings.") {
+                        Some(n) => settings.get(n),
+                        None => params.get(when),
+                    };
+                    let on = match cond {
                         Some(Value::Bool(b)) => *b,
                         Some(Value::String(s)) => !s.is_empty(),
                         Some(Value::Null) | None => false,
@@ -407,7 +546,7 @@ impl Tool for ExternalTool {
                     };
                     if on {
                         for s in args {
-                            argv.push(self.expand(s, &params, &output_path, &ctx)?);
+                            argv.push(self.expand(s, &params, &settings, &output_path, &ctx)?);
                         }
                     }
                 }
@@ -461,6 +600,215 @@ impl TrustStore {
     }
 }
 
+/// Setting values for one installation, kept beside (never inside) the
+/// manifests: `<extensions>/settings/<id>.toml`, and secrets in
+/// `secrets/<id>.toml` (owner-only permissions on Unix). Values are keyed by
+/// installation directory and tool id, so two installations of the same
+/// manifest keep separate settings and the manifest's trust pin never changes.
+#[derive(Debug, Clone)]
+pub struct SettingsStore {
+    dir: PathBuf,
+}
+
+/// A setting as shown to clients. Secret values are never included.
+#[derive(Debug, Clone, Serialize)]
+pub struct SettingView {
+    #[serde(flatten)]
+    pub spec: ParamSpec,
+    pub secret: bool,
+    /// Whether a value is stored (or a default applies).
+    pub set: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<Value>,
+}
+
+impl SettingsStore {
+    pub fn new(dir: impl Into<PathBuf>) -> Self {
+        Self { dir: dir.into() }
+    }
+
+    /// The store for an extensions directory: `<dir>/settings`.
+    pub fn for_extensions(extensions_dir: &Path) -> Self {
+        Self::new(extensions_dir.join("settings"))
+    }
+
+    fn path(&self, id: &str, secret: bool) -> ToolResult<PathBuf> {
+        if id.is_empty()
+            || !id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-')
+            || id.starts_with('.')
+        {
+            return Err(ToolError::invalid("id", format!("'{id}' is not a tool id")));
+        }
+        let dir = if secret {
+            self.dir.join("secrets")
+        } else {
+            self.dir.clone()
+        };
+        Ok(dir.join(format!("{id}.toml")))
+    }
+
+    fn read(&self, id: &str, secret: bool) -> BTreeMap<String, Value> {
+        self.path(id, secret)
+            .ok()
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .and_then(|t| toml::from_str(&t).ok())
+            .unwrap_or_default()
+    }
+
+    fn write(&self, id: &str, secret: bool, values: &BTreeMap<String, Value>) -> ToolResult<()> {
+        let path = self.path(id, secret)?;
+        if values.is_empty() {
+            let _ = std::fs::remove_file(&path);
+            return Ok(());
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| ToolError::failed(format!("cannot create settings folder: {e}")))?;
+        }
+        let text = toml::to_string_pretty(values)
+            .map_err(|e| ToolError::failed(format!("cannot save settings: {e}")))?;
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        if secret {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        use std::io::Write;
+        let mut f = opts
+            .open(&path)
+            .map_err(|e| ToolError::failed(format!("cannot save settings: {e}")))?;
+        #[cfg(unix)]
+        if secret {
+            use std::os::unix::fs::PermissionsExt;
+            f.set_permissions(std::fs::Permissions::from_mode(0o600))
+                .map_err(|e| ToolError::failed(format!("cannot save settings: {e}")))?;
+        }
+        f.write_all(text.as_bytes())
+            .map_err(|e| ToolError::failed(format!("cannot save settings: {e}")))
+    }
+
+    /// All stored values for a tool, secrets included (for running it only).
+    pub fn values(&self, id: &str) -> BTreeMap<String, Value> {
+        let mut v = self.read(id, false);
+        v.extend(self.read(id, true));
+        v
+    }
+
+    /// Validate and store `changes`; a null or empty value clears a setting.
+    pub fn set(
+        &self,
+        id: &str,
+        decls: &[ParamSpec],
+        changes: &serde_json::Map<String, Value>,
+    ) -> ToolResult<()> {
+        let mut plain = self.read(id, false);
+        let mut secret = self.read(id, true);
+        for (k, v) in changes {
+            let decl = decls.iter().find(|d| d.name == *k).ok_or_else(|| {
+                let known: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
+                ToolError::invalid(
+                    k,
+                    if known.is_empty() {
+                        format!("'{id}' has no settings")
+                    } else {
+                        format!("unknown setting (known: {})", known.join(", "))
+                    },
+                )
+            })?;
+            // A key lives in one file only. A stored secret stays secret until it is
+            // cleared, even if a manifest update declares it as plain.
+            let (target, other) = if decl.is_secret() || secret.contains_key(k) {
+                (&mut secret, &mut plain)
+            } else {
+                (&mut plain, &mut secret)
+            };
+            other.remove(k);
+            if v.is_null() || v.as_str() == Some("") {
+                target.remove(k);
+            } else {
+                let coerced = crate::params::coerce(decl, v.clone(), &FsPolicy::unrestricted())?;
+                target.insert(k.clone(), coerced);
+            }
+        }
+        // Secrets first: a value moving into them is never lost if a write fails.
+        self.write(id, true, &secret)?;
+        self.write(id, false, &plain)
+    }
+
+    /// Settings for display, without secret values.
+    pub fn view(&self, id: &str, decls: &[ParamSpec]) -> Vec<SettingView> {
+        let plain = self.read(id, false);
+        let secrets = self.read(id, true);
+        decls
+            .iter()
+            .map(|d| {
+                // Anything in the secrets file stays hidden, whatever the declaration says.
+                let secret = d.is_secret() || secrets.contains_key(&d.name);
+                let value = if secret {
+                    secrets.get(&d.name).or(d.default.as_ref()).cloned()
+                } else {
+                    plain.get(&d.name).or(d.default.as_ref()).cloned()
+                };
+                SettingView {
+                    spec: d.clone(),
+                    secret,
+                    set: value.is_some(),
+                    value: if secret { None } else { value },
+                }
+            })
+            .collect()
+    }
+}
+
+/// One extension's settings, as shown in Settings → Extensions.
+#[derive(Debug, Clone, Serialize)]
+pub struct ExtensionSettings {
+    pub id: String,
+    pub name: String,
+    pub settings: Vec<SettingView>,
+}
+
+/// Every valid manifest in `dir` that declares settings (trusted or not, so a
+/// tool can be set up before or after it is trusted).
+pub fn extension_settings(dir: &Path) -> Vec<ExtensionSettings> {
+    let store = SettingsStore::for_extensions(dir);
+    let (tools, _) = load_extensions(dir, true);
+    tools
+        .iter()
+        .map(|t| t.spec())
+        .filter(|s| !s.settings.is_empty())
+        .map(|s| ExtensionSettings {
+            id: s.id.clone(),
+            name: s.name.clone(),
+            settings: store.view(&s.id, &s.settings),
+        })
+        .collect()
+}
+
+/// Validate and store settings for extension `id` in `dir`.
+pub fn configure_extension(
+    dir: &Path,
+    id: &str,
+    changes: &serde_json::Map<String, Value>,
+) -> ToolResult<ExtensionSettings> {
+    let (tools, _) = load_extensions(dir, true);
+    let spec = tools
+        .iter()
+        .map(|t| t.spec())
+        .find(|s| s.id == id)
+        .ok_or_else(|| ToolError::NotFound { id: id.to_string() })?;
+    let store = SettingsStore::for_extensions(dir);
+    store.set(id, &spec.settings, changes)?;
+    Ok(ExtensionSettings {
+        id: spec.id.clone(),
+        name: spec.name.clone(),
+        settings: store.view(id, &spec.settings),
+    })
+}
+
 pub fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(sha2::Sha256::digest(bytes))
 }
@@ -477,6 +825,7 @@ pub struct ExtensionStatus {
 /// Load trusted extension manifests from a directory.
 pub fn load_extensions(dir: &Path, trust_all: bool) -> (Vec<Arc<dyn Tool>>, Vec<ExtensionStatus>) {
     let trust = TrustStore::load(&dir.join("trusted.toml"));
+    let settings = SettingsStore::for_extensions(dir);
     let mut tools: Vec<Arc<dyn Tool>> = vec![];
     let mut status = vec![];
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -503,7 +852,7 @@ pub fn load_extensions(dir: &Path, trust_all: bool) -> (Vec<Arc<dyn Tool>>, Vec<
                 let trusted =
                     trust_all || trust.trusted.get(&id).map(|h| *h == sha).unwrap_or(false);
                 if trusted {
-                    tools.push(Arc::new(t));
+                    tools.push(Arc::new(t.with_settings_store(settings.clone())));
                     status.push(ExtensionStatus {
                         file,
                         id: Some(id),
@@ -752,5 +1101,215 @@ stdout = "text/plain"
         .unwrap();
         let (tools, _) = load_extensions(dir.path(), false);
         assert!(tools.is_empty());
+    }
+
+    const S: &str = r#"
+[tool]
+id = "text.ext_say"
+name = "Say"
+category = "text"
+[command]
+program = "echo"
+args = ["{settings.greeting}", "--to={settings.queue}", { when = "settings.loud", args = ["LOUD"] }, "{word}"]
+[output]
+stdout = "text/plain"
+[[params]]
+name = "word"
+type = "text"
+default = "x"
+[[settings]]
+name = "queue"
+type = "text"
+required = true
+[[settings]]
+name = "greeting"
+type = "text"
+default = "hi"
+[[settings]]
+name = "loud"
+type = "boolean"
+[[settings]]
+name = "token"
+type = "text"
+secret = true
+"#;
+
+    fn installed(dir: &Path) -> Arc<dyn Tool> {
+        std::fs::write(dir.join("say.toml"), S).unwrap();
+        let mut ts = TrustStore::default();
+        ts.trusted
+            .insert("text.ext_say".into(), sha256_hex(S.as_bytes()));
+        ts.save(&dir.join("trusted.toml")).unwrap();
+        let (mut tools, st) = load_extensions(dir, false);
+        assert!(st[0].loaded, "{:?}", st[0].error);
+        tools.remove(0)
+    }
+
+    #[test]
+    fn parses_settings_and_rejects_unknown_ones() {
+        let t = parse_manifest(S, "x").unwrap();
+        let names: Vec<&str> = t.spec.settings.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["queue", "greeting", "loud", "token"]);
+        assert!(t.spec.settings[0].required);
+        assert_eq!(t.spec.settings[1].default, Some(serde_json::json!("hi")));
+        assert!(t.spec.settings[3].is_secret());
+        assert!(t.spec.params.iter().all(|p| p.name == "word"));
+        let err = |m: String| parse_manifest(&m, "x").err().unwrap();
+        assert!(err(S.replace("{settings.queue}", "{settings.nope}")).contains("setting"));
+        assert!(err(S.replace("{settings.queue}", "{settings}")).contains("setting"));
+        assert!(err(S.replace("settings.loud", "settings.nope")).contains("group"));
+        assert!(err(S.replace("name = \"loud\"", "name = \"queue\"")).contains("twice"));
+        assert!(
+            err(S.replace("type = \"boolean\"", "type = \"boolean\"\nsecret = true"))
+                .contains("secret")
+        );
+        assert!(
+            err(S.replace("secret = true", "secret = true\ndefault = \"k\"")).contains("default")
+        );
+        let extra = |t: &str| format!("{S}[[settings]]\nname = \"x\"\n{t}\n");
+        assert!(err(extra("type = \"path\"\nkind = \"dir\"")).contains("path"));
+        assert!(err(extra(
+            "type = \"enum\"\nmulti = true\noptions = [{ value = \"a\", label = \"A\" }]"
+        ))
+        .contains("multi"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn required_setting_gates_and_values_expand_to_one_arg() {
+        let dir = tempfile::tempdir().unwrap();
+        let tool = installed(dir.path());
+        let h = crate::testing::TestHarness::new(vec![tool]);
+        assert!(!h.available("text.ext_say"));
+        let registry = h.engine.registry();
+        let info = h.engine.info(registry.get("text.ext_say").unwrap().spec());
+        assert_eq!(
+            info.availability.reason.as_deref(),
+            Some("Set up Say in Settings")
+        );
+        assert_eq!(info.availability.unset_settings, ["queue"]);
+        let err = h
+            .run("text.ext_say", serde_json::json!({}))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "not_configured");
+        assert!(err.to_string().contains("Set up Say in Settings"));
+
+        let store = SettingsStore::for_extensions(dir.path());
+        let decls = parse_manifest(S, "x").unwrap().spec.settings;
+        let set = |v: serde_json::Value| store.set("text.ext_say", &decls, v.as_object().unwrap());
+        set(serde_json::json!({"queue": "a b; $(id)", "loud": "true"})).unwrap();
+        assert!(h.available("text.ext_say"));
+        let out = h
+            .run("text.ext_say", serde_json::json!({"word": "w"}))
+            .await
+            .unwrap();
+        assert_eq!(out.text.as_deref(), Some("hi --to=a b; $(id) LOUD w\n"));
+        assert!(set(serde_json::json!({"nope": 1})).is_err());
+        assert!(set(serde_json::json!({"loud": "maybe"})).is_err());
+        // Clearing a required setting makes the tool unavailable again.
+        set(serde_json::json!({"queue": null})).unwrap();
+        assert!(!h.available("text.ext_say"));
+    }
+
+    #[test]
+    fn settings_live_outside_the_manifest_and_secrets_are_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        installed(dir.path());
+        let store = SettingsStore::for_extensions(dir.path());
+        let decls = parse_manifest(S, "x").unwrap().spec.settings;
+        store
+            .set(
+                "text.ext_say",
+                &decls,
+                serde_json::json!({"queue": "q1", "token": "s3cret"})
+                    .as_object()
+                    .unwrap(),
+            )
+            .unwrap();
+        // The manifest is untouched, so it stays trusted.
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("say.toml")).unwrap(),
+            S
+        );
+        let (tools, st) = load_extensions(dir.path(), false);
+        assert_eq!(tools.len(), 1);
+        assert_eq!(st.len(), 1, "settings files are not manifests");
+        assert_eq!(store.values("text.ext_say")["token"], "s3cret");
+        let plain = std::fs::read_to_string(dir.path().join("settings/text.ext_say.toml")).unwrap();
+        assert!(!plain.contains("s3cret"));
+        let view = serde_json::to_string(&store.view("text.ext_say", &decls)).unwrap();
+        assert!(!view.contains("s3cret"), "{view}");
+        let token = store
+            .view("text.ext_say", &decls)
+            .into_iter()
+            .find(|v| v.spec.name == "token")
+            .unwrap();
+        assert!(token.set && token.secret && token.value.is_none());
+        // A different manifest reusing the id cannot unmask a stored secret.
+        let other = store.view("text.ext_say", &[ParamSpec::text("token")]);
+        assert!(other[0].secret && other[0].value.is_none());
+        // A replacement saved under a plain declaration stays secret until cleared.
+        let plain_token = [ParamSpec::text("token")];
+        let set = |decls: &[ParamSpec], v: serde_json::Value| {
+            store
+                .set("text.ext_say", decls, v.as_object().unwrap())
+                .unwrap()
+        };
+        let read = |rel: &str| {
+            std::fs::read_to_string(dir.path().join("settings").join(rel)).unwrap_or_default()
+        };
+        set(&plain_token, serde_json::json!({"token": "n3w"}));
+        assert!(read("secrets/text.ext_say.toml").contains("n3w"));
+        assert!(!read("text.ext_say.toml").contains("n3w"));
+        let view = store.view("text.ext_say", &plain_token);
+        assert!(view[0].secret && view[0].value.is_none());
+        set(&plain_token, serde_json::json!({"token": null}));
+        assert!(!store.values("text.ext_say").contains_key("token"));
+        // A plain value saved under a secret declaration moves to the secrets file.
+        set(&plain_token, serde_json::json!({"token": "pl41n"}));
+        assert!(read("text.ext_say.toml").contains("pl41n"));
+        set(&decls, serde_json::json!({"token": "m0ved"}));
+        assert!(read("secrets/text.ext_say.toml").contains("m0ved"));
+        assert!(!read("text.ext_say.toml").contains("token"));
+        store
+            .set(
+                "text.ext_say",
+                &decls,
+                serde_json::json!({"token": "s3cret"}).as_object().unwrap(),
+            )
+            .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(dir.path().join("settings/secrets/text.ext_say.toml"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o077, 0);
+        }
+        assert!(store.set("../x", &decls, &Default::default()).is_err());
+    }
+
+    #[tokio::test]
+    async fn two_installations_hold_different_settings() {
+        let (a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let (ta, tb) = (installed(a.path()), installed(b.path()));
+        let decls = parse_manifest(S, "x").unwrap().spec.settings;
+        for (dir, q) in [(&a, "first"), (&b, "second")] {
+            SettingsStore::for_extensions(dir.path())
+                .set(
+                    "text.ext_say",
+                    &decls,
+                    serde_json::json!({"queue": q}).as_object().unwrap(),
+                )
+                .unwrap();
+        }
+        let ha = crate::testing::TestHarness::new(vec![ta]);
+        let hb = crate::testing::TestHarness::new(vec![tb]);
+        let ra = ha.run("text.ext_say", serde_json::json!({})).await.unwrap();
+        let rb = hb.run("text.ext_say", serde_json::json!({})).await.unwrap();
+        assert_eq!(ra.text.as_deref(), Some("hi --to=first x\n"));
+        assert_eq!(rb.text.as_deref(), Some("hi --to=second x\n"));
     }
 }

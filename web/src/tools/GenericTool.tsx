@@ -122,7 +122,7 @@ export function GenericTool({ tool, jobId, head, meta }: { tool: ToolInfo; jobId
           form={form}
           label={live ? 'Run now' : 'Run'}
           disabled={!available}
-          disabledReason={!available ? (tool.availability.reason || 'Unavailable until the missing dependency is installed') : undefined}
+          disabledReason={!available ? (tool.availability.reason ?? 'Unavailable until the missing dependency is installed') : undefined}
         />
         {meta}
       </section>

@@ -416,7 +416,7 @@ fn check_accept(p: &ParamSpec, f: &InputFile) -> ToolResult<()> {
     }
 }
 
-fn coerce(p: &ParamSpec, v: Value, fs_policy: &FsPolicy) -> ToolResult<Value> {
+pub(crate) fn coerce(p: &ParamSpec, v: Value, fs_policy: &FsPolicy) -> ToolResult<Value> {
     let name = &p.name;
     match &p.kind {
         ParamKind::Text { max_len, .. } => {

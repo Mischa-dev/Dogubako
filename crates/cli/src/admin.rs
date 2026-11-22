@@ -143,6 +143,14 @@ pub fn extensions_cmd() -> Command {
                 .arg(Arg::new("id").required(true)),
         )
         .subcommand(Command::new("untrust").arg(Arg::new("id").required(true)))
+        .subcommand(
+            Command::new("config")
+                .about("Show or change an extension's settings (stored outside its manifest)")
+                .arg(Arg::new("id").required(true))
+                .arg(Arg::new("values").num_args(0..).help(
+                    "key=value pairs; key= clears a setting, key=- reads the value from stdin",
+                )),
+        )
 }
 
 fn open_db(m: &ArgMatches) -> Result<Db, String> {
@@ -461,6 +469,67 @@ pub fn extensions(m: &ArgMatches, out: &Out) -> i32 {
                         s.file,
                         s.error.unwrap_or_default()
                     );
+                }
+            }
+            0
+        }
+        Some(("config", s)) => {
+            let id = s.get_one::<String>("id").unwrap();
+            let mut changes = serde_json::Map::new();
+            let mut stdin_used = false;
+            for kv in s.get_many::<String>("values").into_iter().flatten() {
+                let Some((k, v)) = kv.split_once('=') else {
+                    return out.error(&format!("expected key=value, got '{kv}'"), 2);
+                };
+                let v = if v == "-" {
+                    // Read the value from stdin so secrets stay out of shell history.
+                    if stdin_used {
+                        return out.error("only one key=- value can be read from stdin", 2);
+                    }
+                    stdin_used = true;
+                    match read_password(true) {
+                        Ok(v) if !v.is_empty() => v,
+                        Ok(_) => {
+                            return out.error(
+                                &format!("no value for '{k}' on stdin (use {k}= to clear)"),
+                                2,
+                            )
+                        }
+                        Err(e) => return out.error(&e, 1),
+                    }
+                } else {
+                    v.to_string()
+                };
+                changes.insert(k.trim().to_string(), json!(v));
+            }
+            let ext = if changes.is_empty() {
+                dogubako_core::manifest::extension_settings(&dir)
+                    .into_iter()
+                    .find(|e| e.id == *id)
+                    .ok_or_else(|| {
+                        format!("no extension '{id}' with settings in {}", dir.display())
+                    })
+            } else {
+                dogubako_core::manifest::configure_extension(&dir, id, &changes)
+                    .map_err(|e| e.to_string())
+            };
+            let ext = match ext {
+                Ok(e) => e,
+                Err(e) => return out.error(&e, 1),
+            };
+            if out.json {
+                println!("{}", serde_json::to_string_pretty(&ext).unwrap());
+            } else {
+                println!("{} ({})", ext.name, ext.id);
+                for v in &ext.settings {
+                    let shown = match (&v.value, v.secret, v.set) {
+                        (_, true, true) => "(secret, set)".to_string(),
+                        (Some(serde_json::Value::String(s)), _, _) => s.clone(),
+                        (Some(x), _, _) => x.to_string(),
+                        _ => "(not set)".to_string(),
+                    };
+                    let req = if v.spec.required { " *" } else { "" };
+                    println!("  {:<20} {shown}{req}", v.spec.name);
                 }
             }
             0
