@@ -1933,7 +1933,7 @@ async fn admin_config(State(s): State<AppState>, Admin(_): Admin) -> Json<Value>
         "config": c,
         "running_jobs": s.jobs.running_count(),
         "uptime_secs": s.started.elapsed().as_secs(),
-        "permissions": Permission::ALL.iter().map(|p| json!({"id": p.id(), "description": p.describe()})).collect::<Vec<_>>(),
+        "permissions": Permission::POLICY.iter().map(|p| json!({"id": p.id(), "description": p.describe()})).collect::<Vec<_>>(),
     }))
 }
 

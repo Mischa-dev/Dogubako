@@ -2224,3 +2224,270 @@ async fn store_search_install_and_update_over_http() {
         .unwrap()
         .contains("refusing to install"));
 }
+
+#[tokio::test]
+async fn mcp_authoring_tools_need_extensions_author_and_never_promote() {
+    let src = tempfile::tempdir().unwrap();
+    let d = src.path().join("store/text.ext_shout");
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(
+        d.join("manifest.toml"),
+        "[tool]\nid = \"text.ext_shout\"\nname = \"Shout\"\ncategory = \"text\"\n\
+         description = \"Upper-case words\"\nversion = \"1.0.0\"\n\
+         [http]\nurl = \"https://example.com/s?q={w}\"\n[[params]]\nname = \"w\"\ntype = \"text\"\n\
+         [[tests]]\nparams = { w = \"a\" }\nhttp = { body = \"A\" }\nexpect = { text = \"A\" }\n",
+    )
+    .unwrap();
+    dogubako_core::store::build_index(&src.path().join("store"))
+        .unwrap()
+        .write(&src.path().join("public"))
+        .unwrap();
+    let url = format!("file://{}", src.path().join("public/index.json").display());
+    let t = setup_with(AuthMode::Required, move |c| {
+        c.allow_extension_install = true;
+        c.store_url = url;
+    });
+    let (cookie, csrf) = owner_session(&t).await;
+    let dir = t.state.cfg.extensions_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    let ld = dir.clone();
+    t.state.engine.set_loader(Arc::new(move || {
+        let mut reg = Registry::new();
+        reg.register_all(test_tools());
+        let st = dogubako_core::extensions::load_into(&mut reg, &ld);
+        (reg, st)
+    }));
+    let plain = create_agent_token(&t, &cookie, &csrf, "plain", json!({"allow": ["*"]})).await;
+    let author = create_agent_token(
+        &t,
+        &cookie,
+        &csrf,
+        "author",
+        json!({"allow": ["*"], "permissions": ["extensions_author", "network"]}),
+    )
+    .await;
+    let narrow = create_agent_token(
+        &t,
+        &cookie,
+        &csrf,
+        "narrow",
+        json!({"allow": ["image.*"], "permissions": ["extensions_author", "network"]}),
+    )
+    .await;
+    let app = t.app.clone();
+    let session = |token: String| {
+        let app = app.clone();
+        async move {
+            let bearer = format!("Bearer {token}");
+            let h = [
+                ("authorization", bearer.as_str()),
+                ("accept", "application/json, text/event-stream"),
+            ];
+            let r = call(&app, Method::POST, "/mcp", &h, Some(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}}))).await;
+            assert_eq!(r.status, StatusCode::OK);
+            let sid = r.headers["mcp-session-id"].to_str().unwrap().to_string();
+            (bearer, sid)
+        }
+    };
+    let rpc = |s: &(String, String), method: &str, params: Value| {
+        let app = app.clone();
+        let (bearer, sid) = s.clone();
+        let method = method.to_string();
+        async move {
+            let h = [
+                ("authorization", bearer.as_str()),
+                ("mcp-session-id", sid.as_str()),
+            ];
+            let r = call(
+                &app,
+                Method::POST,
+                "/mcp",
+                &h,
+                Some(json!({"jsonrpc": "2.0", "id": 2, "method": method, "params": params})),
+            )
+            .await;
+            assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+            r.body["result"].clone()
+        }
+    };
+    let names = |r: &Value| -> Vec<String> {
+        r["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let authoring = [
+        "dogubako_extension_install",
+        "dogubako_extension_test",
+        "dogubako_extension_status",
+        "dogubako_store_install",
+    ];
+    let manifest = "[tool]\nid = \"text.wip_echo\"\nname = \"Echo (wip)\"\ncategory = \"text\"\n\
+                    [command]\nprogram = \"echo\"\nargs = [\"{word}\"]\n[output]\nstdout = \"text/plain\"\n\
+                    [[params]]\nname = \"word\"\ntype = \"text\"\n\
+                    [[tests]]\nparams = { word = \"hi\" }\nexpect = { text = \"hi\" }\n";
+
+    // Without the permission: the tool list is unchanged and calls are refused.
+    let p = session(plain).await;
+    let before = names(&rpc(&p, "tools/list", json!({})).await);
+    assert!(authoring.iter().all(|a| !before.contains(&a.to_string())));
+    let r = rpc(
+        &p,
+        "tools/call",
+        json!({"name": "dogubako_extension_install", "arguments": {"manifest": manifest}}),
+    )
+    .await;
+    assert_eq!(r["isError"], true);
+    assert_eq!(r["structuredContent"]["error"]["code"], "permission_denied");
+    assert!(!dir.join("dev/text.wip_echo.toml").exists());
+
+    let a = session(author).await;
+    let listed = names(&rpc(&a, "tools/list", json!({})).await);
+    assert!(authoring.iter().all(|n| listed.contains(&n.to_string())));
+    assert!(!listed.iter().any(|n| n.contains("promote")));
+
+    // Parse errors come back structured.
+    let r = rpc(
+        &a,
+        "tools/call",
+        json!({"name": "dogubako_extension_install", "arguments": {"manifest": "[tool]\nid = 3"}}),
+    )
+    .await;
+    assert_eq!(r["isError"], true);
+    assert_eq!(r["structuredContent"]["installed"], false);
+    assert!(r["structuredContent"]["parse_error"].is_string(), "{r}");
+
+    // Install into the dev slot: tests run, the MCP name comes back.
+    let r = rpc(
+        &a,
+        "tools/call",
+        json!({"name": "dogubako_extension_install", "arguments": {"manifest": manifest}}),
+    )
+    .await;
+    assert_eq!(r["isError"], false, "{r}");
+    let sc = &r["structuredContent"];
+    assert_eq!(sc["mcp_name"], "text_wip_echo");
+    assert_eq!(sc["dev"], true);
+    assert_eq!(sc["trusted"], false);
+    assert_eq!(sc["passed"], true);
+    assert_eq!(sc["tests"][0]["status"], "passed");
+    assert!(dir.join("dev/text.wip_echo.toml").exists());
+
+    // Callable in the same session; invisible to everyone else.
+    assert!(names(&rpc(&a, "tools/list", json!({})).await).contains(&"text_wip_echo".to_string()));
+    let r = rpc(
+        &a,
+        "tools/call",
+        json!({"name": "text_wip_echo", "arguments": {"word": "hello"}}),
+    )
+    .await;
+    assert_eq!(r["isError"], false, "{r}");
+    assert!(!names(&rpc(&p, "tools/list", json!({})).await).contains(&"text_wip_echo".to_string()));
+
+    let r = rpc(
+        &a,
+        "tools/call",
+        json!({"name": "dogubako_extension_status", "arguments": {"id": "text.wip_echo"}}),
+    )
+    .await;
+    let ext = &r["structuredContent"]["extensions"][0];
+    assert_eq!(ext["dev"], true);
+    assert_eq!(ext["trusted"], false);
+    assert_eq!(ext["loaded"], true);
+    assert_eq!(ext["mcp_name"], "text_wip_echo");
+    let r = rpc(
+        &a,
+        "tools/call",
+        json!({"name": "dogubako_extension_test", "arguments": {"id": "text.wip_echo"}}),
+    )
+    .await;
+    assert_eq!(r["structuredContent"]["passed"], true, "{r}");
+
+    // No promotion: not over MCP, not over HTTP with the agent's token.
+    let r = rpc(
+        &a,
+        "tools/call",
+        json!({"name": "dogubako_extension_promote", "arguments": {"id": "text.wip_echo"}}),
+    )
+    .await;
+    assert_eq!(r["isError"], true);
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/extensions/text.wip_echo/promote",
+        &[("authorization", a.0.as_str())],
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.body);
+    assert!(dir.join("dev/text.wip_echo.toml").exists());
+    assert!(!dir.join("text.wip_echo.toml").exists());
+
+    // Store installs: only index entries, only tools the caller may run.
+    let r = rpc(
+        &a,
+        "tools/call",
+        json!({"name": "dogubako_store_install", "arguments": {"id": "text.not_there"}}),
+    )
+    .await;
+    assert_eq!(r["isError"], true);
+    assert_eq!(r["structuredContent"]["error"]["code"], "not_found");
+    let n = session(narrow).await;
+    let r = rpc(
+        &n,
+        "tools/call",
+        json!({"name": "dogubako_store_install", "arguments": {"id": "text.ext_shout"}}),
+    )
+    .await;
+    assert_eq!(
+        r["structuredContent"]["error"]["code"], "permission_denied",
+        "{r}"
+    );
+    let r = rpc(
+        &a,
+        "tools/call",
+        json!({"name": "dogubako_store_install", "arguments": {"id": "text.ext_shout"}}),
+    )
+    .await;
+    assert_eq!(r["isError"], false, "{r}");
+    assert_eq!(r["structuredContent"]["mcp_name"], "text_ext_shout");
+    assert_eq!(r["structuredContent"]["trusted"], true);
+    assert!(names(&rpc(&a, "tools/list", json!({})).await).contains(&"text_ext_shout".to_string()));
+}
+
+#[tokio::test]
+async fn mcp_authoring_respects_allow_extension_install() {
+    let t = setup(AuthMode::Required);
+    let (cookie, csrf) = owner_session(&t).await;
+    let author = create_agent_token(
+        &t,
+        &cookie,
+        &csrf,
+        "author",
+        json!({"allow": ["*"], "permissions": ["extensions_author"]}),
+    )
+    .await;
+    let bearer = format!("Bearer {author}");
+    let h = [
+        ("authorization", bearer.as_str()),
+        ("accept", "application/json, text/event-stream"),
+    ];
+    let r = call(&t.app, Method::POST, "/mcp", &h, Some(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}}))).await;
+    let sid = r.headers["mcp-session-id"].to_str().unwrap().to_string();
+    let hs = [
+        ("authorization", bearer.as_str()),
+        ("mcp-session-id", sid.as_str()),
+    ];
+    let r = call(&t.app, Method::POST, "/mcp", &hs, Some(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "dogubako_extension_install", "arguments": {"manifest": "[tool]"}}}))).await;
+    let res = &r.body["result"];
+    assert_eq!(res["isError"], true);
+    assert!(
+        res["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("allow_extension_install"),
+        "{res}"
+    );
+}

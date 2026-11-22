@@ -194,7 +194,7 @@ fn cli(engine: &Engine) -> Command {
                     .arg(Arg::new("allow").long("allow").action(ArgAction::Append).help("Allowed tool patterns (default: *), e.g. 'image.*'"))
                     .arg(Arg::new("deny").long("deny").action(ArgAction::Append).help("Denied tool patterns"))
                     .arg(Arg::new("dev").long("dev").action(ArgAction::SetTrue).help("Also offer dev-slot tools (extensions/dev/) to this agent; hidden by default"))
-                    .arg(Arg::new("permissions").long("permissions").help("Comma-separated capabilities to grant (default: all): network,host_fs_read,host_fs_write,system_info,process_info"))
+                    .arg(Arg::new("permissions").long("permissions").help("Comma-separated capabilities to grant (default: all tool capabilities): network,host_fs_read,host_fs_write,system_info,process_info; add extensions_author to offer the tool-authoring meta-tools (never part of the default)"))
                     .arg(Arg::new("discovery").long("discovery").value_parser(["full", "compact"]).default_value("full"))
                     .arg(Arg::new("output-dir").long("output-dir").help("Where output files are written"))
                     .arg(Arg::new("fs-root").long("fs-root").action(ArgAction::Append).help("Restrict file inputs and path parameters to these folders")),

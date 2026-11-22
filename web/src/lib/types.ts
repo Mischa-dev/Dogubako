@@ -4,7 +4,7 @@ export type CategoryId =
   | 'image' | 'video' | 'audio' | 'speech' | 'pdf' | 'files'
   | 'text' | 'dev' | 'data' | 'network' | 'design' | 'system';
 
-export type PermissionId = 'host_fs_read' | 'host_fs_write' | 'network' | 'system_info' | 'process_info';
+export type PermissionId = 'host_fs_read' | 'host_fs_write' | 'network' | 'system_info' | 'process_info' | 'extensions_author';
 
 export interface EnumOption {
   value: string;

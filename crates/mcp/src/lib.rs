@@ -16,6 +16,7 @@ pub mod types;
 use base64::Engine as _;
 use dogubako_core::engine::ToolInfo;
 use dogubako_core::error::ToolError;
+use dogubako_core::extensions::{ExtensionReport, TestStatus};
 use dogubako_core::schema;
 use dogubako_core::spec::{Category, OutputKind, Permission};
 use dogubako_core::tool::ProgressFn;
@@ -38,6 +39,144 @@ pub async fn read_capped(path: impl AsRef<std::path::Path>, max: u64) -> std::io
     f.take(max).read_to_end(&mut buf).await?;
     Ok(buf)
 }
+
+pub fn author_denied() -> ToolError {
+    ToolError::denied("authoring tools need the extensions_author permission")
+}
+
+/// One extension as `dogubako_extension_status` reports it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ExtensionView {
+    pub id: Option<String>,
+    pub file: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp_name: Option<String>,
+    pub loaded: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// In the dev slot: untrusted, only its author sees it.
+    pub dev: bool,
+    pub trusted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub availability: Option<dogubako_core::engine::Availability>,
+}
+
+/// The engine's extensions that `visible` lets through, optionally only `id`.
+/// `visible` gets the load status and the loaded tool's spec, if any.
+pub fn extension_views(
+    engine: &dogubako_core::engine::Engine,
+    id: Option<&str>,
+    visible: impl Fn(
+        &dogubako_core::manifest::ExtensionStatus,
+        Option<&dogubako_core::spec::ToolSpec>,
+    ) -> bool,
+) -> Vec<ExtensionView> {
+    let reg = engine.registry();
+    engine
+        .extensions()
+        .iter()
+        .filter(|st| id.is_none_or(|id| st.id.as_deref() == Some(id)))
+        .filter_map(|st| {
+            let spec = st
+                .id
+                .as_deref()
+                .and_then(|i| reg.get(i))
+                .map(|t| t.spec())
+                .filter(|s| st.loaded && s.dev == st.dev);
+            visible(st, spec).then(|| ExtensionView {
+                id: st.id.clone(),
+                file: st.file.clone(),
+                mcp_name: spec.map(|s| s.mcp_name()),
+                loaded: st.loaded,
+                error: st.error.clone(),
+                dev: st.dev,
+                trusted: !st.dev && st.loaded,
+                availability: spec.map(|s| engine.availability(s)),
+            })
+        })
+        .collect()
+}
+
+fn report_text(action: &str, r: &ExtensionReport) -> String {
+    let count = |st: TestStatus| r.tests.iter().filter(|t| t.status == st).count();
+    let mut out = format!(
+        "{action} {} {} as MCP tool '{}'{}. Tests: {} passed, {} failed, {} skipped.",
+        r.id,
+        r.version,
+        r.mcp_name,
+        if r.dev {
+            " in the dev slot (untrusted, only you can see and run it)"
+        } else if r.trusted {
+            " (trusted)"
+        } else {
+            ""
+        },
+        count(TestStatus::Passed),
+        count(TestStatus::Failed),
+        count(TestStatus::Skipped),
+    );
+    for t in r.tests.iter().filter(|t| t.status != TestStatus::Passed) {
+        out.push_str(&format!(
+            "\n- {} {:?}: {}",
+            t.name,
+            t.status,
+            t.error.as_deref().unwrap_or("")
+        ));
+    }
+    if let Some(e) = &r.error {
+        out.push_str(&format!("\nError: {e}"));
+    }
+    if !r.missing.is_empty() {
+        out.push_str(&format!("\nMissing programs: {}", r.missing.join(", ")));
+    }
+    if !r.unset_settings.is_empty() {
+        out.push_str(&format!(
+            "\nUnset settings: {}",
+            r.unset_settings.join(", ")
+        ));
+    }
+    if r.passed && r.loaded {
+        out.push_str(&format!(
+            "\nCall it as '{}' (or via dogubako_run_tool).",
+            r.mcp_name
+        ));
+    }
+    out
+}
+
+fn report_result(action: &str, r: &ExtensionReport) -> Result<Value, ToolError> {
+    let mut structured = serde_json::to_value(r)?;
+    structured["installed"] = json!(r.loaded || r.file.is_some());
+    Ok(json!({
+        "content": [{"type": "text", "text": report_text(action, r)}],
+        "structuredContent": structured,
+        "isError": !r.passed,
+    }))
+}
+
+/// A failed install as a result: the error, plus `parse_error` when the
+/// manifest itself was rejected.
+fn install_error(e: &ToolError) -> Value {
+    let mut v = error_result(e);
+    v["structuredContent"]["installed"] = json!(false);
+    if let ToolError::InvalidInput {
+        param: Some(p),
+        message,
+    } = e
+    {
+        if p == "manifest" {
+            v["structuredContent"]["parse_error"] = json!(message);
+        }
+    }
+    v
+}
+
+const AUTHOR_TOOLS: &[&str] = &[
+    "dogubako_extension_install",
+    "dogubako_extension_test",
+    "dogubako_extension_status",
+    "dogubako_store_install",
+];
 
 /// How tools are exposed in `tools/list`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +235,32 @@ pub trait McpBackend: Send + Sync {
     /// Maximum accepted upload size through MCP (bytes).
     fn max_upload(&self) -> u64 {
         DEFAULT_MAX_UPLOAD
+    }
+    /// Whether this caller holds `extensions_author`: offers the authoring
+    /// tools (dev-slot install/test/status, official store install). There is
+    /// deliberately no way to promote a tool to trusted over MCP.
+    fn can_author(&self) -> bool {
+        false
+    }
+    /// Install manifest text into the caller's dev slot and run its tests.
+    async fn extension_install(
+        &self,
+        _manifest: &str,
+        _replace: bool,
+    ) -> Result<ExtensionReport, ToolError> {
+        Err(author_denied())
+    }
+    /// Run the tests of an extension the caller can see.
+    async fn extension_test(&self, _id: &str) -> Result<ExtensionReport, ToolError> {
+        Err(author_denied())
+    }
+    /// Load status of the extensions the caller can see (one, or all).
+    async fn extension_status(&self, _id: Option<&str>) -> Result<Vec<ExtensionView>, ToolError> {
+        Err(author_denied())
+    }
+    /// Install a tool from the configured tool store, SHA-256 checked.
+    async fn store_install(&self, _id: &str) -> Result<ExtensionReport, ToolError> {
+        Err(author_denied())
     }
     /// Default time a direct tool call waits before returning a job handle.
     fn default_wait(&self) -> Duration {
@@ -179,7 +344,10 @@ fn search_available(
         .map(|(_, t)| {
             let install = match &t.pack {
                 Some(pack) => format!("Turn on the '{pack}' pack to install it."),
-                None => format!("Install it from the tool store ('{}').", t.id),
+                None => format!(
+                    "Install it from the tool store ('{}'; dogubako_store_install if you have it).",
+                    t.id
+                ),
             };
             json!({
                 "id": t.id, "name": t.name, "category": t.category,
@@ -189,6 +357,43 @@ fn search_available(
             })
         })
         .collect()
+}
+
+fn author_tools() -> Vec<Value> {
+    let id = json!({"type": "string", "description": "Tool id, e.g. 'text.wip_echo'"});
+    vec![
+        json!({
+            "name": "dogubako_extension_install",
+            "title": "Install a tool manifest (dev slot)",
+            "description": "Install a Dogubako tool manifest (TOML text) into your dev slot: it is validated, loaded untrusted, visible only to you, and its [[tests]] run. Returns parse errors, test results and the new tool's MCP name; the tool is callable right away (tools/list_changed is sent). It cannot make a tool trusted: a human admin promotes it in the app.",
+            "inputSchema": {"type": "object", "properties": {
+                "manifest": {"type": "string", "description": "The manifest TOML text"},
+                "replace": {"type": "boolean", "default": false, "description": "Replace your earlier dev copy of the same id"}
+            }, "required": ["manifest"], "additionalProperties": false},
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false}
+        }),
+        json!({
+            "name": "dogubako_extension_test",
+            "title": "Test an installed tool",
+            "description": "Run an installed extension's [[tests]] again (your dev tools, or trusted extensions you can use) without reinstalling it.",
+            "inputSchema": {"type": "object", "properties": {"id": id}, "required": ["id"], "additionalProperties": false},
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false}
+        }),
+        json!({
+            "name": "dogubako_extension_status",
+            "title": "Extension status",
+            "description": "Load status of your dev-slot tools and the trusted extensions you can use: loaded or the load error, dev or trusted, MCP name, and availability (missing programs, unset settings).",
+            "inputSchema": {"type": "object", "properties": {"id": {"type": "string", "description": "Only this tool id; omit for all"}}, "additionalProperties": false},
+            "annotations": {"readOnlyHint": true, "openWorldHint": false}
+        }),
+        json!({
+            "name": "dogubako_store_install",
+            "title": "Install a tool from the store",
+            "description": "Install a tool from the Dogubako tool store by id (find ids with dogubako_search_tools include_available=true). Only entries of the store index are accepted and their manifest must match the index's SHA-256; store tools are reviewed and install as trusted.",
+            "inputSchema": {"type": "object", "properties": {"id": id}, "required": ["id"], "additionalProperties": false},
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}
+        }),
+    ]
 }
 
 impl McpServer {
@@ -407,6 +612,9 @@ impl McpServer {
             "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
             "annotations": {"readOnlyHint": true, "openWorldHint": false}
         }));
+        if self.backend.can_author() {
+            v.extend(author_tools());
+        }
         v
     }
 
@@ -461,6 +669,77 @@ impl McpServer {
         match self.call_inner(name, args, progress).await {
             Ok(v) => v,
             Err(e) => error_result(&e),
+        }
+    }
+
+    async fn author_call(&self, name: &str, args: &Map<String, Value>) -> Result<Value, ToolError> {
+        if !self.backend.can_author() {
+            return Err(author_denied());
+        }
+        let str_arg = |k: &str| {
+            args.get(k)
+                .and_then(|v| v.as_str())
+                .filter(|v| !v.trim().is_empty())
+                .ok_or_else(|| ToolError::invalid(k, format!("'{k}' is required")))
+        };
+        match name {
+            "dogubako_extension_install" => {
+                let replace = args
+                    .get("replace")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                match self
+                    .backend
+                    .extension_install(str_arg("manifest")?, replace)
+                    .await
+                {
+                    Ok(r) => report_result("Installed", &r),
+                    Err(e) => Ok(install_error(&e)),
+                }
+            }
+            "dogubako_extension_test" => {
+                let r = self.backend.extension_test(str_arg("id")?).await?;
+                report_result("Tested", &r)
+            }
+            "dogubako_extension_status" => {
+                let id = args.get("id").and_then(|v| v.as_str());
+                let exts = self.backend.extension_status(id).await?;
+                if let (Some(id), true) = (id, exts.is_empty()) {
+                    return Err(ToolError::NotFound {
+                        id: format!("{id} (no extension you can see)"),
+                    });
+                }
+                let text = if exts.is_empty() {
+                    "No extensions.".into()
+                } else {
+                    exts.iter()
+                        .map(|e| {
+                            let state = match (&e.error, e.loaded) {
+                                (Some(err), _) => format!("failed: {err}"),
+                                (None, true) => "loaded".into(),
+                                (None, false) => "not loaded".into(),
+                            };
+                            format!(
+                                "- {} [{}] {}{}",
+                                e.id.as_deref().unwrap_or(&e.file),
+                                if e.dev { "dev" } else { "trusted" },
+                                state,
+                                e.mcp_name
+                                    .as_deref()
+                                    .map(|n| format!(" (MCP '{n}')"))
+                                    .unwrap_or_default()
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+                Ok(ok_result(text, json!({"extensions": exts})))
+            }
+            "dogubako_store_install" => match self.backend.store_install(str_arg("id")?).await {
+                Ok(r) => report_result("Installed", &r),
+                Err(e) => Ok(install_error(&e)),
+            },
+            _ => Err(ToolError::NotFound { id: name.into() }),
         }
     }
 
@@ -687,6 +966,7 @@ impl McpServer {
                 };
                 Ok(ok_result(text, json!({"files": files})))
             }
+            n if AUTHOR_TOOLS.contains(&n) => self.author_call(n, &args).await,
             other => {
                 // Direct invocation by MCP name. Works in compact mode too:
                 // listing is about context size, not authorization.
