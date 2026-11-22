@@ -207,7 +207,7 @@ impl BuiltStore {
         if let Ok(rd) = std::fs::read_dir(out) {
             for e in rd.flatten() {
                 let name = e.file_name().to_string_lossy().to_string();
-                if e.path().is_dir() && !keep.contains(&name.as_str()) {
+                if e.path().join(MANIFEST_FILE).is_file() && !keep.contains(&name.as_str()) {
                     stale.push(format!("{name}/ (no longer in the store)"));
                 }
             }
@@ -640,7 +640,8 @@ pub async fn install(
 }
 
 /// Update installed store tools that have a newer version in the index:
-/// `id`, or all of them.
+/// `id`, or all of them. A tool that fails is reported with its error and
+/// the rest still update.
 pub async fn update(
     engine: &Engine,
     ext_dir: &Path,
@@ -669,7 +670,14 @@ pub async fn update(
         .collect();
     let mut out = vec![];
     for t in targets {
-        out.push(install(engine, ext_dir, index, &t, true).await?);
+        out.push(match install(engine, ext_dir, index, &t, true).await {
+            Ok(r) => r,
+            Err(e) => ExtensionReport {
+                id: t,
+                error: Some(e.to_string()),
+                ..Default::default()
+            },
+        });
     }
     Ok(out)
 }
@@ -898,6 +906,8 @@ expect = {{ text = "HI" }}
         std::fs::create_dir_all(spaced.join("public/assets")).unwrap();
         publish(&spaced, "1.0.0");
         assert!(spaced.join("public/assets").is_dir());
+        let built = build_index(&spaced.join("store")).unwrap();
+        assert!(built.stale(&spaced.join("public")).is_empty());
         let url = url::Url::from_file_path(spaced.join("public/index.json"))
             .unwrap()
             .to_string();
