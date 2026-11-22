@@ -1579,6 +1579,16 @@ http = { json = {} }
         assert!(dir.join("dev/a.toml").exists());
         std::fs::remove_file(dir.join("text.ext_echo.toml")).unwrap();
 
+        // Uninstalling an id drops its owner even when the draft is gone.
+        let mut a = DevAuthors::load(dir).unwrap();
+        a.authors.insert("text.gone".into(), "token:t9".into());
+        a.save(dir).unwrap();
+        let _ = uninstall(&e, dir, "text.gone", false);
+        assert!(!DevAuthors::load(dir)
+            .unwrap()
+            .authors
+            .contains_key("text.gone"));
+
         // A damaged ownership file hides drafts from everyone.
         std::fs::write(dir.join("dev/authors.toml"), "authors = [").unwrap();
         e.reload();
