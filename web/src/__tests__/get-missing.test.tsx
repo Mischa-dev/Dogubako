@@ -111,4 +111,11 @@ describe('one-click engine and model downloads', () => {
     expect(screen.getByRole('button', { name: 'Download Whisper base (141 MB)' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Open Models settings/ })).toBeTruthy();
   });
+
+  it('refreshes a stale tool list when a run finds the model gone', () => {
+    desktop();
+    const tool = { id: 'audio.tts', name: 'Speak', availability: { available: true, platform_supported: true } } as unknown as ToolInfo;
+    render(<ErrorView error={{ code: 'missing_model', message: 'Model not installed' }} tool={tool} />);
+    expect(app.changed).toHaveBeenCalledTimes(1);
+  });
 });
