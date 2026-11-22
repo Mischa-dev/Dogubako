@@ -136,7 +136,7 @@ async fn set_packs(app: tauri::AppHandle, state: State<'_, Desktop>, enabled: Op
 /// Delete engines and models no turned-on pack uses (all when `ids` is null).
 #[tauri::command]
 fn packs_cleanup(state: State<'_, Desktop>, ids: Option<Vec<String>>) -> Result<Value, String> {
-    if !state.runs.lock().unwrap().is_empty() {
+    if state.runs.lock().unwrap().values().any(|t| !t.is_cancelled()) {
         return Err("Tools are running; delete unused downloads once they finish".into());
     }
     let removed = state.engine.remove_unused(ids.as_deref()).map_err(|e| e.to_string())?;

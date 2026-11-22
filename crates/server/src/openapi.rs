@@ -294,18 +294,30 @@ pub fn spec(engine: &Engine) -> Value {
         "/api/v1/admin/packs/{id}",
         "put",
         op(
-            "Turn a tool pack on or off for everyone; body {enabled} (admin)",
+            "Turn a tool pack on or off for everyone (admin)",
             "admin",
-            json!({}),
+            json!({
+                "parameters": [id_param("id")],
+                "requestBody": {"required": true, "content": {"application/json": {"schema": {
+                    "type": "object",
+                    "required": ["enabled"],
+                    "properties": {"enabled": {"type": "boolean"}}
+                }}}}
+            }),
         ),
     );
     add(
         "/api/v1/admin/packs/cleanup",
         "post",
         op(
-            "Delete engines and models no turned-on pack uses; body {ids?} (admin)",
+            "Delete engines and models no turned-on pack uses; all of them when ids is omitted (admin)",
             "admin",
-            json!({}),
+            json!({
+                "requestBody": {"required": true, "content": {"application/json": {"schema": {
+                    "type": "object",
+                    "properties": {"ids": {"type": "array", "items": {"type": "string"}}}
+                }}}}
+            }),
         ),
     );
     add(
