@@ -1,4 +1,4 @@
-import type { ToolErrorView } from './types';
+import type { ExtensionReport, ToolErrorView } from './types';
 
 export interface FriendlyError {
   title: string;
@@ -85,4 +85,11 @@ export function errorText(e: unknown): string {
   if (e instanceof Error) return e.message;
   const anyE = e as ToolErrorView;
   return describeError(anyE).message;
+}
+
+/** Why an extension install failed, or `null` when it passed. */
+export function reportError(r: ExtensionReport): string | null {
+  if (r.error) return r.error;
+  const failed = r.tests?.filter((t) => t.status === 'failed') ?? [];
+  return failed.length ? `${failed.length} test${failed.length > 1 ? 's' : ''} failed: ${failed.map((t) => t.name).join(', ')}` : null;
 }

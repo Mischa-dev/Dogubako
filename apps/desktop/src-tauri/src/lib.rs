@@ -309,6 +309,30 @@ async fn store_index(state: &Desktop) -> Result<dogubako_core::store::LoadedInde
     dogubako_core::store::load_index(&url, &state.dirs.extensions, &state.engine.config.net).await.map_err(|e| e.to_string())
 }
 
+/// Tools not installed here: turned-off packs and store tools (cached index,
+/// or fetched once when not cached).
+#[tauri::command]
+async fn available_tools(state: State<'_, Desktop>) -> Result<Value, String> {
+    use dogubako_core::store;
+    let ext = &state.dirs.extensions;
+    let index = match store::local_url() {
+        Some(url) => match store::cached_index(&url, ext) {
+            Some(i) => Some(i),
+            None => store::load_index(&url, ext, &state.engine.config.net).await.ok().map(|l| l.index),
+        },
+        None => None,
+    };
+    let tools: Vec<Value> = store::available(&state.engine, index.as_ref(), |_| true)
+        .into_iter()
+        .map(|t| {
+            let mut v = serde_json::to_value(&t).unwrap_or_default();
+            v["can_install"] = json!(true);
+            v
+        })
+        .collect();
+    Ok(json!({ "tools": tools }))
+}
+
 /// Search the tool store (cached index when offline).
 #[tauri::command]
 async fn store_search(state: State<'_, Desktop>, query: Option<String>) -> Result<Value, String> {
@@ -589,6 +613,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
+            available_tools,
             store_search,
             store_installed,
             store_install,

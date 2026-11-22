@@ -1439,6 +1439,24 @@ mod tests {
     }
 
     #[test]
+    fn turned_off_pack_tools_are_available_not_installed() {
+        let e = packs_engine(PackSelection::only(["text"]));
+        let avail = crate::store::available(&e, None, |_| true);
+        assert_eq!(avail.len(), 1);
+        assert_eq!(avail[0].id, "image.blur");
+        assert_eq!(avail[0].source, "pack");
+        assert_eq!(
+            avail[0].pack.as_deref(),
+            Some(e.catalog().get("image.blur").unwrap().spec().pack.as_str())
+        );
+        assert_eq!(avail[0].requires, vec!["imagemagick".to_string()]);
+        assert!(crate::store::available(&e, None, |s| s.id != "image.blur").is_empty());
+        assert!(
+            crate::store::available(&packs_engine(PackSelection::all()), None, |_| true).is_empty()
+        );
+    }
+
+    #[test]
     fn every_pack_on_by_default() {
         let e = packs_engine(PackSelection::default());
         assert_eq!(e.list().len(), 2);

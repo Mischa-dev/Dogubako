@@ -37,6 +37,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/auth/me", get(me))
         .route("/auth/password", post(change_password))
         .route("/tools", get(list_tools))
+        .route("/tools/available", get(available_tools))
         .route("/tools/{id}", get(get_tool))
         .route("/tools/{id}/run", post(run_tool))
         .route("/tools/{id}/check", post(check_tool))
@@ -372,6 +373,42 @@ async fn list_tools(
         .map(|spec| tool_json(&s, &p, &s.engine.info(spec)))
         .collect();
     Json(json!({"tools": tools, "count": tools.len()}))
+}
+
+/// Tools the caller could add: built-ins of turned-off packs they may use,
+/// and store tools from the index (cached, or fetched once when not cached).
+/// `can_install` says whether this caller may install each one.
+async fn available_tools(State(s): State<AppState>, p: Principal) -> Json<Value> {
+    use dogubako_core::store;
+    let ext = s.cfg.extensions_dir();
+    let index = match s.cfg.store_url() {
+        Some(url) => match store::cached_index(&url, &ext) {
+            Some(i) => Some(i),
+            None => store::load_index(&url, &ext, &s.engine.config.net)
+                .await
+                .ok()
+                .map(|l| l.index),
+        },
+        None => None,
+    };
+    let perms = p.permissions(s.host_fs_enabled());
+    let store_ok = p.is_admin() && s.cfg.allow_extension_install;
+    let tools: Vec<Value> = store::available(&s.engine, index.as_ref(), |spec| {
+        p.can_use(spec) && perms.missing(&spec.permissions).is_empty()
+    })
+    .into_iter()
+    .map(|t| {
+        let can = if t.source == "store" {
+            store_ok
+        } else {
+            p.is_admin()
+        };
+        let mut v = serde_json::to_value(&t).unwrap_or_default();
+        v["can_install"] = json!(can);
+        v
+    })
+    .collect();
+    Json(json!({ "tools": tools }))
 }
 
 async fn get_tool(

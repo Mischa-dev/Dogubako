@@ -46,6 +46,16 @@ impl McpBackend for ServerBackend {
         }
         tools.not_installed(name)
     }
+    fn available_tools(&self) -> Vec<dogubako_core::store::AvailableTool> {
+        let perms = self.principal.permissions(self.state.host_fs_enabled());
+        let index =
+            self.state.cfg.store_url().and_then(|u| {
+                dogubako_core::store::cached_index(&u, &self.state.cfg.extensions_dir())
+            });
+        dogubako_core::store::available(&self.state.engine, index.as_ref(), |s| {
+            self.principal.can_use(s) && perms.missing(&s.permissions).is_empty()
+        })
+    }
     fn file_mode(&self) -> &'static str {
         "id"
     }

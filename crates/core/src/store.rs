@@ -682,6 +682,86 @@ pub async fn update(
     Ok(out)
 }
 
+// ---------------------------------------------------------------- not installed
+
+/// The cached index for `url`, without touching the network.
+pub fn cached_index(url: &str, ext_dir: &Path) -> Option<StoreIndex> {
+    read_cache(ext_dir, url).map(|c| c.index)
+}
+
+/// A tool this installation could add: a built-in of a turned-off pack
+/// (`source: "pack"`) or a store tool not installed yet (`source: "store"`).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AvailableTool {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub keywords: Vec<String>,
+    pub category: String,
+    pub source: &'static str,
+    /// The pack that turns it on (`source: "pack"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pack: Option<String>,
+    pub version: String,
+    pub permissions: Vec<String>,
+    pub requires: Vec<String>,
+    pub platforms: Vec<String>,
+}
+
+/// Tools not installed here: built-ins of turned-off packs that `keep`
+/// accepts, then entries of `index` that are not in the catalog at all.
+pub fn available(
+    engine: &Engine,
+    index: Option<&StoreIndex>,
+    keep: impl Fn(&crate::spec::ToolSpec) -> bool,
+) -> Vec<AvailableTool> {
+    let tools = engine.snapshot();
+    let mut out: Vec<AvailableTool> = tools
+        .catalog
+        .specs()
+        .filter(|s| tools.installed.get(&s.id).is_none() && keep(s))
+        .map(|s| AvailableTool {
+            id: s.id.clone(),
+            name: s.name.clone(),
+            description: s.description.clone(),
+            keywords: s.keywords.clone(),
+            category: s.category.id().to_string(),
+            source: "pack",
+            pack: Some(s.pack.clone()),
+            version: s.version.clone(),
+            permissions: s.permissions.iter().map(|p| p.id().to_string()).collect(),
+            requires: s.requires.clone(),
+            platforms: s
+                .platforms
+                .iter()
+                .filter_map(|p| serde_json::to_value(p).ok()?.as_str().map(String::from))
+                .collect(),
+        })
+        .collect();
+    if let Some(index) = index {
+        out.extend(
+            index
+                .tools
+                .iter()
+                .filter(|e| tools.catalog.get(&e.id).is_none())
+                .map(|e| AvailableTool {
+                    id: e.id.clone(),
+                    name: e.name.clone(),
+                    description: e.description.clone(),
+                    keywords: e.keywords.clone(),
+                    category: e.category.clone(),
+                    source: "store",
+                    pack: None,
+                    version: e.version.clone(),
+                    permissions: e.permissions.clone(),
+                    requires: e.requires.clone(),
+                    platforms: e.platforms.clone(),
+                }),
+        );
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -744,6 +824,27 @@ expect = {{ text = "HI" }}
         let out = root.join("public");
         build_index(&src).unwrap().write(&out).unwrap();
         format!("file://{}", out.join("index.json").display())
+    }
+
+    #[tokio::test]
+    async fn cached_store_tools_are_available_until_installed() {
+        let root = tempfile::tempdir().unwrap();
+        let url = publish(root.path(), "1.0.0");
+        let ext = root.path().join("ext");
+        std::fs::create_dir_all(&ext).unwrap();
+        let e = engine(&ext);
+        assert!(cached_index(&url, &ext).is_none());
+        let idx = load_index(&url, &ext, &NetPolicy::default()).await.unwrap();
+        let index = cached_index(&url, &ext).unwrap();
+        let avail = available(&e, Some(&index), |_| true);
+        assert_eq!(avail.len(), 1);
+        assert_eq!(
+            (avail[0].id.as_str(), avail[0].source),
+            ("text.shout", "store")
+        );
+        assert_eq!(avail[0].permissions, index.tools[0].permissions);
+        install(&e, &ext, &idx, "text.shout", false).await.unwrap();
+        assert!(available(&e, Some(&index), |_| true).is_empty());
     }
 
     #[test]

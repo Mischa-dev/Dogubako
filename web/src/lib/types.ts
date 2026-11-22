@@ -281,6 +281,17 @@ export type ExtensionSetting = ParamSpec & { secret: boolean; set: boolean; valu
 
 export interface ExtensionSettings { id: string; name: string; settings: ExtensionSetting[] }
 
+/** A tool that is not installed here: a built-in of a turned-off pack, or a store tool. */
+export interface AvailableTool {
+  id: string; name: string; description: string; keywords: string[]; category: string;
+  source: 'pack' | 'store';
+  /** The pack that turns it on (`source: 'pack'`). */
+  pack?: string;
+  version: string; permissions: string[]; requires: string[]; platforms: string[];
+  /** False when only an admin may install it. */
+  can_install: boolean;
+}
+
 /** A tool in the official store, with what is installed here. */
 export interface StoreTool {
   id: string; name: string; description: string; keywords: string[]; category: string;
