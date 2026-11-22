@@ -504,6 +504,9 @@ impl ExternalTool {
     ) -> ToolResult<Self> {
         let mut fixed = BTreeMap::new();
         for (name, v) in values {
+            if v.is_null() || v.as_str() == Some("") {
+                continue;
+            }
             let p = self
                 .spec
                 .settings

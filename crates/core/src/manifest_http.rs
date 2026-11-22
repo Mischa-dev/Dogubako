@@ -11,7 +11,7 @@ use crate::tool::{ToolContext, ToolOutput};
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::Deserialize;
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 use serde_json_path::JsonPath;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -251,7 +251,7 @@ impl HttpRequest {
                 if t.columns.is_empty() {
                     return Err("[output.table] needs at least one column".into());
                 }
-                if picks.iter().any(|p| p.name == "rows") {
+                if picks.iter().any(|p| p.name == "table") {
                     return Err("[output] json field 'rows' clashes with [output.table]".into());
                 }
                 let mut columns: Vec<Pick> = vec![];
@@ -323,9 +323,20 @@ impl HttpRequest {
         recorded: Option<&RecordedResponse>,
         lookup: &(dyn Fn(&str) -> ToolResult<String> + Sync),
     ) -> ToolResult<ToolOutput> {
-        let raw = substitute(&self.url, |ph| {
-            Ok(utf8_percent_encode(&lookup(ph)?, COMPONENT).to_string())
-        })?;
+        let split = self.url.find('?').unwrap_or(self.url.len());
+        let (path_part, query_part) = self.url.split_at(split);
+        let encode = |ph: &str, in_path: bool| -> ToolResult<String> {
+            let v = lookup(ph)?;
+            if in_path && (v == "." || v == "..") {
+                return Err(ToolError::invalid(
+                    ph,
+                    "cannot be '.' or '..' in the URL path",
+                ));
+            }
+            Ok(utf8_percent_encode(&v, COMPONENT).to_string())
+        };
+        let raw = substitute(path_part, |ph| encode(ph, true))?
+            + &substitute(query_part, |ph| encode(ph, false))?;
         let url = crate::net::check_url(ctx.net_policy(), &raw)?;
         if url.host_str() != Some(self.host.as_str()) {
             return Err(ToolError::failed(
@@ -342,7 +353,10 @@ impl HttpRequest {
             headers.insert(name.clone(), value);
         }
         let limit = ctx.limits().max_stdout_bytes;
-        let client = ctx.http_client()?;
+        let mut client = ctx.http_client()?;
+        if !self.headers.is_empty() {
+            client = crate::net::guarded_client_same_origin(ctx.net_policy().clone())?;
+        }
         let (status, content_type, body) = match recorded {
             Some(r) => {
                 if let Ok(mut reqs) = r.requests.lock() {
@@ -379,7 +393,14 @@ impl HttpRequest {
                         .filter(|c| !c.is_empty())
                 })
                 .unwrap_or_else(|| "text/plain".into());
-            return Ok(ToolOutput::new().with_text(String::from_utf8_lossy(&body), &mime));
+            let charset = content_type.as_deref().and_then(|c| {
+                c.split(';')
+                    .skip(1)
+                    .find_map(|p| p.trim().strip_prefix("charset="))
+                    .and_then(|l| encoding_rs::Encoding::for_label(l.trim_matches('"').as_bytes()))
+            });
+            let text = charset.unwrap_or(encoding_rs::UTF_8).decode(&body).0;
+            return Ok(ToolOutput::new().with_text(text, &mime));
         }
         let doc: Value = serde_json::from_slice(&body).map_err(|e| {
             ToolError::failed(format!(
@@ -402,7 +423,7 @@ impl HttpRequest {
                     let found = path.query(&doc).all();
                     match found.as_slice() {
                         [] => return Err(self.missing("[output.table] rows", src)),
-                        [Value::Array(a)] => a.iter().collect(),
+                        [Value::Array(a)] if !selects_many(src) => a.iter().collect(),
                         _ => found,
                     }
                 }
@@ -412,19 +433,17 @@ impl HttpRequest {
                 .map(|row| {
                     t.columns
                         .iter()
-                        .map(|c| {
-                            let v = match c.path.query(row).all().as_slice() {
-                                [] => Value::Null,
-                                [one] => (*one).clone(),
-                                many => Value::Array(many.iter().map(|v| (*v).clone()).collect()),
-                            };
-                            (c.name.clone(), v)
+                        .map(|c| match c.path.query(row).all().as_slice() {
+                            [] => Value::Null,
+                            [one] => (*one).clone(),
+                            many => Value::Array(many.iter().map(|v| (*v).clone()).collect()),
                         })
-                        .collect::<Map<_, _>>()
+                        .collect::<Vec<Value>>()
                         .into()
                 })
                 .collect::<Vec<Value>>();
-            data.insert("rows".into(), Value::Array(rows));
+            let columns: Vec<&str> = t.columns.iter().map(|c| c.name.as_str()).collect();
+            data.insert("table".into(), json!({ "columns": columns, "rows": rows }));
         }
         Ok(ToolOutput::new().with_data(Value::Object(data)))
     }
@@ -457,7 +476,7 @@ impl HttpRequest {
             .timeout(self.timeout)
             .send()
             .await
-            .map_err(|e| self.transport_error(&e))?;
+            .map_err(|e| self.transport_error(e))?;
         let status = resp.status().as_u16();
         let content_type = resp
             .headers()
@@ -470,7 +489,7 @@ impl HttpRequest {
             }
         }
         let mut body = Vec::new();
-        while let Some(chunk) = resp.chunk().await.map_err(|e| self.transport_error(&e))? {
+        while let Some(chunk) = resp.chunk().await.map_err(|e| self.transport_error(e))? {
             if body.len() + chunk.len() > limit {
                 return Err(too_large((body.len() + chunk.len()) as u64, limit));
             }
@@ -479,7 +498,9 @@ impl HttpRequest {
         Ok((status, content_type, body))
     }
 
-    fn transport_error(&self, e: &reqwest::Error) -> ToolError {
+    fn transport_error(&self, e: reqwest::Error) -> ToolError {
+        // Expanded URLs can carry secret settings.
+        let e = e.without_url();
         if e.is_timeout() {
             return ToolError::External {
                 program: self.program(),
@@ -488,18 +509,24 @@ impl HttpRequest {
             };
         }
         let mut chain = e.to_string();
-        let mut src = std::error::Error::source(e);
+        let mut src = std::error::Error::source(&e);
         while let Some(s) = src {
             chain.push_str(": ");
             chain.push_str(&s.to_string());
             src = s.source();
         }
-        if chain.contains("network policy") {
+        if chain.contains("network policy") || chain.contains("redirect refused") {
             ToolError::denied(format!("{}: {chain}", self.program()))
         } else {
             ToolError::failed(format!("{} failed: {chain}", self.program()))
         }
     }
+}
+
+/// Whether a JSON path can select several nodes (each a row) rather than
+/// one array of rows.
+fn selects_many(src: &str) -> bool {
+    src.contains(['*', '?', ':', ',']) || src.contains("..")
 }
 
 fn too_large(len: u64, limit: usize) -> ToolError {
@@ -756,8 +783,28 @@ json = { temp = "$.current.temperature_2m", unit = "$.current_units.temperature_
         let out = harness(t).run("ext.t", json!({})).await.unwrap();
         assert_eq!(
             out.data,
-            json!({ "total": 2, "rows": [{ "title": "a", "n": 1 }, { "title": "b", "n": null }] })
+            json!({ "total": 2, "table": { "columns": ["title", "n"], "rows": [["a", 1], ["b", null]] } })
         );
+
+        // A wildcard selects rows itself, even when it matches one array row.
+        let arrays = manifest(
+            "url = \"https://example.com/\"",
+            "\n[output.table]\nrows = \"$.items[*]\"\ncolumns = [{ name = \"a\", path = \"$[0]\" }]\n",
+        );
+        let rec = RecordedResponse::json(&json!({ "items": [["x", 1]] }));
+        let t = parse_manifest(&arrays, "x")
+            .unwrap()
+            .with_recorded_response(rec);
+        let out = harness(t).run("ext.t", json!({})).await.unwrap();
+        assert_eq!(out.data["table"]["rows"], json!([["x"]]));
+
+        let latin1 = RecordedResponse::new(200, b"caf\xe9".to_vec())
+            .content_type("text/plain; charset=ISO-8859-1");
+        let t = parse_manifest(&plain, "x")
+            .unwrap()
+            .with_recorded_response(latin1);
+        let out = harness(t).run("ext.t", json!({})).await.unwrap();
+        assert_eq!(out.text.as_deref(), Some("café"));
     }
 
     #[tokio::test]
@@ -805,6 +852,36 @@ json = { temp = "$.current.temperature_2m", unit = "$.current_units.temperature_
     }
 
     /// Serve `reply` (raw HTTP) once on 127.0.0.1; `None` never replies.
+    #[tokio::test]
+    async fn dot_segments_and_secret_urls_stay_out() {
+        let text = manifest("url = \"https://example.com/items/{q}?also={q}\"", "");
+        let rec = RecordedResponse::new(200, "{}");
+        let t = parse_manifest(&text, "x")
+            .unwrap()
+            .with_recorded_response(rec.clone());
+        let h = harness(t);
+        for v in [".", ".."] {
+            let err = h.run("ext.t", json!({ "q": v })).await.unwrap_err();
+            assert_eq!(err.code(), "invalid_input", "{err}");
+        }
+        h.run("ext.t", json!({ "q": "a.b" })).await.unwrap();
+        assert_eq!(
+            rec.requests(),
+            vec!["https://example.com/items/a.b?also=a.b"]
+        );
+
+        let leak = manifest(
+            "url = \"http://127.0.0.1:1/x?key={settings.key}\"",
+            "\n[[settings]]\nname = \"key\"\ntype = \"text\"\nsecret = true\n",
+        );
+        let t = parse_manifest(&leak, "x")
+            .unwrap()
+            .with_setting_values(json!({ "key": "s3cret" }).as_object().unwrap())
+            .unwrap();
+        let err = harness(t).run("ext.t", json!({})).await.unwrap_err();
+        assert!(!format!("{err} {err:?}").contains("s3cret"), "{err:?}");
+    }
+
     async fn serve_once(reply: Option<String>) -> (String, tokio::task::JoinHandle<String>) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -878,5 +955,23 @@ json = { temp = "$.current.temperature_2m", unit = "$.current_units.temperature_
         h.engine.config.net.deny_hosts = vec!["blocked.example".into()];
         let err = h.run("ext.t", json!({})).await.unwrap_err();
         assert_eq!(err.code(), "permission_denied", "{err}");
+
+        // Manifest headers never follow a redirect to another origin.
+        let (other, other_task) = serve_once(Some(
+            "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{}".into(),
+        ))
+        .await;
+        let other = other.replace("127.0.0.1", "localhost");
+        let (base, _task) = serve_once(Some(format!(
+            "HTTP/1.1 302 Found\r\nlocation: {other}/\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+        )))
+        .await;
+        let err = harness(live(&base, "", ""))
+            .run("ext.t", json!({}))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "permission_denied", "{err}");
+        assert!(err.to_string().contains("cross-origin"), "{err}");
+        other_task.abort();
     }
 }

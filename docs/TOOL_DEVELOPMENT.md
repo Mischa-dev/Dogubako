@@ -179,6 +179,21 @@ timeout_secs = 30                                          # optional
 
 [output]
 json = { temp = "$.current.temperature_2m", unit = "$.current_units.temperature_2m" }
+
+[[settings]]
+name = "lat"
+type = "text"
+required = true
+
+[[settings]]
+name = "lon"
+type = "text"
+required = true
+
+[[settings]]
+name = "api_key"
+type = "text"
+secret = true
 ```
 
 * Only GET; there is no scripting. The scheme and host must be written out —
@@ -186,13 +201,15 @@ json = { temp = "$.current.temperature_2m", unit = "$.current_units.temperature_
   and header values, and are percent-encoded in the URL. File and path
   parameters cannot be sent.
 * Requests use the instance's network policy: private addresses, denied hosts
-  and redirects to them are refused, and responses larger than
-  `max_stdout_bytes` are refused.
+  and redirects to them are refused; with `headers`, redirects must stay on
+  the same origin. Responses larger than `max_stdout_bytes` are refused.
 * Output: `json = { field = "<JSON path>" }` picks values into `data` (a path
   that matches nothing is an error); `[output.table]` with `rows = "$.items"`
   and `columns = [{ name = "title", path = "$.title" }]` returns
-  `data.rows`; otherwise the body is returned as text (`body = "<mime>"`
-  overrides the response's content type).
+  a sortable `data.table` (a `rows` path naming one array uses its items; a
+  path with `*`, `..` or a filter makes each match a row); otherwise the body
+  is returned as text in the response's charset (`body = "<mime>"` overrides
+  its content type).
 * A non-2xx status or a timeout fails with an `external_failure` error naming
   the status and a short excerpt of the body.
 * Tests run offline with a recorded response:
