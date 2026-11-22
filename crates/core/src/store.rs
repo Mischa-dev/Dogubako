@@ -528,9 +528,11 @@ pub async fn fetch_entry(
         return Err(ToolError::invalid(
             "sha256",
             format!(
-                "the manifest for '{}' at {url} has SHA-256 {sha}, but the store index lists {}; \
+                "the store's manifest for '{}' does not match its index entry (SHA-256 {}… vs {}…); \
                  refusing to install it",
-                e.id, e.sha256
+                e.id,
+                &sha[..12],
+                e.sha256.get(..12).unwrap_or(&e.sha256)
             ),
         ));
     }
