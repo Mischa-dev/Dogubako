@@ -185,9 +185,14 @@ fn parse_settings(decls: Vec<SettingDecl>) -> Result<Vec<ParamSpec>, String> {
             return Err(format!("setting '{name}' is declared twice"));
         }
         match &p.kind {
-            ParamKind::File { .. } | ParamKind::Json { .. } => {
+            ParamKind::File { .. } | ParamKind::Json { .. } | ParamKind::Path { .. } => {
                 return Err(format!(
-                    "setting '{name}': file and json types cannot be settings"
+                    "setting '{name}': file, path and json types cannot be settings"
+                ))
+            }
+            ParamKind::Enum { multi: true, .. } => {
+                return Err(format!(
+                    "setting '{name}': multi-choice enums cannot be settings"
                 ))
             }
             ParamKind::Text { .. } | ParamKind::Secret if d.secret => p.kind = ParamKind::Secret,
@@ -274,7 +279,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     let check = |s: &str| -> Result<(), String> {
         for ph in placeholders(s) {
             let base = ph.split('.').next().unwrap_or("");
-            if base == "settings" {
+            if base == "settings" && ph.contains('.') {
                 if !is_setting(&ph) {
                     return Err(format!("placeholder '{{{ph}}}' does not match any setting"));
                 }
@@ -391,8 +396,7 @@ impl ExternalTool {
                     })?
             } else if base == "workdir" {
                 ctx.work_dir().to_string_lossy().to_string()
-            } else if base == "settings" {
-                let name = attr.unwrap_or("");
+            } else if let (true, Some(name)) = (base == "settings", attr) {
                 settings
                     .get(name)
                     .map(value_str)
@@ -528,7 +532,7 @@ impl TrustStore {
 
 /// Setting values for one installation, kept beside (never inside) the
 /// manifests: `<extensions>/settings/<id>.toml`, and secrets in
-/// `<id>.secrets.toml` (owner-only permissions on Unix). Values are keyed by
+/// `secrets/<id>.toml` (owner-only permissions on Unix). Values are keyed by
 /// installation directory and tool id, so two installations of the same
 /// manifest keep separate settings and the manifest's trust pin never changes.
 #[derive(Debug, Clone)]
@@ -567,8 +571,12 @@ impl SettingsStore {
         {
             return Err(ToolError::invalid("id", format!("'{id}' is not a tool id")));
         }
-        let suffix = if secret { ".secrets" } else { "" };
-        Ok(self.dir.join(format!("{id}{suffix}.toml")))
+        let dir = if secret {
+            self.dir.join("secrets")
+        } else {
+            self.dir.clone()
+        };
+        Ok(dir.join(format!("{id}.toml")))
     }
 
     fn read(&self, id: &str, secret: bool) -> BTreeMap<String, Value> {
@@ -585,8 +593,10 @@ impl SettingsStore {
             let _ = std::fs::remove_file(&path);
             return Ok(());
         }
-        std::fs::create_dir_all(&self.dir)
-            .map_err(|e| ToolError::failed(format!("cannot create settings folder: {e}")))?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| ToolError::failed(format!("cannot create settings folder: {e}")))?;
+        }
         let text = toml::to_string_pretty(values)
             .map_err(|e| ToolError::failed(format!("cannot save settings: {e}")))?;
         let mut opts = std::fs::OpenOptions::new();
@@ -597,8 +607,16 @@ impl SettingsStore {
             opts.mode(0o600);
         }
         use std::io::Write;
-        opts.open(&path)
-            .and_then(|mut f| f.write_all(text.as_bytes()))
+        let mut f = opts
+            .open(&path)
+            .map_err(|e| ToolError::failed(format!("cannot save settings: {e}")))?;
+        #[cfg(unix)]
+        if secret {
+            use std::os::unix::fs::PermissionsExt;
+            f.set_permissions(std::fs::Permissions::from_mode(0o600))
+                .map_err(|e| ToolError::failed(format!("cannot save settings: {e}")))?;
+        }
+        f.write_all(text.as_bytes())
             .map_err(|e| ToolError::failed(format!("cannot save settings: {e}")))
     }
 
@@ -648,12 +666,18 @@ impl SettingsStore {
 
     /// Settings for display, without secret values.
     pub fn view(&self, id: &str, decls: &[ParamSpec]) -> Vec<SettingView> {
-        let stored = self.values(id);
+        let plain = self.read(id, false);
+        let secrets = self.read(id, true);
         decls
             .iter()
             .map(|d| {
-                let secret = d.is_secret();
-                let value = stored.get(&d.name).or(d.default.as_ref()).cloned();
+                // Anything in the secrets file stays hidden, whatever the declaration says.
+                let secret = d.is_secret() || secrets.contains_key(&d.name);
+                let value = if secret {
+                    secrets.get(&d.name).or(d.default.as_ref()).cloned()
+                } else {
+                    plain.get(&d.name).or(d.default.as_ref()).cloned()
+                };
                 SettingView {
                     spec: d.clone(),
                     secret,
@@ -937,8 +961,15 @@ secret = true
         assert!(
             err(S.replace("secret = true", "secret = true\ndefault = \"k\"")).contains("default")
         );
+        let extra = |t: &str| format!("{S}[[settings]]\nname = \"x\"\n{t}\n");
+        assert!(err(extra("type = \"path\"\nkind = \"dir\"")).contains("path"));
+        assert!(err(extra(
+            "type = \"enum\"\nmulti = true\noptions = [{ value = \"a\", label = \"A\" }]"
+        ))
+        .contains("multi"));
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn required_setting_gates_and_values_expand_to_one_arg() {
         let dir = tempfile::tempdir().unwrap();
@@ -1011,10 +1042,13 @@ secret = true
             .find(|v| v.spec.name == "token")
             .unwrap();
         assert!(token.set && token.secret && token.value.is_none());
+        // A different manifest reusing the id cannot unmask a stored secret.
+        let other = store.view("text.ext_say", &[ParamSpec::text("token")]);
+        assert!(other[0].secret && other[0].value.is_none());
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(dir.path().join("settings/text.ext_say.secrets.toml"))
+            let mode = std::fs::metadata(dir.path().join("settings/secrets/text.ext_say.toml"))
                 .unwrap()
                 .permissions()
                 .mode();

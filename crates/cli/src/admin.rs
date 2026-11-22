@@ -147,11 +147,9 @@ pub fn extensions_cmd() -> Command {
             Command::new("config")
                 .about("Show or change an extension's settings (stored outside its manifest)")
                 .arg(Arg::new("id").required(true))
-                .arg(
-                    Arg::new("values")
-                        .num_args(0..)
-                        .help("key=value pairs; key= clears a setting"),
-                ),
+                .arg(Arg::new("values").num_args(0..).help(
+                    "key=value pairs; key= clears a setting, key=- reads the value from stdin",
+                )),
         )
 }
 
@@ -481,6 +479,15 @@ pub fn extensions(m: &ArgMatches, out: &Out) -> i32 {
             for kv in s.get_many::<String>("values").into_iter().flatten() {
                 let Some((k, v)) = kv.split_once('=') else {
                     return out.error(&format!("expected key=value, got '{kv}'"), 2);
+                };
+                let v = if v == "-" {
+                    // Read the value from stdin so secrets stay out of shell history.
+                    match read_password(true) {
+                        Ok(v) => v,
+                        Err(e) => return out.error(&e, 1),
+                    }
+                } else {
+                    v.to_string()
                 };
                 changes.insert(k.trim().to_string(), json!(v));
             }

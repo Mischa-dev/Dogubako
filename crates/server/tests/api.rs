@@ -1118,6 +1118,7 @@ async fn job_zip_keeps_folders() {
     );
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn extension_settings_are_set_over_http_and_secrets_never_echo() {
     let dir = tempfile::tempdir().unwrap();

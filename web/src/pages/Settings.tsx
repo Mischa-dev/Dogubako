@@ -377,7 +377,7 @@ export function Extensions() {
 
 function initialValue(s: ExtensionSetting): unknown {
   if (s.secret) return '';
-  return s.value ?? (s.type === 'boolean' ? false : '');
+  return s.value ?? (s.type === 'boolean' ? undefined : '');
 }
 
 function ExtensionForm({ ext, onSaved }: { ext: ExtensionSettings; onSaved: (e: ExtensionSettings) => void }) {
@@ -386,7 +386,7 @@ function ExtensionForm({ ext, onSaved }: { ext: ExtensionSettings; onSaved: (e: 
   const [values, setValues] = useState<Record<string, unknown>>(init);
   const [saving, setSaving] = useState(false);
   useEffect(() => setValues(init), [init]);
-  // Only changed values are sent; an empty secret field keeps the stored secret.
+  // Only changed values are sent; an empty secret field keeps the stored secret, null clears it.
   const changes = Object.fromEntries(ext.settings.filter((s) => (s.secret ? values[s.name] !== '' : values[s.name] !== init[s.name])).map((s) => [s.name, values[s.name]]));
   const dirty = Object.keys(changes).length > 0;
   const save = async (body: Record<string, unknown>) => {
@@ -421,11 +421,13 @@ function ExtensionForm({ ext, onSaved }: { ext: ExtensionSettings; onSaved: (e: 
               </select>
             ) : s.secret ? (
               <span className="row-gap">
-                <input id={id} className="input" type="password" autoComplete="off" value={String(v ?? '')} placeholder={s.set ? 'Saved (type to replace)' : 'Not set'} onChange={(e) => set(s.name, e.target.value)} />
-                {s.set && <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => void save({ [s.name]: null })}>Clear</Button>}
+                <input id={id} className="input" type="password" autoComplete="off" value={String(v ?? '')} placeholder={v === null ? 'Cleared on save' : s.set ? 'Saved (type to replace)' : 'Not set'} onChange={(e) => set(s.name, e.target.value)} />
+                {s.set && v !== null && <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => set(s.name, null)}>Clear</Button>}
               </span>
+            ) : s.type === 'text' && s.multiline ? (
+              <textarea id={id} className="input" rows={3} value={String(v ?? '')} placeholder={s.default != null ? String(s.default) : ''} onChange={(e) => set(s.name, e.target.value)} />
             ) : (
-              <input id={id} className="input" type={s.type === 'integer' || s.type === 'number' ? 'number' : 'text'} value={String(v ?? '')} placeholder={s.default != null ? String(s.default) : ''} onChange={(e) => set(s.name, e.target.value)} />
+              <input id={id} className="input" type={s.type === 'integer' || s.type === 'number' ? 'number' : 'text'} step={s.type === 'number' ? 'any' : undefined} value={String(v ?? '')} placeholder={s.default != null ? String(s.default) : ''} onChange={(e) => set(s.name, e.target.value)} />
             )}
           </Row>
         );

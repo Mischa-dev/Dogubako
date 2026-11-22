@@ -171,12 +171,13 @@ secret = true
 ```
 
 Values are stored **outside the manifest**, in `<extensions>/settings/<id>.toml`
-(secrets in `<id>.secrets.toml`, owner-only on Unix), so editing them keeps the
+(secrets in `secrets/<id>.toml`, owner-only on Unix), so editing them keeps the
 trust pin and sharing a manifest never shares its settings. Each installation
 has its own values. A tool with a required setting unset is shown unavailable
 ("Set up <tool> in Settings") and is rejected before it runs. Edit them in
 Settings → Extensions (desktop, or admins on a server), with
-`dogubako extensions config <id> key=value` (`key=` clears), or
+`dogubako extensions config <id> key=value` (`key=` clears, `key=-` reads the
+value from stdin), or
 `PUT /api/v1/extensions/<id>/settings`. Secret values are never echoed back.
 Unknown `{settings.x}` names are rejected when the manifest is parsed.
 
