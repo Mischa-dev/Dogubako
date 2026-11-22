@@ -37,7 +37,7 @@ services:
       DOGUBAKO_MAX_JOB_SECONDS: "3600"
       DOGUBAKO_MCP_ENABLED: "true"
       # Built-in tool packs to turn on, e.g. "image,video,pdf" or "all,-speech".
-      # Empty = every pack.
+      # Empty = the config file's setting (every pack by default).
       DOGUBAKO_PACKS: ${DOGUBAKO_PACKS:-}
       # Plain-words mode. Users can bring their own model; these optionally
       # offer one shared model to everyone ("This server"). Empty = unset.

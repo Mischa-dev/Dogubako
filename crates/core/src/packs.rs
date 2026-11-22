@@ -106,7 +106,10 @@ impl PackSelection {
     pub fn parse_checked(list: &str) -> Result<Self, Vec<String>> {
         let bad: Vec<String> = list
             .split([',', ';', ' '])
-            .map(|s| s.trim().trim_start_matches('-').to_ascii_lowercase())
+            .map(|s| {
+                let s = s.trim();
+                s.strip_prefix('-').unwrap_or(s).to_ascii_lowercase()
+            })
             .filter(|s| !s.is_empty() && s != "all" && s != "*" && builtin_pack(s).is_none())
             .collect();
         if bad.is_empty() {
@@ -192,6 +195,10 @@ mod tests {
         assert_eq!(
             PackSelection::parse_checked("all,-spech,pfd"),
             Err(vec!["spech".to_string(), "pfd".to_string()])
+        );
+        assert_eq!(
+            PackSelection::parse_checked("all,--speech"),
+            Err(vec!["-speech".to_string()])
         );
         assert_eq!(
             PackSelection::parse_checked("all,-speech"),
