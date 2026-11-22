@@ -196,6 +196,7 @@ pub async fn install(
     let guard = lifecycle_lock();
     let (tool, existing) = validate(engine, dir, text, opts)?;
     let id = tool.spec().id.clone();
+    check_id(&id)?;
     let sha = tool.sha256().to_string();
     std::fs::create_dir_all(dir)
         .map_err(|e| ToolError::failed(format!("creating {}: {e}", dir.display())))?;
@@ -276,6 +277,7 @@ pub async fn install(
 
 /// Run an installed extension's tests without reinstalling it.
 pub async fn test(engine: &Engine, dir: &Path, id: &str) -> ToolResult<ExtensionReport> {
+    check_id(id)?;
     let statuses = engine.extensions();
     let status = statuses
         .iter()
@@ -331,6 +333,7 @@ pub fn uninstall(
     id: &str,
     purge: bool,
 ) -> ToolResult<UninstallReport> {
+    check_id(id)?;
     let _guard = lifecycle_lock();
     if let Some(t) = engine.catalog().get(id) {
         if !is_extension(t.spec()) {
@@ -436,6 +439,25 @@ fn validate(
         ));
     }
     Ok((tool, existing))
+}
+
+/// An id that names a file inside the extension folder: no separators,
+/// no `..`, nothing that could step outside it.
+fn check_id(id: &str) -> ToolResult<()> {
+    let ok = !id.is_empty()
+        && !id.starts_with('.')
+        && !id.contains("..")
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
+    if ok {
+        Ok(())
+    } else {
+        Err(ToolError::invalid(
+            "id",
+            format!("'{id}' is not a valid extension id"),
+        ))
+    }
 }
 
 /// Manifest files in `dir` whose id is `id`, plus an unparsable `<id>.toml`.
@@ -873,6 +895,21 @@ http = { json = {} }
             &json!(9007199254740992_u64)
         ));
         assert!(!json_eq(&json!([1]), &json!([1, 2])));
+    }
+
+    #[tokio::test]
+    async fn ids_cannot_reach_outside_the_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("ext");
+        std::fs::create_dir(&dir).unwrap();
+        let outside = root.path().join("victim.toml");
+        std::fs::write(&outside, "not a manifest").unwrap();
+        let e = engine(&dir);
+        for id in ["../victim", "..", "a/b", "a\\b", ".hidden", ""] {
+            assert!(uninstall(&e, &dir, id, true).is_err(), "{id}");
+            assert!(test(&e, &dir, id).await.is_err(), "{id}");
+        }
+        assert!(outside.exists());
     }
 
     #[tokio::test]

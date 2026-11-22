@@ -1351,7 +1351,8 @@ async fn extension_install(
     if !s.cfg.allow_extension_install {
         return Err(ApiError::forbidden(
             "installing extensions over HTTP is off; set allow_extension_install \
-             (DOGUBAKO_ALLOW_EXTENSION_INSTALL=true) or run `dogubako extensions install` on the host",
+             (DOGUBAKO_ALLOW_EXTENSION_INSTALL=true), or on the host run \
+             `dogubako extensions --dir <server extensions folder> install` and restart the server",
         ));
     }
     let text = match (body.manifest, body.url) {
