@@ -16,6 +16,11 @@ Search before writing anything:
 - MCP: `dogubako_search_tools` with `{"query": "<what X is>", "include_available": true}`.
 - CLI: `dogubako tools search <words>`, then `dogubako store search <words>`.
 
+Read the `tools` array, not `total` (which counts installed matches only).
+MCP sees store tools only once the store index is cached, so on a fresh
+install an empty MCP result proves nothing: run `dogubako store search <words>`
+(it fetches the index) or ask the owner to, before writing a new tool.
+
 What you find decides the next step:
 
 | Found | Do |
@@ -37,6 +42,12 @@ visible to whoever installed it:
   Capabilities, "Author tools (MCP)").
 - **This machine** (stdio): `dogubako mcp serve --permissions network,extensions_author`,
   or the CLI commands below, which write to the local extensions folder.
+
+Over stdio, send `initialize`, then one JSON-RPC line per call:
+
+```json
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"dogubako_extension_status","arguments":{"id":"data.weather"}}}
+```
 
 ## 3. Write the manifest
 
@@ -89,7 +100,8 @@ expect = { text = "Now 21.5°C", json = { "$.temperature" = 21.5 } }
 Only GET; scheme and host are written out, placeholders fill the path, query
 and headers. An API key is a `[[settings]]` text with `secret = true`, used as
 `headers = { Authorization = "Bearer {settings.api_key}" }`. Lists of results:
-`[output.table]` with `rows = "$.items"` and `columns = [{ name = "title", path = "$.title" }]`.
+`[output.table]` with `rows = "$.items"` (`rows = "$"` when the body is the
+array) and `columns = [{ name = "title", path = "$.title" }]`.
 
 ### Worked example: command with settings (print)
 
@@ -137,6 +149,11 @@ files = { file = "%PDF-1.4\n%%EOF\n" }
 settings = { queue = "Office" }
 command = { stdout = "request id is Office-12 (1 file(s))\n" }
 expect = { text = "Queued, job Office-12" }
+
+[[tests]]                        # the failure case: a required input is missing
+settings = { queue = "Office" }
+command = { stdout = "" }
+expect = { error = "invalid_input" }
 ```
 
 Each placeholder is exactly one argument. Use `{output}` with
@@ -153,7 +170,8 @@ something outside Dogubako.
   `"replace": true` for each later version.
 - CLI: `dogubako extensions install --dev <file>.toml` (add `--replace`).
 
-Read the report and fix until `passed` is true:
+Read the report and fix until `passed` is true (`loaded` alone is not
+enough: a tool with failing tests still loads):
 
 | Report | Fix |
 |---|---|
@@ -173,7 +191,8 @@ message:
 1. The tool id, what it does, its permissions and `requires`.
 2. Settings to fill in: Settings → Extensions, or `dogubako extensions config <id> key=value`.
 3. To promote it (review the manifest first): the Promote button on the tool in
-   the app, or `dogubako extensions promote <id>`.
+   the app, or `dogubako extensions promote <id>` (it asks to confirm; `--yes`
+   skips).
 
 Until then the tool works only for you and is marked Dev. A tool others would
 want can go in the official store by pull request (`store/<id>/manifest.toml`).

@@ -502,9 +502,12 @@ fn agent_skill_matches_this_build() {
         let report: Value = serde_json::from_slice(&out.stdout)
             .unwrap_or_else(|_| panic!("{}", String::from_utf8_lossy(&out.stderr)));
         assert_eq!(report["passed"], true, "example {i}: {report}");
+        // Recorded output stands in for a missing program, not an unsupported platform.
+        let runs_here = !cfg!(windows) || !manifest.contains(r#"platforms = ["linux", "macos"]"#);
+        let want = if runs_here { "passed" } else { "skipped" };
         let tests = report["tests"].as_array().unwrap();
         assert!(
-            !tests.is_empty() && tests.iter().all(|t| t["status"] == "passed"),
+            !tests.is_empty() && tests.iter().all(|t| t["status"] == want),
             "{report}"
         );
     }
