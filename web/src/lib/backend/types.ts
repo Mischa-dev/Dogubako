@@ -1,4 +1,4 @@
-import type { ExtensionReport, ExtensionSettings, StoreResult } from '../types';
+import type { AvailableTool, ExtensionReport, ExtensionSettings, StoreResult } from '../types';
 import type {
   Artifact, Category, DepInfo, JobView, Me, ModelDownload, ModelInfo, Status, ToolErrorView, ToolInfo,
 } from '../types';
@@ -87,6 +87,8 @@ export interface Backend {
   /** Promote a dev tool to trusted (desktop; an owner or admin signed in on a server, never a token). */
   promoteExtension?(id: string): Promise<ExtensionReport>;
   /** Official tool store (desktop; admins on a server). Search uses the cached index when offline. */
+  /** Tools not installed here (turned-off packs, store tools), for search. */
+  availableTools?(): Promise<{ tools: AvailableTool[] }>;
   storeSearch?(query?: string): Promise<StoreResult>;
   /** Tools installed from the store, with their version and available updates. */
   storeInstalled?(): Promise<StoreResult>;

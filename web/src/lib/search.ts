@@ -20,7 +20,7 @@ export interface SearchHit<T = ToolInfo> {
 
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 
-export function makeDoc(t: ToolInfo, categoryLabel = ''): SearchDoc {
+export function makeDoc(t: Pick<ToolInfo, 'id' | 'name' | 'description'> & { keywords?: string[]; category: string }, categoryLabel = ''): SearchDoc {
   return {
     id: t.id,
     name: t.name,

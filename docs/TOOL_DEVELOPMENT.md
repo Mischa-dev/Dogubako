@@ -198,6 +198,9 @@ header values may use parameters and settings.
   placeholders (`{param}`, `{settings.<name>}`) may only fill the path, query
   and header values, and are percent-encoded in the URL. File and path
   parameters cannot be sent.
+  `{param|settings.<name>}` uses the parameter when the run gives it and the
+  setting otherwise (a per-run override of a saved value); with neither, the
+  tool asks to be set up.
 * Requests use the instance's network policy: private addresses, denied hosts
   and redirects to them are refused; with `headers`, redirects must stay on
   the same origin. Responses larger than `max_stdout_bytes` are refused.
@@ -208,6 +211,15 @@ header values may use parameters and settings.
   path with `*`, `..` or a filter makes each match a row); otherwise the body
   is returned as text in the response's charset (`body = "<mime>"` overrides
   its content type).
+* `text = "Now {temp}{unit}"` under `[output]` also returns plain text filled
+  from the `json` fields (arrays comma-separated, null empty); `[output.table]`
+  takes its own `text`, repeated per row with its columns and the `json`
+  fields. `columnar = true` (instead of `rows`) builds rows from parallel
+  arrays: row `i` takes item `i` of each column path.
+* `[output.labels.<set>]` maps values to labels (`"0" = "Clear sky"`); a json
+  field `{ path = "$.code", labels = "<set>" }` or a column with
+  `labels = "<set>"` returns the label for values in the set and the value
+  otherwise. See `store/data.weather/manifest.toml`.
 * A non-2xx status or a timeout fails with an `external_failure` error naming
   the status and a short excerpt of the body.
 * Manifest `[[tests]]` run offline with a recorded response (`http = {...}`,

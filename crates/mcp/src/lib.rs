@@ -88,6 +88,11 @@ pub trait McpBackend: Send + Sync {
     fn not_installed(&self, _name: &str) -> Option<ToolError> {
         None
     }
+    /// Tools this caller could install but has not: turned-off packs and
+    /// store tools from the cached index.
+    fn available_tools(&self) -> Vec<dogubako_core::store::AvailableTool> {
+        vec![]
+    }
     /// Maximum accepted upload size through MCP (bytes).
     fn max_upload(&self) -> u64 {
         DEFAULT_MAX_UPLOAD
@@ -126,6 +131,65 @@ const META_TOOLS: &[&str] = &[
     "dogubako_upload_file",
     "dogubako_list_files",
 ];
+
+/// Not-installed tools matching every term, best first, as search results.
+fn search_available(
+    tools: Vec<dogubako_core::store::AvailableTool>,
+    terms: &[&str],
+    cat: Option<&str>,
+    limit: usize,
+) -> Vec<Value> {
+    let mut scored: Vec<(usize, dogubako_core::store::AvailableTool)> = tools
+        .into_iter()
+        .filter(|t| cat.is_none_or(|c| t.category == c))
+        .filter_map(|t| {
+            let hay = format!(
+                "{} {} {} {} {}",
+                t.id,
+                t.name,
+                t.description,
+                t.keywords.join(" "),
+                Category::ALL
+                    .iter()
+                    .find(|c| c.id() == t.category)
+                    .map_or(t.category.as_str(), |c| c.label())
+            )
+            .to_lowercase();
+            if !terms.iter().all(|term| hay.contains(term)) {
+                return None;
+            }
+            let name_l = t.name.to_lowercase();
+            let score = terms
+                .iter()
+                .map(|term| {
+                    if name_l.contains(term) || t.id.contains(term) {
+                        3
+                    } else {
+                        1
+                    }
+                })
+                .sum();
+            Some((score, t))
+        })
+        .collect();
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.id.cmp(&b.1.id)));
+    scored
+        .into_iter()
+        .take(limit)
+        .map(|(_, t)| {
+            let install = match &t.pack {
+                Some(pack) => format!("Turn on the '{pack}' pack to install it."),
+                None => format!("Install it from the tool store ('{}').", t.id),
+            };
+            json!({
+                "id": t.id, "name": t.name, "category": t.category,
+                "description": t.description, "installed": false, "source": t.source,
+                "pack": t.pack, "version": t.version, "permissions": t.permissions,
+                "requires": t.requires, "install": install,
+            })
+        })
+        .collect()
+}
 
 impl McpServer {
     pub fn new(
@@ -274,7 +338,8 @@ impl McpServer {
                 "inputSchema": {"type": "object", "properties": {
                     "query": {"type": "string", "description": "Keywords, e.g. 'compress video' or 'pdf merge'. Empty lists everything."},
                     "category": {"type": "string", "enum": Category::ALL.iter().map(|c| c.id()).collect::<Vec<_>>()},
-                    "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 25}
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 25},
+                    "include_available": {"type": "boolean", "default": false, "description": "Also return matching tools that are not installed (turned-off packs, store tools) with installed: false, so you can suggest installing them."}
                 }, "additionalProperties": false},
                 "annotations": {"readOnlyHint": true, "openWorldHint": false}
             }),
@@ -460,18 +525,28 @@ impl McpServer {
                     }
                 }
                 scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.spec.id.cmp(&b.1.spec.id)));
-                let results: Vec<Value> = scored
+                let mut results: Vec<Value> = scored
                     .iter()
                     .take(limit)
                     .map(|(_, t)| {
                         json!({
                             "id": t.spec.id, "mcp_name": t.spec.mcp_name(), "name": t.spec.name,
                             "category": t.spec.category.id(), "description": t.spec.description,
+                            "installed": true,
                             "available": t.availability.available,
                             "unavailable_reason": t.availability.reason,
                         })
                     })
                     .collect();
+                if args.get("include_available").and_then(|v| v.as_bool()) == Some(true) {
+                    let room = limit.saturating_sub(results.len());
+                    results.extend(search_available(
+                        self.backend.available_tools(),
+                        &terms,
+                        cat,
+                        room,
+                    ));
+                }
                 let text = if results.is_empty() {
                     "No matching tools.".to_string()
                 } else {
@@ -482,10 +557,15 @@ impl McpServer {
                                 "- {} — {}{}",
                                 r["id"].as_str().unwrap_or(""),
                                 r["description"].as_str().unwrap_or(""),
-                                if r["available"] == json!(false) {
-                                    " (unavailable)"
+                                if r["installed"] == json!(false) {
+                                    format!(
+                                        " (not installed: {})",
+                                        r["install"].as_str().unwrap_or("")
+                                    )
+                                } else if r["available"] == json!(false) {
+                                    " (unavailable)".into()
                                 } else {
-                                    ""
+                                    String::new()
                                 }
                             )
                         })

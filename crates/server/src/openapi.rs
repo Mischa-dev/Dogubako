@@ -62,6 +62,15 @@ pub fn spec(engine: &Engine) -> Value {
         ),
     );
     add(
+        "/api/v1/tools/available",
+        "get",
+        op(
+            "Tools not installed here (turned-off packs, cached store index) with can_install for the caller",
+            "tools",
+            json!({}),
+        ),
+    );
+    add(
         "/api/v1/tools",
         "get",
         op(

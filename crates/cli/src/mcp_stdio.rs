@@ -92,6 +92,12 @@ impl McpBackend for LocalBackend {
     fn not_installed(&self, name: &str) -> Option<ToolError> {
         self.engine.not_installed(name)
     }
+    fn available_tools(&self) -> Vec<dogubako_core::store::AvailableTool> {
+        let ext = dogubako_core::paths::AppDirs::default_local().extensions;
+        let index = dogubako_core::store::local_url()
+            .and_then(|u| dogubako_core::store::cached_index(&u, &ext));
+        dogubako_core::store::available(&self.engine, index.as_ref(), |s| self.permitted(s))
+    }
     fn file_mode(&self) -> &'static str {
         "path"
     }

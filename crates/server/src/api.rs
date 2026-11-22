@@ -37,6 +37,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/auth/me", get(me))
         .route("/auth/password", post(change_password))
         .route("/tools", get(list_tools))
+        .route("/tools/available", get(available_tools))
         .route("/tools/{id}", get(get_tool))
         .route("/tools/{id}/run", post(run_tool))
         .route("/tools/{id}/check", post(check_tool))
@@ -373,6 +374,44 @@ async fn list_tools(
         .map(|spec| tool_json(&s, &p, &s.engine.info(spec)))
         .collect();
     Json(json!({"tools": tools, "count": tools.len()}))
+}
+
+/// Refresh the cached store index in the background once it is this old.
+const STORE_REFRESH_SECS: u64 = 3600;
+
+/// Tools the caller could add: built-ins of turned-off packs they may use,
+/// and store tools from the cached index (refreshed in the background when stale).
+/// `can_install` says whether this caller may install each one.
+async fn available_tools(State(s): State<AppState>, p: Principal) -> Json<Value> {
+    use dogubako_core::store;
+    let ext = s.cfg.extensions_dir();
+    // Scoped tokens never see store metadata; people do, so they can ask.
+    let url = s.cfg.store_url().filter(|_| p.token_scope.is_none());
+    let index = url.as_deref().and_then(|u| store::cached_index(u, &ext));
+    if let Some(url) = url.filter(|u| store::cache_is_stale(u, &ext, STORE_REFRESH_SECS)) {
+        let (ext, net) = (ext.clone(), s.engine.config.net.clone());
+        tokio::spawn(async move {
+            let _ = store::load_index(&url, &ext, &net).await;
+        });
+    }
+    let perms = p.permissions(s.host_fs_enabled());
+    let store_ok = p.is_admin() && s.cfg.allow_extension_install;
+    let tools: Vec<Value> = store::available(&s.engine, index.as_ref(), |spec| {
+        p.can_use(spec) && perms.missing(&spec.permissions).is_empty()
+    })
+    .into_iter()
+    .map(|t| {
+        let can = if t.source == "store" {
+            store_ok
+        } else {
+            p.is_admin()
+        };
+        let mut v = serde_json::to_value(&t).unwrap_or_default();
+        v["can_install"] = json!(can);
+        v
+    })
+    .collect();
+    Json(json!({ "tools": tools }))
 }
 
 async fn get_tool(
