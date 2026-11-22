@@ -345,6 +345,17 @@ impl Engine {
     }
 
     pub fn availability(&self, spec: &ToolSpec) -> Availability {
+        let unset_settings = self
+            .registry()
+            .get(&spec.id)
+            .map(|t| t.unset_settings())
+            .unwrap_or_default();
+        self.availability_with(spec, unset_settings)
+    }
+
+    /// [`Engine::availability`] with the unset settings of a specific tool
+    /// version, e.g. the one a job resolved before a reload.
+    fn availability_with(&self, spec: &ToolSpec, unset_settings: Vec<String>) -> Availability {
         let platform_supported = spec.supports_current_platform();
         let missing: Vec<MissingDep> = spec
             .requires
@@ -366,11 +377,6 @@ impl Engine {
         let missing_model = model_group.as_ref().map(|g| {
             format!("No '{g}' model installed. Download one in Settings → Models or with `dogubako models download <id>`.")
         });
-        let unset_settings = self
-            .registry()
-            .get(&spec.id)
-            .map(|t| t.unset_settings())
-            .unwrap_or_default();
         let recommended_model = model_group
             .as_deref()
             .and_then(crate::models::recommended_model)
@@ -570,7 +576,7 @@ impl Engine {
                 names.join(", ")
             )));
         }
-        let avail = self.availability(&spec);
+        let avail = self.availability_with(&spec, tool.unset_settings());
         if let Some(m) = avail.missing.first() {
             return Err(ToolError::MissingDependency {
                 dependency: m.id.clone(),
