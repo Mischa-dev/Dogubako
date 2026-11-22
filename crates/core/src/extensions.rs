@@ -355,13 +355,18 @@ pub fn uninstall(
     let trust_path = dir.join("trusted.toml");
     let mut trust = TrustStore::load(&trust_path);
     let was_trusted = trust.trusted.remove(id).is_some();
-    if !dev_files.is_empty() {
-        let mut authors = dev_authors(dir)?;
-        if authors.authors.remove(id).is_some() {
-            authors
-                .save(dir)
-                .map_err(|e| ToolError::failed(format!("saving dev authors: {e}")))?;
+    // Drop any ownership entry so a later draft with this id starts fresh;
+    // a damaged file only blocks removing a draft.
+    match dev_authors(dir) {
+        Ok(mut authors) => {
+            if authors.authors.remove(id).is_some() {
+                authors
+                    .save(dir)
+                    .map_err(|e| ToolError::failed(format!("saving dev authors: {e}")))?;
+            }
         }
+        Err(e) if !dev_files.is_empty() => return Err(e),
+        Err(_) => {}
     }
     if files.is_empty() && !was_trusted {
         return Err(ToolError::NotFound { id: id.to_string() });
@@ -510,10 +515,13 @@ pub async fn install_dev(
         ));
     }
     let target = dev.join(format!("{id}.toml"));
-    let occupied = std::fs::read_to_string(&target)
-        .ok()
-        .and_then(|t| parse_manifest(&t, "").ok())
-        .is_some_and(|t| t.spec().id != id);
+    // An unparsable `<id>.toml` is already in `existing`; one we can't read
+    // or that declares another id is someone else's.
+    let occupied = target.exists()
+        && match std::fs::read_to_string(&target) {
+            Ok(t) => parse_manifest(&t, "").is_ok_and(|t| t.spec().id != id),
+            Err(_) => true,
+        };
     if occupied {
         return Err(ToolError::invalid(
             "manifest",
