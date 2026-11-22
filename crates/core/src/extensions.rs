@@ -350,15 +350,18 @@ pub fn uninstall(
         }
     }
     let mut files = manifests_with_id(dir, id);
-    files.extend(manifests_with_id(&dir.join(DEV_DIR), id));
+    let dev_files = manifests_with_id(&dir.join(DEV_DIR), id);
+    files.extend(dev_files.iter().cloned());
     let trust_path = dir.join("trusted.toml");
     let mut trust = TrustStore::load(&trust_path);
     let was_trusted = trust.trusted.remove(id).is_some();
-    let mut authors = dev_authors(dir)?;
-    if authors.authors.remove(id).is_some() {
-        authors
-            .save(dir)
-            .map_err(|e| ToolError::failed(format!("saving dev authors: {e}")))?;
+    if !dev_files.is_empty() {
+        let mut authors = dev_authors(dir)?;
+        if authors.authors.remove(id).is_some() {
+            authors
+                .save(dir)
+                .map_err(|e| ToolError::failed(format!("saving dev authors: {e}")))?;
+        }
     }
     if files.is_empty() && !was_trusted {
         return Err(ToolError::NotFound { id: id.to_string() });
@@ -396,18 +399,9 @@ pub fn load_into(reg: &mut Registry, dir: &Path) -> Vec<ExtensionStatus> {
     register(reg, tools, &mut statuses);
     let (dev, mut dev_st) = load_dev_extensions(dir);
     let installed: Vec<String> = statuses.iter().filter_map(|s| s.id.clone()).collect();
-    let mut allowed: Vec<Arc<dyn Tool>> = vec![];
     for t in dev {
         let spec = t.spec();
-        let sibling = allowed
-            .iter()
-            .find(|o| o.spec().id == spec.id || o.spec().mcp_name() == spec.mcp_name());
-        let clash = if let Some(o) = sibling {
-            Some(format!(
-                "it clashes with the dev tool '{}'",
-                o.spec().source
-            ))
-        } else if installed.contains(&spec.id) {
+        let clash = if installed.contains(&spec.id) {
             Some(format!("'{}' is already an installed extension", spec.id))
         } else if let Some(other) = reg.get(&spec.id) {
             Some(format!(
@@ -421,10 +415,10 @@ pub fn load_into(reg: &mut Registry, dir: &Path) -> Vec<ExtensionStatus> {
         };
         match clash {
             Some(e) => mark_failed(&mut dev_st, spec, format!("dev tool cannot shadow: {e}")),
-            None => allowed.push(t),
+            // Registered now, so later drafts are checked against it.
+            None => register(reg, vec![t.clone()], &mut dev_st),
         }
     }
-    register(reg, allowed, &mut dev_st);
     statuses.extend(dev_st);
     statuses
 }
@@ -516,7 +510,11 @@ pub async fn install_dev(
         ));
     }
     let target = dev.join(format!("{id}.toml"));
-    if target.exists() && !existing.contains(&target) {
+    let occupied = std::fs::read_to_string(&target)
+        .ok()
+        .and_then(|t| parse_manifest(&t, "").ok())
+        .is_some_and(|t| t.spec().id != id);
+    if occupied {
         return Err(ToolError::invalid(
             "manifest",
             format!("dev/{id}.toml holds a different tool; rename or remove it first"),
@@ -1564,7 +1562,11 @@ http = { json = {} }
         std::fs::remove_file(dir.join("dev/b.toml")).unwrap();
 
         // A different extension already sits at the promotion target.
-        std::fs::write(dir.join("text.ext_echo.toml"), "not a manifest").unwrap();
+        std::fs::write(
+            dir.join("text.ext_echo.toml"),
+            M.replace("text.ext_echo", "text.other"),
+        )
+        .unwrap();
         assert!(promote(&e, dir, "text.ext_echo").await.is_err());
         assert!(dir.join("dev/a.toml").exists());
         std::fs::remove_file(dir.join("text.ext_echo.toml")).unwrap();
