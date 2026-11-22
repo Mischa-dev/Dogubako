@@ -45,7 +45,13 @@ pub(crate) struct TableSection {
     /// JSON path selecting the rows; the document root when absent.
     #[serde(default)]
     rows: Option<String>,
+    /// Each column path selects an array; row `i` takes item `i` of each.
+    #[serde(default)]
+    columnar: bool,
     columns: Vec<ColumnDecl>,
+    /// Text template repeated for each row, after `[output] text`.
+    #[serde(default)]
+    text: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -53,27 +59,47 @@ pub(crate) struct TableSection {
 struct ColumnDecl {
     name: String,
     path: String,
+    #[serde(default)]
+    labels: Option<String>,
+}
+
+/// An `[output] json` field: a JSON path, or a path with a label set.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum PickDecl {
+    Path(String),
+    Labeled {
+        path: String,
+        labels: Option<String>,
+    },
 }
 
 /// What the `[output]` section asks of an `[http]` response.
 #[derive(Debug, Default)]
 pub(crate) struct HttpOutputDecl {
     pub body: Option<String>,
-    pub json: BTreeMap<String, String>,
+    pub json: BTreeMap<String, PickDecl>,
     pub table: Option<TableSection>,
+    pub text: Option<String>,
+    pub labels: BTreeMap<String, BTreeMap<String, String>>,
 }
+
+type Labels = Arc<BTreeMap<String, String>>;
 
 #[derive(Debug, Clone)]
 struct Pick {
     name: String,
     src: String,
     path: JsonPath,
+    labels: Option<Labels>,
 }
 
 #[derive(Debug, Clone)]
 struct Table {
     rows: Option<(String, JsonPath)>,
+    columnar: bool,
     columns: Vec<Pick>,
+    text: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -85,6 +111,7 @@ pub(crate) struct HttpRequest {
     body_mime: Option<String>,
     picks: Vec<Pick>,
     table: Option<Table>,
+    text: Option<String>,
 }
 
 /// A canned response served instead of the network, so manifest tests run
@@ -122,6 +149,89 @@ impl RecordedResponse {
     pub fn requests(&self) -> Vec<String> {
         self.requests.lock().map(|r| r.clone()).unwrap_or_default()
     }
+}
+
+impl Pick {
+    /// Swap values (or the items of an array) found in the label set for
+    /// their labels; other values are kept.
+    fn apply_labels(&self, v: Value) -> Value {
+        let Some(labels) = &self.labels else { return v };
+        let label = |v: Value| {
+            let key = match &v {
+                Value::String(s) => s.clone(),
+                Value::Number(_) | Value::Bool(_) => v.to_string(),
+                _ => return v,
+            };
+            labels
+                .get(&key)
+                .map(|l| Value::String(l.clone()))
+                .unwrap_or(v)
+        };
+        match v {
+            Value::Array(a) => Value::Array(a.into_iter().map(label).collect()),
+            other => label(other),
+        }
+    }
+}
+
+impl Table {
+    /// Rows from parallel arrays: row `i` takes item `i` of each column.
+    fn columnar_rows(&self, doc: &Value) -> Vec<Vec<Value>> {
+        let cols: Vec<Vec<Value>> = self
+            .columns
+            .iter()
+            .map(
+                |c| match c.apply_labels(collect(&c.path.query(doc).all())) {
+                    Value::Array(a) => a,
+                    Value::Null => vec![],
+                    one => vec![one],
+                },
+            )
+            .collect();
+        let n = cols.iter().map(Vec::len).max().unwrap_or(0);
+        (0..n)
+            .map(|i| {
+                cols.iter()
+                    .map(|c| c.get(i).cloned().unwrap_or(Value::Null))
+                    .collect()
+            })
+            .collect()
+    }
+}
+
+/// One match as itself, several (or none) as an array.
+fn collect(found: &[&Value]) -> Value {
+    match found {
+        [] => Value::Null,
+        [one] => (*one).clone(),
+        many => Value::Array(many.iter().map(|v| (*v).clone()).collect()),
+    }
+}
+
+fn check_template(s: &str, what: &str, known: impl Fn(&str) -> bool) -> Result<(), String> {
+    probe(s).map_err(|e| format!("{what}: {e}"))?;
+    for ph in crate::manifest::placeholders(s) {
+        if !known(&ph) {
+            return Err(format!(
+                "placeholder '{{{ph}}}' in {what} does not match any output field"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Fill `{field}` from output values: text as-is, arrays comma-separated,
+/// missing and null values empty.
+fn fill_template<'a>(s: &str, get: impl Fn(&str) -> Option<&'a Value>) -> String {
+    fn show(v: &Value) -> String {
+        match v {
+            Value::Null => String::new(),
+            Value::String(s) => s.clone(),
+            Value::Array(a) => a.iter().map(show).collect::<Vec<_>>().join(", "),
+            other => other.to_string(),
+        }
+    }
+    substitute(s, |n| Ok(get(n).map(show).unwrap_or_default())).unwrap_or_else(|_| s.to_string())
 }
 
 /// Replace each `{name}` in `s` with `f(name)`.
@@ -187,7 +297,10 @@ impl HttpRequest {
         tool_timeout_secs: u64,
     ) -> Result<Self, String> {
         let check = |s: &str, what: &str| -> Result<(), String> {
-            for ph in crate::manifest::placeholders(s) {
+            for ph in crate::manifest::placeholders(s)
+                .iter()
+                .flat_map(|ph| ph.split('|'))
+            {
                 if let Some(name) = ph.strip_prefix("settings.") {
                     if settings.iter().any(|p| p.name == name) {
                         continue;
@@ -234,14 +347,33 @@ impl HttpRequest {
             .timeout_secs
             .min(tool_timeout_secs.saturating_sub(1))
             .max(1);
+        let label_sets: BTreeMap<&str, Labels> = out
+            .labels
+            .iter()
+            .map(|(k, v)| (k.as_str(), Arc::new(v.clone())))
+            .collect();
+        let labels = |what: &str, set: Option<&String>| -> Result<Option<Labels>, String> {
+            set.map(|n| {
+                label_sets.get(n.as_str()).cloned().ok_or_else(|| {
+                    format!("{what}: labels '{n}' does not match any [output.labels] set")
+                })
+            })
+            .transpose()
+        };
         let picks = out
             .json
             .iter()
-            .map(|(name, src)| {
+            .map(|(name, decl)| {
+                let what = format!("[output] json field '{name}'");
+                let (src, set) = match decl {
+                    PickDecl::Path(src) => (src, None),
+                    PickDecl::Labeled { path, labels } => (path, labels.as_ref()),
+                };
                 Ok(Pick {
                     name: name.clone(),
                     src: src.clone(),
-                    path: compile_path(&format!("[output] json field '{name}'"), src)?,
+                    path: compile_path(&what, src)?,
+                    labels: labels(&what, set)?,
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
@@ -262,23 +394,43 @@ impl HttpRequest {
                             c.name
                         ));
                     }
-                    let path =
-                        compile_path(&format!("[output.table] column '{}'", c.name), &c.path)?;
+                    let what = format!("[output.table] column '{}'", c.name);
+                    let path = compile_path(&what, &c.path)?;
                     columns.push(Pick {
+                        labels: labels(&what, c.labels.as_ref())?,
                         name: c.name,
                         src: c.path,
                         path,
                     });
                 }
+                if t.columnar && t.rows.is_some() {
+                    return Err("[output.table] takes rows or columnar, not both".into());
+                }
+                if let Some(text) = &t.text {
+                    check_template(text, "[output.table] text", |n| {
+                        columns.iter().any(|c| c.name == n) || picks.iter().any(|p| p.name == n)
+                    })?;
+                }
                 let rows = t
                     .rows
                     .map(|src| compile_path("[output.table] rows", &src).map(|p| (src, p)))
                     .transpose()?;
-                Some(Table { rows, columns })
+                Some(Table {
+                    rows,
+                    columnar: t.columnar,
+                    columns,
+                    text: t.text,
+                })
             }
         };
         if out.body.is_some() && (!picks.is_empty() || table.is_some()) {
             return Err("[output] body cannot be combined with json or table".into());
+        }
+        if let Some(text) = &out.text {
+            if picks.is_empty() && table.is_none() {
+                return Err("[output] text needs json or table fields to fill it".into());
+            }
+            check_template(text, "[output] text", |n| picks.iter().any(|p| p.name == n))?;
         }
         Ok(Self {
             url: http.url,
@@ -288,11 +440,16 @@ impl HttpRequest {
             body_mime: out.body,
             picks,
             table,
+            text: out.text,
         })
     }
 
     fn returns_data(&self) -> bool {
         !self.picks.is_empty() || self.table.is_some()
+    }
+
+    fn has_text(&self) -> bool {
+        self.text.is_some() || self.table.as_ref().is_some_and(|t| t.text.is_some())
     }
 
     pub(crate) fn output_kind(&self) -> OutputKind {
@@ -304,7 +461,9 @@ impl HttpRequest {
     }
 
     pub(crate) fn text_mime(&self) -> Option<String> {
-        if self.returns_data() {
+        if self.has_text() {
+            Some("text/plain".into())
+        } else if self.returns_data() {
             None
         } else {
             self.body_mime.clone()
@@ -413,46 +572,71 @@ impl HttpRequest {
         for p in &self.picks {
             data.insert(p.name.clone(), self.pick(p, &doc, "[output] json field")?);
         }
+        let mut lines = vec![];
+        if let Some(text) = &self.text {
+            lines.push(fill_template(text, |n| data.get(n)));
+        }
         if let Some(t) = &self.table {
-            let rows: Vec<&Value> = match &t.rows {
-                None => match &doc {
-                    Value::Array(a) => a.iter().collect(),
-                    other => vec![other],
-                },
-                Some((src, path)) => {
-                    let found = path.query(&doc).all();
-                    match found.as_slice() {
-                        [] => return Err(self.missing("[output.table] rows", src)),
-                        [Value::Array(a)] if !selects_many(src) => a.iter().collect(),
-                        _ => found,
-                    }
-                }
+            let rows = if t.columnar {
+                t.columnar_rows(&doc)
+            } else {
+                self.table_rows(t, &doc)?
             };
-            let rows = rows
-                .into_iter()
-                .map(|row| {
-                    t.columns
-                        .iter()
-                        .map(|c| match c.path.query(row).all().as_slice() {
-                            [] => Value::Null,
-                            [one] => (*one).clone(),
-                            many => Value::Array(many.iter().map(|v| (*v).clone()).collect()),
-                        })
-                        .collect::<Vec<Value>>()
-                        .into()
-                })
-                .collect::<Vec<Value>>();
+            if let Some(text) = &t.text {
+                for row in &rows {
+                    lines.push(fill_template(text, |n| {
+                        match t.columns.iter().position(|c| c.name == n) {
+                            Some(i) => row.get(i),
+                            None => data.get(n),
+                        }
+                    }));
+                }
+            }
+            let rows: Vec<Value> = rows.into_iter().map(Value::Array).collect();
             let columns: Vec<&str> = t.columns.iter().map(|c| c.name.as_str()).collect();
             data.insert("table".into(), json!({ "columns": columns, "rows": rows }));
         }
-        Ok(ToolOutput::new().with_data(Value::Object(data)))
+        let out = ToolOutput::new().with_data(Value::Object(data));
+        Ok(if self.has_text() {
+            out.with_text(lines.join("\n"), "text/plain")
+        } else {
+            out
+        })
+    }
+
+    fn table_rows(&self, t: &Table, doc: &Value) -> ToolResult<Vec<Vec<Value>>> {
+        let rows: Vec<&Value> = match &t.rows {
+            None => match doc {
+                Value::Array(a) => a.iter().collect(),
+                other => vec![other],
+            },
+            Some((src, path)) => {
+                let found = path.query(doc).all();
+                match found.as_slice() {
+                    [] => return Err(self.missing("[output.table] rows", src)),
+                    [Value::Array(a)] if !selects_many(src) => a.iter().collect(),
+                    _ => found,
+                }
+            }
+        };
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                t.columns
+                    .iter()
+                    .map(|c| match c.path.query(row).all().as_slice() {
+                        [] => Value::Null,
+                        found => c.apply_labels(collect(found)),
+                    })
+                    .collect()
+            })
+            .collect())
     }
 
     fn pick(&self, p: &Pick, doc: &Value, what: &str) -> ToolResult<Value> {
         match p.path.query(doc).all().as_slice() {
             [] => Err(self.missing(&format!("{what} '{}'", p.name), &p.src)),
-            [one] => Ok((*one).clone()),
-            many => Ok(Value::Array(many.iter().map(|v| (*v).clone()).collect())),
+            found => Ok(p.apply_labels(collect(found))),
         }
     }
 
@@ -689,6 +873,36 @@ json = { temp = "$.current.temperature_2m", unit = "$.current_units.temperature_
                 "\n[output]\nbody = \"text/plain\"\njson = { a = \"$.a\" }\n",
                 "cannot be combined",
             ),
+            (
+                "url = \"https://example.com/\"",
+                "\n[output]\ntext = \"{a}\"\n",
+                "needs json or table",
+            ),
+            (
+                "url = \"https://example.com/\"",
+                "\n[output]\ntext = \"{b}\"\njson = { a = \"$.a\" }\n",
+                "does not match any output field",
+            ),
+            (
+                "url = \"https://example.com/\"",
+                "\n[output]\njson = { a = { path = \"$.a\", labels = \"x\" } }\n",
+                "does not match any [output.labels] set",
+            ),
+            (
+                "url = \"https://example.com/\"",
+                "\n[output.table]\ncolumnar = true\nrows = \"$.r\"\ncolumns = [{ name = \"a\", path = \"$.a\" }]\n",
+                "rows or columnar",
+            ),
+            (
+                "url = \"https://example.com/\"",
+                "\n[output.table]\ncolumns = [{ name = \"a\", path = \"$.a\" }]\ntext = \"{b}\"\n",
+                "does not match any output field",
+            ),
+            (
+                "url = \"https://example.com/{q|settings.nope}\"",
+                "",
+                "does not match any setting",
+            ),
         ];
         for (http, extra, want) in cases {
             let err = parse_manifest(&manifest(http, extra), "x")
@@ -727,6 +941,100 @@ json = { temp = "$.current.temperature_2m", unit = "$.current_units.temperature_
             rec.requests(),
             vec!["https://api.example.com/v1/forecast?lat=40.0&lon=-105.2&q=S%C3%A3o%20Paulo%20%26%20co%2Fx%3Fy"]
         );
+    }
+
+    const FORECAST: &str = r#"
+[tool]
+id = "ext.forecast"
+name = "Forecast"
+category = "data"
+
+[http]
+url = "https://api.example.com/f?lat={lat|settings.lat}&unit={unit|settings.unit}"
+
+[[params]]
+name = "lat"
+type = "number"
+
+[[params]]
+name = "unit"
+type = "text"
+
+[[settings]]
+name = "lat"
+type = "number"
+
+[[settings]]
+name = "unit"
+type = "text"
+default = "c"
+
+[output]
+text = "Now {sky}, {temp}{unit_label}"
+json = { temp = "$.now.t", unit_label = "$.u", sky = { path = "$.now.code", labels = "sky" } }
+
+[output.table]
+columnar = true
+columns = [{ name = "day", path = "$.days.d" }, { name = "sky", path = "$.days.code", labels = "sky" }, { name = "high", path = "$.days.hi" }]
+text = "{day}: {sky}, {high}{unit_label}"
+
+[output.labels.sky]
+"0" = "clear"
+"3" = "cloudy"
+"#;
+
+    #[tokio::test]
+    async fn text_template_labels_and_columnar_table() {
+        let rec = RecordedResponse::json(&json!({
+            "now": { "t": 21.5, "code": 0 },
+            "u": "°C",
+            "days": { "d": ["mon", "tue", "wed"], "code": [0, 3, 9], "hi": [22, 18] }
+        }));
+        let t = parse_manifest(FORECAST, "f")
+            .unwrap()
+            .with_setting_values(json!({ "lat": 40.0 }).as_object().unwrap())
+            .unwrap()
+            .with_recorded_response(rec.clone());
+        let spec = crate::tool::Tool::spec(&t).clone();
+        assert_eq!(spec.output.text_mime.as_deref(), Some("text/plain"));
+        let h = harness(t);
+        let out = h.run("ext.forecast", json!({})).await.unwrap();
+        assert_eq!(
+            out.text.as_deref(),
+            Some("Now clear, 21.5°C\nmon: clear, 22°C\ntue: cloudy, 18°C\nwed: 9, °C")
+        );
+        assert_eq!(out.data["sky"], json!("clear"));
+        assert_eq!(
+            out.data["table"],
+            json!({
+                "columns": ["day", "sky", "high"],
+                "rows": [["mon", "clear", 22], ["tue", "cloudy", 18], ["wed", 9, null]]
+            })
+        );
+        h.run("ext.forecast", json!({ "lat": -33.9, "unit": "f" }))
+            .await
+            .unwrap();
+        assert_eq!(
+            rec.requests(),
+            vec![
+                "https://api.example.com/f?lat=40.0&unit=c",
+                "https://api.example.com/f?lat=-33.9&unit=f"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn alternatives_fall_back_to_a_setup_hint() {
+        let rec = RecordedResponse::json(&json!({}));
+        let t = parse_manifest(FORECAST, "f")
+            .unwrap()
+            .with_setting_values(&Map::new())
+            .unwrap()
+            .with_recorded_response(rec.clone());
+        let err = harness(t).run("ext.forecast", json!({})).await.unwrap_err();
+        assert_eq!(err.code(), "not_configured", "{err}");
+        assert!(err.to_string().contains("missing: lat"), "{err}");
+        assert!(rec.requests().is_empty());
     }
 
     #[tokio::test]
