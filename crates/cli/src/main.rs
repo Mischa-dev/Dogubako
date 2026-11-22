@@ -17,6 +17,9 @@ use dogubako_core::spec::Category;
 use dogubako_core::tool::Environment;
 use std::process::ExitCode;
 
+/// The agent skill printed by `dogubako skill`.
+const AGENT_SKILL: &str = include_str!("../skills/add-a-dogubako-tool/SKILL.md");
+
 pub fn build_engine(env: Environment) -> Engine {
     build_engine_with(env, AppDirs::default_local().extensions)
 }
@@ -247,6 +250,9 @@ fn cli(engine: &Engine) -> Command {
         .subcommand(admin::extensions_cmd())
         .subcommand(store::store_cmd());
     cmd = cmd.subcommand(
+        Command::new("skill").about("Print the agent skill for adding a Dogubako tool (SKILL.md)"),
+    );
+    cmd = cmd.subcommand(
         Command::new("api")
             .about("API utilities")
             .subcommand_required(true)
@@ -328,6 +334,10 @@ async fn dispatch(engine: Engine, m: &ArgMatches, out: &render::Out) -> i32 {
             _ => admin::extensions(sub, out),
         },
         Some(("store", sub)) => store::run(sub, out).await,
+        Some(("skill", _)) => {
+            print!("{AGENT_SKILL}");
+            0
+        }
         Some(("api", sub)) => match sub.subcommand() {
             Some(("openapi", _)) => {
                 println!(

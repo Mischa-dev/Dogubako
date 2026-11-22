@@ -415,3 +415,100 @@ fn packs_command_turns_packs_on_and_off() {
         .assert()
         .failure();
 }
+
+/// The agent skill names only commands and MCP tools this build has, and its
+/// worked examples install and pass their tests.
+#[test]
+fn agent_skill_matches_this_build() {
+    let h = tempfile::tempdir().unwrap();
+    let skill = String::from_utf8(cmd(&h).arg("skill").output().unwrap().stdout).unwrap();
+    assert!(
+        skill.starts_with("---\nname: add-a-dogubako-tool\n"),
+        "{skill}"
+    );
+
+    let input = concat!(
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+        "\n",
+    );
+    let out = cmd(&h)
+        .args(["mcp", "serve", "--permissions", "network,extensions_author"])
+        .write_stdin(input)
+        .timeout(std::time::Duration::from_secs(30))
+        .output()
+        .unwrap();
+    let list: Value = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| serde_json::from_str::<Value>(l).unwrap())
+        .find(|l| l["id"] == 2)
+        .unwrap();
+    let names: Vec<&str> = list["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    let words = |s: &str| -> Vec<String> {
+        s.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .filter(|w| w.starts_with("dogubako_"))
+            .map(String::from)
+            .collect()
+    };
+    for tool in words(&skill) {
+        assert!(
+            names.contains(&tool.as_str()),
+            "skill names missing MCP tool {tool}"
+        );
+    }
+
+    let mut commands = Vec::new();
+    for (i, part) in skill.split('`').enumerate() {
+        if i % 2 == 1 && part.starts_with("dogubako ") {
+            commands.push(part.to_string());
+        }
+    }
+    assert!(commands.len() >= 8, "{commands:?}");
+    for c in commands {
+        let sub: Vec<&str> = c
+            .split_whitespace()
+            .skip(1)
+            .take_while(|w| w.chars().all(|ch| ch.is_ascii_lowercase()))
+            .collect();
+        assert!(!sub.is_empty(), "{c}");
+        cmd(&h)
+            .args(&sub)
+            .arg("--help")
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Usage"));
+    }
+
+    let examples: Vec<&str> = skill
+        .split("```toml\n")
+        .skip(1)
+        .map(|b| b.split("```").next().unwrap())
+        .collect();
+    assert_eq!(examples.len(), 2);
+    for (i, manifest) in examples.iter().enumerate() {
+        let file = h.path().join(format!("example{i}.toml"));
+        std::fs::write(&file, manifest).unwrap();
+        let out = cmd(&h)
+            .args(["--json", "extensions", "install", "--dev"])
+            .arg(&file)
+            .output()
+            .unwrap();
+        let report: Value = serde_json::from_slice(&out.stdout)
+            .unwrap_or_else(|_| panic!("{}", String::from_utf8_lossy(&out.stderr)));
+        assert_eq!(report["passed"], true, "example {i}: {report}");
+        // Recorded output stands in for a missing program, not an unsupported platform.
+        let runs_here = !cfg!(windows) || !manifest.contains(r#"platforms = ["linux", "macos"]"#);
+        let want = if runs_here { "passed" } else { "skipped" };
+        let tests = report["tests"].as_array().unwrap();
+        assert!(
+            !tests.is_empty() && tests.iter().all(|t| t["status"] == want),
+            "{report}"
+        );
+    }
+}

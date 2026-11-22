@@ -49,7 +49,9 @@ stdio default do not grant it, and a token scope must list it too. An admin
 turns it on under Admin → Users → Capabilities ("Author tools (MCP)") or with
 `dogubako users policy <name> --allow '*' --permissions network,extensions_author`.
 Principals without it see exactly the tool list above; calls to the authoring
-tools are refused with `permission_denied`.
+tools are refused with `permission_denied`. `dogubako skill` prints a short
+agent skill that walks an agent through these tools, from searching the
+installed tools and the store to a tested dev-slot tool.
 
 | Meta-tool | Purpose |
 |---|---|
