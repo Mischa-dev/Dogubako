@@ -88,6 +88,65 @@ fn list_packs(state: State<'_, Desktop>) -> Vec<dogubako_core::packs::PackInfo> 
     state.engine.packs()
 }
 
+fn packs_view(engine: &Engine) -> Value {
+    let unused = engine.unused_downloads();
+    let unused_bytes: u64 = unused.iter().map(|u| u.bytes).sum();
+    json!({ "packs": engine.packs(), "unused": unused, "unused_bytes": unused_bytes })
+}
+
+/// Packs plus downloads no turned-on pack uses, and whether the install
+/// choice (Everything or Custom) has been made yet.
+#[tauri::command]
+fn packs_status(state: State<'_, Desktop>) -> Value {
+    let mut v = packs_view(&state.engine);
+    v["chosen"] = json!(dogubako_core::packs::packs_file(&state.dirs.config).exists());
+    v
+}
+
+/// Save the pack selection (`null` = every pack) and apply it now.
+#[tauri::command]
+async fn set_packs(app: tauri::AppHandle, state: State<'_, Desktop>, enabled: Option<Vec<String>>) -> Result<Value, String> {
+    use dogubako_core::packs::{packs_file, PackSelection};
+    let sel = match enabled {
+        None => PackSelection::all(),
+        Some(ids) => {
+            let sel = PackSelection::only(ids);
+            if let Some(bad) = sel.unknown().first() {
+                return Err(format!("unknown pack '{bad}'"));
+            }
+            sel
+        }
+    };
+    let engine = state.engine.clone();
+    let file = packs_file(&state.dirs.config);
+    let report = tauri::async_runtime::spawn_blocking(move || {
+        engine.edit_packs(|_| sel, |next| next.save(&file))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    if report.tool_set_changed() {
+        let _ = app.emit(TOOLS_CHANGED, &report);
+    }
+    let mut v = packs_view(&state.engine);
+    v["reload"] = json!(report);
+    Ok(v)
+}
+
+/// Delete engines and models no turned-on pack uses (all when `ids` is null).
+#[tauri::command]
+fn packs_cleanup(state: State<'_, Desktop>, ids: Option<Vec<String>>) -> Result<Value, String> {
+    if state.runs.lock().unwrap().values().any(|t| !t.is_cancelled()) {
+        return Err("Tools are running; delete unused downloads once they finish".into());
+    }
+    let removed = state.engine.remove_unused(ids.as_deref()).map_err(|e| e.to_string())?;
+    let freed: u64 = removed.iter().map(|u| u.bytes).sum();
+    let mut v = packs_view(&state.engine);
+    v["removed"] = json!(removed);
+    v["freed_bytes"] = json!(freed);
+    Ok(v)
+}
+
 #[tauri::command]
 fn list_tools(state: State<'_, Desktop>) -> Vec<Value> {
     state
@@ -490,6 +549,9 @@ pub fn run() {
             app_info,
             list_tools,
             list_packs,
+            packs_status,
+            set_packs,
+            packs_cleanup,
             run_tool,
             check_tool,
             cancel_run,

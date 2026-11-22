@@ -82,6 +82,9 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/admin/tokens", get(admin_tokens).post(admin_create_token))
         .route("/admin/audit", get(admin_audit))
         .route("/admin/config", get(admin_config))
+        .route("/admin/packs", get(admin_packs))
+        .route("/admin/packs/cleanup", post(admin_packs_cleanup))
+        .route("/admin/packs/{id}", put(admin_set_pack))
         .route("/openapi.json", get(openapi))
         .merge(crate::assistant::router())
 }
@@ -390,6 +393,97 @@ async fn get_tool(
 /// Built-in tool packs: tool count, on/off, and the engines and models used.
 async fn packs(State(s): State<AppState>, _p: Principal) -> Json<Value> {
     Json(json!({"packs": s.engine.packs()}))
+}
+
+fn packs_view(s: &AppState) -> Value {
+    let unused = s.engine.unused_downloads();
+    let unused_bytes: u64 = unused.iter().map(|u| u.bytes).sum();
+    json!({"packs": s.engine.packs(), "unused": unused, "unused_bytes": unused_bytes})
+}
+
+/// Packs with what turning one off can free (admins only).
+async fn admin_packs(State(s): State<AppState>, Admin(_): Admin) -> Json<Value> {
+    Json(packs_view(&s))
+}
+
+#[derive(Deserialize)]
+struct SetPack {
+    enabled: bool,
+}
+
+/// Turn a pack on or off for everyone, now and after restarts.
+async fn admin_set_pack(
+    State(s): State<AppState>,
+    Admin(p): Admin,
+    ClientIp(ip): ClientIp,
+    Path(id): Path<String>,
+    Json(body): Json<SetPack>,
+) -> ApiResult<Json<Value>> {
+    if dogubako_core::packs::builtin_pack(&id).is_none() {
+        return Err(ApiError::not_found(format!("unknown pack '{id}'")));
+    }
+    let (engine, file, pack) = (s.engine.clone(), s.cfg.packs_file(), id.clone());
+    let report = tokio::task::spawn_blocking(move || {
+        engine.edit_pack(&pack, body.enabled, |next| next.save(&file))
+    })
+    .await
+    .map_err(|e| ApiError::internal(format!("pack change failed: {e}")))?
+    .map_err(|e| ApiError::internal(format!("could not save packs: {e}")))?;
+    s.db.audit(
+        &p.username,
+        if body.enabled {
+            "packs.enable"
+        } else {
+            "packs.disable"
+        },
+        &id,
+        "ok",
+        &ip,
+        &format!("{} tools", report.tools),
+    );
+    let mut v = packs_view(&s);
+    v["reload"] = json!(report);
+    Ok(Json(v))
+}
+
+#[derive(Deserialize)]
+struct Cleanup {
+    #[serde(default)]
+    ids: Option<Vec<String>>,
+}
+
+/// Delete engines and models that no turned-on pack uses.
+async fn admin_packs_cleanup(
+    State(s): State<AppState>,
+    Admin(p): Admin,
+    ClientIp(ip): ClientIp,
+    Json(body): Json<Cleanup>,
+) -> ApiResult<Json<Value>> {
+    if s.jobs.running_count() > 0 {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "jobs_running",
+            "Jobs are queued or running; delete unused downloads once they finish",
+        ));
+    }
+    let ids = body.ids;
+    let removed = s
+        .engine
+        .remove_unused(ids.as_deref())
+        .map_err(ApiError::from)?;
+    let freed: u64 = removed.iter().map(|u| u.bytes).sum();
+    s.db.audit(
+        &p.username,
+        "packs.cleanup",
+        "downloads",
+        "ok",
+        &ip,
+        &format!("removed {} ({freed} bytes)", removed.len()),
+    );
+    let mut v = packs_view(&s);
+    v["removed"] = json!(removed);
+    v["freed_bytes"] = json!(freed);
+    Ok(Json(v))
 }
 
 async fn categories(State(s): State<AppState>, p: Principal) -> Json<Value> {

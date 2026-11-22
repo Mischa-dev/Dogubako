@@ -3,7 +3,7 @@ import type {
   AdminConfig, Artifact, AuditRow, Category, DepInfo, FileView, JobView, Me, ModelDownload, ModelInfo,
   NewToken, Policy, Role, Status, ToolErrorView, ToolInfo, TokenRow, UserRow,
 } from '../types';
-import { ApiError, type AssistantInfo, type AssistantTarget, type Backend, type FileRef, type ReloadResult, type RunHandle, type RunOptions } from './types';
+import { ApiError, type AssistantInfo, type AssistantTarget, type Backend, type FileRef, type PacksState, type ReloadResult, type RunHandle, type RunOptions } from './types';
 
 const TERMINAL = new Set(['succeeded', 'failed', 'cancelled']);
 export const isTerminal = (s: string) => TERMINAL.has(s);
@@ -315,6 +315,9 @@ export class HttpBackend implements Backend {
   adminConfig() { return this.get<AdminConfig>('/admin/config'); }
   adminJobs(limit = 50) { return this.get<{ jobs: JobView[] }>(`/jobs?all=true&limit=${limit}`); }
   reloadRegistry() { return this.post<ReloadResult>('/admin/reload'); }
+  packs() { return this.get<PacksState>('/admin/packs'); }
+  setPack(id: string, enabled: boolean) { return this.request<PacksState>('PUT', `/admin/packs/${encodeURIComponent(id)}`, { enabled }); }
+  packsCleanup(ids?: string[]) { return this.post<PacksState>('/admin/packs/cleanup', ids ? { ids } : {}); }
   async onToolsChanged(cb: () => void) {
     if (typeof EventSource === 'undefined') return () => {};
     const source = new EventSource(this.url('/tools/events'), { withCredentials: true });

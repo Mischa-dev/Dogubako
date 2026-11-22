@@ -282,6 +282,45 @@ pub fn spec(engine: &Engine) -> Value {
         op("Security & execution audit log (admin)", "admin", json!({})),
     );
     add(
+        "/api/v1/admin/packs",
+        "get",
+        op(
+            "Tool packs plus downloads no turned-on pack uses (admin)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/admin/packs/{id}",
+        "put",
+        op(
+            "Turn a tool pack on or off for everyone (admin)",
+            "admin",
+            json!({
+                "parameters": [id_param("id")],
+                "requestBody": {"required": true, "content": {"application/json": {"schema": {
+                    "type": "object",
+                    "required": ["enabled"],
+                    "properties": {"enabled": {"type": "boolean"}}
+                }}}}
+            }),
+        ),
+    );
+    add(
+        "/api/v1/admin/packs/cleanup",
+        "post",
+        op(
+            "Delete engines and models no turned-on pack uses; all of them when ids is omitted (admin)",
+            "admin",
+            json!({
+                "requestBody": {"required": true, "content": {"application/json": {"schema": {
+                    "type": "object",
+                    "properties": {"ids": {"type": "array", "items": {"type": "string"}}}
+                }}}}
+            }),
+        ),
+    );
+    add(
         "/api/v1/admin/reload",
         "post",
         op(

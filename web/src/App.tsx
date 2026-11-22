@@ -8,12 +8,15 @@ import { LoginPage, SetupPage } from './pages/Auth';
 import { Button, Spinner } from './components/ui';
 import { LogoMark } from './components/Logo';
 import { Toaster } from './components/toast';
+import { InstallChoice } from './components/Packs';
+import type { PacksState } from './lib/backend/types';
 
 type Phase =
   | { k: 'loading' }
   | { k: 'error'; message: string }
   | { k: 'setup'; backend: Backend; status: Status }
   | { k: 'login'; backend: Backend; status: Status }
+  | { k: 'install'; backend: Backend; packs: PacksState }
   | { k: 'ready'; backend: Backend; status: Status; me: Me | null; tools: ToolInfo[]; categories: Category[] | null };
 
 export function App() {
@@ -26,6 +29,10 @@ export function App() {
       if (!backend) setBackend(be);
       const status = await be.getStatus();
       if (be.mode === 'server' && status.setup_required) return setPhase({ k: 'setup', backend: be, status });
+      if (be.mode === 'desktop' && be.choosePacks && be.packs) {
+        const packs = await be.packs().catch(() => null);
+        if (packs && packs.chosen === false) return setPhase({ k: 'install', backend: be, packs });
+      }
       const me = await be.getMe();
       if (be.mode === 'server' && status.auth === 'required' && !me) return setPhase({ k: 'login', backend: be, status });
       const [tools, categories] = await Promise.all([be.listTools(), be.listCategories().catch(() => null)]);
@@ -72,6 +79,9 @@ export function App() {
       break;
     case 'setup':
       body = <SetupPage backend={phase.backend} status={phase.status} onDone={() => boot(phase.backend)} />;
+      break;
+    case 'install':
+      body = <InstallChoice backend={phase.backend} initial={phase.packs} onDone={() => boot(phase.backend)} />;
       break;
     case 'login':
       body = <LoginPage backend={phase.backend} status={phase.status} onDone={() => boot(phase.backend)} />;

@@ -8,7 +8,7 @@
 use crate::deps::{DepRegistry, Unmet};
 use crate::error::{ToolError, ToolResult};
 use crate::models::ModelRegistry;
-use crate::packs::{PackEngine, PackInfo, PackSelection};
+use crate::packs::{PackEngine, PackInfo, PackSelection, UnusedDownload};
 use crate::params::{validate, FileResolver, Params};
 use crate::policy::{ExecLimits, FsPolicy, NetPolicy, PermissionSet};
 use crate::registry::{fingerprint, Registry};
@@ -20,6 +20,7 @@ const CHECK_TIMEOUT_SECS: u64 = 30;
 use crate::manifest::ExtensionStatus;
 use serde::Serialize;
 use serde_json::{Map, Value};
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
@@ -196,6 +197,10 @@ pub struct Engine {
     /// Serializes reloads so two cannot interleave their diff and swap.
     reloading: Mutex<()>,
     generation: tokio::sync::watch::Sender<u64>,
+    /// Packs turned on now; starts as `config.packs`, changed by
+    /// [`Engine::set_packs`].
+    packs: RwLock<PackSelection>,
+    pack_edit: Mutex<()>,
     pub deps: Arc<DepRegistry>,
     pub models: Arc<ModelRegistry>,
     pub config: EngineConfig,
@@ -219,6 +224,8 @@ impl Engine {
             loader: RwLock::new(None),
             reloading: Mutex::new(()),
             generation: tokio::sync::watch::Sender::new(0),
+            packs: RwLock::new(config.packs.clone()),
+            pack_edit: Mutex::new(()),
             deps: Arc::new(deps),
             models: Arc::new(ModelRegistry::new(config.models_dir.clone())),
             config,
@@ -305,7 +312,8 @@ impl Engine {
     }
 
     fn swap(&self, catalog: Registry, extensions: Vec<ExtensionStatus>) -> ReloadReport {
-        let registry = catalog.filtered(|s| self.config.packs.is_on(&s.pack));
+        let packs = self.pack_selection();
+        let registry = catalog.filtered(|s| packs.is_on(&s.pack));
         let old = self.registry();
         let before: HashMap<&str, &Arc<dyn Tool>> =
             old.iter().map(|t| (t.spec().id.as_str(), t)).collect();
@@ -500,31 +508,96 @@ impl Engine {
         self.snapshot().not_installed(id)
     }
 
-    /// Every built-in pack, with its tool count, state and what it uses.
+    /// The packs turned on now.
+    pub fn pack_selection(&self) -> PackSelection {
+        self.packs.read().unwrap().clone()
+    }
+
+    /// Turn packs on or off now: re-filters the current catalog and swaps
+    /// it in like a reload. The caller saves the selection.
+    pub fn set_packs(&self, packs: PackSelection) -> ReloadReport {
+        let _guard = self.reloading.lock().unwrap();
+        *self.packs.write().unwrap() = packs;
+        let catalog = self.catalog().filtered(|_| true);
+        let extensions = (*self.extensions()).clone();
+        self.swap(catalog, extensions)
+    }
+
+    /// Turn one pack on or off as a single step: read the current
+    /// selection, `save` the new one, then apply it. Concurrent edits are
+    /// serialized so none is lost.
+    pub fn edit_pack<E>(
+        &self,
+        pack: &str,
+        on: bool,
+        save: impl FnOnce(&PackSelection) -> Result<(), E>,
+    ) -> Result<ReloadReport, E> {
+        self.edit_packs(|cur| cur.with(pack, on), save)
+    }
+
+    /// Like [`Engine::edit_pack`] for any change of the selection.
+    pub fn edit_packs<E>(
+        &self,
+        change: impl FnOnce(&PackSelection) -> PackSelection,
+        save: impl FnOnce(&PackSelection) -> Result<(), E>,
+    ) -> Result<ReloadReport, E> {
+        let _edit = self.pack_edit.lock().unwrap();
+        let next = change(&self.pack_selection());
+        save(&next)?;
+        Ok(self.set_packs(next))
+    }
+
+    /// Engines and model groups a tool uses.
+    fn uses(spec: &ToolSpec) -> (BTreeSet<String>, BTreeSet<String>) {
+        let mut deps: BTreeSet<String> = spec.requires.iter().cloned().collect();
+        for r in spec.params.iter().filter_map(|p| p.requires.as_ref()) {
+            deps.insert(match r {
+                Requirement::MagickWrite { .. } => "imagemagick".to_string(),
+                Requirement::FfmpegEncoder { .. } => "ffmpeg".to_string(),
+                Requirement::Program { dependency, .. } => dependency.clone(),
+            });
+        }
+        (deps, spec.requires_model.iter().cloned().collect())
+    }
+
+    /// Every built-in pack, with its tool count, state, what it uses and
+    /// what it can download.
     pub fn packs(&self) -> Vec<PackInfo> {
+        let catalog = self.catalog();
+        let selection = self.pack_selection();
+        let managed = self.deps.managed().list();
         crate::packs::builtin_packs()
             .into_iter()
             .map(|p| {
-                let catalog = self.catalog();
                 let specs: Vec<&ToolSpec> = catalog.specs().filter(|s| s.pack == p.id).collect();
-                let mut deps = std::collections::BTreeSet::new();
-                let mut models = std::collections::BTreeSet::new();
+                let mut deps = BTreeSet::new();
+                let mut models = BTreeSet::new();
                 for s in &specs {
-                    deps.extend(s.requires.iter().cloned());
-                    for r in s.params.iter().filter_map(|p| p.requires.as_ref()) {
-                        deps.insert(match r {
-                            Requirement::MagickWrite { .. } => "imagemagick".to_string(),
-                            Requirement::FfmpegEncoder { .. } => "ffmpeg".to_string(),
-                            Requirement::Program { dependency, .. } => dependency.clone(),
-                        });
-                    }
-                    models.extend(s.requires_model.iter().cloned());
+                    let (d, m) = Self::uses(s);
+                    deps.extend(d);
+                    models.extend(m);
+                }
+                let mut download_bytes = 0;
+                let mut disk_bytes = 0;
+                for e in managed
+                    .iter()
+                    .filter(|e| e.tier == "on_demand" && e.deps.iter().any(|d| deps.contains(d)))
+                {
+                    download_bytes += e.download_bytes.unwrap_or(0);
+                    disk_bytes += e.installed_bytes.unwrap_or(0);
+                }
+                for m in models
+                    .iter()
+                    .filter_map(|g| crate::models::recommended_model(g))
+                {
+                    download_bytes += m.size_bytes;
+                    disk_bytes += m.size_bytes;
                 }
                 PackInfo {
                     id: p.id.to_string(),
                     name: p.name.to_string(),
                     description: p.description.to_string(),
-                    enabled: self.config.packs.is_on(p.id),
+                    enabled: selection.is_on(p.id),
                     tools: specs.len(),
                     engines: deps
                         .into_iter()
@@ -534,9 +607,104 @@ impl Engine {
                         })
                         .collect(),
                     models: models.into_iter().collect(),
+                    download_bytes,
+                    disk_bytes,
                 }
             })
             .collect()
+    }
+
+    /// Downloaded engines and models that only turned-off tools use: what
+    /// turning a pack off can free. Anything a turned-on tool (or an
+    /// extension) uses is never listed.
+    pub fn unused_downloads(&self) -> Vec<UnusedDownload> {
+        let tools = self.snapshot();
+        let (mut used_deps, mut used_models) = (BTreeSet::new(), BTreeSet::new());
+        for s in tools.installed.specs() {
+            let (d, m) = Self::uses(s);
+            used_deps.extend(d);
+            used_models.extend(m);
+        }
+        // Format converters other tools fall back to without declaring them.
+        if !tools.installed.is_empty() {
+            used_deps.extend(SHARED_ENGINES.iter().map(|d| d.to_string()));
+        }
+        let (mut off_deps, mut off_models) = (BTreeSet::new(), BTreeSet::new());
+        for s in tools
+            .catalog
+            .specs()
+            .filter(|s| tools.installed.get(&s.id).is_none())
+        {
+            let (d, m) = Self::uses(s);
+            off_deps.extend(d);
+            off_models.extend(m);
+        }
+        let mut out = vec![];
+        for e in self.deps.managed().list() {
+            if e.tier == "on_demand"
+                && e.installed
+                && e.deps.iter().any(|d| off_deps.contains(d))
+                && !e.deps.iter().any(|d| used_deps.contains(d))
+            {
+                let bytes = dir_size(&self.deps.managed().install_root().join(&e.id));
+                out.push(UnusedDownload {
+                    kind: "engine",
+                    name: e
+                        .deps
+                        .first()
+                        .map(|d| self.deps.status(d).name)
+                        .unwrap_or_else(|| e.id.clone()),
+                    id: e.id,
+                    bytes,
+                });
+            }
+        }
+        for m in self.models.list() {
+            if m.installed
+                && off_models.contains(m.spec.group)
+                && !used_models.contains(m.spec.group)
+            {
+                let bytes = model_bytes(self.models.dir(), &m.spec);
+                out.push(UnusedDownload {
+                    kind: "model",
+                    id: m.spec.id.to_string(),
+                    name: m.spec.name.to_string(),
+                    bytes,
+                });
+            }
+        }
+        out
+    }
+
+    /// Remove the given unused downloads (all of them when `ids` is
+    /// `None`); ids that a turned-on tool still uses are skipped. Returns
+    /// what was removed.
+    pub fn remove_unused(&self, ids: Option<&[String]>) -> ToolResult<Vec<UnusedDownload>> {
+        let mut removed = vec![];
+        for u in self.unused_downloads() {
+            if ids.is_some_and(|ids| !ids.contains(&u.id)) {
+                continue;
+            }
+            let path = self.deps.managed().install_root().join(&u.id);
+            let left = match u.kind {
+                "engine" => {
+                    self.deps.managed().remove(&u.id)?;
+                    dir_size(&path)
+                }
+                _ => {
+                    self.models.remove(&u.id)?;
+                    model_spec(&u.id).map_or(0, |m| model_bytes(self.models.dir(), m))
+                }
+            };
+            removed.push(UnusedDownload {
+                bytes: u.bytes.saturating_sub(left),
+                ..u
+            });
+        }
+        if removed.iter().any(|u| u.kind == "engine") {
+            self.deps.refresh();
+        }
+        Ok(removed)
     }
 
     /// Checks shared by [`Engine::run`] and [`Engine::check`]: the tool,
@@ -759,6 +927,29 @@ fn loose_eq(a: &Value, b: &Value) -> bool {
             },
             _ => false,
         }
+}
+
+/// Engines tools may use to read or write formats without listing them in
+/// `requires`; kept while any tool is on.
+use crate::models::model_spec;
+
+const SHARED_ENGINES: &[&str] = &["imagemagick", "ffmpeg"];
+
+fn dir_size(p: &std::path::Path) -> u64 {
+    match std::fs::symlink_metadata(p) {
+        Ok(m) if m.is_dir() => std::fs::read_dir(p)
+            .map(|rd| rd.flatten().map(|e| dir_size(&e.path())).sum())
+            .unwrap_or(0),
+        Ok(m) => m.len(),
+        Err(_) => 0,
+    }
+}
+
+fn model_bytes(dir: &std::path::Path, spec: &crate::models::ModelSpec) -> u64 {
+    std::iter::once(spec.file_name)
+        .chain(spec.extra.iter().map(|(_, f)| *f))
+        .map(|f| dir_size(&dir.join(f)))
+        .sum()
 }
 
 #[cfg(test)]
@@ -1310,5 +1501,112 @@ mod tests {
             "not_installed"
         );
         assert_eq!(e.packs().iter().find(|p| p.id == "text").unwrap().tools, 1);
+    }
+
+    #[test]
+    fn set_packs_applies_without_restart() {
+        let e = packs_engine(PackSelection::all());
+        let before = e.generation();
+        let r = e.set_packs(PackSelection::only(["image"]));
+        assert_eq!(r.removed, vec!["text.upper"]);
+        assert!(e.generation() > before);
+        assert_eq!(
+            e.not_installed("text.upper").unwrap().code(),
+            "not_installed"
+        );
+        assert!(!e.packs().iter().find(|p| p.id == "text").unwrap().enabled);
+        let r = e.set_packs(e.pack_selection().with("text", true));
+        assert_eq!(r.added, vec!["text.upper"]);
+        assert!(e.pack_selection().is_on("text"));
+        e.set_packs(PackSelection::all());
+        assert_eq!(e.registry().len(), 2);
+    }
+
+    fn speech_engine() -> Engine {
+        let mut reg = Registry::new();
+        reg.register_all(vec![
+            sync_tool(
+                ToolSpec::new("text.upper", "Upper", Category::Text).describe("upper"),
+                |_c, _p| Ok(ToolOutput::text("A")),
+            ),
+            sync_tool(
+                ToolSpec::new("audio.transcribe", "Transcribe", Category::Audio)
+                    .describe("transcribe")
+                    .requires_model("whisper"),
+                |_c, _p| Ok(ToolOutput::text("t")),
+            ),
+        ]);
+        Engine::new(reg, EngineConfig::local(Environment::Cli), vec![])
+    }
+
+    #[test]
+    fn packs_report_download_sizes() {
+        let e = speech_engine();
+        let packs = e.packs();
+        let model = crate::models::recommended_model("whisper").unwrap();
+        let audio = packs.iter().find(|p| p.id == "audio").unwrap();
+        assert!(audio.download_bytes >= model.size_bytes);
+        assert!(audio.disk_bytes >= model.size_bytes);
+        assert_eq!(
+            packs
+                .iter()
+                .find(|p| p.id == "text")
+                .unwrap()
+                .download_bytes,
+            0
+        );
+    }
+
+    #[test]
+    fn unused_downloads_only_lists_what_no_turned_on_pack_uses() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut e = speech_engine();
+        e.models = Arc::new(crate::models::ModelRegistry::new(dir.path().to_path_buf()));
+        let model = crate::models::recommended_model("whisper").unwrap();
+        for f in std::iter::once(model.file_name).chain(model.extra.iter().map(|(_, f)| *f)) {
+            std::fs::write(dir.path().join(f), b"12345").unwrap();
+        }
+        assert!(e.models.is_installed(model.id));
+        assert!(e.unused_downloads().is_empty(), "audio pack still on");
+
+        e.set_packs(PackSelection::only(["text"]));
+        let unused = e.unused_downloads();
+        assert_eq!(unused.len(), 1);
+        assert_eq!(unused[0].kind, "model");
+        assert_eq!(unused[0].id, model.id);
+        assert_eq!(unused[0].bytes, 5 * (1 + model.extra.len() as u64));
+
+        assert!(e
+            .remove_unused(Some(&["other".to_string()]))
+            .unwrap()
+            .is_empty());
+        let removed = e.remove_unused(None).unwrap();
+        assert_eq!(removed, unused);
+        assert!(!e.models.is_installed(model.id));
+        assert!(e.unused_downloads().is_empty());
+    }
+
+    #[test]
+    fn concurrent_pack_edits_are_not_lost() {
+        let e = Arc::new(packs_engine(PackSelection::all()));
+        let saved = Arc::new(std::sync::Mutex::new(PackSelection::all()));
+        let hs: Vec<_> = ["text", "image"]
+            .into_iter()
+            .map(|p| {
+                let (e, saved) = (e.clone(), saved.clone());
+                std::thread::spawn(move || {
+                    e.edit_pack(p, false, |n| {
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                        *saved.lock().unwrap() = n.clone();
+                        Ok::<_, ()>(())
+                    })
+                    .unwrap();
+                })
+            })
+            .collect();
+        hs.into_iter().for_each(|h| h.join().unwrap());
+        let live = e.pack_selection();
+        assert!(!live.is_on("text") && !live.is_on("image"));
+        assert_eq!(*saved.lock().unwrap(), live);
     }
 }

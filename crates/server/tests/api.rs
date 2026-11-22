@@ -1633,3 +1633,98 @@ expect = { text = "hi" }
     assert_eq!(r.status, StatusCode::NOT_FOUND);
     assert!(!dir.join("text.ext_echo.toml").exists());
 }
+
+#[tokio::test]
+async fn admins_turn_packs_on_and_off() {
+    let t = setup(AuthMode::Required);
+    let (cookie, csrf) = owner_session(&t).await;
+    let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
+    let token = create_agent_token(&t, &cookie, &csrf, "bot", json!({"allow": ["*"]})).await;
+    let bearer = format!("Bearer {token}");
+    let agent = [("authorization", bearer.as_str())];
+
+    // Non-admins can read packs but not change them.
+    let r = call(&t.app, Method::GET, "/api/v1/packs", &agent, None).await;
+    assert_eq!(r.status, StatusCode::OK);
+    for (m, p, b) in [
+        (Method::GET, "/api/v1/admin/packs", None),
+        (
+            Method::PUT,
+            "/api/v1/admin/packs/text",
+            Some(json!({"enabled": false})),
+        ),
+        (Method::POST, "/api/v1/admin/packs/cleanup", Some(json!({}))),
+    ] {
+        let r = call(&t.app, m, p, &agent, b).await;
+        assert_eq!(r.status, StatusCode::FORBIDDEN, "{p}");
+    }
+
+    let r = call(&t.app, Method::GET, "/api/v1/admin/packs", &h, None).await;
+    assert_eq!(r.status, StatusCode::OK);
+    let text = |b: &Value| {
+        b["packs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["id"] == "text")
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(text(&r.body)["enabled"], true);
+    assert!(text(&r.body)["download_bytes"].is_u64());
+
+    let r = call(
+        &t.app,
+        Method::PUT,
+        "/api/v1/admin/packs/nope",
+        &h,
+        Some(json!({"enabled": false})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+
+    // Turning Text off hides its tools right away and is saved.
+    let r = call(
+        &t.app,
+        Method::PUT,
+        "/api/v1/admin/packs/text",
+        &h,
+        Some(json!({"enabled": false})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(text(&r.body)["enabled"], false);
+    assert!(r.body["reload"]["removed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|x| x == "text.upper"));
+    assert!(r.body["unused"].is_array());
+    let r = call(&t.app, Method::GET, "/api/v1/tools/text.upper", &h, None).await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    let saved = dogubako_core::packs::PackSelection::load(&t.state.cfg.packs_file());
+    assert!(!saved.is_on("text") && saved.is_on("image"));
+    assert_eq!(t.state.cfg.saved_packs(), saved);
+
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/admin/packs/cleanup",
+        &h,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.body["freed_bytes"], 0);
+
+    let r = call(
+        &t.app,
+        Method::PUT,
+        "/api/v1/admin/packs/text",
+        &h,
+        Some(json!({"enabled": true})),
+    )
+    .await;
+    assert_eq!(text(&r.body)["enabled"], true);
+    assert!(dogubako_core::packs::PackSelection::load(&t.state.cfg.packs_file()).is_all());
+}
