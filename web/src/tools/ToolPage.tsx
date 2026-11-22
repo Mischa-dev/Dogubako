@@ -44,7 +44,7 @@ export default function ToolPage({ toolId }: { toolId: string }) {
   const shown = live ?? (last.current?.id === toolId ? last.current : undefined);
   const removed = !live && !!shown;
   const tool = useMemo(
-    () => (shown && removed ? { ...shown, availability: { ...shown.availability, available: false } } : shown),
+    () => (shown && removed ? { ...shown, availability: { ...shown.availability, available: false, reason: 'This tool was removed' } } : shown),
     [shown, removed],
   );
   const route = useRoute();
