@@ -375,22 +375,24 @@ async fn list_tools(
     Json(json!({"tools": tools, "count": tools.len()}))
 }
 
+/// Refresh the cached store index in the background once it is this old.
+const STORE_REFRESH_SECS: u64 = 3600;
+
 /// Tools the caller could add: built-ins of turned-off packs they may use,
-/// and store tools from the index (cached, or fetched once when not cached).
+/// and store tools from the cached index (refreshed in the background when stale).
 /// `can_install` says whether this caller may install each one.
 async fn available_tools(State(s): State<AppState>, p: Principal) -> Json<Value> {
     use dogubako_core::store;
     let ext = s.cfg.extensions_dir();
-    let index = match s.cfg.store_url() {
-        Some(url) => match store::cached_index(&url, &ext) {
-            Some(i) => Some(i),
-            None => store::load_index(&url, &ext, &s.engine.config.net)
-                .await
-                .ok()
-                .map(|l| l.index),
-        },
-        None => None,
-    };
+    // Scoped tokens never see store metadata; people do, so they can ask.
+    let url = s.cfg.store_url().filter(|_| p.token_scope.is_none());
+    let index = url.as_deref().and_then(|u| store::cached_index(u, &ext));
+    if let Some(url) = url.filter(|u| store::cache_is_stale(u, &ext, STORE_REFRESH_SECS)) {
+        let (ext, net) = (ext.clone(), s.engine.config.net.clone());
+        tokio::spawn(async move {
+            let _ = store::load_index(&url, &ext, &net).await;
+        });
+    }
     let perms = p.permissions(s.host_fs_enabled());
     let store_ok = p.is_admin() && s.cfg.allow_extension_install;
     let tools: Vec<Value> = store::available(&s.engine, index.as_ref(), |spec| {

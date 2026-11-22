@@ -149,7 +149,10 @@ fn search_available(
                 t.name,
                 t.description,
                 t.keywords.join(" "),
-                t.category
+                Category::ALL
+                    .iter()
+                    .find(|c| c.id() == t.category)
+                    .map_or(t.category.as_str(), |c| c.label())
             )
             .to_lowercase();
             if !terms.iter().all(|term| hay.contains(term)) {
@@ -536,11 +539,12 @@ impl McpServer {
                     })
                     .collect();
                 if args.get("include_available").and_then(|v| v.as_bool()) == Some(true) {
+                    let room = limit.saturating_sub(results.len());
                     results.extend(search_available(
                         self.backend.available_tools(),
                         &terms,
                         cat,
-                        limit,
+                        room,
                     ));
                 }
                 let text = if results.is_empty() {
@@ -553,10 +557,15 @@ impl McpServer {
                                 "- {} — {}{}",
                                 r["id"].as_str().unwrap_or(""),
                                 r["description"].as_str().unwrap_or(""),
-                                if r["available"] == json!(false) {
-                                    " (unavailable)"
+                                if r["installed"] == json!(false) {
+                                    format!(
+                                        " (not installed: {})",
+                                        r["install"].as_str().unwrap_or("")
+                                    )
+                                } else if r["available"] == json!(false) {
+                                    " (unavailable)".into()
                                 } else {
-                                    ""
+                                    String::new()
                                 }
                             )
                         })

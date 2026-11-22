@@ -684,6 +684,11 @@ pub async fn update(
 
 // ---------------------------------------------------------------- not installed
 
+/// Whether the cached index for `url` is missing or older than `max_age_secs`.
+pub fn cache_is_stale(url: &str, ext_dir: &Path, max_age_secs: u64) -> bool {
+    read_cache(ext_dir, url).is_none_or(|c| now().saturating_sub(c.fetched_at) > max_age_secs)
+}
+
 /// The cached index for `url`, without touching the network.
 pub fn cached_index(url: &str, ext_dir: &Path) -> Option<StoreIndex> {
     read_cache(ext_dir, url).map(|c| c.index)

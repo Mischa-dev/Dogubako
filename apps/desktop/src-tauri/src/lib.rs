@@ -309,19 +309,20 @@ async fn store_index(state: &Desktop) -> Result<dogubako_core::store::LoadedInde
     dogubako_core::store::load_index(&url, &state.dirs.extensions, &state.engine.config.net).await.map_err(|e| e.to_string())
 }
 
-/// Tools not installed here: turned-off packs and store tools (cached index,
-/// or fetched once when not cached).
+/// Tools not installed here: turned-off packs and store tools from the cached
+/// index (refreshed in the background when stale).
 #[tauri::command]
 async fn available_tools(state: State<'_, Desktop>) -> Result<Value, String> {
     use dogubako_core::store;
     let ext = &state.dirs.extensions;
-    let index = match store::local_url() {
-        Some(url) => match store::cached_index(&url, ext) {
-            Some(i) => Some(i),
-            None => store::load_index(&url, ext, &state.engine.config.net).await.ok().map(|l| l.index),
-        },
-        None => None,
-    };
+    let url = store::local_url();
+    let index = url.as_deref().and_then(|u| store::cached_index(u, ext));
+    if let Some(url) = url.filter(|u| store::cache_is_stale(u, ext, 3600)) {
+        let (ext, net) = (ext.clone(), state.engine.config.net.clone());
+        tauri::async_runtime::spawn(async move {
+            let _ = store::load_index(&url, &ext, &net).await;
+        });
+    }
     let tools: Vec<Value> = store::available(&state.engine, index.as_ref(), |_| true)
         .into_iter()
         .map(|t| {
