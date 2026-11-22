@@ -190,13 +190,59 @@ value from stdin), or
 `PUT /api/v1/extensions/<id>/settings`. Secret values are never echoed back.
 Unknown `{settings.x}` names are rejected when the manifest is parsed.
 
+### Tests
+
+Optional `[[tests]]` run right after install and with
+`dogubako extensions test <id>`: sample `params`, sample input `files`
+(contents keyed by file parameter; the parameter's value, if given, names the
+file) and checks in `expect`:
+
+```toml
+[[tests]]
+name = "encodes a sample"
+params = { quality = 50, input = "a.png" }
+files = { input = "..." }
+expect = { files = 1 }
+
+[[tests]]
+params = { word = '{"ok":true}' }
+expect = { text = "...", contains = ["ok"], json = { "$.ok" = true } }
+# expect = { error = "invalid_input" } passes only if the run fails that way
+```
+
+`json` maps a path (`$.a.b[0]`) to the expected value, checked against JSON
+text output (or the structured data). A test whose tool is unavailable here
+(missing program, unset required setting) is reported `skipped`, never passed.
+
+### Install, uninstall, test
+
+```
+dogubako extensions install ./weather.toml      # or an https:// URL
+dogubako extensions test text.weather
+dogubako extensions uninstall text.weather [--purge]
+```
+
+Install validates the manifest, shows its permissions and requirements (and
+asks unless `--yes`/`--json`), copies it to `<extensions>/<id>.toml`, pins its
+SHA-256, reloads and runs its tests, returning
+`{id, version, trusted, loaded, tests: [{name, status, error}], passed, error}`
+(exit code 1 when `passed` is false). An id that collides with a built-in or
+another extension fails and changes nothing; `--replace` updates an installed
+extension. A failing test leaves the extension installed and reports it
+failing. Uninstall removes the manifest and its trust entry and reloads;
+settings are kept unless `--purge`. The same exist as admin endpoints
+(`POST /api/v1/extensions/install`, `DELETE /api/v1/extensions/<id>`,
+`POST /api/v1/extensions/<id>/test`) and desktop commands
+(`install_extension`, `uninstall_extension`, `test_extension`).
+
 ### Trust and permissions
 
 * Manifests live in the per-user extensions folder (`~/.local/share/dogubako/extensions`,
   `~/Library/Application Support/Dogubako/extensions`, `%APPDATA%\Dogubako\extensions`)
   or `<data_dir>/extensions` on a server.
 * A manifest is **only loaded after it is explicitly trusted**:
-  `dogubako extensions trust <id>` pins its SHA-256 in `trusted.toml`. Any
+  `dogubako extensions install` or `dogubako extensions trust <id>` pins its
+  SHA-256 in `trusted.toml`. Any
   edit invalidates trust until it is reviewed and trusted again.
 * Shells and script interpreters (`sh`, `bash`, `cmd`, `powershell`, `python`,
   `node`, `perl`, `env`, `sudo`…) are refused as programs.

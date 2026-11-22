@@ -219,6 +219,32 @@ fn configure_extension(state: State<'_, Desktop>, id: String, values: Map<String
     dogubako_core::manifest::configure_extension(&state.dirs.extensions, &id, &values).map_err(|e| e.to_string())
 }
 
+/// Install a manifest (file path or http(s) URL) in one step: validate,
+/// copy, trust, reload and run its tests.
+#[tauri::command]
+async fn install_extension(app: tauri::AppHandle, state: State<'_, Desktop>, source: String, replace: Option<bool>) -> Result<dogubako_core::extensions::ExtensionReport, String> {
+    use dogubako_core::extensions as ext;
+    let text = ext::fetch_manifest(&source, &state.engine.config.net).await.map_err(|e| e.to_string())?;
+    let opts = ext::InstallOptions { replace: replace.unwrap_or(false) };
+    let report = ext::install(&state.engine, &state.dirs.extensions, &text, opts).await.map_err(|e| e.to_string())?;
+    let _ = app.emit(TOOLS_CHANGED, json!({ "added": [report.id.clone()] }));
+    Ok(report)
+}
+
+/// Remove an extension and its trust entry; settings are kept unless `purge`.
+#[tauri::command]
+fn uninstall_extension(app: tauri::AppHandle, state: State<'_, Desktop>, id: String, purge: Option<bool>) -> Result<dogubako_core::extensions::UninstallReport, String> {
+    let report = dogubako_core::extensions::uninstall(&state.engine, &state.dirs.extensions, &id, purge.unwrap_or(false)).map_err(|e| e.to_string())?;
+    let _ = app.emit(TOOLS_CHANGED, json!({ "removed": [id] }));
+    Ok(report)
+}
+
+/// Run an installed extension's tests without reinstalling it.
+#[tauri::command]
+async fn test_extension(state: State<'_, Desktop>, id: String) -> Result<dogubako_core::extensions::ExtensionReport, String> {
+    dogubako_core::extensions::test(&state.engine, &state.dirs.extensions, &id).await.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn cancel_run(state: State<'_, Desktop>, run_id: String) {
     // The web app only cancels runs it has started, so a missing entry means
@@ -484,6 +510,9 @@ pub fn run() {
             assistant_models,
             extension_settings,
             configure_extension,
+            install_extension,
+            uninstall_extension,
+            test_extension,
             discard_run_outputs,
             reload_tools
         ])

@@ -6,8 +6,8 @@ use crate::error::{ToolError, ToolResult};
 use crate::manifest::{
     json_path_get, parse_manifest, sha256_hex, ManifestTest, SettingsStore, TrustStore,
 };
-use crate::policy::NetPolicy;
 use crate::params::LocalFileResolver;
+use crate::policy::NetPolicy;
 use crate::policy::PermissionSet;
 use crate::registry::Registry;
 use crate::spec::ToolSpec;
@@ -157,7 +157,12 @@ fn too_big() -> ToolError {
 }
 
 /// Validate a manifest without changing anything: what install would add.
-pub fn preview(engine: &Engine, dir: &Path, text: &str, opts: InstallOptions) -> ToolResult<ExtensionReport> {
+pub fn preview(
+    engine: &Engine,
+    dir: &Path,
+    text: &str,
+    opts: InstallOptions,
+) -> ToolResult<ExtensionReport> {
     let (tool, existing) = validate(engine, dir, text, opts)?;
     let mut r = ExtensionReport::from_spec(tool.spec(), engine);
     r.sha256 = tool.sha256().to_string();
@@ -223,11 +228,7 @@ pub async fn install(
 
     engine.reload();
     let file = target.file_name().unwrap().to_string_lossy().to_string();
-    let status = engine
-        .extensions()
-        .iter()
-        .find(|s| s.file == file)
-        .cloned();
+    let status = engine.extensions().iter().find(|s| s.file == file).cloned();
     if !status.as_ref().is_some_and(|s| s.loaded) {
         let why = status
             .and_then(|s| s.error)
@@ -239,7 +240,9 @@ pub async fn install(
     let Some(loaded) = engine.registry().get(&id).cloned() else {
         rollback(&mut trust);
         engine.reload();
-        return Err(ToolError::failed(format!("'{id}' is not available after reload")));
+        return Err(ToolError::failed(format!(
+            "'{id}' is not available after reload"
+        )));
     };
     let mut r = ExtensionReport::from_spec(loaded.spec(), engine);
     r.file = Some(file);
@@ -264,7 +267,8 @@ pub async fn test(engine: &Engine, dir: &Path, id: &str) -> ToolResult<Extension
         .is_some_and(|s| *s == status.sha256);
     let text = std::fs::read_to_string(dir.join(&status.file))
         .map_err(|e| ToolError::failed(format!("reading {}: {e}", status.file)))?;
-    let parsed = parse_manifest(&text, &status.file).map_err(|e| ToolError::invalid("manifest", e))?;
+    let parsed =
+        parse_manifest(&text, &status.file).map_err(|e| ToolError::invalid("manifest", e))?;
     let loaded = engine.registry().get(id).cloned();
     let spec = loaded
         .as_ref()
@@ -295,7 +299,12 @@ pub async fn test(engine: &Engine, dir: &Path, id: &str) -> ToolResult<Extension
 
 /// Remove an extension's manifest(s) and trust entry and reload. Settings
 /// are kept unless `purge`.
-pub fn uninstall(engine: &Engine, dir: &Path, id: &str, purge: bool) -> ToolResult<UninstallReport> {
+pub fn uninstall(
+    engine: &Engine,
+    dir: &Path,
+    id: &str,
+    purge: bool,
+) -> ToolResult<UninstallReport> {
     if let Some(t) = engine.catalog().get(id) {
         if !is_extension(t.spec()) {
             return Err(ToolError::invalid(
@@ -351,7 +360,9 @@ fn validate(
     let id = spec.id.clone();
     // The registry's own checks (id format, parameter specs) up front.
     Registry::new()
-        .register(Arc::new(parse_manifest(text, "install").map_err(|e| ToolError::invalid("manifest", e))?))
+        .register(Arc::new(
+            parse_manifest(text, "install").map_err(|e| ToolError::invalid("manifest", e))?,
+        ))
         .map_err(|e| ToolError::invalid("manifest", e.to_string()))?;
     let catalog = engine.catalog();
     let mcp = spec.mcp_name();
@@ -391,7 +402,10 @@ fn validate(
     if target.exists() && !existing.contains(&target) {
         return Err(ToolError::invalid(
             "manifest",
-            format!("{} exists and is not a manifest for '{id}'", target.display()),
+            format!(
+                "{} exists and is not a manifest for '{id}'",
+                target.display()
+            ),
         ));
     }
     Ok((tool, existing))
@@ -448,7 +462,10 @@ async fn run_test(engine: &Engine, spec: &ToolSpec, t: &ManifestTest) -> TestRes
             why.push(format!("missing {}", names.join(", ")));
         }
         if !avail.unset_settings.is_empty() {
-            why.push(format!("unset settings: {}", avail.unset_settings.join(", ")));
+            why.push(format!(
+                "unset settings: {}",
+                avail.unset_settings.join(", ")
+            ));
         }
         if why.is_empty() {
             why.push("tool is unavailable".into());
@@ -473,8 +490,13 @@ async fn run_test(engine: &Engine, spec: &ToolSpec, t: &ManifestTest) -> TestRes
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| format!("{param}.txt"));
         let path = inputs.join(name);
-        if let Err(e) = std::fs::create_dir_all(&inputs).and_then(|_| std::fs::write(&path, contents)) {
-            return result(TestStatus::Failed, Some(format!("writing sample file: {e}")));
+        if let Err(e) =
+            std::fs::create_dir_all(&inputs).and_then(|_| std::fs::write(&path, contents))
+        {
+            return result(
+                TestStatus::Failed,
+                Some(format!("writing sample file: {e}")),
+            );
         }
         params.insert(param.clone(), Value::String(path.to_string_lossy().into()));
     }
@@ -505,10 +527,15 @@ pub fn check(t: &ManifestTest, run: ToolResult<ToolOutput>) -> Result<(), String
     let out = match (run, &e.error) {
         (Err(err), Some(code)) if err.code() == code => return Ok(()),
         (Err(err), Some(code)) => {
-            return Err(format!("expected error '{code}', got '{}': {err}", err.code()))
+            return Err(format!(
+                "expected error '{code}', got '{}': {err}",
+                err.code()
+            ))
         }
         (Err(err), None) => return Err(err.to_string()),
-        (Ok(_), Some(code)) => return Err(format!("expected error '{code}', but the run succeeded")),
+        (Ok(_), Some(code)) => {
+            return Err(format!("expected error '{code}', but the run succeeded"))
+        }
         (Ok(o), None) => o,
     };
     let text = out.text.clone().unwrap_or_default();
@@ -519,7 +546,10 @@ pub fn check(t: &ManifestTest, run: ToolResult<ToolOutput>) -> Result<(), String
     }
     for s in &e.contains {
         if !text.contains(s.as_str()) {
-            return Err(format!("output does not contain {s:?}: {:?}", truncate(&text)));
+            return Err(format!(
+                "output does not contain {s:?}: {:?}",
+                truncate(&text)
+            ));
         }
     }
     if !e.json.is_empty() {
@@ -534,7 +564,10 @@ pub fn check(t: &ManifestTest, run: ToolResult<ToolOutput>) -> Result<(), String
     }
     if let Some(n) = e.files {
         if out.artifacts.len() != n {
-            return Err(format!("expected {n} output file(s), got {}", out.artifacts.len()));
+            return Err(format!(
+                "expected {n} output file(s), got {}",
+                out.artifacts.len()
+            ));
         }
     }
     Ok(())
@@ -650,11 +683,20 @@ expect = { json = { "$.a[0]" = 1, "a[1].b" = "c" } }
     async fn install_pins_reloads_and_runs_tests() {
         let dir = tempfile::tempdir().unwrap();
         let e = engine(dir.path());
-        let r = install(&e, dir.path(), M, InstallOptions::default()).await.unwrap();
+        let r = install(&e, dir.path(), M, InstallOptions::default())
+            .await
+            .unwrap();
         assert!(r.trusted && r.loaded && r.passed, "{r:?}");
-        assert_eq!((r.id.as_str(), r.version.as_str()), ("text.ext_echo", "1.2.0"));
+        assert_eq!(
+            (r.id.as_str(), r.version.as_str()),
+            ("text.ext_echo", "1.2.0")
+        );
         assert_eq!(r.tests.len(), 2);
-        assert!(r.tests.iter().all(|t| t.status == TestStatus::Passed), "{:?}", r.tests);
+        assert!(
+            r.tests.iter().all(|t| t.status == TestStatus::Passed),
+            "{:?}",
+            r.tests
+        );
         assert_eq!(r.tests[1].name, "test 2");
         assert_eq!(files(dir.path()), ["text.ext_echo.toml", "trusted.toml"]);
         let trust = TrustStore::load(&dir.path().join("trusted.toml"));
@@ -671,7 +713,9 @@ expect = { json = { "$.a[0]" = 1, "a[1].b" = "c" } }
         let dir = tempfile::tempdir().unwrap();
         let e = engine(dir.path());
         let m = M.replace(r#"text = "hi""#, r#"text = "bye""#);
-        let r = install(&e, dir.path(), &m, InstallOptions::default()).await.unwrap();
+        let r = install(&e, dir.path(), &m, InstallOptions::default())
+            .await
+            .unwrap();
         assert!(r.loaded && r.trusted);
         assert!(!r.passed);
         assert_eq!(r.tests[0].status, TestStatus::Failed);
@@ -687,7 +731,9 @@ expect = { json = { "$.a[0]" = 1, "a[1].b" = "c" } }
         let dir = tempfile::tempdir().unwrap();
         let e = engine(dir.path());
         let m = format!("{M}[[settings]]\nname = \"key\"\ntype = \"text\"\nrequired = true\n");
-        let r = install(&e, dir.path(), &m, InstallOptions::default()).await.unwrap();
+        let r = install(&e, dir.path(), &m, InstallOptions::default())
+            .await
+            .unwrap();
         assert!(r.loaded && r.passed);
         assert_eq!(r.unset_settings, ["key"]);
         assert!(r.tests.iter().all(|t| t.status == TestStatus::Skipped));
@@ -716,13 +762,19 @@ expect = { json = { "$.a[0]" = 1, "a[1].b" = "c" } }
         let err = install(&e, dir.path(), &v2, opts).await.unwrap_err();
         assert!(err.to_string().contains("already installed"), "{err}");
         assert_eq!(files(dir.path()), before);
-        assert_eq!(std::fs::read_to_string(dir.path().join("trusted.toml")).unwrap(), trust);
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("trusted.toml")).unwrap(),
+            trust
+        );
 
         let r = install(&e, dir.path(), &v2, InstallOptions { replace: true })
             .await
             .unwrap();
         assert!(r.replaced && r.version == "1.3.0");
-        assert_eq!(e.registry().get("text.ext_echo").unwrap().spec().version, "1.3.0");
+        assert_eq!(
+            e.registry().get("text.ext_echo").unwrap().spec().version,
+            "1.3.0"
+        );
     }
 
     #[tokio::test]
@@ -731,7 +783,9 @@ expect = { json = { "$.a[0]" = 1, "a[1].b" = "c" } }
         let e = engine(dir.path());
         let settings = dir.path().join("settings").join("text.ext_echo.toml");
         for purge in [false, true] {
-            install(&e, dir.path(), M, InstallOptions::default()).await.unwrap();
+            install(&e, dir.path(), M, InstallOptions::default())
+                .await
+                .unwrap();
             std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
             std::fs::write(&settings, "word = \"x\"\n").unwrap();
             let r = uninstall(&e, dir.path(), "text.ext_echo", purge).unwrap();

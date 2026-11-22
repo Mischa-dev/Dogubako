@@ -144,6 +144,47 @@ pub fn extensions_cmd() -> Command {
         )
         .subcommand(Command::new("untrust").arg(Arg::new("id").required(true)))
         .subcommand(
+            Command::new("install")
+                .about(
+                    "Install a manifest in one step: validate, copy, trust (pin SHA-256), reload \
+                     and run its tests",
+                )
+                .arg(
+                    Arg::new("source")
+                        .required(true)
+                        .help("Manifest file or http(s) URL"),
+                )
+                .arg(
+                    Arg::new("replace")
+                        .long("replace")
+                        .action(ArgAction::SetTrue)
+                        .help("Replace an installed extension with the same id"),
+                )
+                .arg(
+                    Arg::new("yes")
+                        .long("yes")
+                        .short('y')
+                        .action(ArgAction::SetTrue)
+                        .help("Do not ask for confirmation"),
+                ),
+        )
+        .subcommand(
+            Command::new("uninstall")
+                .about("Remove an extension's manifest and trust entry and reload")
+                .arg(Arg::new("id").required(true))
+                .arg(
+                    Arg::new("purge")
+                        .long("purge")
+                        .action(ArgAction::SetTrue)
+                        .help("Also delete its saved settings"),
+                ),
+        )
+        .subcommand(
+            Command::new("test")
+                .about("Run an installed extension's tests without reinstalling it")
+                .arg(Arg::new("id").required(true)),
+        )
+        .subcommand(
             Command::new("config")
                 .about("Show or change an extension's settings (stored outside its manifest)")
                 .arg(Arg::new("id").required(true))
@@ -448,11 +489,166 @@ pub fn tokens(m: &ArgMatches, out: &Out) -> i32 {
     }
 }
 
-pub fn extensions(m: &ArgMatches, out: &Out) -> i32 {
-    let dir = m
-        .get_one::<String>("dir")
+fn extensions_dir(m: &ArgMatches) -> PathBuf {
+    m.get_one::<String>("dir")
         .map(PathBuf::from)
-        .unwrap_or_else(|| dogubako_core::paths::AppDirs::default_local().extensions);
+        .unwrap_or_else(|| dogubako_core::paths::AppDirs::default_local().extensions)
+}
+
+/// `extensions install|uninstall|test`.
+pub async fn extension_lifecycle(m: &ArgMatches, out: &Out) -> i32 {
+    use dogubako_core::extensions as ext;
+    let dir = extensions_dir(m);
+    let engine = crate::build_engine_with(dogubako_core::tool::Environment::Cli, dir.clone());
+    let report = match m.subcommand() {
+        Some(("install", s)) => {
+            let source = s.get_one::<String>("source").unwrap();
+            let opts = ext::InstallOptions {
+                replace: s.get_flag("replace"),
+            };
+            let failed = |id: String, e: String| ext::ExtensionReport {
+                id,
+                error: Some(e),
+                ..Default::default()
+            };
+            let text = match ext::fetch_manifest(source, &engine.config.net).await {
+                Ok(t) => t,
+                Err(e) => return print_report(out, &failed(String::new(), e.to_string())),
+            };
+            let preview = match ext::preview(&engine, &dir, &text, opts) {
+                Ok(p) => p,
+                Err(e) => {
+                    let id = parse_manifest(&text, "")
+                        .map(|t| {
+                            use dogubako_core::tool::Tool;
+                            t.spec().id.clone()
+                        })
+                        .unwrap_or_default();
+                    return print_report(out, &failed(id, e.to_string()));
+                }
+            };
+            if !out.json && !out.quiet {
+                eprintln!("{} {} ({})", preview.name, preview.version, preview.id);
+                eprintln!("  permissions: {}", none_if_empty(&preview.permissions));
+                eprintln!("  requires:    {}", none_if_empty(&preview.requires));
+                if !preview.missing.is_empty() {
+                    eprintln!("  not installed here: {}", preview.missing.join(", "));
+                }
+                if preview.replaced {
+                    eprintln!("  replaces the installed copy");
+                }
+            }
+            let ask = !s.get_flag("yes")
+                && !out.json
+                && std::io::stdin().is_terminal()
+                && std::io::stderr().is_terminal();
+            if ask {
+                eprint!("Install and trust this extension? [y/N] ");
+                let mut line = String::new();
+                let _ = std::io::stdin().read_line(&mut line);
+                if !matches!(line.trim(), "y" | "Y" | "yes") {
+                    return out.error("cancelled", 1);
+                }
+            }
+            match ext::install(&engine, &dir, &text, opts).await {
+                Ok(r) => r,
+                Err(e) => failed(preview.id, e.to_string()),
+            }
+        }
+        Some(("test", s)) => {
+            let id = s.get_one::<String>("id").unwrap();
+            match ext::test(&engine, &dir, id).await {
+                Ok(r) => r,
+                Err(e) => ext::ExtensionReport {
+                    id: id.clone(),
+                    error: Some(e.to_string()),
+                    ..Default::default()
+                },
+            }
+        }
+        Some(("uninstall", s)) => {
+            let id = s.get_one::<String>("id").unwrap();
+            return match ext::uninstall(&engine, &dir, id, s.get_flag("purge")) {
+                Ok(r) => {
+                    if out.json {
+                        println!("{}", serde_json::to_string_pretty(&r).unwrap());
+                    } else {
+                        out.info(&format!(
+                            "uninstalled {id}{}",
+                            if r.purged {
+                                " and deleted its settings"
+                            } else {
+                                " (settings kept; --purge deletes them)"
+                            }
+                        ));
+                    }
+                    0
+                }
+                Err(e) => out.tool_error(&e),
+            };
+        }
+        _ => return 2,
+    };
+    print_report(out, &report)
+}
+
+fn none_if_empty(v: &[String]) -> String {
+    if v.is_empty() {
+        "none".into()
+    } else {
+        v.join(", ")
+    }
+}
+
+fn print_report(out: &Out, r: &dogubako_core::extensions::ExtensionReport) -> i32 {
+    use dogubako_core::extensions::TestStatus;
+    if out.json {
+        println!("{}", serde_json::to_string_pretty(r).unwrap());
+    } else {
+        if r.loaded {
+            println!(
+                "{} {} installed: trusted={} loaded={}",
+                r.id, r.version, r.trusted, r.loaded
+            );
+        }
+        if !r.unset_settings.is_empty() {
+            println!(
+                "  set up with: dogubako extensions config {} {}",
+                r.id,
+                r.unset_settings
+                    .iter()
+                    .map(|s| format!("{s}=..."))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+        }
+        if r.loaded && r.tests.is_empty() && r.error.is_none() {
+            println!("  no tests in the manifest");
+        }
+        for t in &r.tests {
+            let mark = match t.status {
+                TestStatus::Passed => "pass",
+                TestStatus::Failed => "FAIL",
+                TestStatus::Skipped => "skip",
+            };
+            match &t.error {
+                Some(e) => println!("  {mark} {} — {e}", t.name),
+                None => println!("  {mark} {} ({} ms)", t.name, t.duration_ms),
+            }
+        }
+        if let Some(e) = &r.error {
+            eprintln!("error: {e}");
+        }
+    }
+    if r.passed {
+        0
+    } else {
+        1
+    }
+}
+
+pub fn extensions(m: &ArgMatches, out: &Out) -> i32 {
+    let dir = extensions_dir(m);
     let trust_path = dir.join("trusted.toml");
     match m.subcommand() {
         Some(("list", _)) => {

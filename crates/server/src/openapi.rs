@@ -291,6 +291,33 @@ pub fn spec(engine: &Engine) -> Value {
         ),
     );
     add(
+        "/api/v1/extensions/install",
+        "post",
+        op(
+            "Install a manifest in one step: validate, copy, pin its SHA-256, reload and run its tests. Body {manifest | url, replace}; returns {id, version, trusted, loaded, tests, passed, error} (admin)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/extensions/{id}",
+        "delete",
+        op(
+            "Uninstall an extension: remove its manifest and trust entry and reload; ?purge=true also deletes its settings (admin)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/extensions/{id}/test",
+        "post",
+        op(
+            "Run an installed extension's tests without reinstalling it (admin)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
         "/api/v1/tools/events",
         "get",
         op(

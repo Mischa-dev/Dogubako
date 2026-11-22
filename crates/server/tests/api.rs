@@ -1526,3 +1526,97 @@ async fn packs_default_to_all() {
     let r = call(&t.app, Method::GET, "/api/v1/tools/text.upper", &[], None).await;
     assert_eq!(r.status, StatusCode::OK);
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn extensions_install_test_and_uninstall_over_http() {
+    let t = setup(AuthMode::Required);
+    let (cookie, csrf) = owner_session(&t).await;
+    let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
+    let dir = t.state.cfg.extensions_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    let d = dir.clone();
+    t.state.engine.set_loader(Arc::new(move || {
+        let mut reg = Registry::new();
+        reg.register_all(test_tools());
+        let (tools, st) = dogubako_core::manifest::load_extensions(&d, false);
+        reg.register_all(tools);
+        (reg, st)
+    }));
+    let manifest = r#"
+[tool]
+id = "text.ext_echo"
+name = "Echo"
+category = "text"
+version = "1.0.0"
+[command]
+program = "echo"
+args = ["{word}"]
+[output]
+stdout = "text/plain"
+[[params]]
+name = "word"
+type = "text"
+[[tests]]
+params = { word = "hi" }
+expect = { text = "hi" }
+"#;
+    let install = |body: Value| {
+        call(
+            &t.app,
+            Method::POST,
+            "/api/v1/extensions/install",
+            &h,
+            Some(body),
+        )
+    };
+    let r = install(json!({"manifest": manifest})).await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["id"], "text.ext_echo");
+    assert_eq!(r.body["trusted"], true);
+    assert_eq!(r.body["loaded"], true);
+    assert_eq!(r.body["passed"], true);
+    assert_eq!(r.body["tests"][0]["status"], "passed");
+    let r = call(&t.app, Method::GET, "/api/v1/tools/text.ext_echo", &h, None).await;
+    assert_eq!(r.status, StatusCode::OK);
+
+    let r = install(json!({"manifest": manifest})).await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.body);
+    assert!(r.body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("already installed"));
+    let r = install(json!({"manifest": manifest.replace("text.ext_echo", "text.upper")})).await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.body);
+    assert!(r.body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("built-in"));
+    let r = install(json!({"url": "/etc/passwd"})).await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/extensions/text.ext_echo/test",
+        &h,
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["passed"], true);
+
+    let r = call(
+        &t.app,
+        Method::DELETE,
+        "/api/v1/extensions/text.ext_echo?purge=true",
+        &h,
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["purged"], true);
+    let r = call(&t.app, Method::GET, "/api/v1/tools/text.ext_echo", &h, None).await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    assert!(!dir.join("text.ext_echo.toml").exists());
+}
