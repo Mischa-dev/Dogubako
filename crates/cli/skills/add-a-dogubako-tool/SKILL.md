@@ -18,8 +18,9 @@ Search before writing anything:
 
 Read the `tools` array, not `total` (which counts installed matches only).
 MCP sees store tools only once the store index is cached, so on a fresh
-install an empty MCP result proves nothing: run `dogubako store search <words>`
-(it fetches the index) or ask the owner to, before writing a new tool.
+install an empty MCP result proves nothing. On this machine run
+`dogubako store search <words>` (it fetches the index); for a server, ask the
+owner whether its store has the tool before you write a new one.
 
 What you find decides the next step:
 
@@ -170,8 +171,9 @@ something outside Dogubako.
   `"replace": true` for each later version.
 - CLI: `dogubako extensions install --dev <file>.toml` (add `--replace`).
 
-Read the report and fix until `passed` is true (`loaded` alone is not
-enough: a tool with failing tests still loads):
+Read the report and fix until `passed` is true and your tests show `passed`,
+not `skipped` (`passed` stays true when every test is skipped, and `loaded`
+alone is not enough: a tool with failing tests still loads):
 
 | Report | Fix |
 |---|---|
@@ -191,8 +193,8 @@ message:
 1. The tool id, what it does, its permissions and `requires`.
 2. Settings to fill in: Settings → Extensions, or `dogubako extensions config <id> key=value`.
 3. To promote it (review the manifest first): the Promote button on the tool in
-   the app, or `dogubako extensions promote <id>` (it asks to confirm; `--yes`
-   skips).
+   the app, or `dogubako extensions promote <id>` (run in a terminal, it asks to
+   confirm first).
 
 Until then the tool works only for you and is marked Dev. A tool others would
 want can go in the official store by pull request (`store/<id>/manifest.toml`).
