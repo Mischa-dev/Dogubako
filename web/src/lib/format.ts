@@ -1,3 +1,5 @@
+import type { ToolInfo } from './types';
+
 export function formatBytes(n: number | undefined | null): string {
   if (n == null || !isFinite(n)) return '—';
   if (n < 1024) return `${n} B`;
@@ -65,4 +67,9 @@ export function humanizeKey(k: string): string {
 
 export function plural(n: number, one: string, many = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
+}
+
+/** Whether a tool writes host files (rather than acting elsewhere, like printing). */
+export function touchesFiles(t: ToolInfo): boolean {
+  return t.permissions.includes('host_fs_write') || t.params.some((p) => p.type === 'path');
 }

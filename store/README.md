@@ -5,7 +5,8 @@ Reviewed extension manifests, one folder per tool: `store/<id>/manifest.toml`
 `dogubako store install <id>` (or from Settings → Tool store).
 
 * Every manifest must have `[[tests]]` that pass offline (record HTTP
-  responses with `http = {...}`); CI runs `dogubako store test`.
+  responses with `http = {...}`, program output with `command = {...}`); CI
+  runs `dogubako store test`.
 * Bump `version` when you change a manifest, then rebuild the published index
   and commit it:
 

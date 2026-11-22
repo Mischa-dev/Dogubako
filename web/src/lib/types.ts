@@ -95,6 +95,8 @@ export interface ToolInfo {
   version: string;
   ui?: string;
   destructive: boolean;
+  /** Run-button label ("Print") instead of "Run". */
+  action?: string;
   source: string;
   /** The tool checks its inputs before Run (`Backend.check`). */
   prechecks?: boolean;

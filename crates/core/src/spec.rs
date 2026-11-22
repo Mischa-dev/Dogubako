@@ -725,6 +725,9 @@ pub struct ToolSpec {
     /// Whether results may modify state outside the job (e.g. batch rename).
     #[serde(default)]
     pub destructive: bool,
+    /// Label of the button that runs the tool ("Print") instead of "Run".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
     /// Source: builtin or extension id.
     #[serde(default = "builtin")]
     pub source: String,
@@ -762,6 +765,7 @@ impl ToolSpec {
             version: "1.0.0".to_string(),
             ui: None,
             destructive: false,
+            action: None,
             source: builtin(),
             prechecks: false,
             settings: vec![],

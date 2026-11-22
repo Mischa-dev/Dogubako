@@ -88,6 +88,8 @@ Extension folders:
 | `platforms` | | Limit to `linux`, `macos` and/or `windows` |
 | `requires` | | Programs the tool needs, as dependency ids such as `["cups"]` (listed by `dogubako deps`). A missing one marks the tool unavailable with an install hint; an unknown id is an error |
 | `timeout_secs` | | Default 300 |
+| `destructive` | | `true` when running the tool has an effect outside Dogubako (prints, sends, deletes). Agents ask before running it and MCP marks it `destructiveHint` |
+| `action` | | Label of the button that runs the tool, such as `"Print"`, instead of Run (at most 24 characters) |
 
 ### `[command]`
 
@@ -98,12 +100,18 @@ Extension folders:
 
 ### `[output]`
 
-Exactly one of:
-
 | Key | Meaning |
 |---|---|
 | `file` | The output file name template. `{output}` in `args` expands to its path |
 | `stdout` | Capture standard output as text with this MIME type |
+| `extract` | Data fields read from standard output, each a regular expression (its first group, or the whole match, is the value) or a list of `{ regex, value }` cases where the first match wins and a case without `regex` is the fallback. `{param}` and `{settings.name}` in a pattern match the value literally. A field nothing matches fails the run |
+| `text` | Plain-text result built from `extract` fields and parameters, such as `"Queued, job {job_id}"` (instead of `stdout`) |
+
+```toml
+[output]
+extract = { job_id = 'request id is (\S+)' }
+text = "Queued, job {job_id}"
+```
 
 ### `[[params]]`
 

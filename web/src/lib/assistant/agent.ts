@@ -16,6 +16,7 @@
 import type { AssistantTarget, Backend } from '../backend';
 import type { Artifact, JobView, ParamSpec, ToolInfo } from '../types';
 import { search, type SearchDoc } from '../search';
+import { touchesFiles } from '../format';
 
 export interface AgentFile { ref: string; name: string; size: number; mime: string }
 
@@ -234,7 +235,7 @@ export function summarizeJob(job: JobView): Record<string, unknown> {
 /** Why a step needs the person's yes, or null when it can just run. */
 export function riskOf(t: ToolInfo, mode: 'risky' | 'always'): string | null {
   if (mode === 'always') return 'You asked to approve every step';
-  if (t.destructive) return 'Changes or removes files';
+  if (t.destructive) return touchesFiles(t) ? 'Changes or removes files' : 'Acts outside Dogubako';
   if (t.permissions.includes('host_fs_write')) return 'Writes to folders on this computer';
   if (t.permissions.includes('network')) return 'Connects to the internet';
   if (t.permissions.includes('process_info')) return 'Reads running programs';
