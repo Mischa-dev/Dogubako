@@ -54,6 +54,10 @@
 //!   store (`trusted.toml`), so dropping a file into the folder is not enough.
 //! * Declared permissions are enforced by the engine like builtin tools.
 //!
+//! `min_dogubako = "0.2.0"` in `[tool]` is the oldest Dogubako that can load
+//! the manifest (when it uses newer manifest fields). The store index carries
+//! it so older apps do not offer the tool; loading a manifest ignores it.
+//!
 //! `requires = ["cups"]` in `[tool]` names dependencies from
 //! [`crate::deps::KNOWN_DEPS`], checked like a Rust tool's `.requires(..)`. A
 //! `program` that is one of their ids or executables is found through the
@@ -118,6 +122,9 @@ struct ToolSection {
     /// Dependency ids from [`crate::deps::KNOWN_DEPS`].
     #[serde(default)]
     requires: Vec<String>,
+    /// Oldest Dogubako version that can load this manifest (semver).
+    #[serde(default)]
+    min_dogubako: Option<String>,
 }
 
 fn default_version() -> String {
@@ -331,8 +338,28 @@ fn parse_settings(decls: Vec<SettingDecl>) -> Result<Vec<ParamSpec>, String> {
 }
 
 /// Parse a manifest from TOML text.
+/// The manifest's `[tool] min_dogubako`, checked to be a semver version.
+/// Read on its own so it is found even when the rest of the manifest uses
+/// fields this build does not know.
+pub fn min_dogubako(text: &str) -> Result<Option<String>, String> {
+    let v: toml::Table = toml::from_str(text).map_err(|e| format!("invalid manifest: {e}"))?;
+    let Some(min) = v.get("tool").and_then(|t| t.get("min_dogubako")) else {
+        return Ok(None);
+    };
+    let min = min
+        .as_str()
+        .ok_or("min_dogubako must be a version string, e.g. \"0.2.0\"")?;
+    semver::Version::parse(min)
+        .map_err(|e| format!("min_dogubako '{min}' is not a semver version: {e}"))?;
+    Ok(Some(min.to_string()))
+}
+
 pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> {
     let mut m: Manifest = toml::from_str(text).map_err(|e| format!("invalid manifest: {e}"))?;
+    if let Some(min) = &m.tool.min_dogubako {
+        semver::Version::parse(min)
+            .map_err(|e| format!("min_dogubako '{min}' is not a semver version: {e}"))?;
+    }
     let category = Category::parse(&m.tool.category)
         .ok_or_else(|| format!("unknown category '{}'", m.tool.category))?;
     let command = match (m.command.take(), m.http.take()) {

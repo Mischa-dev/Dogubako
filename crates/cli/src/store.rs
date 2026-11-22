@@ -146,6 +146,13 @@ pub async fn run(m: &ArgMatches, out: &Out) -> i32 {
         }
         Some(("update", s)) => {
             let id = s.get_one::<String>("id").map(String::as_str);
+            if id.is_none() && !out.json && !out.quiet {
+                for t in store::annotate(&index.index, &engine, &dir) {
+                    if let (true, Some(why)) = (t.installed, &t.unsupported) {
+                        eprintln!("skipped: {why}");
+                    }
+                }
+            }
             match store::update(&engine, &dir, &index, id).await {
                 Ok(reports) if reports.is_empty() => {
                     if out.json {
@@ -210,6 +217,9 @@ fn print_tools(out: &Out, index: &LoadedIndex, tools: &[StoreTool], empty: &str)
         };
         println!("{} {}{state}", t.entry.id, t.entry.version);
         println!("    {}", t.entry.description);
+        if let Some(why) = &t.unsupported {
+            println!("    {why}");
+        }
     }
 }
 

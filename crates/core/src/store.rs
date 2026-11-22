@@ -7,7 +7,7 @@
 use crate::engine::Engine;
 use crate::error::{ToolError, ToolResult};
 use crate::extensions::{self, ExtensionReport, InstallOptions};
-use crate::manifest::{parse_manifest, sha256_hex};
+use crate::manifest::{min_dogubako, parse_manifest, sha256_hex};
 use crate::policy::NetPolicy;
 use crate::tool::Tool;
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,8 @@ pub const INDEX_SCHEMA: u32 = 1;
 pub const MAX_INDEX_BYTES: usize = 4 * 1024 * 1024;
 /// File name of a store tool's manifest inside `store/<id>/`.
 pub const MANIFEST_FILE: &str = "manifest.toml";
+/// The Dogubako version entries' `min_dogubako` is compared with.
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// One tool in the index.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -43,6 +45,27 @@ pub struct StoreEntry {
     pub platforms: Vec<String>,
     /// The manifest, absolute or relative to the index URL.
     pub url: String,
+    /// Oldest Dogubako that can load the manifest; older apps neither install
+    /// nor update to this entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_dogubako: Option<String>,
+}
+
+impl StoreEntry {
+    /// Why this app can't install the entry: it needs a newer Dogubako.
+    pub fn unsupported(&self) -> Option<String> {
+        self.unsupported_by(APP_VERSION)
+    }
+
+    fn unsupported_by(&self, app: &str) -> Option<String> {
+        let min = self.min_dogubako.as_deref()?;
+        is_newer(min, app).then(|| {
+            format!(
+                "{} {} needs Dogubako {min} or newer (this is {app}); update Dogubako to install it",
+                self.id, self.version
+            )
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -126,6 +149,13 @@ pub fn build_index(store_dir: &Path) -> Result<BuiltStore, String> {
             errors.push(format!("{}: manifest is too large", path.display()));
             continue;
         }
+        let min = match min_dogubako(&text) {
+            Ok(m) => m,
+            Err(e) => {
+                errors.push(format!("{}: {e}", path.display()));
+                continue;
+            }
+        };
         tools.push(StoreEntry {
             id: spec.id.clone(),
             name: spec.name.clone(),
@@ -147,6 +177,7 @@ pub fn build_index(store_dir: &Path) -> Result<BuiltStore, String> {
                 })
                 .collect(),
             url: format!("{}/{MANIFEST_FILE}", spec.id),
+            min_dogubako: min,
         });
         manifests.push((format!("{}/{MANIFEST_FILE}", spec.id), text));
     }
@@ -456,8 +487,13 @@ pub struct StoreTool {
     /// The installed store tool's version.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub installed_version: Option<String>,
-    /// The index has a newer version than the installed one.
+    /// The index has a newer version than the installed one, and this app
+    /// can load it.
     pub update_available: bool,
+    /// Why this app can't install (or update to) the entry: it needs a newer
+    /// Dogubako (`min_dogubako`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unsupported: Option<String>,
 }
 
 /// Store tools installed here, by id, with their installed version. An
@@ -503,16 +539,26 @@ pub fn is_newer(a: &str, b: &str) -> bool {
 
 /// Every tool in the index with its install state.
 pub fn annotate(index: &StoreIndex, engine: &Engine, ext_dir: &Path) -> Vec<StoreTool> {
+    annotate_for(index, engine, ext_dir, APP_VERSION)
+}
+
+fn annotate_for(index: &StoreIndex, engine: &Engine, ext_dir: &Path, app: &str) -> Vec<StoreTool> {
     let installed = installed_versions(engine, ext_dir);
     index
         .tools
         .iter()
         .map(|e| {
             let v = installed.get(&e.id).cloned();
+            let newer = v.as_deref().is_some_and(|v| is_newer(&e.version, v));
+            // An installed tool at the index's version is fine as it is.
+            let unsupported = (v.is_none() || newer)
+                .then(|| e.unsupported_by(app))
+                .flatten();
             StoreTool {
-                update_available: v.as_deref().is_some_and(|v| is_newer(&e.version, v)),
+                update_available: newer && unsupported.is_none(),
                 installed: v.is_some(),
                 installed_version: v,
+                unsupported,
                 entry: e.clone(),
             }
         })
@@ -623,7 +669,21 @@ pub async fn install(
     id: &str,
     replace: bool,
 ) -> ToolResult<ExtensionReport> {
+    install_for(engine, ext_dir, index, id, replace, APP_VERSION).await
+}
+
+async fn install_for(
+    engine: &Engine,
+    ext_dir: &Path,
+    index: &LoadedIndex,
+    id: &str,
+    replace: bool,
+    app: &str,
+) -> ToolResult<ExtensionReport> {
     let e = entry(index, id)?;
+    if let Some(message) = e.unsupported_by(app) {
+        return Err(ToolError::Unsupported { message });
+    }
     let text = fetch_entry(index, e, &engine.config.net).await?;
     let report = extensions::install(engine, ext_dir, &text, InstallOptions { replace }).await?;
     with_installed(ext_dir, |i| {
@@ -641,14 +701,25 @@ pub async fn install(
 
 /// Update installed store tools that have a newer version in the index:
 /// `id`, or all of them. A tool that fails is reported with its error and
-/// the rest still update.
+/// the rest still update. Newer versions that need a newer Dogubako are
+/// skipped (see [`StoreTool::unsupported`]); naming one is an error.
 pub async fn update(
     engine: &Engine,
     ext_dir: &Path,
     index: &LoadedIndex,
     id: Option<&str>,
 ) -> ToolResult<Vec<ExtensionReport>> {
-    let tools = annotate(&index.index, engine, ext_dir);
+    update_for(engine, ext_dir, index, id, APP_VERSION).await
+}
+
+async fn update_for(
+    engine: &Engine,
+    ext_dir: &Path,
+    index: &LoadedIndex,
+    id: Option<&str>,
+    app: &str,
+) -> ToolResult<Vec<ExtensionReport>> {
+    let tools = annotate_for(&index.index, engine, ext_dir, app);
     if let Some(id) = id {
         let t = tools
             .iter()
@@ -662,6 +733,11 @@ pub async fn update(
                 format!("'{id}' is not installed from the tool store; install it first"),
             ));
         }
+        if let Some(message) = &t.unsupported {
+            return Err(ToolError::Unsupported {
+                message: message.clone(),
+            });
+        }
     }
     let targets: Vec<String> = tools
         .into_iter()
@@ -670,14 +746,16 @@ pub async fn update(
         .collect();
     let mut out = vec![];
     for t in targets {
-        out.push(match install(engine, ext_dir, index, &t, true).await {
-            Ok(r) => r,
-            Err(e) => ExtensionReport {
-                id: t,
-                error: Some(e.to_string()),
-                ..Default::default()
+        out.push(
+            match install_for(engine, ext_dir, index, &t, true, app).await {
+                Ok(r) => r,
+                Err(e) => ExtensionReport {
+                    id: t,
+                    error: Some(e.to_string()),
+                    ..Default::default()
+                },
             },
-        });
+        );
     }
     Ok(out)
 }
@@ -714,7 +792,8 @@ pub struct AvailableTool {
 }
 
 /// Tools not installed here: built-ins of turned-off packs that `keep`
-/// accepts, then entries of `index` that are not in the catalog at all.
+/// accepts, then entries of `index` that are not in the catalog at all and
+/// that this Dogubako can load.
 pub fn available(
     engine: &Engine,
     index: Option<&StoreIndex>,
@@ -748,7 +827,7 @@ pub fn available(
             index
                 .tools
                 .iter()
-                .filter(|e| tools.catalog.get(&e.id).is_none())
+                .filter(|e| tools.catalog.get(&e.id).is_none() && e.unsupported().is_none())
                 .map(|e| AvailableTool {
                     id: e.id.clone(),
                     name: e.name.clone(),
@@ -820,12 +899,25 @@ expect = {{ text = "HI" }}
         )
     }
 
+    /// `manifest(version)` that declares `min_dogubako = min`.
+    fn manifest_min(version: &str, min: &str) -> String {
+        manifest(version).replacen(
+            "keywords =",
+            &format!("min_dogubako = \"{min}\"\nkeywords ="),
+            1,
+        )
+    }
+
     /// A store folder for `text.shout` at `version`, published to `out`;
     /// returns the index URL.
     fn publish(root: &Path, version: &str) -> String {
+        publish_text(root, &manifest(version))
+    }
+
+    fn publish_text(root: &Path, text: &str) -> String {
         let src = root.join("store");
         std::fs::create_dir_all(src.join("text.shout")).unwrap();
-        std::fs::write(src.join("text.shout/manifest.toml"), manifest(version)).unwrap();
+        std::fs::write(src.join("text.shout/manifest.toml"), text).unwrap();
         let out = root.join("public");
         build_index(&src).unwrap().write(&out).unwrap();
         format!("file://{}", out.join("index.json").display())
@@ -1092,5 +1184,137 @@ expect = {{ text = "HI" }}
         let t = &annotate(&idx.index, &eng, &ext)[0];
         assert!(!t.installed && !t.update_available);
         assert!(update(&eng, &ext, &idx, None).await.unwrap().is_empty());
+    }
+
+    #[test]
+    fn build_carries_min_dogubako_and_rejects_a_bad_one() {
+        let root = tempfile::tempdir().unwrap();
+        publish(root.path(), "1.0.0");
+        let built = build_index(&root.path().join("store")).unwrap();
+        assert_eq!(built.index.tools[0].min_dogubako, None);
+        let json = serde_json::to_string(&built.index).unwrap();
+        assert!(!json.contains("min_dogubako"), "{json}");
+
+        publish_text(root.path(), &manifest_min("1.1.0", "0.2.0-alpha.1"));
+        let built = build_index(&root.path().join("store")).unwrap();
+        assert_eq!(
+            built.index.tools[0].min_dogubako.as_deref(),
+            Some("0.2.0-alpha.1")
+        );
+
+        let src = root.path().join("store/text.shout/manifest.toml");
+        std::fs::write(&src, manifest_min("1.2.0", "next")).unwrap();
+        let err = build_index(&root.path().join("store")).unwrap_err();
+        assert!(err.contains("min_dogubako 'next' is not a semver"), "{err}");
+    }
+
+    #[test]
+    fn min_dogubako_compares_releases_and_prereleases() {
+        let e = |min: Option<&str>| StoreEntry {
+            id: "text.shout".into(),
+            name: "Shout".into(),
+            description: String::new(),
+            keywords: vec![],
+            category: "text".into(),
+            version: "1.1.0".into(),
+            sha256: String::new(),
+            permissions: vec![],
+            requires: vec![],
+            platforms: vec![],
+            url: String::new(),
+            min_dogubako: min.map(String::from),
+        };
+        assert_eq!(e(None).unsupported_by("0.1.0-alpha.2"), None);
+        assert_eq!(
+            e(Some("0.1.0-alpha.2")).unsupported_by("0.1.0-alpha.2"),
+            None
+        );
+        assert_eq!(e(Some("0.1.0-alpha.3")).unsupported_by("0.1.0"), None);
+        let why = e(Some("0.1.0-alpha.3"))
+            .unsupported_by("0.1.0-alpha.2")
+            .unwrap();
+        assert_eq!(
+            why,
+            "text.shout 1.1.0 needs Dogubako 0.1.0-alpha.3 or newer (this is 0.1.0-alpha.2); \
+             update Dogubako to install it"
+        );
+        assert!(e(Some("0.2.0")).unsupported_by("0.1.9").is_some());
+    }
+
+    #[tokio::test]
+    async fn older_apps_neither_install_nor_update_to_an_entry_that_needs_a_newer_one() {
+        let root = tempfile::tempdir().unwrap();
+        let ext = root.path().join("ext");
+        std::fs::create_dir_all(&ext).unwrap();
+        let eng = engine(&ext);
+        let net = NetPolicy::default();
+        let url = publish_text(root.path(), &manifest_min("1.0.0", "0.2.0"));
+        let idx = load_index(&url, &ext, &net).await.unwrap();
+
+        // Not installed: an older app says why and refuses to install.
+        let t = &annotate_for(&idx.index, &eng, &ext, "0.1.0")[0];
+        assert!(!t.installed && !t.update_available);
+        assert!(t
+            .unsupported
+            .as_deref()
+            .unwrap()
+            .contains("needs Dogubako 0.2.0"));
+        let err = install_for(&eng, &ext, &idx, "text.shout", false, "0.1.0")
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "unsupported");
+        assert!(err.to_string().contains("update Dogubako"), "{err}");
+        assert!(!ext.join("text.shout.toml").exists());
+
+        // A new enough app installs it; the installed version stays fine.
+        let r = install_for(&eng, &ext, &idx, "text.shout", false, "0.2.0")
+            .await
+            .unwrap();
+        assert!(r.passed, "{r:?}");
+        let t = &annotate_for(&idx.index, &eng, &ext, "0.1.0")[0];
+        assert!(t.installed && t.unsupported.is_none());
+
+        // A newer version that needs a newer app is not offered as an update.
+        publish_text(root.path(), &manifest_min("1.1.0", "0.3.0"));
+        let idx = load_index(&url, &ext, &net).await.unwrap();
+        let t = &annotate_for(&idx.index, &eng, &ext, "0.2.0")[0];
+        assert!(!t.update_available);
+        assert!(t
+            .unsupported
+            .as_deref()
+            .unwrap()
+            .contains("1.1.0 needs Dogubako 0.3.0"));
+        assert!(update_for(&eng, &ext, &idx, None, "0.2.0")
+            .await
+            .unwrap()
+            .is_empty());
+        let err = update_for(&eng, &ext, &idx, Some("text.shout"), "0.2.0")
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("needs Dogubako 0.3.0"), "{err}");
+        let updated = update_for(&eng, &ext, &idx, None, "0.3.0").await.unwrap();
+        assert_eq!(updated[0].version, "1.1.0");
+    }
+
+    #[tokio::test]
+    async fn entries_this_app_cannot_load_are_not_available() {
+        let root = tempfile::tempdir().unwrap();
+        let ext = root.path().join("ext");
+        std::fs::create_dir_all(&ext).unwrap();
+        let eng = engine(&ext);
+        let url = publish_text(root.path(), &manifest_min("1.0.0", APP_VERSION));
+        load_index(&url, &ext, &NetPolicy::default()).await.unwrap();
+        let index = cached_index(&url, &ext).unwrap();
+        assert_eq!(available(&eng, Some(&index), |_| true).len(), 1);
+
+        publish_text(root.path(), &manifest_min("1.0.0", "999.0.0"));
+        load_index(&url, &ext, &NetPolicy::default()).await.unwrap();
+        let index = cached_index(&url, &ext).unwrap();
+        assert!(available(&eng, Some(&index), |_| true).is_empty());
+        let idx = load_index(&url, &ext, &NetPolicy::default()).await.unwrap();
+        let err = install(&eng, &ext, &idx, "text.shout", false)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("needs Dogubako 999.0.0"), "{err}");
     }
 }

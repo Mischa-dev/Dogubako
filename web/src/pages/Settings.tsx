@@ -437,9 +437,12 @@ export function ToolStore() {
               <span className="setting-label">{t.name} <span className="muted mono">{t.installed_version ?? t.version}</span></span>
               <span className="setting-desc">{t.description}</span>
               <span className="setting-desc mono">{t.id}{t.permissions.length ? ` · ${t.permissions.join(', ')}` : ''}{t.requires.length ? ` · needs ${t.requires.join(', ')}` : ''}</span>
+              {t.unsupported && <span className="setting-desc">{t.installed ? `Version ${t.version} needs Dogubako ${t.min_dogubako} or newer. Update Dogubako to get it.` : `Needs Dogubako ${t.min_dogubako} or newer. Update Dogubako to install it.`}</span>}
             </div>
             <div className="setting-control">
-              {t.update_available ? (
+              {t.unsupported && !t.installed ? (
+                <Badge tone="warn">Needs Dogubako {t.min_dogubako}</Badge>
+              ) : t.update_available ? (
                 <Button size="sm" disabled={!!busy || offline} onClick={() => void act(t, true)}>{busy === t.id ? <Spinner /> : `Update to ${t.version}`}</Button>
               ) : t.installed ? (
                 <Badge tone="success">Installed</Badge>

@@ -327,6 +327,11 @@ as `store/<id>/manifest.toml` (folder named after the tool id, with offline
 runs every store tool's tests (`dogubako store test`). Bump `version` when you
 change a manifest.
 
+A store manifest that uses manifest features newer than the last release sets
+`min_dogubako = "<next release>"` in `[tool]`; `store build` copies it into the
+index entry. Older apps then neither install the entry nor update to it, and
+say which Dogubako version it needs (`unsupported` in the store API).
+
 ```
 dogubako store search weather       # cached index when offline
 dogubako store install data.weather # SHA-256 must match the index, then install/trust/test
