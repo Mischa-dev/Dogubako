@@ -160,6 +160,60 @@ managed engines and `DOGUBAKO_<ID>_PATH` apply; any other bare program next to a
 required dependency's binary (`pdftotext` beside Poppler's `pdftoppm`) is run
 from that folder before PATH is searched.
 
+### HTTP requests
+
+For weather, feeds and small APIs, a manifest can send one GET request with
+`[http]` instead of running a program (a manifest has `[command]` or `[http]`,
+never both). It gets the `network` permission automatically:
+
+```toml
+[tool]
+id = "data.weather"
+name = "Weather"
+category = "data"
+
+[http]
+url = "https://api.open-meteo.com/v1/forecast?latitude={settings.lat}&longitude={settings.lon}&current=temperature_2m"
+timeout_secs = 30   # optional
+
+[output]
+json = { temp = "$.current.temperature_2m", unit = "$.current_units.temperature_2m" }
+
+[[settings]]
+name = "lat"
+type = "text"
+required = true
+
+[[settings]]
+name = "lon"
+type = "text"
+required = true
+```
+
+Add `headers = { Authorization = "Bearer {settings.api_key}" }` under `[http]`
+(with an `api_key` setting declared `secret = true`) for APIs that need a key;
+header values may use parameters and settings.
+
+* Only GET; there is no scripting. The scheme and host must be written out —
+  placeholders (`{param}`, `{settings.<name>}`) may only fill the path, query
+  and header values, and are percent-encoded in the URL. File and path
+  parameters cannot be sent.
+* Requests use the instance's network policy: private addresses, denied hosts
+  and redirects to them are refused; with `headers`, redirects must stay on
+  the same origin. Responses larger than `max_stdout_bytes` are refused.
+* Output: `json = { field = "<JSON path>" }` picks values into `data` (a path
+  that matches nothing is an error); `[output.table]` with `rows = "$.items"`
+  and `columns = [{ name = "title", path = "$.title" }]` returns
+  a sortable `data.table` (a `rows` path naming one array uses its items; a
+  path with `*`, `..` or a filter makes each match a row); otherwise the body
+  is returned as text in the response's charset (`body = "<mime>"` overrides
+  its content type).
+* A non-2xx status or a timeout fails with an `external_failure` error naming
+  the status and a short excerpt of the body.
+* Tests run offline with a recorded response:
+  `parse_manifest(..)?.with_recorded_response(RecordedResponse::json(&value))`
+  (see `crates/core/src/manifest_http.rs`).
+
 ### Settings
 
 Values that belong to one installation (a printer queue, a saved location, an
