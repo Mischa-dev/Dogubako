@@ -146,10 +146,14 @@ pub async fn run(m: &ArgMatches, out: &Out) -> i32 {
         }
         Some(("update", s)) => {
             let id = s.get_one::<String>("id").map(String::as_str);
-            if id.is_none() && !out.json && !out.quiet {
+            let mut skipped = 0;
+            if id.is_none() {
                 for t in store::annotate(&index.index, &engine, &dir) {
                     if let (true, Some(why)) = (t.installed, &t.unsupported) {
-                        eprintln!("skipped: {why}");
+                        skipped += 1;
+                        if !out.json && !out.quiet {
+                            eprintln!("skipped: {why}");
+                        }
                     }
                 }
             }
@@ -157,6 +161,10 @@ pub async fn run(m: &ArgMatches, out: &Out) -> i32 {
                 Ok(reports) if reports.is_empty() => {
                     if out.json {
                         println!("[]");
+                    } else if skipped > 0 {
+                        println!(
+                            "no updates this Dogubako can install; {skipped} need a newer Dogubako"
+                        );
                     } else {
                         println!("everything from the store is up to date");
                     }

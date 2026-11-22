@@ -59,7 +59,7 @@ impl StoreEntry {
 
     fn unsupported_by(&self, app: &str) -> Option<String> {
         let min = self.min_dogubako.as_deref()?;
-        is_newer(min, app).then(|| {
+        needs_newer(min, app).then(|| {
             format!(
                 "{} {} needs Dogubako {min} or newer (this is {app}); update Dogubako to install it",
                 self.id, self.version
@@ -519,6 +519,15 @@ fn installed_versions(engine: &Engine, ext_dir: &Path) -> BTreeMap<String, Strin
             (id, v)
         })
         .collect()
+}
+
+/// `min` is a newer release than `app`, by semver precedence (build metadata
+/// such as `+build.1` doesn't count).
+fn needs_newer(min: &str, app: &str) -> bool {
+    match (semver::Version::parse(min), semver::Version::parse(app)) {
+        (Ok(min), Ok(app)) => min.cmp_precedence(&app).is_gt(),
+        _ => is_newer(min, app),
+    }
 }
 
 /// `a` is a newer version than `b` (semver, else numeric dotted parts).
@@ -1239,6 +1248,10 @@ expect = {{ text = "HI" }}
              update Dogubako to install it"
         );
         assert!(e(Some("0.2.0")).unsupported_by("0.1.9").is_some());
+        assert_eq!(
+            e(Some("0.1.0-alpha.2+build.1")).unsupported_by("0.1.0-alpha.2"),
+            None
+        );
     }
 
     #[tokio::test]
