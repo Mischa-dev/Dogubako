@@ -49,6 +49,12 @@ pub trait Tool: Send + Sync + 'static {
     fn unset_settings(&self) -> Vec<String> {
         vec![]
     }
+
+    /// Whether a run needs the spec's external programs (false for a test
+    /// run that replays recorded program output).
+    fn runs_programs(&self) -> bool {
+        true
+    }
 }
 
 /// An output file produced by a tool.

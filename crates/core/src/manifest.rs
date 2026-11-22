@@ -795,11 +795,6 @@ impl ExternalTool {
         self
     }
 
-    /// Whether tests use a recorded program run instead of the program.
-    pub fn has_recorded_command(&self) -> bool {
-        self.recorded_command.is_some()
-    }
-
     /// Fill `[output.extract]` from `stdout`.
     fn extract(
         &self,
@@ -1043,6 +1038,10 @@ impl Tool for ExternalTool {
 
     fn fingerprint(&self) -> Option<String> {
         Some(self.sha256.clone())
+    }
+
+    fn runs_programs(&self) -> bool {
+        self.recorded_command.is_none()
     }
 
     fn unset_settings(&self) -> Vec<String> {
@@ -1877,7 +1876,7 @@ type = "text"
                 stdout: "request id is Office-12 (1 file(s))\n".into(),
                 exit_code: 0,
             });
-        assert!(tool.has_recorded_command());
+        assert!(!tool.runs_programs());
         let id = tool.spec.id.clone();
         let h = crate::testing::TestHarness::new(vec![std::sync::Arc::new(tool)]);
         let out = h

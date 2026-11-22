@@ -558,8 +558,7 @@ async fn run_test(
         }
     };
     let mut avail = engine.availability(spec);
-    if t.command.is_some() {
-        // A recorded run needs no program.
+    if !tool.runs_programs() {
         avail.missing.clear();
     }
     avail.unset_settings = tool.unset_settings();

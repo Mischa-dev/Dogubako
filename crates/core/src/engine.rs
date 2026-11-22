@@ -744,7 +744,10 @@ impl Engine {
                 names.join(", ")
             )));
         }
-        let avail = self.availability_with(&spec, tool.unset_settings());
+        let mut avail = self.availability_with(&spec, tool.unset_settings());
+        if !tool.runs_programs() {
+            avail.missing.clear();
+        }
         if let Some(m) = avail.missing.first() {
             return Err(ToolError::MissingDependency {
                 dependency: m.id.clone(),
