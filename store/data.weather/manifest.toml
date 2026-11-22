@@ -1,34 +1,147 @@
 [tool]
 id = "data.weather"
-name = "Current weather"
+name = "Weather"
 category = "data"
-description = "Current temperature, wind and weather code for a location (Open-Meteo, no API key)"
-version = "1.0.0"
+description = "Current conditions and a short daily forecast for a saved or given location (Open-Meteo, no API key)"
+version = "1.1.0"
 keywords = ["weather", "temperature", "forecast", "open-meteo"]
 
 [http]
-url = "https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m,wind_speed_10m,weather_code"
+url = "https://api.open-meteo.com/v1/forecast?latitude={latitude|settings.latitude}&longitude={longitude|settings.longitude}&temperature_unit={temperature_unit|settings.temperature_unit}&wind_speed_unit={wind_speed_unit|settings.wind_speed_unit}&forecast_days={days}&timezone=auto&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
 timeout_secs = 30
 
 [output]
-json = { temperature = "$.current.temperature_2m", temperature_unit = "$.current_units.temperature_2m", wind_speed = "$.current.wind_speed_10m", wind_speed_unit = "$.current_units.wind_speed_10m", weather_code = "$.current.weather_code" }
+text = "Now at {latitude}, {longitude}: {conditions}, {temperature}{temperature_unit}, humidity {humidity}%, wind {wind_speed} {wind_speed_unit}"
+
+[output.json]
+latitude = "$.latitude"
+longitude = "$.longitude"
+timezone = "$.timezone"
+time = "$.current.time"
+temperature = "$.current.temperature_2m"
+temperature_unit = "$.current_units.temperature_2m"
+humidity = "$.current.relative_humidity_2m"
+wind_speed = "$.current.wind_speed_10m"
+wind_speed_unit = "$.current_units.wind_speed_10m"
+weather_code = "$.current.weather_code"
+conditions = { path = "$.current.weather_code", labels = "wmo" }
+
+[output.table]
+columnar = true
+columns = [
+  { name = "date", path = "$.daily.time" },
+  { name = "conditions", path = "$.daily.weather_code", labels = "wmo" },
+  { name = "low", path = "$.daily.temperature_2m_min" },
+  { name = "high", path = "$.daily.temperature_2m_max" },
+  { name = "precipitation_chance", path = "$.daily.precipitation_probability_max" },
+]
+text = "{date}: {conditions}, {low} to {high}{temperature_unit}, {precipitation_chance}% chance of precipitation"
+
+[output.labels.wmo]
+"0" = "Clear sky"
+"1" = "Mainly clear"
+"2" = "Partly cloudy"
+"3" = "Overcast"
+"45" = "Fog"
+"48" = "Freezing fog"
+"51" = "Light drizzle"
+"53" = "Drizzle"
+"55" = "Heavy drizzle"
+"56" = "Light freezing drizzle"
+"57" = "Freezing drizzle"
+"61" = "Light rain"
+"63" = "Rain"
+"65" = "Heavy rain"
+"66" = "Light freezing rain"
+"67" = "Freezing rain"
+"71" = "Light snow"
+"73" = "Snow"
+"75" = "Heavy snow"
+"77" = "Snow grains"
+"80" = "Light rain showers"
+"81" = "Rain showers"
+"82" = "Violent rain showers"
+"85" = "Light snow showers"
+"86" = "Heavy snow showers"
+"95" = "Thunderstorm"
+"96" = "Thunderstorm with hail"
+"99" = "Thunderstorm with heavy hail"
 
 [[params]]
 name = "latitude"
 type = "number"
 min = -90
 max = 90
-required = true
+description = "Overrides the saved latitude for this run"
 
 [[params]]
 name = "longitude"
 type = "number"
 min = -180
 max = 180
-required = true
+description = "Overrides the saved longitude for this run"
+
+[[params]]
+name = "temperature_unit"
+type = "enum"
+options = [{ value = "celsius", label = "Celsius" }, { value = "fahrenheit", label = "Fahrenheit" }]
+description = "Overrides the saved temperature unit for this run"
+
+[[params]]
+name = "wind_speed_unit"
+type = "enum"
+options = [{ value = "kmh", label = "km/h" }, { value = "ms", label = "m/s" }, { value = "mph", label = "mph" }, { value = "kn", label = "Knots" }]
+description = "Overrides the saved wind speed unit for this run"
+
+[[params]]
+name = "days"
+type = "integer"
+min = 1
+max = 7
+default = 3
+description = "Forecast days, today included"
+
+[[settings]]
+name = "latitude"
+type = "number"
+min = -90
+max = 90
+description = "Saved location latitude"
+
+[[settings]]
+name = "longitude"
+type = "number"
+min = -180
+max = 180
+description = "Saved location longitude"
+
+[[settings]]
+name = "temperature_unit"
+type = "enum"
+options = [{ value = "celsius", label = "Celsius" }, { value = "fahrenheit", label = "Fahrenheit" }]
+default = "celsius"
+
+[[settings]]
+name = "wind_speed_unit"
+type = "enum"
+options = [{ value = "kmh", label = "km/h" }, { value = "ms", label = "m/s" }, { value = "mph", label = "mph" }, { value = "kn", label = "Knots" }]
+default = "kmh"
 
 [[tests]]
-name = "reads the current conditions"
-params = { latitude = 40.01, longitude = -105.27 }
-http = { json = { current = { temperature_2m = 21.5, wind_speed_10m = 8.2, weather_code = 1 }, current_units = { temperature_2m = "°C", wind_speed_10m = "km/h" } } }
-expect = { json = { "$.temperature" = 21.5, "$.temperature_unit" = "°C", "$.weather_code" = 1 } }
+name = "reads current conditions and the forecast for the saved location"
+settings = { latitude = 40.01, longitude = -105.27 }
+http = { json = { latitude = 40.01, longitude = -105.27, timezone = "America/Denver", current = { time = "2026-11-22T10:30", temperature_2m = 21.5, relative_humidity_2m = 40, wind_speed_10m = 8.2, weather_code = 1 }, current_units = { temperature_2m = "°C", wind_speed_10m = "km/h" }, daily = { time = ["2026-11-22", "2026-11-23", "2026-11-24"], weather_code = [1, 61, 71], temperature_2m_max = [21.5, 12.0, 3.4], temperature_2m_min = [5.1, 4.0, -2.3], precipitation_probability_max = [0, 80, 65] } } }
+expect = { contains = ["Now at 40.01, -105.27: Mainly clear, 21.5°C, humidity 40%, wind 8.2 km/h", "2026-11-23: Light rain, 4.0 to 12.0°C, 80% chance of precipitation", "2026-11-24: Light snow"], json = { "$.temperature" = 21.5, "$.temperature_unit" = "°C", "$.conditions" = "Mainly clear", "$.weather_code" = 1, "$.table.columns[1]" = "conditions", "$.table.rows[1][1]" = "Light rain", "$.table.rows[2][2]" = -2.3 } }
+
+[[tests]]
+name = "per-run location and units override the saved ones"
+params = { latitude = 51.51, longitude = -0.13, temperature_unit = "fahrenheit", wind_speed_unit = "mph", days = 1 }
+settings = { latitude = 40.01, longitude = -105.27 }
+http = { json = { latitude = 51.5, longitude = -0.12, timezone = "Europe/London", current = { time = "2026-11-22T17:30", temperature_2m = 48.2, relative_humidity_2m = 88, wind_speed_10m = 12.4, weather_code = 3 }, current_units = { temperature_2m = "°F", wind_speed_10m = "mp/h" }, daily = { time = ["2026-11-22"], weather_code = [63], temperature_2m_max = [50.0], temperature_2m_min = [44.6], precipitation_probability_max = [90] } } }
+expect = { contains = ["Now at 51.5, -0.12: Overcast, 48.2°F", "2026-11-22: Rain, 44.6 to 50.0°F"], json = { "$.temperature_unit" = "°F", "$.table.rows[0][0]" = "2026-11-22" } }
+
+[[tests]]
+name = "asks for a location when none is saved or given"
+settings = {}
+http = { json = {} }
+expect = { error = "not_configured" }
