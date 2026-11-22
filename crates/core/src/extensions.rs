@@ -362,6 +362,7 @@ pub fn uninstall(
     if purge {
         SettingsStore::for_extensions(dir).remove(id)?;
     }
+    crate::store::forget(dir, id);
     engine.reload();
     Ok(UninstallReport {
         id: id.to_string(),

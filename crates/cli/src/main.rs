@@ -7,6 +7,7 @@ mod admin;
 mod local;
 mod mcp_stdio;
 mod render;
+mod store;
 mod toolcmd;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -242,7 +243,8 @@ fn cli(engine: &Engine) -> Command {
     cmd = cmd
         .subcommand(admin::users_cmd())
         .subcommand(admin::tokens_cmd())
-        .subcommand(admin::extensions_cmd());
+        .subcommand(admin::extensions_cmd())
+        .subcommand(store::store_cmd());
     cmd = cmd.subcommand(
         Command::new("api")
             .about("API utilities")
@@ -322,6 +324,7 @@ async fn dispatch(engine: Engine, m: &ArgMatches, out: &render::Out) -> i32 {
             Some("install" | "uninstall" | "test") => admin::extension_lifecycle(sub, out).await,
             _ => admin::extensions(sub, out),
         },
+        Some(("store", sub)) => store::run(sub, out).await,
         Some(("api", sub)) => match sub.subcommand() {
             Some(("openapi", _)) => {
                 println!(

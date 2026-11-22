@@ -223,7 +223,7 @@
   display: flex; align-items: center; gap: 9px; padding: 10px 10px 10px 12px; background: var(--glass-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border);
   border-radius: var(--r-md); box-shadow: var(--shadow-pop); font-size: var(--fs-md); animation: pop 140ms var(--ease);
 }
-.toast > span { flex: 1; }
+.toast > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .toast-success > svg { color: var(--success); }
 .toast-error > svg { color: var(--danger); }
 .toast-info > svg { color: var(--accent-text); }

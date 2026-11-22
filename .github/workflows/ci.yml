@@ -78,6 +78,25 @@ jobs:
           echo '{"b":2,"a":1}' | ./target/debug/dogubako dev json
           ./target/debug/dogubako deps
 
+  store:
+    name: Tool store index is current and its tools pass
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p dogubako-cli --locked
+      - name: Store index is current (store build --check)
+        run: ./target/debug/dogubako store build --check
+      - name: Every store tool's tests pass (store test)
+        if: success() || failure()
+        run: ./target/debug/dogubako store test
+
   generated:
     # The same checks the Release workflow runs, so drift fails the PR that causes it.
     name: Generated docs and third-party notices are current

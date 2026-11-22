@@ -73,6 +73,10 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/extensions/install", post(extension_install))
         .route("/extensions/{id}", delete(extension_uninstall))
         .route("/extensions/{id}/test", post(extension_test))
+        .route("/store", get(store_search))
+        .route("/store/installed", get(store_installed))
+        .route("/store/install", post(store_install))
+        .route("/store/update", post(store_update))
         .route("/admin/users", get(admin_users).post(admin_create_user))
         .route(
             "/admin/users/{id}",
@@ -1411,6 +1415,131 @@ async fn extension_test(
 ) -> ApiResult<Json<Value>> {
     let r = dogubako_core::extensions::test(&s.engine, &s.cfg.extensions_dir(), &id).await?;
     Ok(Json(json!(r)))
+}
+
+fn install_allowed(s: &AppState) -> ApiResult<()> {
+    if s.cfg.allow_extension_install {
+        return Ok(());
+    }
+    Err(ApiError::forbidden(
+        "installing extensions over HTTP is off; set allow_extension_install \
+         (DOGUBAKO_ALLOW_EXTENSION_INSTALL=true), or on the host run \
+         `dogubako store --dir <server extensions folder> install <id>`",
+    ))
+}
+
+async fn store_index(s: &AppState) -> ApiResult<dogubako_core::store::LoadedIndex> {
+    let url = s
+        .cfg
+        .store_url()
+        .ok_or_else(dogubako_core::store::disabled_error)?;
+    Ok(
+        dogubako_core::store::load_index(&url, &s.cfg.extensions_dir(), &s.engine.config.net)
+            .await?,
+    )
+}
+
+#[derive(Deserialize)]
+struct StoreQuery {
+    #[serde(default)]
+    q: String,
+}
+
+/// Search the tool store; uses the cached index when it can't be fetched
+/// (`index.offline`).
+async fn store_search(
+    State(s): State<AppState>,
+    Admin(_): Admin,
+    Query(q): Query<StoreQuery>,
+) -> ApiResult<Json<Value>> {
+    use dogubako_core::store;
+    let index = store_index(&s).await?;
+    let tools = store::search(
+        store::annotate(&index.index, &s.engine, &s.cfg.extensions_dir()),
+        &q.q,
+    );
+    Ok(Json(json!({ "index": index, "tools": tools })))
+}
+
+/// Tools installed from the store, with their version and available updates.
+async fn store_installed(State(s): State<AppState>, Admin(_): Admin) -> ApiResult<Json<Value>> {
+    use dogubako_core::store;
+    let index = store_index(&s).await?;
+    let tools: Vec<_> = store::annotate(&index.index, &s.engine, &s.cfg.extensions_dir())
+        .into_iter()
+        .filter(|t| t.installed)
+        .collect();
+    Ok(Json(json!({ "index": index, "tools": tools })))
+}
+
+#[derive(Deserialize)]
+struct StoreInstallBody {
+    id: String,
+}
+
+/// Install a store tool after checking its SHA-256 against the index.
+async fn store_install(
+    State(s): State<AppState>,
+    Admin(p): Admin,
+    ClientIp(ip): ClientIp,
+    Json(body): Json<StoreInstallBody>,
+) -> ApiResult<Json<Value>> {
+    install_allowed(&s)?;
+    let index = store_index(&s).await?;
+    let r =
+        dogubako_core::store::install(&s.engine, &s.cfg.extensions_dir(), &index, &body.id, false)
+            .await;
+    let outcome = match &r {
+        Ok(r) if r.passed => "ok",
+        Ok(_) => "tests_failed",
+        Err(_) => "error",
+    };
+    s.db.audit(&p.username, "store.install", &body.id, outcome, &ip, "");
+    Ok(Json(json!(r?)))
+}
+
+#[derive(Deserialize)]
+struct StoreUpdateBody {
+    #[serde(default)]
+    id: Option<String>,
+}
+
+/// Update store tools with a newer version in the index (one, or all).
+async fn store_update(
+    State(s): State<AppState>,
+    Admin(p): Admin,
+    ClientIp(ip): ClientIp,
+    Json(body): Json<StoreUpdateBody>,
+) -> ApiResult<Json<Value>> {
+    install_allowed(&s)?;
+    let index = store_index(&s).await?;
+    let r = dogubako_core::store::update(
+        &s.engine,
+        &s.cfg.extensions_dir(),
+        &index,
+        body.id.as_deref(),
+    )
+    .await;
+    let target = body.id.clone().unwrap_or_else(|| "*".into());
+    let failed: Vec<&str> = r
+        .as_ref()
+        .map(|reports| {
+            reports
+                .iter()
+                .filter(|x| !x.passed)
+                .map(|x| x.id.as_str())
+                .collect()
+        })
+        .unwrap_or_default();
+    let outcome = if r.is_err() || !failed.is_empty() {
+        "error"
+    } else {
+        "ok"
+    };
+    let detail = failed.join(",");
+    s.db.audit(&p.username, "store.update", &target, outcome, &ip, &detail);
+    // Per-tool results: a tool that failed carries its error; the rest updated.
+    Ok(Json(json!({ "updated": r? })))
 }
 
 /// Rebuild the tool registry (builtins, trusted extensions, enabled packs)

@@ -489,7 +489,7 @@ pub fn tokens(m: &ArgMatches, out: &Out) -> i32 {
     }
 }
 
-fn extensions_dir(m: &ArgMatches) -> PathBuf {
+pub(crate) fn extensions_dir(m: &ArgMatches) -> PathBuf {
     m.get_one::<String>("dir")
         .map(PathBuf::from)
         .unwrap_or_else(|| dogubako_core::paths::AppDirs::default_local().extensions)
@@ -600,7 +600,7 @@ fn none_if_empty(v: &[String]) -> String {
     }
 }
 
-fn print_report(out: &Out, r: &dogubako_core::extensions::ExtensionReport) -> i32 {
+pub(crate) fn print_report(out: &Out, r: &dogubako_core::extensions::ExtensionReport) -> i32 {
     use dogubako_core::extensions::TestStatus;
     if out.json {
         println!("{}", serde_json::to_string_pretty(r).unwrap());

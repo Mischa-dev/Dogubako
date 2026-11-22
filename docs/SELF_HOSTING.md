@@ -104,6 +104,7 @@ environment variables and CLI flags. `dogubako server config` prints the effecti
 | `DOGUBAKO_FS_ROOTS` | — | Comma-separated host folders available to folder tools |
 | `DOGUBAKO_ALLOW_PRIVATE_NETWORK` | `false` | Let network tools reach private addresses |
 | `DOGUBAKO_ALLOW_EXTENSION_INSTALL` | `false` | Let admins install extension manifests over HTTP (`POST /api/v1/extensions/install`); a manifest runs a host program |
+| `DOGUBAKO_STORE_URL` | official store | Tool store index (`https://docs.dogubako.app/store/index.json`); point it at your own copy of `site/public/store/`, or set it empty to turn the store off. Store installs over HTTP also need `DOGUBAKO_ALLOW_EXTENSION_INSTALL` |
 | `DOGUBAKO_MCP_ENABLED` | `true` | Enable `/mcp` |
 | `DOGUBAKO_ASSISTANT_ENABLED` | `true` | Allow plain-words mode (relays model requests users configure; see [ASSISTANT.md](ASSISTANT.md)) |
 | `DOGUBAKO_ASSISTANT_ALLOW_PRIVATE` | `false` | Let that relay reach loopback/LAN model servers (e.g. Ollama on this host) |

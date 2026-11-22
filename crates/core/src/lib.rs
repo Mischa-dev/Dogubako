@@ -26,6 +26,7 @@ pub mod process;
 pub mod registry;
 pub mod schema;
 pub mod spec;
+pub mod store;
 pub mod testing;
 pub mod tool;
 pub mod util;

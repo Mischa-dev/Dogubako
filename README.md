@@ -145,6 +145,7 @@ crates/cli           `dogubako` binary
 apps/desktop         Tauri 2 desktop app
 web                  React + TypeScript UI (shared by desktop and web)
 extensions           example TOML extension
+store                official tool store (one manifest per tool, built into site/public/store)
 deploy               compose overlays, systemd unit, example config
 website              the dogubako.app website (static, no build step)
 docs                 documentation

@@ -1,0 +1,27 @@
+[tool]
+id = "text.define"
+name = "Define a word"
+category = "text"
+description = "English dictionary definitions, parts of speech and phonetics (Free Dictionary API)"
+version = "1.0.0"
+keywords = ["dictionary", "definition", "meaning", "word", "english"]
+
+[http]
+url = "https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
+timeout_secs = 30
+
+[output.table]
+rows = "$[0].meanings[*].definitions[*]"
+columns = [{ name = "definition", path = "$.definition" }, { name = "example", path = "$.example" }]
+
+[[params]]
+name = "word"
+type = "text"
+required = true
+primary = true
+
+[[tests]]
+name = "lists definitions"
+params = { word = "store" }
+http = { json = [{ word = "store", meanings = [{ partOfSpeech = "noun", definitions = [{ definition = "A place where items may be purchased.", example = "a grocery store" }] }] }] }
+expect = { json = { "$.table.rows[0][0]" = "A place where items may be purchased.", "$.table.rows[0][1]" = "a grocery store" } }

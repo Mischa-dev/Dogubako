@@ -1728,3 +1728,147 @@ async fn admins_turn_packs_on_and_off() {
     assert_eq!(text(&r.body)["enabled"], true);
     assert!(dogubako_core::packs::PackSelection::load(&t.state.cfg.packs_file()).is_all());
 }
+
+#[tokio::test]
+async fn store_search_install_and_update_over_http() {
+    let src = tempfile::tempdir().unwrap();
+    let manifest = |v: &str| {
+        format!(
+            "[tool]\nid = \"text.ext_shout\"\nname = \"Shout\"\ncategory = \"text\"\n\
+             description = \"Upper-case words\"\nversion = \"{v}\"\nkeywords = [\"caps\"]\n\
+             [http]\nurl = \"https://example.com/s?q={{w}}\"\n[[params]]\nname = \"w\"\ntype = \"text\"\n\
+             [[tests]]\nparams = {{ w = \"a\" }}\nhttp = {{ body = \"A\" }}\nexpect = {{ text = \"A\" }}\n"
+        )
+    };
+    let publish = |v: &str| {
+        let d = src.path().join("store/text.ext_shout");
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("manifest.toml"), manifest(v)).unwrap();
+        dogubako_core::store::build_index(&src.path().join("store"))
+            .unwrap()
+            .write(&src.path().join("public"))
+            .unwrap();
+    };
+    publish("1.0.0");
+    let url = format!("file://{}", src.path().join("public/index.json").display());
+
+    // Off: the store is turned off; installs need allow_extension_install.
+    let u = url.clone();
+    let t = setup_with(AuthMode::Required, move |c| c.store_url = u);
+    let (cookie, csrf) = owner_session(&t).await;
+    let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/store/install",
+        &h,
+        Some(json!({"id": "text.ext_shout"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN);
+    let t = setup_with(AuthMode::Required, |c| c.store_url = String::new());
+    let (cookie, csrf) = owner_session(&t).await;
+    let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
+    let r = call(&t.app, Method::GET, "/api/v1/store", &h, None).await;
+    assert_eq!(r.status, StatusCode::NOT_IMPLEMENTED, "{:?}", r.body);
+
+    let u = url.clone();
+    let t = setup_with(AuthMode::Required, move |c| {
+        c.allow_extension_install = true;
+        c.store_url = u;
+    });
+    let (cookie, csrf) = owner_session(&t).await;
+    let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
+    let dir = t.state.cfg.extensions_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    let d = dir.clone();
+    t.state.engine.set_loader(Arc::new(move || {
+        let mut reg = Registry::new();
+        reg.register_all(test_tools());
+        let (tools, st) = dogubako_core::manifest::load_extensions(&d, false);
+        reg.register_all(tools);
+        (reg, st)
+    }));
+
+    let r = call(&t.app, Method::GET, "/api/v1/store?q=caps", &h, None).await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["index"]["offline"], false);
+    assert_eq!(r.body["tools"][0]["id"], "text.ext_shout");
+    assert_eq!(r.body["tools"][0]["installed"], false);
+
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/store/install",
+        &h,
+        Some(json!({"id": "text.ext_shout"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["passed"], true);
+    let r = call(
+        &t.app,
+        Method::GET,
+        "/api/v1/tools/text.ext_shout",
+        &h,
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+
+    publish("1.2.0");
+    let r = call(&t.app, Method::GET, "/api/v1/store/installed", &h, None).await;
+    assert_eq!(r.body["tools"][0]["installed_version"], "1.0.0");
+    assert_eq!(r.body["tools"][0]["update_available"], true);
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/store/update",
+        &h,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["updated"][0]["version"], "1.2.0");
+    let r = call(&t.app, Method::GET, "/api/v1/store/installed", &h, None).await;
+    assert_eq!(r.body["tools"][0]["installed_version"], "1.2.0");
+    assert_eq!(r.body["tools"][0]["update_available"], false);
+
+    // A manifest that no longer matches the index is refused.
+    std::fs::write(
+        src.path().join("public/text.ext_shout/manifest.toml"),
+        manifest("9.9.9"),
+    )
+    .unwrap();
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/store/update",
+        &h,
+        Some(json!({"id": "text.ext_shout"})),
+    )
+    .await;
+    assert_eq!(r.body["updated"], json!([]));
+    let r = call(
+        &t.app,
+        Method::DELETE,
+        "/api/v1/extensions/text.ext_shout",
+        &h,
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/store/install",
+        &h,
+        Some(json!({"id": "text.ext_shout"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.body);
+    assert!(r.body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("refusing to install"));
+}

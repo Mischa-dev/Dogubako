@@ -304,6 +304,34 @@ settings are kept unless `--purge`. The same exist as admin endpoints
 `POST /api/v1/extensions/<id>/test`) and desktop commands
 (`install_extension`, `uninstall_extension`, `test_extension`).
 
+### Official tool store
+
+Dogubako ships with the full toolbox; the store adds reviewed extension tools
+on top, so you only install what you need. Store tools live in the repository
+as `store/<id>/manifest.toml` (folder named after the tool id, with offline
+`[[tests]]`). `dogubako store build` writes the index and manifests to
+`site/public/store/`, published with the docs site at
+<https://docs.dogubako.app/store/index.json>; CI fails when it is stale and
+runs every store tool's tests (`dogubako store test`). Bump `version` when you
+change a manifest.
+
+```
+dogubako store search weather       # cached index when offline
+dogubako store install data.weather # SHA-256 must match the index, then install/trust/test
+dogubako store list                 # installed store tools, versions and updates
+dogubako store update [id]          # install newer versions
+```
+
+The same is in Settings → Tool store (desktop and server), over HTTP
+(`GET /api/v1/store?q=`, `GET /api/v1/store/installed`,
+`POST /api/v1/store/install {id}`, `POST /api/v1/store/update {id?}`; admin,
+installs need `allow_extension_install`) and as desktop commands
+(`store_search`, `store_installed`, `store_install`, `store_update`). The index
+is fetched through the network policy and cached in
+`<extensions>/store/`. `DOGUBAKO_STORE_URL` (server: `store_url`) points at
+another index for self-hosting; empty turns the store off. The store is
+official only: tools are added by pull request.
+
 ### Trust and permissions
 
 * Manifests live in the per-user extensions folder (`~/.local/share/dogubako/extensions`,

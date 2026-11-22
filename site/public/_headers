@@ -17,3 +17,8 @@
 /tools.json
   Access-Control-Allow-Origin: *
   Cache-Control: public, max-age=3600
+
+# The official tool store index and manifests (installs check each SHA-256).
+/store/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=300
