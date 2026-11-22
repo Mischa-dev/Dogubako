@@ -160,6 +160,24 @@ managed engines and `DOGUBAKO_<ID>_PATH` apply; any other bare program next to a
 required dependency's binary (`pdftotext` beside Poppler's `pdftoppm`) is run
 from that folder before PATH is searched.
 
+`[output] extract` reads data fields from stdout with regular expressions and
+`text` turns them into a result line (the official `system.print` tool):
+
+```toml
+[output]
+extract = { job_id = 'request id is (\S+)' }   # first group, or the whole match
+text = "Queued, job {job_id}"                  # extract fields and params
+
+# Cases: the first whose regex matches gives its value; no regex = fallback.
+# {param} / {settings.x} in a pattern match the value literally.
+[output.extract]
+state = [{ regex = '(?m)^printer \S+ now printing {job_id}\.', value = "printing" }, { value = "not found" }]
+```
+
+A field nothing matches fails the run. `[tool] destructive = true` marks a tool
+whose run has an effect outside Dogubako (agents ask first, MCP sets
+`destructiveHint`), and `action = "Print"` relabels its Run button.
+
 ### HTTP requests
 
 For weather, feeds and small APIs, a manifest can send one GET request with
@@ -280,6 +298,18 @@ params = { city = "Boulder" }
 settings = { lat = "40.0" }
 http = { json = { current = { temp = 21.5 } } }   # or body = "...", status = 500, content_type = "..."
 expect = { json = { "$.temp" = 21.5 } }
+```
+
+`[command]` manifests can record the program's output the same way, so the test
+runs without the program installed (arguments are still built and checked):
+
+```toml
+[[tests]]
+params = { file = "a.pdf" }
+files = { file = "%PDF-1.4" }
+settings = { queue = "Office" }
+command = { stdout = "request id is Office-12 (1 file(s))" }   # exit_code = 1 to test a failure
+expect = { text = "Queued, job Office-12" }
 ```
 
 ### Install, uninstall, test

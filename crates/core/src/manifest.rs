@@ -118,6 +118,12 @@ struct ToolSection {
     /// Dependency ids from [`crate::deps::KNOWN_DEPS`].
     #[serde(default)]
     requires: Vec<String>,
+    /// The tool has an effect outside Dogubako (prints, sends, deletes).
+    #[serde(default)]
+    destructive: bool,
+    /// Label of the button that runs the tool ("Print"), instead of "Run".
+    #[serde(default)]
+    action: Option<String>,
 }
 
 fn default_version() -> String {
@@ -146,6 +152,11 @@ struct OutputSection {
     file: Option<String>,
     /// Capture stdout as text with this MIME type.
     stdout: Option<String>,
+    /// `[command]`: data fields read from stdout with regular expressions.
+    #[serde(default)]
+    extract: BTreeMap<String, ExtractDecl>,
+    /// `[command]`: plain-text result built from extracted fields and params.
+    text: Option<String>,
     /// `[http]`: return the response body as text with this MIME type.
     body: Option<String>,
     /// `[http]`: data fields picked from a JSON response by JSON path.
@@ -154,6 +165,35 @@ struct OutputSection {
     /// `[http]`: rows picked from a JSON response.
     #[serde(default)]
     table: Option<TableSection>,
+}
+
+/// One `[output.extract]` field: a pattern whose first capture group (or
+/// whole match) is the value, or cases tried in order where the first whose
+/// `regex` matches gives its `value`; a case without `regex` always matches.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum ExtractDecl {
+    Pattern(String),
+    Cases(Vec<ExtractCase>),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExtractCase {
+    regex: Option<String>,
+    value: Option<String>,
+}
+
+impl ExtractDecl {
+    fn cases(&self) -> Vec<ExtractCase> {
+        match self {
+            ExtractDecl::Pattern(r) => vec![ExtractCase {
+                regex: Some(r.clone()),
+                value: None,
+            }],
+            ExtractDecl::Cases(c) => c.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +231,20 @@ pub struct ManifestTest {
     /// For `[http]` manifests: the response served instead of the network.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub http: Option<HttpFixture>,
+    /// For `[command]` manifests: the program's recorded output, used
+    /// instead of running it (the arguments are still built and checked).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<CommandFixture>,
+}
+
+/// A recorded program run for a manifest test.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommandFixture {
+    #[serde(default)]
+    pub stdout: String,
+    #[serde(default)]
+    pub exit_code: i32,
 }
 
 /// A recorded HTTP response for a manifest test: `body` as text or `json`.
@@ -268,6 +322,7 @@ pub struct ExternalTool {
     http: Option<HttpRequest>,
     store: Option<SettingsStore>,
     recorded: Option<RecordedResponse>,
+    recorded_command: Option<CommandFixture>,
     fixed_settings: Option<BTreeMap<String, Value>>,
     tests: Vec<ManifestTest>,
 }
@@ -341,6 +396,9 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     if m.output.body.is_some() || !m.output.json.is_empty() || m.output.table.is_some() {
         return Err("[output] body, json and table are for [http] manifests".into());
     }
+    if m.output.text.is_some() && m.output.stdout.is_some() {
+        return Err("[output] takes stdout or text, not both".into());
+    }
     let prog_name = Path::new(&command.program)
         .file_name()
         .map(|s| s.to_string_lossy().to_lowercase())
@@ -359,12 +417,16 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     let dep = program_dep(&command.program, &m.tool.requires);
     spec.output.kind = if m.output.file.is_some() {
         OutputKind::Files
-    } else if m.output.stdout.is_some() {
+    } else if m.output.stdout.is_some() || m.output.text.is_some() {
         OutputKind::Text
     } else {
         OutputKind::Data
     };
-    spec.output.text_mime = m.output.stdout.clone();
+    spec.output.text_mime = m
+        .output
+        .stdout
+        .clone()
+        .or_else(|| m.output.text.as_ref().map(|_| "text/plain".to_string()));
     // Validate placeholders reference known params.
     let known: Vec<&str> = m.params.iter().map(|p| p.name.as_str()).collect();
     let known_settings: Vec<&str> = spec.settings.iter().map(|p| p.name.as_str()).collect();
@@ -406,6 +468,55 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     if let Some(f) = &m.output.file {
         check(f)?;
     }
+    for (field, decl) in &m.output.extract {
+        if field.is_empty() || !field.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            return Err(format!(
+                "extract field '{field}' must use only letters, digits and _"
+            ));
+        }
+        let cases = decl.cases();
+        if cases.is_empty() {
+            return Err(format!("extract field '{field}' has no cases"));
+        }
+        for c in &cases {
+            match &c.regex {
+                Some(r) => {
+                    let mut sample = r.clone();
+                    for ph in regex_placeholders(r) {
+                        if ph.starts_with("settings.") {
+                            if !is_setting(&ph) {
+                                return Err(format!(
+                                    "extract '{field}': placeholder '{{{ph}}}' does not match any setting"
+                                ));
+                            }
+                        } else if !known.contains(&ph.as_str()) {
+                            return Err(format!(
+                                "extract '{field}': placeholder '{{{ph}}}' does not match any parameter"
+                            ));
+                        }
+                        sample = sample.replace(&format!("{{{ph}}}"), "x");
+                    }
+                    regex::Regex::new(&sample)
+                        .map_err(|e| format!("extract '{field}': invalid regex: {e}"))?;
+                }
+                None if c.value.is_none() => {
+                    return Err(format!(
+                        "extract '{field}': a case needs a regex, a value or both"
+                    ))
+                }
+                None => {}
+            }
+        }
+    }
+    if let Some(t) = &m.output.text {
+        for ph in placeholders(t) {
+            if !m.output.extract.contains_key(&ph) && !known.contains(&ph.as_str()) {
+                return Err(format!(
+                    "[output] text: placeholder '{{{ph}}}' does not match any extract field or parameter"
+                ));
+            }
+        }
+    }
     validate_tests(&mut m.tests, &spec, false)?;
     Ok(ExternalTool {
         spec,
@@ -417,6 +528,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
         http: None,
         store: None,
         recorded: None,
+        recorded_command: None,
         fixed_settings: None,
         tests: m.tests,
     })
@@ -465,6 +577,16 @@ fn base_spec(
         let perm = Permission::parse(p).ok_or_else(|| format!("unknown permission '{p}'"))?;
         spec = spec.permission(perm);
     }
+    spec.destructive = m.tool.destructive;
+    spec.action = m
+        .tool
+        .action
+        .as_ref()
+        .map(|a| a.trim().to_string())
+        .filter(|a| !a.is_empty());
+    if spec.action.as_ref().is_some_and(|a| a.chars().count() > 24) {
+        return Err("[tool] action must be at most 24 characters".into());
+    }
     spec.source = format!("extension:{source}");
     spec.pack = spec.source.clone();
     Ok(spec)
@@ -497,6 +619,12 @@ fn validate_tests(tests: &mut [ManifestTest], spec: &ToolSpec, http: bool) -> Re
         }
         for path in t.expect.json.keys() {
             json_path_segments(path).map_err(|e| format!("{}: {e}", t.name))?;
+        }
+        if t.command.is_some() && http {
+            return Err(format!(
+                "{}: [tests.command] is only for [command] manifests",
+                t.name
+            ));
         }
         if let Some(f) = &t.http {
             if !http {
@@ -557,6 +685,7 @@ fn parse_http_manifest(
         http: Some(request),
         store: None,
         recorded: None,
+        recorded_command: None,
         fixed_settings: None,
         tests: std::mem::take(&mut m.tests),
     })
@@ -601,6 +730,28 @@ pub(crate) fn placeholders(s: &str) -> Vec<String> {
     out
 }
 
+/// `{name}` / `{settings.name}` placeholders in a regex; other braces
+/// (`{2}`, `{2,3}`, `\{`) are regex syntax.
+fn regex_placeholders(s: &str) -> Vec<String> {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)?)\}").unwrap()
+    })
+    .captures_iter(s)
+    .map(|c| c[1].to_string())
+    .collect()
+}
+
+/// Whether a `{ when = .. }` argument group is included.
+fn arg_group_on(cond: Option<&Value>) -> bool {
+    match cond {
+        Some(Value::Bool(b)) => *b,
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(Value::Null) | None => false,
+        Some(_) => true,
+    }
+}
+
 fn value_str(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
@@ -635,6 +786,67 @@ impl ExternalTool {
     pub fn with_recorded_response(mut self, response: RecordedResponse) -> Self {
         self.recorded = Some(response);
         self
+    }
+
+    /// Use `fixture` as the program's output instead of running it, so
+    /// manifest tests run without the program.
+    pub fn with_recorded_command(mut self, fixture: CommandFixture) -> Self {
+        self.recorded_command = Some(fixture);
+        self
+    }
+
+    /// Whether tests use a recorded program run instead of the program.
+    pub fn has_recorded_command(&self) -> bool {
+        self.recorded_command.is_some()
+    }
+
+    /// Fill `[output.extract]` from `stdout`.
+    fn extract(
+        &self,
+        stdout: &str,
+        params: &Params,
+        settings: &BTreeMap<String, Value>,
+    ) -> ToolResult<serde_json::Map<String, Value>> {
+        let mut data = serde_json::Map::new();
+        for (field, decl) in &self.output.extract {
+            let mut found = None;
+            for c in decl.cases() {
+                let Some(pattern) = &c.regex else {
+                    found = c.value.clone();
+                    break;
+                };
+                let mut expanded = pattern.clone();
+                for ph in regex_placeholders(pattern) {
+                    let v = match ph.strip_prefix("settings.") {
+                        Some(n) => settings.get(n).map(value_str),
+                        None => params.get(&ph).filter(|v| !v.is_null()).map(value_str),
+                    }
+                    .unwrap_or_default();
+                    expanded = expanded.replace(&format!("{{{ph}}}"), &regex::escape(&v));
+                }
+                let re = regex::Regex::new(&expanded)
+                    .map_err(|e| ToolError::failed(format!("extract '{field}': {e}")))?;
+                if let Some(caps) = re.captures(stdout) {
+                    found = Some(match &c.value {
+                        Some(v) => v.clone(),
+                        None => caps
+                            .get(1)
+                            .or_else(|| caps.get(0))
+                            .map(|m| m.as_str().to_string())
+                            .unwrap_or_default(),
+                    });
+                    break;
+                }
+            }
+            let value = found.ok_or_else(|| {
+                ToolError::failed(format!(
+                    "could not read {field} from {}'s output",
+                    self.program
+                ))
+            })?;
+            data.insert(field.clone(), Value::String(value));
+        }
+        Ok(data)
     }
 
     /// Use these setting values (validated like a configure call) instead of
@@ -684,6 +896,86 @@ impl ExternalTool {
                     .map(|v| (p.name.clone(), v.clone()))
             })
             .collect()
+    }
+
+    /// Text and data read from the program's stdout.
+    fn stdout_result(
+        &self,
+        stdout: &str,
+        params: &Params,
+        settings: &BTreeMap<String, Value>,
+    ) -> ToolResult<ToolOutput> {
+        let mut result = ToolOutput::new();
+        if let Some(mime) = &self.output.stdout {
+            result = result.with_text(stdout, mime);
+        }
+        if self.output.extract.is_empty() && self.output.text.is_none() {
+            return Ok(result);
+        }
+        let data = self.extract(stdout, params, settings)?;
+        if let Some(template) = &self.output.text {
+            let mut text = template.clone();
+            for ph in placeholders(template) {
+                let v = data
+                    .get(&ph)
+                    .cloned()
+                    .or_else(|| params.get(&ph).cloned())
+                    .map(|v| value_str(&v))
+                    .unwrap_or_default();
+                text = text.replace(&format!("{{{ph}}}"), &v);
+            }
+            result = result.with_text(text, "text/plain");
+        }
+        if !data.is_empty() {
+            result = result.with_data(Value::Object(data));
+        }
+        Ok(result)
+    }
+
+    /// A test run with recorded program output: arguments are still built,
+    /// so missing parameters and settings fail as they would for real.
+    fn finish_recorded(
+        &self,
+        fixture: &CommandFixture,
+        ctx: &ToolContext,
+        params: &Params,
+        settings: &BTreeMap<String, Value>,
+    ) -> ToolResult<ToolOutput> {
+        let output_path = match &self.output.file {
+            Some(t) => Some(ctx.output_path(&self.expand(t, params, settings, &None, ctx)?)),
+            None => None,
+        };
+        for a in &self.args {
+            let parts: &[String] = match a {
+                ArgItem::Plain(s) => std::slice::from_ref(s),
+                ArgItem::Group { args, .. } => args,
+            };
+            if let ArgItem::Group { when, .. } = a {
+                let cond = match when.strip_prefix("settings.") {
+                    Some(n) => settings.get(n),
+                    None => params.get(when),
+                };
+                if !arg_group_on(cond) {
+                    continue;
+                }
+            }
+            for s in parts {
+                self.expand(s, params, settings, &output_path, ctx)?;
+            }
+        }
+        if fixture.exit_code != 0 {
+            return Err(ToolError::External {
+                program: self.program.clone(),
+                exit_code: Some(fixture.exit_code),
+                stderr: String::new(),
+            });
+        }
+        if output_path.is_some() {
+            return Err(ToolError::failed(
+                "recorded program output cannot produce an output file",
+            ));
+        }
+        self.stdout_result(&fixture.stdout, params, settings)
     }
 
     fn expand(
@@ -786,6 +1078,9 @@ impl Tool for ExternalTool {
                 };
             return http.run(&ctx, self.recorded.as_ref(), &lookup).await;
         }
+        if let Some(fixture) = &self.recorded_command {
+            return self.finish_recorded(fixture, &ctx, &params, &settings);
+        }
         let mut cmd = if let Some((dep, name)) = &self.dep {
             ctx.command_program(dep, name)?
         } else if Path::new(&self.program).is_absolute() {
@@ -827,13 +1122,7 @@ impl Tool for ExternalTool {
                         Some(n) => settings.get(n),
                         None => params.get(when),
                     };
-                    let on = match cond {
-                        Some(Value::Bool(b)) => *b,
-                        Some(Value::String(s)) => !s.is_empty(),
-                        Some(Value::Null) | None => false,
-                        Some(_) => true,
-                    };
-                    if on {
+                    if arg_group_on(cond) {
                         for s in args {
                             argv.push(self.expand(s, &params, &settings, &output_path, &ctx)?);
                         }
@@ -846,10 +1135,7 @@ impl Tool for ExternalTool {
             cmd = cmd.allow_network();
         }
         let out = cmd.run().await?;
-        let mut result = ToolOutput::new();
-        if let Some(mime) = &self.output.stdout {
-            result = result.with_text(out.stdout_text(), mime);
-        }
+        let mut result = self.stdout_result(&out.stdout_text(), &params, &settings)?;
         if let Some(p) = output_path {
             if p.exists() {
                 result = result.with_artifact(ctx.artifact(&p)?);
@@ -1435,6 +1721,170 @@ stdout = "text/plain"
         std::env::remove_var("DOGUBAKO_PANDOC_PATH");
         assert_eq!(main_out, "fake-pandoc-3 -a\n");
         assert_eq!(sibling_out, "fake-pandoc-lua -a\n");
+    }
+
+    const PRINT: &str = r#"
+[tool]
+id = "system.ext_print"
+name = "Print (extension)"
+category = "system"
+requires = ["cups"]
+destructive = true
+action = "Print"
+[command]
+program = "lp"
+args = ["-d", "{queue}", "{doc}"]
+[output]
+extract = { job_id = 'request id is (\S+)' }
+text = "Queued, job {job_id}"
+[[params]]
+name = "queue"
+type = "text"
+[[params]]
+name = "doc"
+type = "text"
+"#;
+
+    const STATUS: &str = r#"
+[tool]
+id = "system.ext_print_status"
+name = "Print status (extension)"
+category = "system"
+requires = ["cups"]
+[command]
+program = "lpstat"
+args = ["-o"]
+[output]
+text = "{job_id}: {state}"
+[output.extract]
+state = [
+  { regex = '(?m)^{job_id}\s+\d{3}', value = "queued" },
+  { value = "not found" },
+]
+[[params]]
+name = "job_id"
+type = "text"
+"#;
+
+    #[test]
+    fn destructive_and_action_reach_the_spec() {
+        let t = parse_manifest(PRINT, "x").unwrap();
+        assert!(t.spec.destructive);
+        assert_eq!(t.spec.action.as_deref(), Some("Print"));
+        assert_eq!(t.spec.output.kind, OutputKind::Text);
+        let plain = parse_manifest(LPSTAT, "x").unwrap();
+        assert!(!plain.spec.destructive);
+        assert_eq!(plain.spec.action, None);
+        let long = PRINT.replace(
+            r#"action = "Print""#,
+            &format!("action = \"{}\"", "x".repeat(25)),
+        );
+        assert!(parse_manifest(&long, "x")
+            .err()
+            .unwrap()
+            .contains("24 characters"));
+    }
+
+    #[test]
+    fn extract_and_text_are_validated() {
+        let bad =
+            |from: &str, to: &str| parse_manifest(&PRINT.replace(from, to), "x").err().unwrap();
+        assert!(bad(r"(\S+)'", r"(\S+'").contains("invalid regex"));
+        assert!(bad("request id is", "{nope} is").contains("'{nope}'"));
+        assert!(bad("Queued, job {job_id}", "Queued {nope}").contains("'{nope}'"));
+        assert!(bad("job_id = ", "job-id = ").contains("letters, digits"));
+        assert!(bad("[output]", "[output]\nstdout = \"text/plain\"").contains("not both"));
+        // `{3}` is a quantifier, not a placeholder.
+        assert!(parse_manifest(STATUS, "x").is_ok());
+        let caseless = STATUS.replace(r#"{ value = "not found" },"#, "{},");
+        assert!(parse_manifest(&caseless, "x").is_err());
+    }
+
+    #[cfg(unix)]
+    /// `lp` and `lpstat` both running `script`, so the registry finds CUPS here.
+    fn script_bin(script: &str) -> tempfile::TempDir {
+        use std::os::unix::fs::PermissionsExt;
+        let bin = tempfile::tempdir().unwrap();
+        for name in ["lp", "lpstat"] {
+            let p = bin.path().join(name);
+            std::fs::write(&p, format!("#!/bin/sh\n{script}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        bin
+    }
+
+    #[cfg(unix)]
+    async fn run_script(manifest: &str, bin: &Path, params: Value) -> ToolResult<ToolOutput> {
+        let tool = parse_manifest(manifest, "test.toml").unwrap();
+        let id = tool.spec.id.clone();
+        let h = crate::testing::TestHarness::with_bin_dirs(
+            vec![std::sync::Arc::new(tool)],
+            vec![bin.to_path_buf()],
+        );
+        h.run(&id, params).await
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn stdout_values_become_data_and_text() {
+        let bin = script_bin(r#"echo "request id is $2-7 (1 file(s))""#);
+        let out = run_script(
+            PRINT,
+            bin.path(),
+            serde_json::json!({"queue": "Office", "doc": "a"}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(out.text.as_deref(), Some("Queued, job Office-7"));
+        assert_eq!(out.data, serde_json::json!({"job_id": "Office-7"}));
+
+        let silent = script_bin("true");
+        let err = run_script(
+            PRINT,
+            silent.path(),
+            serde_json::json!({"queue": "Q", "doc": "a"}),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("could not read job_id"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn extract_cases_escape_parameter_values() {
+        let bin = script_bin("echo 'Q.1x 100'; echo 'Q-2   200'");
+        let state = |job: &'static str| {
+            let bin = bin.path().to_path_buf();
+            async move {
+                run_script(STATUS, &bin, serde_json::json!({"job_id": job}))
+                    .await
+                    .unwrap()
+                    .text
+                    .unwrap()
+            }
+        };
+        assert_eq!(state("Q-2").await, "Q-2: queued");
+        // `.` in the job id is literal, so it does not match "Q.1x".
+        assert_eq!(state("Q.1").await, "Q.1: not found");
+        assert_eq!(state("Q").await, "Q: not found");
+    }
+
+    #[tokio::test]
+    async fn recorded_command_runs_without_the_program() {
+        let tool = parse_manifest(PRINT, "x")
+            .unwrap()
+            .with_recorded_command(CommandFixture {
+                stdout: "request id is Office-12 (1 file(s))\n".into(),
+                exit_code: 0,
+            });
+        assert!(tool.has_recorded_command());
+        let id = tool.spec.id.clone();
+        let h = crate::testing::TestHarness::new(vec![std::sync::Arc::new(tool)]);
+        let out = h
+            .run(&id, serde_json::json!({"queue": "Office", "doc": "a"}))
+            .await
+            .unwrap();
+        assert_eq!(out.text.as_deref(), Some("Queued, job Office-12"));
     }
 
     #[test]

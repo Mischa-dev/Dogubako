@@ -52,6 +52,61 @@
       "url": "data.weather/manifest.toml"
     },
     {
+      "id": "system.print",
+      "name": "Print",
+      "description": "Send a PDF to a CUPS printer queue. Returns the job ID once the job is queued, not when the page is printed; check it with print_status before retrying.",
+      "keywords": [
+        "print",
+        "printer",
+        "cups",
+        "lp",
+        "pdf",
+        "paper"
+      ],
+      "category": "system",
+      "version": "1.0.0",
+      "sha256": "3a419ed4b82c72593fb1761e0000c534904676deab43ed07c58a53fae8b7769a",
+      "permissions": [
+        "network"
+      ],
+      "requires": [
+        "cups"
+      ],
+      "platforms": [
+        "linux",
+        "macos"
+      ],
+      "url": "system.print/manifest.toml"
+    },
+    {
+      "id": "system.print_status",
+      "name": "Print status",
+      "description": "Check a print job by the ID print returned: queued, printing, completed (CUPS finished with it, including canceled) or not found. Check before retrying a print that timed out.",
+      "keywords": [
+        "print",
+        "printer",
+        "cups",
+        "lpstat",
+        "job",
+        "status",
+        "queue"
+      ],
+      "category": "system",
+      "version": "1.0.0",
+      "sha256": "e99ffe929367bbeb5e5adfe084ec214b54745d5826201b88aa4dbf51f52db5aa",
+      "permissions": [
+        "network"
+      ],
+      "requires": [
+        "cups"
+      ],
+      "platforms": [
+        "linux",
+        "macos"
+      ],
+      "url": "system.print_status/manifest.toml"
+    },
+    {
       "id": "text.define",
       "name": "Define a word",
       "description": "English dictionary definitions, parts of speech and phonetics (Free Dictionary API)",

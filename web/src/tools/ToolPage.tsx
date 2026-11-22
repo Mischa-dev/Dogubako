@@ -3,6 +3,7 @@ import {
   Pin, Cpu, Server, Globe, Brain, Plug, TriangleAlert, Package, ShieldAlert, LayoutPanelLeft, ListChecks,
 } from 'lucide-react';
 import type { ToolInfo } from '../lib/types';
+import { touchesFiles } from '../lib/format';
 import { useApp } from '../lib/app';
 import { href, useRoute } from '../lib/router';
 import { ToolTopRow } from './ToolTopRow';
@@ -133,7 +134,11 @@ function ToolMeta({ tool }: { tool: ToolInfo }) {
   if (tool.permissions.includes('network')) items.push({ icon: Globe, text: 'Uses network', title: 'This tool makes outbound network requests' });
   if (tool.execution === 'model') items.push({ icon: Brain, text: 'Local model', title: `Uses a locally installed ${tool.requires_model ?? ''} model` });
   if (tool.requires.length) items.push({ icon: Plug, text: tool.requires.map((r) => EXEC_REQUIRES_LABEL[r] ?? r).join(', '), title: 'External program used by this tool' });
-  if (tool.destructive) items.push({ icon: ShieldAlert, text: 'Modifies files', title: 'Can modify files outside this job', warn: true });
+  if (tool.destructive) {
+    items.push(touchesFiles(tool)
+      ? { icon: ShieldAlert, text: 'Modifies files', title: 'Can modify files outside this job', warn: true }
+      : { icon: ShieldAlert, text: 'Real-world effect', title: `Acts outside Dogubako; runs only when you press ${tool.action ?? 'Run'}`, warn: true });
+  }
   return (
     <footer className="tool-meta">
       {items.map(({ icon: I, text, title, warn }) => (

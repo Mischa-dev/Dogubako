@@ -1,0 +1,73 @@
+[tool]
+id = "system.print"
+name = "Print"
+category = "system"
+description = "Send a PDF to a CUPS printer queue. Returns the job ID once the job is queued, not when the page is printed; check it with print_status before retrying."
+version = "1.0.0"
+keywords = ["print", "printer", "cups", "lp", "pdf", "paper"]
+# lp reaches the CUPS server over localhost:631 inside the sandbox.
+permissions = ["network"]
+platforms = ["linux", "macos"]
+requires = ["cups"]
+destructive = true
+action = "Print"
+timeout_secs = 60
+
+[command]
+program = "lp"
+# cupsd holds a copy of the file, so the job outlives this run.
+args = [
+  "-d", "{settings.queue}",
+  "-n", "{settings.copies}",
+  { when = "copies", args = ["-n", "{copies}"] },
+  "-t", "{file.name}",
+  "{file}",
+]
+
+[output]
+extract = { job_id = 'request id is (\S+)' }
+text = "Queued, job {job_id}"
+
+[[params]]
+name = "file"
+type = "file"
+accept = ["application/pdf", ".pdf"]
+required = true
+primary = true
+
+[[params]]
+name = "copies"
+type = "integer"
+min = 1
+max = 99
+description = "Copies for this job (default: the copies setting)"
+
+[[settings]]
+name = "queue"
+type = "text"
+required = true
+description = "CUPS queue name (lpstat -a lists them). Use a CUPS-PDF queue such as PDF to try it without paper."
+
+[[settings]]
+name = "copies"
+type = "integer"
+min = 1
+max = 99
+default = 1
+description = "Copies per job unless the job sets its own"
+
+[[tests]]
+name = "returns the queued job id"
+params = { file = "report.pdf" }
+files = { file = "%PDF-1.4\n%%EOF\n" }
+settings = { queue = "Office" }
+command = { stdout = "request id is Office-12 (1 file(s))\n" }
+expect = { text = "Queued, job Office-12", json = { "$.job_id" = "Office-12" } }
+
+[[tests]]
+name = "reports lp failing"
+params = { file = "report.pdf" }
+files = { file = "%PDF-1.4\n%%EOF\n" }
+settings = { queue = "Missing" }
+command = { exit_code = 1 }
+expect = { error = "external_failure" }
