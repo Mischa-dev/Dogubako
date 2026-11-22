@@ -53,13 +53,25 @@ export interface OutputSpec {
   data_schema?: unknown;
 }
 
-export interface MissingDep { id: string; name: string; hint: string }
+export interface MissingDep {
+  id: string;
+  name: string;
+  hint: string;
+  /** Engine id when the app can download this program itself. */
+  downloadable?: string;
+  download_bytes?: number;
+}
+
+export interface ModelOffer { id: string; name: string; size_bytes: number }
 
 export interface Availability {
   available: boolean;
   platform_supported: boolean;
   missing?: MissingDep[];
   missing_model?: string;
+  /** With `missing_model`: the model group the tool needs and the model to offer. */
+  model_group?: string;
+  recommended_model?: ModelOffer;
   reason?: string;
 }
 
@@ -120,6 +132,8 @@ export interface ToolErrorView {
   param?: string | null;
   dependency?: string;
   hint?: string;
+  /** missing_model: the model the run needed, when the tool knows. */
+  model?: string;
   program?: string;
   exit_code?: number | null;
   stderr?: string;
@@ -187,6 +201,8 @@ export interface Me {
   token_scope?: Policy | null;
   storage?: { used: number; quota: number };
   max_upload?: number;
+  /** Usernames of this instance's administrators. */
+  admins?: string[];
 }
 
 export interface UserRow {

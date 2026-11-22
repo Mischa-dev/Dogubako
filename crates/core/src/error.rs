@@ -12,10 +12,21 @@ pub enum ToolError {
     },
     #[error("tool not found: {id}")]
     NotFound { id: String },
+    #[error("{message}")]
+    NotInstalled {
+        id: String,
+        pack: String,
+        message: String,
+    },
     #[error("missing dependency '{dependency}': {hint}")]
     MissingDependency { dependency: String, hint: String },
     #[error("missing model: {message}")]
-    MissingModel { message: String },
+    MissingModel {
+        message: String,
+        /// The model to install, when the tool knows which one it needs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+    },
     #[error("unsupported: {message}")]
     Unsupported { message: String },
     #[error("permission denied: {message}")]
@@ -64,6 +75,19 @@ impl ToolError {
             message: message.into(),
         }
     }
+    /// A built-in tool whose pack is turned off on this install.
+    pub fn not_installed(id: &str, pack: &str) -> Self {
+        let name = crate::packs::builtin_pack(pack)
+            .map(|p| p.name)
+            .unwrap_or(pack);
+        ToolError::NotInstalled {
+            id: id.to_string(),
+            pack: pack.to_string(),
+            message: format!(
+                "'{id}' is not installed: the {name} pack ('{pack}') is turned off on this install"
+            ),
+        }
+    }
     pub fn limit(message: impl Into<String>) -> Self {
         ToolError::LimitExceeded {
             message: message.into(),
@@ -74,6 +98,7 @@ impl ToolError {
         match self {
             ToolError::InvalidInput { .. } => "invalid_input",
             ToolError::NotFound { .. } => "not_found",
+            ToolError::NotInstalled { .. } => "not_installed",
             ToolError::MissingDependency { .. } => "missing_dependency",
             ToolError::MissingModel { .. } => "missing_model",
             ToolError::Unsupported { .. } => "unsupported",
@@ -90,7 +115,8 @@ impl ToolError {
     pub fn exit_code(&self) -> i32 {
         match self {
             ToolError::InvalidInput { .. } | ToolError::NotFound { .. } => 2,
-            ToolError::MissingDependency { .. }
+            ToolError::NotInstalled { .. }
+            | ToolError::MissingDependency { .. }
             | ToolError::MissingModel { .. }
             | ToolError::Unsupported { .. } => 3,
             ToolError::PermissionDenied { .. } => 4,
@@ -104,7 +130,7 @@ impl ToolError {
     pub fn http_status(&self) -> u16 {
         match self {
             ToolError::InvalidInput { .. } => 400,
-            ToolError::NotFound { .. } => 404,
+            ToolError::NotFound { .. } | ToolError::NotInstalled { .. } => 404,
             ToolError::PermissionDenied { .. } => 403,
             ToolError::MissingDependency { .. }
             | ToolError::MissingModel { .. }

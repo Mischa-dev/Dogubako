@@ -214,6 +214,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     };
     spec.output.text_mime = m.output.stdout.clone();
     spec.source = format!("extension:{source}");
+    spec.pack = spec.source.clone();
     // Validate placeholders reference known params.
     let known: Vec<&str> = m.params.iter().map(|p| p.name.as_str()).collect();
     let check = |s: &str| -> Result<(), String> {

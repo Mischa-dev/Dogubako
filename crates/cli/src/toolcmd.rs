@@ -209,6 +209,9 @@ pub async fn run_generated(engine: Engine, id: &str, m: &ArgMatches, out: &Out) 
 
 pub async fn run_generic(engine: Engine, m: &ArgMatches, out: &Out) -> i32 {
     let id = m.get_one::<String>("tool").unwrap().clone();
+    if let Some(e) = engine.not_installed(&id) {
+        return out.tool_error(&e);
+    }
     let registry = engine.registry();
     let Some(tool) = registry.find(&id) else {
         let sugg: Vec<String> = engine
@@ -430,12 +433,13 @@ pub fn tools_cmd(engine: &Engine, m: &ArgMatches, out: &Out) -> i32 {
         }
         Some(("info", s)) => {
             let id = s.get_one::<String>("tool").unwrap();
-            match engine.registry().find(id) {
-                Some(t) => {
+            match engine.find(id) {
+                Ok(t) => {
                     render::tool_info(&engine.info(t.spec()), out);
                     0
                 }
-                None => out.error(&format!("unknown tool '{id}'"), 2),
+                Err(e @ ToolError::NotInstalled { .. }) => out.tool_error(&e),
+                Err(_) => out.error(&format!("unknown tool '{id}'"), 2),
             }
         }
         _ => 2,

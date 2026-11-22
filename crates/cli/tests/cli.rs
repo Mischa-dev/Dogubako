@@ -291,3 +291,66 @@ fn artifact_on_stdout_keeps_stdout_clean() {
     let report: Value = serde_json::from_slice(&out.stderr).unwrap();
     assert_eq!(report["ok"], true);
 }
+
+#[test]
+fn turned_off_packs_hide_tools() {
+    let h = tempfile::tempdir().unwrap();
+    let count = |c: &mut Command| {
+        let out = c.args(["tools", "list", "--json"]).output().unwrap();
+        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|t| {
+                t["spec"]["id"]
+                    .as_str()
+                    .or(t["id"].as_str())
+                    .unwrap()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+    };
+    let all = count(&mut cmd(&h));
+    assert!(all.iter().any(|i| i == "text.case"));
+
+    // DOGUBAKO_PACKS turns packs off for this run.
+    let mut c = cmd(&h);
+    c.env("DOGUBAKO_PACKS", "image");
+    let some = count(&mut c);
+    assert!(!some.is_empty() && some.len() < all.len());
+    assert!(some.iter().all(|i| i.starts_with("image.")), "{some:?}");
+    let out = cmd(&h)
+        .env("DOGUBAKO_PACKS", "image")
+        .args([
+            "--json",
+            "run",
+            "text.case",
+            "--set",
+            "text=a",
+            "--set",
+            "case=upper",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(3));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["error"]["code"], "not_installed");
+    assert!(v["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("Text pack"));
+
+    // The saved selection persists across runs.
+    std::fs::create_dir_all(h.path().join("config")).unwrap();
+    std::fs::write(
+        h.path().join("config/packs.json"),
+        r#"{"enabled": ["image", "pdf"]}"#,
+    )
+    .unwrap();
+    let saved = count(&mut cmd(&h));
+    assert!(!saved.iter().any(|i| i == "text.case"));
+    cmd(&h)
+        .args(["text", "case", "x", "--case", "upper"])
+        .assert()
+        .failure();
+}

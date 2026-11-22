@@ -115,6 +115,19 @@ impl Registry {
         }
     }
 
+    /// A registry holding only the tools `keep` accepts (shared, not copied).
+    pub fn filtered(&self, keep: impl Fn(&ToolSpec) -> bool) -> Registry {
+        let mut out = Registry::new();
+        for (i, t) in self.tools.iter().enumerate() {
+            if keep(t.spec()) {
+                out.by_id.insert(t.spec().id.clone(), out.tools.len());
+                out.tools.push(t.clone());
+                out.haystack.push(self.haystack[i].clone());
+            }
+        }
+        out
+    }
+
     pub fn get(&self, id: &str) -> Option<&Arc<dyn Tool>> {
         self.by_id.get(id).map(|i| &self.tools[*i])
     }

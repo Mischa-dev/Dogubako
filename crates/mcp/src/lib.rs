@@ -84,6 +84,10 @@ pub trait McpBackend: Send + Sync {
     /// (see [`read_capped`]); callers compare the length with `max` to
     /// detect a file that is too large without loading all of it.
     async fn read_file(&self, file_id: &str, max: u64) -> Result<(FileView, Vec<u8>), ToolError>;
+    /// The error for a known tool that is hidden because its pack is off.
+    fn not_installed(&self, _name: &str) -> Option<ToolError> {
+        None
+    }
     /// Maximum accepted upload size through MCP (bytes).
     fn max_upload(&self) -> u64 {
         DEFAULT_MAX_UPLOAD
@@ -621,8 +625,12 @@ impl McpServer {
             .tools()
             .into_iter()
             .find(|t| t.spec.id == name || t.spec.mcp_name() == name)
-            .ok_or_else(|| ToolError::NotFound {
-                id: format!("{name} (unknown or not permitted)"),
+            .ok_or_else(|| {
+                self.backend
+                    .not_installed(name)
+                    .unwrap_or_else(|| ToolError::NotFound {
+                        id: format!("{name} (unknown or not permitted)"),
+                    })
             })
     }
 

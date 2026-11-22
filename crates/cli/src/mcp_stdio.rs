@@ -86,6 +86,9 @@ impl McpBackend for LocalBackend {
             .collect()
     }
 
+    fn not_installed(&self, name: &str) -> Option<ToolError> {
+        self.engine.not_installed(name)
+    }
     fn file_mode(&self) -> &'static str {
         "path"
     }

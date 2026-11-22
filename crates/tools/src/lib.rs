@@ -104,6 +104,23 @@ pub fn build_registry(extensions_dir: Option<&Path>) -> (Registry, Vec<Extension
 mod tests {
     use super::*;
     #[test]
+    fn every_builtin_tool_is_in_one_builtin_pack() {
+        let packs: Vec<&str> = dogubako_core::packs::builtin_packs()
+            .iter()
+            .map(|p| p.id)
+            .collect();
+        for t in builtin_tools() {
+            let s = t.spec();
+            assert!(
+                packs.contains(&s.pack.as_str()),
+                "{} has no built-in pack (pack '{}')",
+                s.id,
+                s.pack
+            );
+        }
+    }
+
+    #[test]
     fn registry_builds_without_conflicts() {
         let (reg, _) = build_registry(None);
         let mut names = std::collections::HashMap::new();

@@ -8,6 +8,7 @@
 use crate::deps::{DepRegistry, Unmet};
 use crate::error::{ToolError, ToolResult};
 use crate::models::ModelRegistry;
+use crate::packs::{PackEngine, PackInfo, PackSelection};
 use crate::params::{validate, FileResolver, Params};
 use crate::policy::{ExecLimits, FsPolicy, NetPolicy, PermissionSet};
 use crate::registry::{fingerprint, Registry};
@@ -37,6 +38,8 @@ pub struct EngineConfig {
     /// Executable that handles `__dogubako-worker <name>` (normally the host
     /// binary itself); see [`crate::tool::ToolContext::worker`].
     pub worker_exe: Option<PathBuf>,
+    /// Built-in packs turned on; tools of other packs are hidden.
+    pub packs: PackSelection,
 }
 
 impl EngineConfig {
@@ -50,6 +53,7 @@ impl EngineConfig {
             models_dir: dirs.models,
             env,
             worker_exe: None,
+            packs: PackSelection::all(),
         }
     }
 }
@@ -59,6 +63,19 @@ pub struct MissingDep {
     pub id: String,
     pub name: String,
     pub hint: String,
+    /// Set when the app can download this program itself: the engine id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub downloadable: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download_bytes: Option<u64>,
+}
+
+/// The model to offer when a tool's model group has none installed.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelOffer {
+    pub id: String,
+    pub name: String,
+    pub size_bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -69,6 +86,11 @@ pub struct Availability {
     pub missing: Vec<MissingDep>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub missing_model: Option<String>,
+    /// With `missing_model`: the model group the tool needs and the one to install.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_group: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recommended_model: Option<ModelOffer>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -127,7 +149,11 @@ impl ReloadReport {
 }
 
 pub struct Engine {
+    /// Installed tools: those whose pack is turned on. Every interface lists
+    /// and runs tools from here; read it with [`Engine::registry`].
     registry: RwLock<Arc<Registry>>,
+    /// Every registered tool, including those of turned-off packs.
+    catalog: RwLock<Arc<Registry>>,
     extensions: RwLock<Arc<Vec<ExtensionStatus>>>,
     loader: RwLock<Option<RegistryLoader>>,
     /// Serializes reloads so two cannot interleave their diff and swap.
@@ -146,8 +172,10 @@ impl Engine {
     /// With a prepared dependency registry, e.g. one that uses the app's own
     /// engines ([`DepRegistry::with_managed`]).
     pub fn with_deps(registry: Registry, config: EngineConfig, deps: DepRegistry) -> Self {
+        let installed = registry.filtered(|s| config.packs.is_on(&s.pack));
         Engine {
-            registry: RwLock::new(Arc::new(registry)),
+            registry: RwLock::new(Arc::new(installed)),
+            catalog: RwLock::new(Arc::new(registry)),
             extensions: RwLock::new(Arc::new(vec![])),
             loader: RwLock::new(None),
             reloading: Mutex::new(()),
@@ -180,6 +208,11 @@ impl Engine {
     /// request; a reload swaps in a new one without affecting it.
     pub fn registry(&self) -> Arc<Registry> {
         self.registry.read().unwrap().clone()
+    }
+
+    /// Every registered tool, including those of turned-off packs.
+    pub fn catalog(&self) -> Arc<Registry> {
+        self.catalog.read().unwrap().clone()
     }
 
     /// Extension manifests found by the last load, trusted or not.
@@ -226,7 +259,8 @@ impl Engine {
         self.swap(registry, extensions)
     }
 
-    fn swap(&self, registry: Registry, extensions: Vec<ExtensionStatus>) -> ReloadReport {
+    fn swap(&self, catalog: Registry, extensions: Vec<ExtensionStatus>) -> ReloadReport {
+        let registry = catalog.filtered(|s| self.config.packs.is_on(&s.pack));
         let old = self.registry();
         let before: HashMap<&str, &Arc<dyn Tool>> =
             old.iter().map(|t| (t.spec().id.as_str(), t)).collect();
@@ -254,6 +288,7 @@ impl Engine {
         report.removed.sort();
         report.changed.sort();
         *self.registry.write().unwrap() = Arc::new(registry);
+        *self.catalog.write().unwrap() = Arc::new(catalog);
         *self.extensions.write().unwrap() = Arc::new(extensions);
         if report.tool_set_changed() {
             self.generation.send_modify(|g| *g += 1);
@@ -273,11 +308,25 @@ impl Engine {
                 id: s.id,
                 name: s.name,
                 hint: s.install_hint,
+                downloadable: s.downloadable,
+                download_bytes: s.download_bytes,
             })
             .collect();
-        let missing_model = spec.requires_model.as_ref().filter(|g| !self.models.group_available(g)).map(|g| {
+        let model_group = spec
+            .requires_model
+            .clone()
+            .filter(|g| !self.models.group_available(g));
+        let missing_model = model_group.as_ref().map(|g| {
             format!("No '{g}' model installed. Download one in Settings → Models or with `dogubako models download <id>`.")
         });
+        let recommended_model = model_group
+            .as_deref()
+            .and_then(crate::models::recommended_model)
+            .map(|m| ModelOffer {
+                id: m.id.to_string(),
+                name: m.name.to_string(),
+                size_bytes: m.size_bytes,
+            });
         let reason = if !platform_supported {
             Some(format!(
                 "Not supported on {:?}",
@@ -293,6 +342,8 @@ impl Engine {
             platform_supported,
             missing,
             missing_model,
+            model_group,
+            recommended_model,
             reason,
         }
     }
@@ -372,21 +423,71 @@ impl Engine {
         self.registry().specs().map(|s| self.info(s)).collect()
     }
 
+    /// An installed tool by id or MCP name; a known tool of a turned-off pack
+    /// is [`ToolError::NotInstalled`].
+    pub fn find(&self, id: &str) -> ToolResult<Arc<dyn Tool>> {
+        if let Some(t) = self.registry().find(id) {
+            return Ok(t.clone());
+        }
+        Err(self
+            .not_installed(id)
+            .unwrap_or_else(|| ToolError::NotFound { id: id.to_string() }))
+    }
+
+    /// The error for a tool that exists but whose pack is turned off.
+    pub fn not_installed(&self, id: &str) -> Option<ToolError> {
+        if self.registry().find(id).is_some() {
+            return None;
+        }
+        self.catalog()
+            .find(id)
+            .map(|t| ToolError::not_installed(&t.spec().id, &t.spec().pack))
+    }
+
+    /// Every built-in pack, with its tool count, state and what it uses.
+    pub fn packs(&self) -> Vec<PackInfo> {
+        crate::packs::builtin_packs()
+            .into_iter()
+            .map(|p| {
+                let catalog = self.catalog();
+                let specs: Vec<&ToolSpec> = catalog.specs().filter(|s| s.pack == p.id).collect();
+                let mut deps = std::collections::BTreeSet::new();
+                let mut models = std::collections::BTreeSet::new();
+                for s in &specs {
+                    deps.extend(s.requires.iter().cloned());
+                    for r in s.params.iter().filter_map(|p| p.requires.as_ref()) {
+                        deps.insert(match r {
+                            Requirement::MagickWrite { .. } => "imagemagick".to_string(),
+                            Requirement::FfmpegEncoder { .. } => "ffmpeg".to_string(),
+                            Requirement::Program { dependency, .. } => dependency.clone(),
+                        });
+                    }
+                    models.extend(s.requires_model.iter().cloned());
+                }
+                PackInfo {
+                    id: p.id.to_string(),
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    enabled: self.config.packs.is_on(p.id),
+                    tools: specs.len(),
+                    engines: deps
+                        .into_iter()
+                        .map(|id| PackEngine {
+                            name: self.deps.status(&id).name,
+                            id,
+                        })
+                        .collect(),
+                    models: models.into_iter().collect(),
+                }
+            })
+            .collect()
+    }
+
     /// Checks shared by [`Engine::run`] and [`Engine::check`]: the tool,
     /// authorization, platform, permissions, dependencies and params.
     fn prepare(&self, req: &RunRequest<'_>) -> ToolResult<(Arc<dyn Tool>, Params, FsPolicy)> {
         let tool = self.find(req.tool_id)?;
         self.prepare_tool(tool, req)
-    }
-
-    /// Look up a tool in the current registry, for [`Engine::run_tool`].
-    pub fn find(&self, name: &str) -> ToolResult<Arc<dyn Tool>> {
-        self.registry()
-            .find(name)
-            .cloned()
-            .ok_or_else(|| ToolError::NotFound {
-                id: name.to_string(),
-            })
     }
 
     fn prepare_tool(
@@ -427,7 +528,10 @@ impl Engine {
             });
         }
         if let Some(m) = avail.missing_model {
-            return Err(ToolError::MissingModel { message: m });
+            return Err(ToolError::MissingModel {
+                message: m,
+                model: avail.recommended_model.map(|r| r.id),
+            });
         }
 
         let fs = req.fs.clone().unwrap_or_else(|| self.config.fs.clone());
@@ -874,6 +978,40 @@ mod tests {
         );
     }
 
+    #[test]
+    fn missing_model_offers_the_recommended_one() {
+        use super::{Engine, EngineConfig};
+        use crate::registry::Registry;
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = EngineConfig::local(Environment::Cli);
+        cfg.models_dir = dir.path().to_path_buf();
+        let engine = Engine::new(Registry::new(), cfg, vec![]);
+        let spec = ToolSpec::new("speech.fake", "Fake", Category::Audio)
+            .describe("needs a whisper model")
+            .requires(&["definitely-not-a-dep"])
+            .requires_model("whisper");
+        let a = engine.availability(&spec);
+        assert!(!a.available);
+        assert_eq!(a.model_group.as_deref(), Some("whisper"));
+        let m = a.recommended_model.expect("recommended model");
+        assert_eq!(m.id, "whisper-base");
+        assert_eq!(m.size_bytes, 147_951_465);
+        assert_eq!(a.missing[0].downloadable, None);
+        let v = serde_json::to_value(engine.info(&spec).availability).unwrap();
+        assert_eq!(v["recommended_model"]["name"], "Whisper base");
+        assert!(v["missing"][0].get("downloadable").is_none());
+
+        let e = ToolError::MissingModel {
+            message: "x".into(),
+            model: Some(m.id.clone()),
+        };
+        assert_eq!(serde_json::to_value(&e).unwrap()["model"], "whisper-base");
+
+        let ok = ToolSpec::new("text.fake", "Fine", Category::Text).describe("needs nothing");
+        let v = serde_json::to_value(engine.availability(&ok)).unwrap();
+        assert!(v.get("model_group").is_none() && v.get("recommended_model").is_none());
+    }
+
     #[tokio::test]
     async fn validation_and_coercion() {
         let h = TestHarness::new(tools());
@@ -1019,5 +1157,93 @@ mod tests {
         release.notify_one();
         let out = h.run("dev.gate", json!({})).await.unwrap();
         assert_eq!(out.text.as_deref(), Some("v2"));
+    }
+
+    use super::{Engine, EngineConfig, PackSelection, Registry};
+    use crate::tool::Environment;
+
+    fn packs_engine(packs: PackSelection) -> Engine {
+        let mut reg = Registry::new();
+        reg.register_all(vec![
+            sync_tool(
+                ToolSpec::new("text.upper", "Upper", Category::Text).describe("upper"),
+                |_c, _p| Ok(ToolOutput::text("A")),
+            ),
+            sync_tool(
+                ToolSpec::new("image.blur", "Blur", Category::Image)
+                    .describe("blur")
+                    .requires(&["imagemagick"])
+                    .requires_model("upscale"),
+                |_c, _p| Ok(ToolOutput::text("b")),
+            ),
+        ]);
+        let mut cfg = EngineConfig::local(Environment::Cli);
+        cfg.packs = packs;
+        Engine::new(reg, cfg, vec![])
+    }
+
+    #[test]
+    fn every_pack_on_by_default() {
+        let e = packs_engine(PackSelection::default());
+        assert_eq!(e.list().len(), 2);
+        assert!(e.find("text.upper").is_ok() && e.find("image.blur").is_ok());
+        assert!(e.packs().iter().all(|p| p.enabled));
+    }
+
+    #[test]
+    fn turned_off_pack_hides_and_rejects_tools() {
+        let e = packs_engine(PackSelection::only(["image"]));
+        let ids: Vec<String> = e.list().into_iter().map(|t| t.spec.id).collect();
+        assert_eq!(ids, vec!["image.blur"]);
+        assert!(e.registry().search("upper").is_empty());
+        assert_eq!(e.registry().by_category(Category::Text).count(), 0);
+        let err = e.find("text.upper").err().unwrap();
+        assert_eq!(err.code(), "not_installed");
+        assert!(err.to_string().contains("Text pack ('text')"), "{err}");
+        assert!(matches!(
+            e.find("text.nope"),
+            Err(ToolError::NotFound { .. })
+        ));
+        assert!(e.not_installed("image.blur").is_none());
+    }
+
+    #[test]
+    fn packs_report_counts_engines_and_models() {
+        let e = packs_engine(PackSelection::only(["image"]));
+        let packs = e.packs();
+        assert_eq!(packs.len(), Category::ALL.len());
+        let image = packs.iter().find(|p| p.id == "image").unwrap();
+        assert!(image.enabled);
+        assert_eq!(image.tools, 1);
+        assert_eq!(image.engines[0].id, "imagemagick");
+        assert_eq!(image.models, vec!["upscale"]);
+        let text = packs.iter().find(|p| p.id == "text").unwrap();
+        assert!(!text.enabled);
+        assert_eq!(text.tools, 1);
+    }
+
+    #[test]
+    fn reload_keeps_turned_off_packs_hidden() {
+        let e = packs_engine(PackSelection::only(["image"]));
+        let mut reg = Registry::new();
+        reg.register_all(vec![
+            sync_tool(
+                ToolSpec::new("text.lower", "Lower", Category::Text).describe("lower"),
+                |_c, _p| Ok(ToolOutput::text("a")),
+            ),
+            sync_tool(
+                ToolSpec::new("image.sharpen", "Sharpen", Category::Image).describe("sharpen"),
+                |_c, _p| Ok(ToolOutput::text("s")),
+            ),
+        ]);
+        let r = e.replace_registry(reg, vec![]);
+        assert_eq!(r.added, vec!["image.sharpen"]);
+        assert_eq!(r.removed, vec!["image.blur"]);
+        assert_eq!(r.tools, 1);
+        assert_eq!(
+            e.not_installed("text.lower").unwrap().code(),
+            "not_installed"
+        );
+        assert_eq!(e.packs().iter().find(|p| p.id == "text").unwrap().tools, 1);
     }
 }
