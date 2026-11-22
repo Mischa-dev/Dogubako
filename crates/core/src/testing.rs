@@ -18,6 +18,11 @@ pub struct TestHarness {
 
 impl TestHarness {
     pub fn new(tools: Vec<Arc<dyn Tool>>) -> Self {
+        Self::with_bin_dirs(tools, vec![])
+    }
+
+    /// Like [`TestHarness::new`], finding dependencies in `bin_dirs` first.
+    pub fn with_bin_dirs(tools: Vec<Arc<dyn Tool>>, bin_dirs: Vec<PathBuf>) -> Self {
         let mut reg = Registry::new();
         reg.register_all(tools);
         let dir = tempfile::tempdir().expect("tempdir");
@@ -27,7 +32,7 @@ impl TestHarness {
             cfg.models_dir = PathBuf::from(m);
         }
         TestHarness {
-            engine: Engine::new(reg, cfg, vec![]),
+            engine: Engine::new(reg, cfg, bin_dirs),
             dir,
         }
     }

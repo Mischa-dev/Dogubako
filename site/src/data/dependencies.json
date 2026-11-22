@@ -240,6 +240,21 @@
     "tools": 0
   },
   {
+    "id": "cups",
+    "name": "CUPS",
+    "purpose": "Printing and printer status (lp, lpstat)",
+    "license": "Apache-2.0",
+    "install": {
+      "apt": "cups-client",
+      "dnf": "cups-client",
+      "pacman": "cups",
+      "brew": "cups",
+      "winget": null,
+      "url": "https://openprinting.github.io/cups/"
+    },
+    "tools": 0
+  },
+  {
     "id": "bwrap",
     "name": "Bubblewrap",
     "purpose": "Optional sandbox for external programs (Linux)",

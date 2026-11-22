@@ -119,6 +119,7 @@ category = "image"
 description = "Encode an image to WebP with Google's cwebp"
 version = "1.0.0"
 permissions = []            # e.g. ["network"]
+requires = []               # dependency ids from KNOWN_DEPS, e.g. ["cups"]
 timeout_secs = 300
 
 [command]
@@ -150,6 +151,14 @@ groups `{ when = "flag", args = [...] }` are included only when the parameter is
 true / non-empty. Parameters use the same schema as Rust tools (`type` =
 `text`, `secret`, `integer`, `number`, `boolean`, `enum` (`options = [{value, label}]`),
 `color`, `file`, `path`, `json`).
+
+`requires` takes the same dependency ids as `.requires(&[..])` (an unknown id is
+a parse error): a missing one marks the tool unavailable with the usual install
+hint. A `program` that is a required dependency's id or one of its executables
+(`whisper`, `lpstat` for `cups`) is found through the dependency registry, so
+managed engines and `DOGUBAKO_<ID>_PATH` apply; any other bare program next to a
+required dependency's binary (`pdftotext` beside Poppler's `pdftoppm`) is run
+from that folder before PATH is searched.
 
 ### Trust and permissions
 
