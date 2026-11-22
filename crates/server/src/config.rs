@@ -51,7 +51,7 @@ pub struct ServerConfig {
     pub mcp_discovery: String,
     /// Built-in tool packs turned on (`DOGUBAKO_PACKS`, or `packs = [...]`
     /// in the config file); unset means every pack.
-    #[serde(default, deserialize_with = "packs_de")]
+    #[serde(default, deserialize_with = "packs_de", serialize_with = "packs_ser")]
     pub packs: PackSelection,
     /// Extra allowed Origins for browser requests / MCP (besides same-origin).
     pub allowed_origins: Vec<String>,
@@ -232,7 +232,9 @@ impl ServerConfig {
             cfg.mcp_discovery = v;
         }
         if let Some(v) = env("PACKS") {
-            cfg.packs = PackSelection::parse(&v);
+            cfg.packs = PackSelection::parse_checked(&v).map_err(|bad| {
+                anyhow_lite::Error(format!("DOGUBAKO_PACKS: {}", unknown_packs(&bad)))
+            })?;
         }
         if let Some(v) = env_list("ALLOWED_ORIGINS") {
             cfg.allowed_origins = v;
@@ -292,15 +294,7 @@ impl ServerConfig {
         }
         let unknown = self.packs.unknown();
         if !unknown.is_empty() {
-            return Err(anyhow_lite::Error(format!(
-                "unknown tool pack(s) {}; known packs: {}",
-                unknown.join(", "),
-                dogubako_core::packs::builtin_packs()
-                    .iter()
-                    .map(|p| p.id)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )));
+            return Err(anyhow_lite::Error(unknown_packs(&unknown)));
         }
         if !["full", "compact"].contains(&self.mcp_discovery.as_str()) {
             return Err(anyhow_lite::Error(
@@ -372,8 +366,20 @@ pub mod anyhow_lite {
     }
 }
 
-/// `packs` in the config file: a list (`["image", "pdf"]`) or a string
-/// (`"all,-speech"`).
+fn unknown_packs(bad: &[String]) -> String {
+    format!(
+        "unknown tool pack(s) {}; known packs: {}",
+        bad.join(", "),
+        dogubako_core::packs::builtin_packs()
+            .iter()
+            .map(|p| p.id)
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+/// `packs` in the config file: a list (`["image", "pdf"]`, `[]` for none) or
+/// a string (`"all,-speech"`).
 fn packs_de<'de, D: serde::Deserializer<'de>>(d: D) -> Result<PackSelection, D::Error> {
     #[derive(Deserialize)]
     #[serde(untagged)]
@@ -382,9 +388,65 @@ fn packs_de<'de, D: serde::Deserializer<'de>>(d: D) -> Result<PackSelection, D::
         Text(String),
         Selection(PackSelection),
     }
-    Ok(match Raw::deserialize(d)? {
-        Raw::List(v) => PackSelection::parse(&v.join(",")),
-        Raw::Text(t) => PackSelection::parse(&t),
-        Raw::Selection(s) => s,
-    })
+    let checked = |t: &str| {
+        PackSelection::parse_checked(t).map_err(|bad| serde::de::Error::custom(unknown_packs(&bad)))
+    };
+    match Raw::deserialize(d)? {
+        Raw::List(v) if v.is_empty() => Ok(PackSelection::only(v)),
+        Raw::List(v) => checked(&v.join(",")),
+        Raw::Text(t) => checked(&t),
+        Raw::Selection(s) => Ok(s),
+    }
+}
+
+/// Written the way [`packs_de`] reads it, so `dogubako server config` output
+/// loads back: `"all"` or the list of packs turned on.
+fn packs_ser<S: serde::Serializer>(p: &PackSelection, s: S) -> Result<S::Ok, S::Error> {
+    match &p.enabled {
+        None => s.serialize_str("all"),
+        Some(set) => s.collect_seq(set),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn packs_from(toml_text: &str) -> Result<PackSelection, String> {
+        toml::from_str::<ServerConfig>(toml_text)
+            .map(|c| c.packs)
+            .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn packs_in_config_file() {
+        assert!(packs_from("").unwrap().is_all());
+        assert_eq!(
+            packs_from("packs = []").unwrap(),
+            PackSelection::only(Vec::<String>::new())
+        );
+        assert_eq!(
+            packs_from("packs = [\"pdf\"]").unwrap(),
+            PackSelection::only(["pdf"])
+        );
+        assert!(packs_from("packs = \"all,-spech\"")
+            .unwrap_err()
+            .contains("spech"));
+    }
+
+    #[test]
+    fn packs_round_trip_through_toml() {
+        for p in [
+            PackSelection::all(),
+            PackSelection::only(["image", "pdf"]),
+            PackSelection::only(Vec::<String>::new()),
+        ] {
+            let cfg = ServerConfig {
+                packs: p.clone(),
+                ..Default::default()
+            };
+            let text = toml::to_string(&cfg).unwrap();
+            assert_eq!(toml::from_str::<ServerConfig>(&text).unwrap().packs, p);
+        }
+    }
 }

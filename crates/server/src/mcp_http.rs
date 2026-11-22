@@ -38,6 +38,11 @@ impl McpBackend for ServerBackend {
     }
 
     fn not_installed(&self, name: &str) -> Option<ToolError> {
+        let perms = self.principal.permissions(self.state.host_fs_enabled());
+        let spec = self.state.engine.catalog.find(name)?.spec();
+        if !self.principal.can_use(spec) || !perms.missing(&spec.permissions).is_empty() {
+            return None;
+        }
         self.state.engine.not_installed(name)
     }
     fn file_mode(&self) -> &'static str {
@@ -64,8 +69,6 @@ impl McpBackend for ServerBackend {
             .map_err(|e| match e.status {
                 StatusCode::FORBIDDEN => ToolError::denied(e.message),
                 StatusCode::NOT_FOUND => self
-                    .state
-                    .engine
                     .not_installed(tool_id)
                     .unwrap_or_else(|| ToolError::NotFound { id: tool_id.into() }),
                 StatusCode::PAYLOAD_TOO_LARGE => ToolError::limit(e.message),

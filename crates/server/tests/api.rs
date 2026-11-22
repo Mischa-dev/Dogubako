@@ -1211,6 +1211,30 @@ async fn turned_off_packs_hide_tools_everywhere() {
 }
 
 #[tokio::test]
+async fn turned_off_tools_stay_unknown_to_restricted_callers() {
+    let t = setup_with(AuthMode::Required, |c| {
+        c.packs = dogubako_core::packs::PackSelection::parse("image")
+    });
+    let (cookie, csrf) = owner_session(&t).await;
+    let token =
+        create_agent_token(&t, &cookie, &csrf, "imgbot", json!({"allow": ["image.*"]})).await;
+    let bearer = format!("Bearer {token}");
+    let auth = [("authorization", bearer.as_str())];
+    let r = call(&t.app, Method::GET, "/api/v1/tools/text.upper", &auth, None).await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    assert_ne!(r.body["error"]["code"], "not_installed");
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tools/text.upper/run",
+        &auth,
+        Some(json!({"params": {"text": "a"}})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.body);
+}
+
+#[tokio::test]
 async fn packs_default_to_all() {
     let t = setup(AuthMode::None);
     let r = call(&t.app, Method::GET, "/api/v1/packs", &[], None).await;

@@ -101,6 +101,21 @@ impl PackSelection {
         }
     }
 
+    /// Like [`parse`](Self::parse), but returns the entries that are not
+    /// built-in pack ids (e.g. the typo in `all,-spech`) as an error.
+    pub fn parse_checked(list: &str) -> Result<Self, Vec<String>> {
+        let bad: Vec<String> = list
+            .split([',', ';', ' '])
+            .map(|s| s.trim().trim_start_matches('-').to_ascii_lowercase())
+            .filter(|s| !s.is_empty() && s != "all" && s != "*" && builtin_pack(s).is_none())
+            .collect();
+        if bad.is_empty() {
+            Ok(Self::parse(list))
+        } else {
+            Err(bad)
+        }
+    }
+
     /// Entries that are not built-in pack ids (likely typos).
     pub fn unknown(&self) -> Vec<String> {
         self.enabled
@@ -171,6 +186,18 @@ pub struct PackInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_checked_rejects_typos() {
+        assert_eq!(
+            PackSelection::parse_checked("all,-spech,pfd"),
+            Err(vec!["spech".to_string(), "pfd".to_string()])
+        );
+        assert_eq!(
+            PackSelection::parse_checked("all,-speech"),
+            Ok(PackSelection::parse("all,-speech"))
+        );
+    }
 
     #[test]
     fn parse_lists() {
