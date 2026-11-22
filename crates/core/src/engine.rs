@@ -57,6 +57,19 @@ pub struct MissingDep {
     pub id: String,
     pub name: String,
     pub hint: String,
+    /// Set when the app can download this program itself: the engine id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub downloadable: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download_bytes: Option<u64>,
+}
+
+/// The model to offer when a tool's model group has none installed.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelOffer {
+    pub id: String,
+    pub name: String,
+    pub size_bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -70,6 +83,11 @@ pub struct Availability {
     /// Required extension settings that are not set yet.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unset_settings: Vec<String>,
+    /// With `missing_model`: the model group the tool needs and the one to install.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_group: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recommended_model: Option<ModelOffer>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -143,9 +161,15 @@ impl Engine {
                 id: s.id,
                 name: s.name,
                 hint: s.install_hint,
+                downloadable: s.downloadable,
+                download_bytes: s.download_bytes,
             })
             .collect();
-        let missing_model = spec.requires_model.as_ref().filter(|g| !self.models.group_available(g)).map(|g| {
+        let model_group = spec
+            .requires_model
+            .clone()
+            .filter(|g| !self.models.group_available(g));
+        let missing_model = model_group.as_ref().map(|g| {
             format!("No '{g}' model installed. Download one in Settings → Models or with `dogubako models download <id>`.")
         });
         let unset_settings = self
@@ -153,6 +177,14 @@ impl Engine {
             .get(&spec.id)
             .map(|t| t.unset_settings())
             .unwrap_or_default();
+        let recommended_model = model_group
+            .as_deref()
+            .and_then(crate::models::recommended_model)
+            .map(|m| ModelOffer {
+                id: m.id.to_string(),
+                name: m.name.to_string(),
+                size_bytes: m.size_bytes,
+            });
         let reason = if !platform_supported {
             Some(format!(
                 "Not supported on {:?}",
@@ -176,6 +208,8 @@ impl Engine {
             missing,
             missing_model,
             unset_settings,
+            model_group,
+            recommended_model,
             reason,
         }
     }
@@ -298,7 +332,10 @@ impl Engine {
             });
         }
         if let Some(m) = avail.missing_model {
-            return Err(ToolError::MissingModel { message: m });
+            return Err(ToolError::MissingModel {
+                message: m,
+                model: avail.recommended_model.map(|r| r.id),
+            });
         }
         if !avail.unset_settings.is_empty() {
             return Err(ToolError::NotConfigured {
@@ -740,6 +777,40 @@ mod tests {
             h.run("nope.nope", json!({})).await.unwrap_err().code(),
             "not_found"
         );
+    }
+
+    #[test]
+    fn missing_model_offers_the_recommended_one() {
+        use super::{Engine, EngineConfig};
+        use crate::registry::Registry;
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = EngineConfig::local(Environment::Cli);
+        cfg.models_dir = dir.path().to_path_buf();
+        let engine = Engine::new(Registry::new(), cfg, vec![]);
+        let spec = ToolSpec::new("speech.fake", "Fake", Category::Audio)
+            .describe("needs a whisper model")
+            .requires(&["definitely-not-a-dep"])
+            .requires_model("whisper");
+        let a = engine.availability(&spec);
+        assert!(!a.available);
+        assert_eq!(a.model_group.as_deref(), Some("whisper"));
+        let m = a.recommended_model.expect("recommended model");
+        assert_eq!(m.id, "whisper-base");
+        assert_eq!(m.size_bytes, 147_951_465);
+        assert_eq!(a.missing[0].downloadable, None);
+        let v = serde_json::to_value(engine.info(&spec).availability).unwrap();
+        assert_eq!(v["recommended_model"]["name"], "Whisper base");
+        assert!(v["missing"][0].get("downloadable").is_none());
+
+        let e = ToolError::MissingModel {
+            message: "x".into(),
+            model: Some(m.id.clone()),
+        };
+        assert_eq!(serde_json::to_value(&e).unwrap()["model"], "whisper-base");
+
+        let ok = ToolSpec::new("text.fake", "Fine", Category::Text).describe("needs nothing");
+        let v = serde_json::to_value(engine.availability(&ok)).unwrap();
+        assert!(v.get("model_group").is_none() && v.get("recommended_model").is_none());
     }
 
     #[tokio::test]

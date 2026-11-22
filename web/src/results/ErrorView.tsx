@@ -1,14 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronRight, CircleAlert, Ban, Package } from 'lucide-react';
-import type { ToolErrorView } from '../lib/types';
+import type { ToolErrorView, ToolInfo } from '../lib/types';
+import { GetMissing, useErrorOffer } from '../components/GetMissing';
+import { notifyToolsChanged } from '../lib/app';
 import { describeError } from '../lib/errors';
 import { href } from '../lib/router';
 import { CopyButton, cx } from '../components/ui';
 
-export function ErrorView({ error }: { error: ToolErrorView }) {
+/** `tool` lets a missing engine or model error offer its download in place. */
+export function ErrorView({ error, tool }: { error: ToolErrorView; tool?: ToolInfo }) {
   const f = describeError(error);
   const [open, setOpen] = useState(false);
   const cancelled = error.code === 'cancelled';
+  const missing = error.code === 'missing_dependency' || error.code === 'missing_model';
+  // The tool list said it was available: refresh it so the download offer reflects what is gone.
+  const stale = !!tool && missing && tool.availability.available;
+  useEffect(() => { if (stale) notifyToolsChanged(); }, [stale]);
   const Icon = cancelled ? Ban : error.code === 'missing_dependency' || error.code === 'missing_model' ? Package : CircleAlert;
   return (
     <div className={cx('error-view', cancelled && 'is-cancelled')} role={cancelled ? 'status' : 'alert'}>
@@ -22,6 +29,7 @@ export function ErrorView({ error }: { error: ToolErrorView }) {
             <CopyButton text={f.hint} iconOnly label="Copy hint" />
           </div>
         )}
+        {tool && missing && <ErrorOffer error={error} tool={tool} />}
         {(error.code === 'missing_dependency' || error.code === 'missing_model') && (
           <a className="link-sm" href={href.settings(error.code === 'missing_model' ? 'models' : 'dependencies')}>
             Open {error.code === 'missing_model' ? 'Models' : 'Dependencies'} settings
@@ -38,4 +46,8 @@ export function ErrorView({ error }: { error: ToolErrorView }) {
       </div>
     </div>
   );
+}
+
+function ErrorOffer({ error, tool }: { error: ToolErrorView; tool: ToolInfo }) {
+  return <GetMissing availability={useErrorOffer(error, tool)} />;
 }

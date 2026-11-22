@@ -10,6 +10,7 @@ import { favorites as favStore, pushRecent, toggleFavorite, useStore } from '../
 import { Callout, CopyButton, Segmented, Spinner, cx } from '../components/ui';
 import { NotFound } from '../pages/NotFound';
 import { GenericTool } from './GenericTool';
+import { GetMissing, downloadOffers } from '../components/GetMissing';
 
 /** Props every special editor gets. The visual editors (crop, redact) lay
  *  themselves out like the generic tool page, so they take the panel head and
@@ -136,7 +137,9 @@ function ToolMeta({ tool }: { tool: ToolInfo }) {
 
 function Availability({ tool }: { tool: ToolInfo }) {
   const a = tool.availability;
-  const { isAdmin, isServer } = useApp();
+  const { backend, isAdmin, isServer } = useApp();
+  // Everything missing can be downloaded: GetMissing then says who to ask.
+  const offersOnly = downloadOffers(a, backend).length === (a.missing?.length ?? 0) + (a.missing_model ? 1 : 0);
   const hints = useMemo(() => (a.missing ?? []).map((m) => ({ name: m.name, hint: m.hint })), [a.missing]);
   if (a.available) return null;
   if (!a.platform_supported) {
@@ -172,7 +175,8 @@ function Availability({ tool }: { tool: ToolInfo }) {
         </div>
       ))}
       {a.missing_model && <div className="hint-line"><span>{a.missing_model}</span></div>}
-      {isServer && !isAdmin && <div className="muted small">Ask an administrator of this instance to install it.</div>}
+      <GetMissing availability={a} />
+      {isServer && !isAdmin && !offersOnly && <div className="muted small">Ask an administrator of this instance to install it.</div>}
     </Callout>
   );
 }

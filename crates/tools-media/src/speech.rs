@@ -199,6 +199,7 @@ fn select_model(
                 message: format!(
                     "speaker turn detection needs the '{TDRZ}' model (Whisper small + tinydiarize)"
                 ),
+                model: Some(TDRZ.into()),
             })?;
         return Ok((m, ctx.models().path(m.id).unwrap()));
     }
@@ -209,6 +210,7 @@ fn select_model(
                 .find(|m| m.id == choice)
                 .ok_or_else(|| ToolError::MissingModel {
                     message: format!("model '{choice}' is not installed"),
+                    model: Some(choice.into()),
                 })?;
         return Ok((m, ctx.models().path(m.id).unwrap()));
     }
@@ -220,6 +222,7 @@ fn select_model(
         .find_map(|id| installed.iter().find(|m| m.id == *id))
         .ok_or_else(|| ToolError::MissingModel {
             message: "no Whisper model is installed".into(),
+            model: dogubako_core::models::recommended_model("whisper").map(|m| m.id.to_string()),
         })?;
     Ok((pick, ctx.models().path(pick.id).unwrap()))
 }
@@ -912,6 +915,8 @@ fn tts() -> Arc<dyn Tool> {
                 .copied()
                 .ok_or_else(|| ToolError::MissingModel {
                     message: "no Piper voice is installed".into(),
+                    model: dogubako_core::models::recommended_model("piper")
+                        .map(|m| m.id.to_string()),
                 })?,
             id => installed
                 .iter()
@@ -919,6 +924,7 @@ fn tts() -> Arc<dyn Tool> {
                 .find(|m| m.id == id)
                 .ok_or_else(|| ToolError::MissingModel {
                     message: format!("voice '{id}' is not installed"),
+                    model: Some(id.into()),
                 })?,
         };
         let model = ctx
@@ -926,6 +932,7 @@ fn tts() -> Arc<dyn Tool> {
             .path(voice.id)
             .ok_or_else(|| ToolError::MissingModel {
                 message: format!("voice '{}' is not installed", voice.id),
+                model: Some(voice.id.into()),
             })?;
         let config = voice
             .extra
