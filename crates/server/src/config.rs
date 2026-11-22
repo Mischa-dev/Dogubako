@@ -366,6 +366,25 @@ pub mod anyhow_lite {
     }
 }
 
+impl ServerConfig {
+    /// Where packs chosen in the web admin are saved.
+    pub fn packs_file(&self) -> PathBuf {
+        self.data_dir.join(dogubako_core::packs::PACKS_FILE)
+    }
+
+    /// Packs to start with: `DOGUBAKO_PACKS` wins, then what an admin saved
+    /// in the web admin, then the config file's `packs`.
+    pub fn saved_packs(&self) -> PackSelection {
+        let env_set =
+            std::env::var(dogubako_core::packs::PACKS_ENV).is_ok_and(|v| !v.trim().is_empty());
+        if !env_set && self.packs_file().exists() {
+            PackSelection::load(&self.packs_file())
+        } else {
+            self.packs.clone()
+        }
+    }
+}
+
 fn unknown_packs(bad: &[String]) -> String {
     format!(
         "unknown tool pack(s) {}; known packs: {}",

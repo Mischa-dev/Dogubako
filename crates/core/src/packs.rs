@@ -129,6 +129,23 @@ impl PackSelection {
             .collect()
     }
 
+    /// This selection with one built-in pack turned on or off. Turning every
+    /// built-in pack on gives back [`PackSelection::all`].
+    pub fn with(&self, pack: &str, on: bool) -> Self {
+        let builtin: BTreeSet<String> = builtin_packs().iter().map(|p| p.id.to_string()).collect();
+        let mut set = self.enabled.clone().unwrap_or_else(|| builtin.clone());
+        if on {
+            set.insert(pack.to_string());
+        } else {
+            set.remove(pack);
+        }
+        if builtin.is_subset(&set) {
+            PackSelection::all()
+        } else {
+            PackSelection { enabled: Some(set) }
+        }
+    }
+
     /// Read a saved selection; a missing or unreadable file means every pack.
     pub fn load(path: &Path) -> Self {
         std::fs::read_to_string(path)
@@ -184,6 +201,23 @@ pub struct PackInfo {
     pub engines: Vec<PackEngine>,
     /// Model groups (see [`crate::models`]).
     pub models: Vec<String>,
+    /// What turning the pack on can download: its app-managed engines and
+    /// the recommended model of each group it uses. Built-in tools
+    /// themselves add nothing.
+    pub download_bytes: u64,
+    /// Disk space those downloads take once installed.
+    pub disk_bytes: u64,
+}
+
+/// A downloaded engine or model that no turned-on tool uses any more.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct UnusedDownload {
+    /// `engine` or `model`.
+    pub kind: &'static str,
+    pub id: String,
+    pub name: String,
+    /// Space it takes on disk.
+    pub bytes: u64,
 }
 
 #[cfg(test)]
@@ -238,5 +272,18 @@ mod tests {
         assert_eq!(PackSelection::load(&f), s);
         PackSelection::all().save(&f).unwrap();
         assert!(PackSelection::load(&f).is_all());
+    }
+
+    #[test]
+    fn with_turns_one_pack_on_or_off() {
+        let off = PackSelection::all().with("speech", false);
+        assert!(!off.is_on("speech") && off.is_on("image"));
+        assert_eq!(
+            off.enabled.as_ref().unwrap().len(),
+            builtin_packs().len() - 1
+        );
+        assert!(off.with("speech", true).is_all());
+        let one = PackSelection::only(["image"]).with("pdf", true);
+        assert!(one.is_on("pdf") && one.is_on("image") && !one.is_on("text"));
     }
 }

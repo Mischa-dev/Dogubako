@@ -1,6 +1,6 @@
 import type { Artifact, Category, DepInfo, ExtensionSettings, JobView, Me, ModelDownload, ModelInfo, Status, ToolErrorView, ToolInfo } from '../types';
 import { readJson, writeJson } from '../storage';
-import { ApiError, type AssistantInfo, type AssistantTarget, type Backend, type FileRef, type PickOptions, type ReloadResult, type RunHandle, type RunOptions } from './types';
+import { ApiError, type AssistantInfo, type AssistantTarget, type Backend, type FileRef, type PacksState, type PickOptions, type ReloadResult, type RunHandle, type RunOptions } from './types';
 
 type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -263,6 +263,14 @@ export class TauriBackend implements Backend {
     return Array.isArray(r) ? { models: r, downloads: [] } : { models: r.models, downloads: r.downloads ?? [] };
   }
   async reloadRegistry() { return invoke<ReloadResult>('reload_tools'); }
+  packs() { return invoke<PacksState>('packs_status'); }
+  async setPack(id: string, enabled: boolean) {
+    const cur = await this.packs();
+    const on = cur.packs.filter((p) => (p.id === id ? enabled : p.enabled)).map((p) => p.id);
+    return this.choosePacks(on.length === cur.packs.length ? null : on);
+  }
+  choosePacks(enabled: string[] | null) { return invoke<PacksState>('set_packs', { enabled }); }
+  packsCleanup(ids?: string[]) { return invoke<PacksState>('packs_cleanup', { ids: ids ?? null }); }
   async onToolsChanged(cb: () => void) {
     const { listen } = await import('@tauri-apps/api/event');
     return listen('dogubako://tools-changed', () => cb());

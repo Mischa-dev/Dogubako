@@ -67,6 +67,14 @@ export interface Backend {
   deps(): Promise<{ dependencies: DepInfo[]; platform?: string; docker_image?: boolean }>;
   /** Rebuild the tool registry (builtins, trusted extensions, packs) without a restart. Server: admin only. */
   reloadRegistry?(): Promise<ReloadResult>;
+  /** Tool packs and downloads no turned-on pack uses (admins on a server). */
+  packs?(): Promise<PacksState>;
+  /** Turn one pack on or off for this installation; applies without a restart. */
+  setPack?(id: string, enabled: boolean): Promise<PacksState>;
+  /** First-run choice: `null` = Everything, else the pack ids to keep (desktop). */
+  choosePacks?(enabled: string[] | null): Promise<PacksState>;
+  /** Delete unused engines and models (all when `ids` is omitted). */
+  packsCleanup?(ids?: string[]): Promise<PacksState>;
   /** Called after a reload changed the tool set (any client's). Returns unsubscribe. */
   onToolsChanged?(cb: () => void): Promise<() => void>;
   models(): Promise<{ models: ModelInfo[]; downloads: ModelDownload[] }>;
@@ -83,6 +91,31 @@ export interface Backend {
   assistantChat(target: AssistantTarget, body: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
   /** The endpoint's model ids, for the model picker. */
   assistantModels(target: AssistantTarget): Promise<{ id: string; owned_by?: string }[]>;
+}
+
+export interface PackInfo {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  tools: number;
+  engines: { id: string; name: string }[];
+  models: string[];
+  download_bytes: number;
+  disk_bytes: number;
+}
+
+/** A downloaded engine or model no turned-on tool uses. */
+export interface UnusedDownload { kind: 'engine' | 'model'; id: string; name: string; bytes: number }
+
+export interface PacksState {
+  packs: PackInfo[];
+  unused: UnusedDownload[];
+  unused_bytes: number;
+  /** Desktop: whether Everything/Custom was chosen (or skipped) yet. */
+  chosen?: boolean;
+  removed?: UnusedDownload[];
+  freed_bytes?: number;
 }
 
 /** What a registry reload changed, by tool id. */

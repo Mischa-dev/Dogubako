@@ -73,6 +73,7 @@ dogubako run text.case --params '{"text":"Hello","case":"snake"}'
 | `dogubako server start [--bind] [--data-dir] [--config] [--no-auth] [--public-url]` | Run the web service |
 | `dogubako server config` / `server health` | Effective config / health check |
 | `dogubako mcp serve [--allow] [--deny] [--permissions] [--fs-root] [--discovery] [--output-dir]` | MCP over stdio |
+| `dogubako packs list\|enable <pack>\|disable <pack> [--remove-unused]` | Turn built-in tool packs on and off (saved in `<config>/packs.json`; `DOGUBAKO_PACKS` overrides). `disable` lists engines and models no turned-on pack uses and the space they take; `--remove-unused` deletes them (models; engines the desktop app downloaded are cleaned up from the app, and it is refused while `DOGUBAKO_PACKS` is set). `--json` for machine output |
 | `dogubako models list\|download <id>\|remove <id>` | Optional models (whisper, face detection, Piper voices) |
 | `dogubako users list\|create\|policy\|set-password\|disable\|enable\|delete` | Server accounts and agents (offline, `--data-dir`) |
 | `dogubako tokens list\|create --user U --name N [--allow …]\|revoke ID` | API tokens |
