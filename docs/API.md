@@ -64,7 +64,8 @@ Job failures carry the same tagged error in `job.error`. Codes: `invalid_input`,
 | `GET /status` | Public instance info (auth mode, setup required, version) |
 | `POST /setup` | First-run owner creation with setup token |
 | `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, `POST /auth/password` | Sessions |
-| `GET /tools[?q=&category=]`, `GET /tools/{id}`, `GET /categories` | Discovery (only permitted tools) |
+| `GET /tools[?q=&category=]`, `GET /tools/{id}`, `GET /categories` | Discovery (only permitted tools of turned-on packs) |
+| `GET /packs` | Built-in tool packs: `id`, `name`, `description`, `enabled`, `tools` (count), `engines`, `models`. Tools of a turned-off pack are hidden everywhere and running one returns 404 `not_installed` naming the pack |
 | `POST /tools/{id}/run` | Run a tool |
 | `GET /jobs`, `GET /jobs/{id}[?wait_seconds=]`, `GET /jobs/{id}/events`, `POST /jobs/{id}/cancel`, `DELETE /jobs/{id}`, `GET /jobs/{id}/artifacts.zip` | Jobs |
 | `GET /files`, `POST /files`, `PUT /files/raw?name=`, `GET /files/{id}`, `GET /files/{id}/content[?inline=1]` (Range supported), `DELETE /files/{id}` | Files |

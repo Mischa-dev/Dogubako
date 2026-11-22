@@ -108,6 +108,7 @@ environment variables and CLI flags. `dogubako server config` prints the effecti
 | `DOGUBAKO_ASSISTANT_ALLOW_PRIVATE` | `false` | Let that relay reach loopback/LAN model servers (e.g. Ollama on this host) |
 | `DOGUBAKO_ASSISTANT_BASE_URL` / `_API_KEY` / `_MODEL` | — | Optional shared model offered to every user as “This server”; the key is never sent to browsers |
 | `DOGUBAKO_MCP_DISCOVERY` | `full` | `full` or `compact` |
+| `DOGUBAKO_PACKS` | all | Built-in tool packs to turn on, e.g. `image,video,pdf` or `all,-speech`. Tools of other packs are hidden and return `not_installed`; an unknown pack name stops startup |
 | `DOGUBAKO_ALLOWED_ORIGINS` | — | Extra allowed Origins (browser MCP clients) |
 | `DOGUBAKO_MODELS_DIR` | `<data>/models` | Model storage |
 | `DOGUBAKO_EXTENSIONS_DIR` | `<data>/extensions` | Trusted TOML extensions |

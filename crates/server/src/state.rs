@@ -108,6 +108,7 @@ impl AppState {
             models_dir: cfg.models_dir(),
             env: Environment::Server,
             worker_exe: cfg.worker_exe.clone(),
+            packs: cfg.packs.clone(),
         };
         let engine = Arc::new(Engine::new(
             registry,

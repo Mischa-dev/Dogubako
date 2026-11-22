@@ -21,6 +21,7 @@ pub fn build_engine(env: Environment) -> Engine {
     let (registry, _) = dogubako_tools::build_registry(Some(&dirs.extensions));
     let mut cfg = EngineConfig::local(env);
     cfg.worker_exe = std::env::current_exe().ok();
+    cfg.packs = dogubako_core::packs::PackSelection::local(&dirs);
     cfg.models_dir = std::env::var_os("DOGUBAKO_MODELS_DIR")
         .map(Into::into)
         .unwrap_or(dirs.models.clone());

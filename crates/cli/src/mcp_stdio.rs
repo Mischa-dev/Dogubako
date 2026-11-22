@@ -86,6 +86,9 @@ impl McpBackend for LocalBackend {
             .collect()
     }
 
+    fn not_installed(&self, name: &str) -> Option<ToolError> {
+        self.engine.not_installed(name)
+    }
     fn file_mode(&self) -> &'static str {
         "path"
     }
@@ -97,13 +100,7 @@ impl McpBackend for LocalBackend {
         progress: Option<ProgressFn>,
         wait: Duration,
     ) -> Result<JobView, ToolError> {
-        let spec = self
-            .engine
-            .registry
-            .find(tool_id)
-            .ok_or_else(|| ToolError::NotFound { id: tool_id.into() })?
-            .spec()
-            .clone();
+        let spec = self.engine.find(tool_id)?.spec().clone();
         if !self.permitted(&spec) {
             return Err(ToolError::denied(format!(
                 "'{}' is not permitted for this MCP server",

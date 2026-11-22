@@ -695,6 +695,10 @@ pub struct ToolSpec {
     pub name: String,
     pub description: String,
     pub category: Category,
+    /// Pack the tool belongs to (see [`crate::packs`]); defaults to the
+    /// category's pack.
+    #[serde(default)]
+    pub pack: String,
     #[serde(default)]
     pub keywords: Vec<String>,
     pub params: Vec<ParamSpec>,
@@ -744,6 +748,7 @@ impl ToolSpec {
             name: name.to_string(),
             description: String::new(),
             category,
+            pack: category.id().to_string(),
             keywords: vec![],
             params: vec![],
             output: OutputSpec::default(),
@@ -764,6 +769,10 @@ impl ToolSpec {
     }
     pub fn describe(mut self, d: &str) -> Self {
         self.description = d.to_string();
+        self
+    }
+    pub fn pack(mut self, pack: &str) -> Self {
+        self.pack = pack.to_string();
         self
     }
     pub fn keywords(mut self, k: &[&str]) -> Self {
