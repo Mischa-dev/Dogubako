@@ -1,5 +1,5 @@
 [tool]
-id = "data.exchange-rates"
+id = "data.exchange_rates"
 name = "Exchange rates"
 category = "data"
 description = "Latest reference exchange rates from the European Central Bank (Frankfurter, no API key)"

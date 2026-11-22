@@ -2,7 +2,7 @@
   "schema": 1,
   "tools": [
     {
-      "id": "data.exchange-rates",
+      "id": "data.exchange_rates",
       "name": "Exchange rates",
       "description": "Latest reference exchange rates from the European Central Bank (Frankfurter, no API key)",
       "keywords": [
@@ -15,7 +15,7 @@
       ],
       "category": "data",
       "version": "1.0.0",
-      "sha256": "6a5b73486906cd75488e8c45886c8a011e6efb43b63f725e1b88820936fe2b66",
+      "sha256": "ec0a934025d99e22913563e8f8e7c67e1714c88c65c98e21b7904dc5601d7684",
       "permissions": [
         "network"
       ],
@@ -25,7 +25,7 @@
         "macos",
         "windows"
       ],
-      "url": "data.exchange-rates/manifest.toml"
+      "url": "data.exchange_rates/manifest.toml"
     },
     {
       "id": "data.weather",

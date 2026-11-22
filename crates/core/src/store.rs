@@ -173,14 +173,14 @@ impl BuiltStore {
     }
 
     /// Write `index.json` and the manifests into `out`, removing published
-    /// tools that are no longer in the store.
+    /// tool folders (those holding a manifest) that are no longer in the store.
     pub fn write(&self, out: &Path) -> std::io::Result<()> {
         let keep: Vec<&str> = self.index.tools.iter().map(|t| t.id.as_str()).collect();
         if let Ok(rd) = std::fs::read_dir(out) {
             for e in rd.flatten() {
                 let p = e.path();
                 let name = e.file_name().to_string_lossy().to_string();
-                if p.is_dir() && !keep.contains(&name.as_str()) {
+                if p.join(MANIFEST_FILE).is_file() && !keep.contains(&name.as_str()) {
                     std::fs::remove_dir_all(&p)?;
                 }
             }
@@ -230,6 +230,9 @@ pub struct LoadedIndex {
     /// Why fetching failed, when offline.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Where the index was actually served from (after redirects).
+    #[serde(skip)]
+    pub base: String,
     #[serde(skip)]
     pub index: StoreIndex,
 }
@@ -237,6 +240,8 @@ pub struct LoadedIndex {
 #[derive(Serialize, Deserialize)]
 struct Cache {
     url: String,
+    #[serde(default)]
+    base: String,
     fetched_at: u64,
     index: StoreIndex,
 }
@@ -268,9 +273,27 @@ pub fn offline_error(url: &str, why: &str) -> ToolError {
     ))
 }
 
-async fn fetch_bytes(url: &str, net: &NetPolicy, max: usize) -> Result<Vec<u8>, String> {
+/// Store traffic must be authenticated: `https`, or `http` only to this machine.
+fn require_https(url: &url::Url) -> Result<(), String> {
+    let loopback = matches!(
+        url.host(),
+        Some(url::Host::Domain("localhost"))
+            | Some(url::Host::Ipv4(std::net::Ipv4Addr::LOCALHOST))
+            | Some(url::Host::Ipv6(std::net::Ipv6Addr::LOCALHOST))
+    );
+    match url.scheme() {
+        "https" | "file" => Ok(()),
+        "http" if loopback => Ok(()),
+        s => Err(format!("the tool store must be served over https, not {s}")),
+    }
+}
+
+/// Fetch `url` (redirects stay on its origin); returns the bytes and the
+/// final URL, which relative manifest links resolve against.
+async fn fetch_bytes(url: &str, net: &NetPolicy, max: usize) -> Result<(Vec<u8>, String), String> {
+    require_https(&url::Url::parse(url).map_err(|e| e.to_string())?)?;
     let checked = crate::net::check_url(net, url).map_err(|e| e.to_string())?;
-    let client = crate::net::guarded_client(net.clone()).map_err(|e| e.to_string())?;
+    let client = crate::net::guarded_client_same_origin(net.clone()).map_err(|e| e.to_string())?;
     let mut resp = client
         .get(checked)
         .timeout(std::time::Duration::from_secs(30))
@@ -280,6 +303,7 @@ async fn fetch_bytes(url: &str, net: &NetPolicy, max: usize) -> Result<Vec<u8>, 
     if !resp.status().is_success() {
         return Err(format!("HTTP {}", resp.status()));
     }
+    let final_url = resp.url().to_string();
     let mut bytes = Vec::new();
     while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
         if bytes.len() + chunk.len() > max {
@@ -287,7 +311,16 @@ async fn fetch_bytes(url: &str, net: &NetPolicy, max: usize) -> Result<Vec<u8>, 
         }
         bytes.extend_from_slice(&chunk);
     }
-    Ok(bytes)
+    Ok((bytes, final_url))
+}
+
+fn read_file_url(url: &str) -> Result<(Vec<u8>, String), String> {
+    let path = url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.to_file_path().ok())
+        .ok_or_else(|| format!("bad file url {url}"))?;
+    let bytes = std::fs::read(&path).map_err(|e| format!("reading {}: {e}", path.display()))?;
+    Ok((bytes, url.to_string()))
 }
 
 fn parse_index(bytes: &[u8]) -> Result<StoreIndex, String> {
@@ -311,15 +344,17 @@ fn read_cache(ext_dir: &Path, url: &str) -> Option<Cache> {
 /// Fetch the index at `url` and cache it under `<extensions>/store/`; when
 /// that fails, fall back to the cached copy (marked `offline`).
 pub async fn load_index(url: &str, ext_dir: &Path, net: &NetPolicy) -> ToolResult<LoadedIndex> {
-    let fetched = match url.strip_prefix("file://") {
-        Some(path) => std::fs::read(path).map_err(|e| e.to_string()),
-        None => fetch_bytes(url, net, MAX_INDEX_BYTES).await,
+    let fetched = if url.starts_with("file://") {
+        read_file_url(url)
+    } else {
+        fetch_bytes(url, net, MAX_INDEX_BYTES).await
     }
-    .and_then(|b| parse_index(&b));
+    .and_then(|(b, base)| Ok((parse_index(&b)?, base)));
     match fetched {
-        Ok(index) => {
+        Ok((index, base)) => {
             let cache = Cache {
                 url: url.to_string(),
+                base,
                 fetched_at: now(),
                 index,
             };
@@ -332,6 +367,7 @@ pub async fn load_index(url: &str, ext_dir: &Path, net: &NetPolicy) -> ToolResul
             });
             Ok(LoadedIndex {
                 url: cache.url,
+                base: cache.base,
                 offline: false,
                 fetched_at: cache.fetched_at,
                 error: None,
@@ -340,6 +376,7 @@ pub async fn load_index(url: &str, ext_dir: &Path, net: &NetPolicy) -> ToolResul
         }
         Err(why) => match read_cache(ext_dir, url) {
             Some(c) => Ok(LoadedIndex {
+                base: if c.base.is_empty() { c.url.clone() } else { c.base },
                 url: c.url,
                 offline: true,
                 fetched_at: c.fetched_at,
@@ -373,6 +410,18 @@ fn installed_path(ext_dir: &Path) -> PathBuf {
     store_dir(ext_dir).join("installed.json")
 }
 
+/// Serializes read-modify-write of `installed.json`.
+static INSTALLED_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn with_installed(ext_dir: &Path, f: impl FnOnce(&mut Installed) -> bool) -> ToolResult<()> {
+    let _guard = INSTALLED_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut i = load_installed(ext_dir);
+    if f(&mut i) {
+        save_installed(ext_dir, &i)?;
+    }
+    Ok(())
+}
+
 fn load_installed(ext_dir: &Path) -> Installed {
     std::fs::read_to_string(installed_path(ext_dir))
         .ok()
@@ -381,18 +430,21 @@ fn load_installed(ext_dir: &Path) -> Installed {
 }
 
 fn save_installed(ext_dir: &Path, i: &Installed) -> ToolResult<()> {
+    use std::io::Write;
     let p = installed_path(ext_dir);
-    std::fs::create_dir_all(p.parent().unwrap())
-        .and_then(|_| std::fs::write(&p, serde_json::to_string_pretty(i).unwrap()))
+    let dir = p.parent().unwrap();
+    std::fs::create_dir_all(dir)
+        .and_then(|_| {
+            let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
+            tmp.write_all(serde_json::to_string_pretty(i).unwrap().as_bytes())?;
+            tmp.persist(&p).map(|_| ()).map_err(|e| e.error)
+        })
         .map_err(|e| ToolError::failed(format!("writing {}: {e}", p.display())))
 }
 
 /// Drop the store record of an uninstalled extension.
 pub fn forget(ext_dir: &Path, id: &str) {
-    let mut i = load_installed(ext_dir);
-    if i.tools.remove(id).is_some() {
-        let _ = save_installed(ext_dir, &i);
-    }
+    let _ = with_installed(ext_dir, |i| i.tools.remove(id).is_some());
 }
 
 /// A store tool with what is installed here.
@@ -408,7 +460,9 @@ pub struct StoreTool {
     pub update_available: bool,
 }
 
-/// Store tools installed here, by id, with their installed version.
+/// Store tools installed here, by id, with their installed version. An
+/// extension replaced by hand (its file no longer has the store's SHA-256)
+/// is not a store tool any more.
 fn installed_versions(engine: &Engine, ext_dir: &Path) -> BTreeMap<String, String> {
     let records = load_installed(ext_dir);
     let statuses = engine.extensions();
@@ -416,7 +470,11 @@ fn installed_versions(engine: &Engine, ext_dir: &Path) -> BTreeMap<String, Strin
     records
         .tools
         .into_iter()
-        .filter(|(id, _)| statuses.iter().any(|s| s.id.as_deref() == Some(id)))
+        .filter(|(id, rec)| {
+            statuses
+                .iter()
+                .any(|s| s.id.as_deref() == Some(id) && s.sha256 == rec.sha256)
+        })
         .map(|(id, rec)| {
             let v = registry
                 .get(&id)
@@ -504,7 +562,12 @@ pub async fn fetch_entry(
             index.error.as_deref().unwrap_or("no connection"),
         ));
     }
-    let url = url::Url::parse(&index.url)
+    let base = if index.base.is_empty() {
+        &index.url
+    } else {
+        &index.base
+    };
+    let url = url::Url::parse(base)
         .and_then(|base| base.join(&e.url))
         .map_err(|err| ToolError::failed(format!("store entry '{}' has a bad url: {err}", e.id)))?;
     if url.scheme() == "file" && !index.url.starts_with("file://") {
@@ -513,11 +576,9 @@ pub async fn fetch_entry(
             format!("store entry '{}' points at a local file", e.id),
         ));
     }
-    let bytes = if url.scheme() == "file" {
-        let path = url
-            .to_file_path()
-            .map_err(|_| ToolError::failed(format!("bad file url {url}")))?;
-        std::fs::read(path).map_err(|err| ToolError::failed(format!("reading {url}: {err}")))?
+    require_https(&url).map_err(|why| ToolError::invalid("url", why))?;
+    let (bytes, _) = if url.scheme() == "file" {
+        read_file_url(url.as_str()).map_err(ToolError::failed)?
     } else {
         fetch_bytes(url.as_str(), net, extensions::MAX_MANIFEST_BYTES)
             .await
@@ -536,8 +597,21 @@ pub async fn fetch_entry(
             ),
         ));
     }
-    String::from_utf8(bytes)
-        .map_err(|_| ToolError::invalid("manifest", "manifest is not UTF-8 text"))
+    let text = String::from_utf8(bytes)
+        .map_err(|_| ToolError::invalid("manifest", "manifest is not UTF-8 text"))?;
+    let tool =
+        parse_manifest(&text, url.as_str()).map_err(|err| ToolError::invalid("manifest", err))?;
+    if tool.spec().id != e.id {
+        return Err(ToolError::invalid(
+            "manifest",
+            format!(
+                "the store's manifest for '{}' declares id '{}'; refusing to install it",
+                e.id,
+                tool.spec().id
+            ),
+        ));
+    }
+    Ok(text)
 }
 
 /// Install a store tool through the one-step install (validate, copy, trust,
@@ -552,15 +626,16 @@ pub async fn install(
     let e = entry(index, id)?;
     let text = fetch_entry(index, e, &engine.config.net).await?;
     let report = extensions::install(engine, ext_dir, &text, InstallOptions { replace }).await?;
-    let mut i = load_installed(ext_dir);
-    i.tools.insert(
-        e.id.clone(),
-        InstalledTool {
-            version: e.version.clone(),
-            sha256: e.sha256.clone(),
-        },
-    );
-    save_installed(ext_dir, &i)?;
+    with_installed(ext_dir, |i| {
+        i.tools.insert(
+            e.id.clone(),
+            InstalledTool {
+                version: e.version.clone(),
+                sha256: e.sha256.clone(),
+            },
+        );
+        true
+    })?;
     Ok(report)
 }
 
@@ -805,5 +880,82 @@ expect = {{ text = "HI" }}
                     .contains("text.shout")
         );
         assert!(!annotate(&idx.index, &eng, &ext)[0].installed);
+    }
+
+    #[test]
+    fn remote_stores_must_use_https() {
+        let ok = |u: &str| require_https(&url::Url::parse(u).unwrap()).is_ok();
+        assert!(ok("https://tools.example/index.json"));
+        assert!(ok("http://localhost:8080/index.json"));
+        assert!(ok("http://127.0.0.1/index.json"));
+        assert!(!ok("http://tools.example/index.json"));
+    }
+
+    #[tokio::test]
+    async fn file_urls_with_escapes_load_and_builds_keep_unrelated_folders() {
+        let root = tempfile::tempdir().unwrap();
+        let spaced = root.path().join("tool store");
+        std::fs::create_dir_all(spaced.join("public/assets")).unwrap();
+        publish(&spaced, "1.0.0");
+        assert!(spaced.join("public/assets").is_dir());
+        let url = url::Url::from_file_path(spaced.join("public/index.json"))
+            .unwrap()
+            .to_string();
+        assert!(url.contains("%20"), "{url}");
+        let ext = root.path().join("ext");
+        let idx = load_index(&url, &ext, &NetPolicy::default()).await.unwrap();
+        assert_eq!(idx.index.tools[0].id, "text.shout");
+        let eng = engine(&ext);
+        install(&eng, &ext, &idx, "text.shout", false)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn install_refuses_an_entry_whose_manifest_has_another_id() {
+        let root = tempfile::tempdir().unwrap();
+        let ext = root.path().join("ext");
+        std::fs::create_dir_all(&ext).unwrap();
+        let url = publish(root.path(), "1.0.0");
+        let index_path = root.path().join("public/index.json");
+        let text = std::fs::read_to_string(&index_path).unwrap();
+        std::fs::write(
+            &index_path,
+            text.replace("\"id\": \"text.shout\"", "\"id\": \"text.other\""),
+        )
+        .unwrap();
+        let idx = load_index(&url, &ext, &NetPolicy::default()).await.unwrap();
+        let err = install(&engine(&ext), &ext, &idx, "text.other", false)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("declares id 'text.shout'"), "{err}");
+        assert!(!ext.join("text.shout.toml").exists());
+    }
+
+    #[tokio::test]
+    async fn a_hand_replaced_extension_is_no_longer_a_store_tool() {
+        let root = tempfile::tempdir().unwrap();
+        let ext = root.path().join("ext");
+        std::fs::create_dir_all(&ext).unwrap();
+        let eng = engine(&ext);
+        let url = publish(root.path(), "1.0.0");
+        let idx = load_index(&url, &ext, &NetPolicy::default()).await.unwrap();
+        install(&eng, &ext, &idx, "text.shout", false)
+            .await
+            .unwrap();
+        extensions::install(
+            &eng,
+            &ext,
+            &manifest("0.9.0-custom"),
+            InstallOptions { replace: true },
+        )
+        .await
+        .unwrap();
+        publish(root.path(), "2.0.0");
+        let idx = load_index(&url, &ext, &NetPolicy::default()).await.unwrap();
+        let t = &annotate(&idx.index, &eng, &ext)[0];
+        assert!(!t.installed && !t.update_available);
+        assert!(update(&eng, &ext, &idx, None).await.unwrap().is_empty());
     }
 }

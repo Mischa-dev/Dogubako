@@ -387,9 +387,15 @@ export function ToolStore() {
   const [res, setRes] = useState<StoreResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [pending, setPending] = useState(0);
   const load = useCallback(async (q: string) => {
     if (!backend.storeSearch) { setErr('The tool store is not available here.'); return; }
-    try { setRes(await backend.storeSearch(q)); setErr(null); } catch (e) { setErr(errorText(e)); }
+    try {
+      const found = await backend.storeSearch(q);
+      setRes(found); setErr(null);
+      const all = q && backend.storeInstalled ? (await backend.storeInstalled()).tools : found.tools;
+      setPending(all.filter((t) => t.update_available).length);
+    } catch (e) { setErr(errorText(e)); }
   }, [backend]);
   useEffect(() => { if (canEdit) void load(''); }, [load, canEdit]);
   const act = async (t: StoreTool, update: boolean) => {
@@ -402,8 +408,19 @@ export function ToolStore() {
       await load(query);
     } catch (e) { toast.error(errorText(e)); } finally { setBusy(null); }
   };
+  const updateAll = async () => {
+    if (!backend.storeUpdate) return;
+    setBusy('*');
+    try {
+      const reports = (await backend.storeUpdate()).updated;
+      const bad = reports.map((r) => { const e = reportError(r); return e ? `${r.id}: ${e}` : null; }).find(Boolean);
+      if (bad) toast.error(bad); else toast.success(`Updated ${reports.length} store tool${reports.length === 1 ? '' : 's'}`);
+      notifyToolsChanged();
+      await load(query);
+    } catch (e) { toast.error(errorText(e)); } finally { setBusy(null); }
+  };
   const tools = res?.tools ?? [];
-  const updates = tools.filter((t) => t.update_available);
+  const offline = !!res?.index.offline;
   return (
     <Section title="Tool store" description="Official tools you can add on top of the bundled ones. Each is reviewed, pinned to the SHA-256 in the store index, and tested when installed.">
       {!canEdit && <Callout tone="info">Only administrators can install tools from the store.</Callout>}
@@ -413,7 +430,7 @@ export function ToolStore() {
         <form className="row-gap" role="search" onSubmit={(e) => { e.preventDefault(); void load(query); }}>
           <input className="input" type="search" aria-label="Search the tool store" placeholder="Search the tool store" value={query} onChange={(e) => setQuery(e.target.value)} />
           <Button type="submit" size="sm" variant="ghost"><Search size={14} aria-hidden />Search</Button>
-          {updates.length > 1 && <Button type="button" size="sm" disabled={!!busy} onClick={async () => { for (const t of updates) await act(t, true); }}>Update all ({updates.length})</Button>}
+          {pending > 1 && <Button type="button" size="sm" disabled={!!busy || offline} onClick={() => void updateAll()}>{busy === '*' ? <Spinner /> : `Update all (${pending})`}</Button>}
         </form>
       )}
       {canEdit && !res && !err && <Spinner />}
@@ -428,11 +445,11 @@ export function ToolStore() {
             </div>
             <div className="setting-control">
               {t.update_available ? (
-                <Button size="sm" disabled={!!busy} onClick={() => void act(t, true)}>{busy === t.id ? <Spinner /> : `Update to ${t.version}`}</Button>
+                <Button size="sm" disabled={!!busy || offline} onClick={() => void act(t, true)}>{busy === t.id ? <Spinner /> : `Update to ${t.version}`}</Button>
               ) : t.installed ? (
                 <Badge tone="success">Installed</Badge>
               ) : (
-                <Button size="sm" variant="ghost" disabled={!!busy || res?.index.offline} onClick={() => void act(t, false)}>{busy === t.id ? <Spinner /> : <><Download size={14} aria-hidden />Install</>}</Button>
+                <Button size="sm" variant="ghost" disabled={!!busy || offline} onClick={() => void act(t, false)}>{busy === t.id ? <Spinner /> : <><Download size={14} aria-hidden />Install</>}</Button>
               )}
             </div>
           </div>

@@ -7,7 +7,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use dogubako_core::extensions as ext;
 use dogubako_core::store::{self, LoadedIndex, StoreTool};
 use serde_json::json;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub fn store_cmd() -> Command {
     let dir = Arg::new("dir")
@@ -261,18 +261,32 @@ async fn test_all(m: &ArgMatches, out: &Out) -> i32 {
     };
     let mut reports = vec![];
     for (rel, text) in &built.manifests {
-        let scratch = scratch_dir(rel);
-        let engine =
-            crate::build_engine_with(dogubako_core::tool::Environment::Cli, scratch.clone());
-        let r = match ext::install(&engine, &scratch, text, ext::InstallOptions::default()).await {
-            Ok(r) => r,
+        let id = rel.trim_end_matches("/manifest.toml").to_string();
+        let scratch = match tempfile::Builder::new()
+            .prefix("dogubako-store-test-")
+            .tempdir()
+        {
+            Ok(d) => d,
+            Err(e) => return out.error(&format!("creating a scratch folder: {e}"), 1),
+        };
+        let dir = scratch.path().to_path_buf();
+        let engine = crate::build_engine_with(dogubako_core::tool::Environment::Cli, dir.clone());
+        let r = match ext::install(&engine, &dir, text, ext::InstallOptions::default()).await {
+            Ok(mut r) => {
+                if !r.tests.iter().any(|t| t.status == ext::TestStatus::Passed) {
+                    r.passed = false;
+                    r.error.get_or_insert_with(|| {
+                        "store tools need at least one offline test that runs and passes".into()
+                    });
+                }
+                r
+            }
             Err(e) => ext::ExtensionReport {
-                id: rel.trim_end_matches("/manifest.toml").to_string(),
+                id,
                 error: Some(e.to_string()),
                 ..Default::default()
             },
         };
-        let _ = std::fs::remove_dir_all(&scratch);
         reports.push(r);
     }
     let ok = reports.iter().all(|r| r.passed);
@@ -294,15 +308,4 @@ async fn test_all(m: &ArgMatches, out: &Out) -> i32 {
     } else {
         1
     }
-}
-
-fn scratch_dir(rel: &str) -> PathBuf {
-    let id = Path::new(rel)
-        .parent()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let d = std::env::temp_dir().join(format!("dogubako-store-test-{}-{id}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    let _ = std::fs::create_dir_all(&d);
-    d
 }
