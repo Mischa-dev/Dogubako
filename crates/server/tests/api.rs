@@ -1117,3 +1117,131 @@ async fn job_zip_keeps_folders() {
         ]
     );
 }
+
+async fn next_sse_frame(body: &mut Body) -> String {
+    let frame = tokio::time::timeout(std::time::Duration::from_secs(5), body.frame())
+        .await
+        .expect("no event within 5s")
+        .expect("stream ended")
+        .unwrap();
+    String::from_utf8(frame.into_data().unwrap().to_vec()).unwrap()
+}
+
+#[tokio::test]
+async fn admin_reload_swaps_tools_and_notifies_clients() {
+    let t = setup(AuthMode::Required);
+    let (cookie, csrf) = owner_session(&t).await;
+    let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
+    let ext = t.state.cfg.extensions_dir();
+    let dir = ext.clone();
+    t.state.engine.set_loader(Arc::new(move || {
+        let mut reg = Registry::new();
+        reg.register_all(test_tools());
+        let (tools, st) = dogubako_core::manifest::load_extensions(&dir, true);
+        reg.register_all(tools);
+        (reg, st)
+    }));
+
+    // Agents can't reload.
+    let token = create_agent_token(&t, &cookie, &csrf, "bot", json!({"allow": ["*"]})).await;
+    let bearer = format!("Bearer {token}");
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/admin/reload",
+        &[("authorization", bearer.as_str())],
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN);
+
+    // A connected MCP client opens the server-initiated stream.
+    let mcp = [
+        ("authorization", bearer.as_str()),
+        ("accept", "application/json, text/event-stream"),
+    ];
+    let r = call(&t.app, Method::POST, "/mcp", &mcp, Some(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}}))).await;
+    assert_eq!(r.body["result"]["capabilities"]["tools"]["listChanged"], true);
+    let sid = r.headers["mcp-session-id"].to_str().unwrap().to_string();
+    let stream_req = |uri: &str, sid: Option<&str>| {
+        let mut b = Request::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .header("authorization", bearer.as_str())
+            .header("accept", "text/event-stream");
+        if let Some(sid) = sid {
+            b = b.header("mcp-session-id", sid);
+        }
+        b.body(Body::empty()).unwrap()
+    };
+    let resp = t
+        .app
+        .clone()
+        .oneshot(stream_req("/mcp", Some(&sid)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let mut mcp_events = resp.into_body();
+    let r = t
+        .app
+        .clone()
+        .oneshot(stream_req("/mcp", Some("nope")))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::NOT_FOUND);
+    let resp = t
+        .app
+        .clone()
+        .oneshot(stream_req("/api/v1/tools/events", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let mut ui_events = resp.into_body();
+
+    let manifest = |desc: &str| {
+        format!("[tool]\nid = \"text.ext_echo\"\nname = \"Echo\"\ncategory = \"text\"\ndescription = \"{desc}\"\n[command]\nprogram = \"echo\"\nargs = [\"hi\"]\n[output]\nstdout = \"text/plain\"\n")
+    };
+    let reload = || call(&t.app, Method::POST, "/api/v1/admin/reload", &h, None);
+    let tool_ids = || async {
+        let r = call(&t.app, Method::GET, "/api/v1/tools", &h, None).await;
+        r.body["tools"]
+            .as_array()
+            .or(r.body.as_array())
+            .unwrap()
+            .iter()
+            .map(|x| x["id"].as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+    };
+
+    // Add
+    std::fs::write(ext.join("echo.toml"), manifest("first")).unwrap();
+    let r = reload().await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["reload"]["added"], json!(["text.ext_echo"]));
+    assert_eq!(r.body["extensions"].as_array().unwrap().len(), 1);
+    assert!(tool_ids().await.contains(&"text.ext_echo".to_string()));
+    let ev = next_sse_frame(&mut mcp_events).await;
+    assert!(ev.contains("notifications/tools/list_changed"), "{ev}");
+    let ev = next_sse_frame(&mut ui_events).await;
+    assert!(ev.contains("event: tools"), "{ev}");
+
+    // Unchanged: nothing to report
+    let r = reload().await;
+    assert_eq!(r.body["reload"]["added"], json!([]));
+    assert_eq!(r.body["reload"]["changed"], json!([]));
+
+    // Changed hash
+    std::fs::write(ext.join("echo.toml"), manifest("second")).unwrap();
+    let r = reload().await;
+    assert_eq!(r.body["reload"]["changed"], json!(["text.ext_echo"]));
+    let ev = next_sse_frame(&mut mcp_events).await;
+    assert!(ev.contains("notifications/tools/list_changed"), "{ev}");
+
+    // Remove
+    std::fs::remove_file(ext.join("echo.toml")).unwrap();
+    let r = reload().await;
+    assert_eq!(r.body["reload"]["removed"], json!(["text.ext_echo"]));
+    assert!(!tool_ids().await.contains(&"text.ext_echo".to_string()));
+    let ev = next_sse_frame(&mut mcp_events).await;
+    assert!(ev.contains("notifications/tools/list_changed"), "{ev}");
+}

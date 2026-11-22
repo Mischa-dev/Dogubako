@@ -130,6 +130,7 @@ struct Manifest {
 
 pub struct ExternalTool {
     spec: ToolSpec,
+    sha256: String,
     program: String,
     args: Vec<ArgItem>,
     output: OutputSection,
@@ -224,6 +225,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     }
     Ok(ExternalTool {
         spec,
+        sha256: sha256_hex(text.as_bytes()),
         program: m.command.program,
         args: m.command.args,
         output: m.output,
@@ -306,6 +308,10 @@ impl ExternalTool {
 impl Tool for ExternalTool {
     fn spec(&self) -> &ToolSpec {
         &self.spec
+    }
+
+    fn fingerprint(&self) -> Option<String> {
+        Some(self.sha256.clone())
     }
 
     async fn run(&self, ctx: ToolContext, params: Params) -> ToolResult<ToolOutput> {

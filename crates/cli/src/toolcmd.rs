@@ -187,7 +187,8 @@ fn absolutize(p: &str) -> String {
 }
 
 pub async fn run_generated(engine: Engine, id: &str, m: &ArgMatches, out: &Out) -> i32 {
-    let Some(tool) = engine.registry.get(id) else {
+    let registry = engine.registry();
+    let Some(tool) = registry.get(id) else {
         return out.error(&format!("unknown tool {id}"), 2);
     };
     let spec = tool.spec().clone();
@@ -208,9 +209,10 @@ pub async fn run_generated(engine: Engine, id: &str, m: &ArgMatches, out: &Out) 
 
 pub async fn run_generic(engine: Engine, m: &ArgMatches, out: &Out) -> i32 {
     let id = m.get_one::<String>("tool").unwrap().clone();
-    let Some(tool) = engine.registry.find(&id) else {
+    let registry = engine.registry();
+    let Some(tool) = registry.find(&id) else {
         let sugg: Vec<String> = engine
-            .registry
+            .registry()
             .search(&id.replace(['.', '_'], " "))
             .iter()
             .take(5)
@@ -410,7 +412,7 @@ pub fn tools_cmd(engine: &Engine, m: &ArgMatches, out: &Out) -> i32 {
         Some(("search", s)) => {
             let q: Vec<String> = s.get_many::<String>("query").unwrap().cloned().collect();
             let infos: Vec<_> = engine
-                .registry
+                .registry()
                 .search(&q.join(" "))
                 .into_iter()
                 .map(|s| engine.info(s))
@@ -428,7 +430,7 @@ pub fn tools_cmd(engine: &Engine, m: &ArgMatches, out: &Out) -> i32 {
         }
         Some(("info", s)) => {
             let id = s.get_one::<String>("tool").unwrap();
-            match engine.registry.find(id) {
+            match engine.registry().find(id) {
                 Some(t) => {
                     render::tool_info(&engine.info(t.spec()), out);
                     0

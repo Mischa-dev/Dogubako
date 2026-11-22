@@ -283,7 +283,7 @@ pub fn spec(engine: &Engine) -> Value {
     );
 
     let mut tool_paths = Map::new();
-    for spec in engine.registry.specs() {
+    for spec in engine.registry().specs() {
         let body = json!({
             "type": "object",
             "properties": {

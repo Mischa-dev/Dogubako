@@ -10,16 +10,18 @@ use crate::error::{ToolError, ToolResult};
 use crate::models::ModelRegistry;
 use crate::params::{validate, FileResolver, Params};
 use crate::policy::{ExecLimits, FsPolicy, NetPolicy, PermissionSet};
-use crate::registry::Registry;
+use crate::registry::{fingerprint, Registry};
 use crate::spec::{ParamKind, Requirement, ToolSpec};
 use crate::tool::{ContextBuilder, Environment, ProgressFn, Tool, ToolContext, ToolOutput};
 
 /// Upper bound for a tool's pre-run [`Tool::check`].
 const CHECK_TIMEOUT_SECS: u64 = 30;
+use crate::manifest::ExtensionStatus;
 use serde::Serialize;
 use serde_json::{Map, Value};
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
@@ -101,8 +103,36 @@ pub struct RunStats {
     pub duration_ms: u64,
 }
 
+/// Builds a fresh registry (builtins, trusted extensions, enabled packs) for
+/// [`Engine::reload`].
+pub type RegistryLoader = Arc<dyn Fn() -> (Registry, Vec<ExtensionStatus>) + Send + Sync>;
+
+/// What a registry reload changed, by tool id.
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+pub struct ReloadReport {
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    /// Same id, different code or manifest.
+    pub changed: Vec<String>,
+    /// Tools registered after the reload.
+    pub tools: usize,
+    /// Bumped by every reload that changed the tool set.
+    pub generation: u64,
+}
+
+impl ReloadReport {
+    pub fn tool_set_changed(&self) -> bool {
+        !(self.added.is_empty() && self.removed.is_empty() && self.changed.is_empty())
+    }
+}
+
 pub struct Engine {
-    pub registry: Arc<Registry>,
+    registry: RwLock<Arc<Registry>>,
+    extensions: RwLock<Arc<Vec<ExtensionStatus>>>,
+    loader: RwLock<Option<RegistryLoader>>,
+    /// Serializes reloads so two cannot interleave their diff and swap.
+    reloading: Mutex<()>,
+    generation: tokio::sync::watch::Sender<u64>,
     pub deps: Arc<DepRegistry>,
     pub models: Arc<ModelRegistry>,
     pub config: EngineConfig,
@@ -117,11 +147,119 @@ impl Engine {
     /// engines ([`DepRegistry::with_managed`]).
     pub fn with_deps(registry: Registry, config: EngineConfig, deps: DepRegistry) -> Self {
         Engine {
-            registry: Arc::new(registry),
+            registry: RwLock::new(Arc::new(registry)),
+            extensions: RwLock::new(Arc::new(vec![])),
+            loader: RwLock::new(None),
+            reloading: Mutex::new(()),
+            generation: tokio::sync::watch::Sender::new(0),
             deps: Arc::new(deps),
             models: Arc::new(ModelRegistry::new(config.models_dir.clone())),
             config,
         }
+    }
+
+    /// Build the registry with `loader` now, and again on every [`Engine::reload`].
+    pub fn from_loader(config: EngineConfig, deps: DepRegistry, loader: RegistryLoader) -> Self {
+        let (registry, extensions) = loader();
+        let engine = Self::with_deps(registry, config, deps).with_extensions(extensions);
+        engine.set_loader(loader);
+        engine
+    }
+
+    /// The extension statuses that came with the initial registry.
+    pub fn with_extensions(mut self, extensions: Vec<ExtensionStatus>) -> Self {
+        *self.extensions.get_mut().unwrap() = Arc::new(extensions);
+        self
+    }
+
+    pub fn set_loader(&self, loader: RegistryLoader) {
+        *self.loader.write().unwrap() = Some(loader);
+    }
+
+    /// The current tool set. Hold the returned snapshot for the length of one
+    /// request; a reload swaps in a new one without affecting it.
+    pub fn registry(&self) -> Arc<Registry> {
+        self.registry.read().unwrap().clone()
+    }
+
+    /// Extension manifests found by the last load, trusted or not.
+    pub fn extensions(&self) -> Arc<Vec<ExtensionStatus>> {
+        self.extensions.read().unwrap().clone()
+    }
+
+    /// Bumped every time a reload changes the tool set.
+    pub fn generation(&self) -> u64 {
+        *self.generation.borrow()
+    }
+
+    /// Notified with the new [`Engine::generation`] when the tool set changes.
+    pub fn subscribe(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.generation.subscribe()
+    }
+
+    /// Rebuild the registry with the loader and swap it in. Runs already
+    /// started keep the tool they started with. Without a loader the
+    /// registry stays as it is.
+    pub fn reload(&self) -> ReloadReport {
+        let loader = self.loader.read().unwrap().clone();
+        match loader {
+            Some(load) => {
+                let _guard = self.reloading.lock().unwrap();
+                let (registry, extensions) = load();
+                self.swap(registry, extensions)
+            }
+            None => ReloadReport {
+                tools: self.registry().len(),
+                generation: self.generation(),
+                ..Default::default()
+            },
+        }
+    }
+
+    /// Swap in an already built registry (embedders, tests).
+    pub fn replace_registry(
+        &self,
+        registry: Registry,
+        extensions: Vec<ExtensionStatus>,
+    ) -> ReloadReport {
+        let _guard = self.reloading.lock().unwrap();
+        self.swap(registry, extensions)
+    }
+
+    fn swap(&self, registry: Registry, extensions: Vec<ExtensionStatus>) -> ReloadReport {
+        let old = self.registry();
+        let before: HashMap<&str, &Arc<dyn Tool>> =
+            old.iter().map(|t| (t.spec().id.as_str(), t)).collect();
+        let mut report = ReloadReport {
+            tools: registry.len(),
+            ..Default::default()
+        };
+        for t in registry.iter() {
+            let id = t.spec().id.as_str();
+            match before.get(id) {
+                None => report.added.push(id.to_string()),
+                Some(prev) => {
+                    if fingerprint(prev.as_ref()) != fingerprint(t.as_ref()) {
+                        report.changed.push(id.to_string());
+                    }
+                }
+            }
+        }
+        report.removed = before
+            .keys()
+            .filter(|id| registry.get(id).is_none())
+            .map(|id| id.to_string())
+            .collect();
+        report.added.sort();
+        report.removed.sort();
+        report.changed.sort();
+        *self.registry.write().unwrap() = Arc::new(registry);
+        *self.extensions.write().unwrap() = Arc::new(extensions);
+        if report.tool_set_changed() {
+            self.generation.send_modify(|g| *g += 1);
+        }
+        report.generation = self.generation();
+        report
     }
 
     pub fn availability(&self, spec: &ToolSpec) -> Availability {
@@ -231,19 +369,31 @@ impl Engine {
     }
 
     pub fn list(&self) -> Vec<ToolInfo> {
-        self.registry.specs().map(|s| self.info(s)).collect()
+        self.registry().specs().map(|s| self.info(s)).collect()
     }
 
     /// Checks shared by [`Engine::run`] and [`Engine::check`]: the tool,
     /// authorization, platform, permissions, dependencies and params.
     fn prepare(&self, req: &RunRequest<'_>) -> ToolResult<(Arc<dyn Tool>, Params, FsPolicy)> {
-        let tool = self
-            .registry
-            .find(req.tool_id)
+        let tool = self.find(req.tool_id)?;
+        self.prepare_tool(tool, req)
+    }
+
+    /// Look up a tool in the current registry, for [`Engine::run_tool`].
+    pub fn find(&self, name: &str) -> ToolResult<Arc<dyn Tool>> {
+        self.registry()
+            .find(name)
+            .cloned()
             .ok_or_else(|| ToolError::NotFound {
-                id: req.tool_id.to_string(),
-            })?
-            .clone();
+                id: name.to_string(),
+            })
+    }
+
+    fn prepare_tool(
+        &self,
+        tool: Arc<dyn Tool>,
+        req: &RunRequest<'_>,
+    ) -> ToolResult<(Arc<dyn Tool>, Params, FsPolicy)> {
         let spec = tool.spec().clone();
 
         if let Some(auth) = req.authorize {
@@ -339,8 +489,20 @@ impl Engine {
 
     /// Run a tool. All checks happen here, regardless of the interface.
     pub async fn run(&self, req: RunRequest<'_>) -> ToolResult<(ToolOutput, RunStats)> {
+        let tool = self.find(req.tool_id)?;
+        self.run_tool(tool, req).await
+    }
+
+    /// Run a tool looked up earlier (e.g. when a job was queued), so a reload
+    /// in between cannot swap it for another version. All of [`Engine::run`]'s
+    /// checks still apply.
+    pub async fn run_tool(
+        &self,
+        tool: Arc<dyn Tool>,
+        req: RunRequest<'_>,
+    ) -> ToolResult<(ToolOutput, RunStats)> {
         let started = Instant::now();
-        let (tool, params, fs) = self.prepare(&req)?;
+        let (tool, params, fs) = self.prepare_tool(tool, &req)?;
         let spec = tool.spec().clone();
 
         std::fs::create_dir_all(&self.config.temp_root)?;
@@ -542,7 +704,7 @@ mod tests {
     #[tokio::test]
     async fn options_needing_missing_engines_are_marked_and_rejected() {
         let h = TestHarness::new(tools());
-        let spec = h.engine.registry.get("dev.caps").unwrap().spec().clone();
+        let spec = h.engine.registry().get("dev.caps").unwrap().spec().clone();
         let info = h.engine.info(&spec);
         assert!(info.availability.available);
         let mode = info.spec.params.iter().find(|p| p.name == "mode").unwrap();
@@ -737,9 +899,116 @@ mod tests {
                 "{bad}"
             );
         }
-        let json_schema =
-            crate::schema::input_schema(h.engine.registry.get("dev.types").unwrap().spec(), "path");
+        let json_schema = crate::schema::input_schema(
+            h.engine.registry().get("dev.types").unwrap().spec(),
+            "path",
+        );
         assert_eq!(json_schema["required"], json!(["n"]));
         assert_eq!(json_schema["properties"]["mode"]["enum"], json!(["a", "b"]));
+    }
+
+    fn manifest(id: &str, description: &str) -> String {
+        format!(
+            "[tool]\nid = \"{id}\"\nname = \"{id}\"\ncategory = \"text\"\ndescription = \"{description}\"\n[command]\nprogram = \"echo\"\nargs = [\"hi\"]\n[output]\nstdout = \"text/plain\"\n"
+        )
+    }
+
+    fn loader_for(dir: std::path::PathBuf) -> crate::engine::RegistryLoader {
+        Arc::new(move || {
+            let mut reg = crate::registry::Registry::new();
+            reg.register_all(tools());
+            let (ext, st) = crate::manifest::load_extensions(&dir, true);
+            reg.register_all(ext);
+            (reg, st)
+        })
+    }
+
+    #[test]
+    fn reload_reports_added_removed_and_changed_tools() {
+        let dir = tempfile::tempdir().unwrap();
+        let ext = dir.path().to_path_buf();
+        std::fs::write(ext.join("a.toml"), manifest("text.ext_a", "first")).unwrap();
+        let engine = crate::engine::Engine::from_loader(
+            crate::engine::EngineConfig::local(Environment::Cli),
+            crate::deps::DepRegistry::new(vec![]),
+            loader_for(ext.clone()),
+        );
+        let mut changes = engine.subscribe();
+        assert!(engine.registry().get("text.ext_a").is_some());
+        assert_eq!(engine.extensions().len(), 1);
+
+        let r = engine.reload();
+        assert!(!r.tool_set_changed(), "{r:?}");
+        assert_eq!(r.generation, 0);
+        assert!(!changes.has_changed().unwrap());
+
+        std::fs::write(ext.join("b.toml"), manifest("text.ext_b", "second")).unwrap();
+        let r = engine.reload();
+        assert_eq!(r.added, vec!["text.ext_b"]);
+        assert!(r.removed.is_empty() && r.changed.is_empty());
+        assert_eq!(r.generation, 1);
+        assert!(changes.has_changed().unwrap());
+        assert_eq!(*changes.borrow_and_update(), 1);
+        assert!(engine.list().iter().any(|t| t.spec.id == "text.ext_b"));
+
+        std::fs::write(ext.join("a.toml"), manifest("text.ext_a", "edited")).unwrap();
+        let r = engine.reload();
+        assert_eq!(r.changed, vec!["text.ext_a"]);
+        assert!(r.added.is_empty() && r.removed.is_empty());
+        assert_eq!(
+            engine.registry().get("text.ext_a").unwrap().spec().description,
+            "edited"
+        );
+
+        std::fs::remove_file(ext.join("b.toml")).unwrap();
+        let r = engine.reload();
+        assert_eq!(r.removed, vec!["text.ext_b"]);
+        assert!(engine.registry().get("text.ext_b").is_none());
+        assert_eq!(engine.extensions().len(), 1);
+        assert_eq!(r.generation, 3);
+        assert_eq!(r.tools, engine.registry().len());
+    }
+
+    #[test]
+    fn reload_without_loader_keeps_registry() {
+        let h = TestHarness::new(tools());
+        let n = h.engine.registry().len();
+        let r = h.engine.reload();
+        assert!(!r.tool_set_changed());
+        assert_eq!(r.tools, n);
+    }
+
+    fn gate(text: &'static str, started: Arc<tokio::sync::Notify>, release: Arc<tokio::sync::Notify>) -> Arc<dyn Tool> {
+        async_tool(
+            ToolSpec::new("dev.gate", "Gate", Category::Dev).describe(text),
+            move |_c, _p| {
+                let (started, release) = (started.clone(), release.clone());
+                async move {
+                    started.notify_one();
+                    release.notified().await;
+                    Ok(ToolOutput::text(text))
+                }
+            },
+        )
+    }
+
+    #[tokio::test]
+    async fn run_started_before_reload_keeps_its_tool() {
+        let started = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let h = TestHarness::new(vec![gate("v1", started.clone(), release.clone())]);
+        let (out, report) = tokio::join!(h.run("dev.gate", json!({})), async {
+            started.notified().await;
+            let mut reg = crate::registry::Registry::new();
+            reg.register_all(vec![gate("v2", started.clone(), release.clone())]);
+            let report = h.engine.replace_registry(reg, vec![]);
+            release.notify_one();
+            report
+        });
+        assert_eq!(report.changed, vec!["dev.gate"]);
+        assert_eq!(out.unwrap().text.as_deref(), Some("v1"));
+        release.notify_one();
+        let out = h.run("dev.gate", json!({})).await.unwrap();
+        assert_eq!(out.text.as_deref(), Some("v2"));
     }
 }

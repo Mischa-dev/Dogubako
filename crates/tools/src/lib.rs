@@ -46,6 +46,37 @@ pub fn worker_main_from_args() -> Option<i32> {
 }
 
 /// Registry with builtins plus trusted extensions from `extensions_dir`.
+/// Changes whenever a file in the extensions folder (manifests, the trust
+/// file) is added, removed or rewritten; polled to reload installed tools.
+pub fn extensions_stamp(dir: &Path) -> u64 {
+    use std::hash::{Hash, Hasher};
+    fn walk(
+        dir: &Path,
+        depth: u32,
+        out: &mut Vec<(std::path::PathBuf, u64, Option<std::time::SystemTime>)>,
+    ) {
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in rd.flatten() {
+            let Ok(md) = e.metadata() else { continue };
+            if md.is_dir() {
+                if depth > 0 {
+                    walk(&e.path(), depth - 1, out);
+                }
+            } else {
+                out.push((e.path(), md.len(), md.modified().ok()));
+            }
+        }
+    }
+    let mut files = vec![];
+    walk(dir, 2, &mut files);
+    files.sort();
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    files.hash(&mut h);
+    h.finish()
+}
+
 pub fn build_registry(extensions_dir: Option<&Path>) -> (Registry, Vec<ExtensionStatus>) {
     let mut reg = Registry::new();
     reg.register_all(builtin_tools());

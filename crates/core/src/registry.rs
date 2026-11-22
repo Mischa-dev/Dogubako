@@ -23,6 +23,14 @@ pub enum RegistryError {
     InvalidSpec(String, String),
 }
 
+/// What identifies a tool's current version: its own fingerprint (an
+/// extension's manifest hash) or a hash of its spec.
+pub fn fingerprint(tool: &dyn Tool) -> String {
+    tool.fingerprint().unwrap_or_else(|| {
+        crate::manifest::sha256_hex(&serde_json::to_vec(tool.spec()).unwrap_or_default())
+    })
+}
+
 pub fn valid_tool_id(id: &str) -> bool {
     let parts: Vec<&str> = id.split('.').collect();
     parts.len() >= 2

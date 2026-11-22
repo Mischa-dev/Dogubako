@@ -43,15 +43,19 @@ pub struct AppState {
     pub assistant_inflight: Arc<Mutex<HashMap<String, u32>>>,
     pub setup_token: Arc<Mutex<Option<String>>>,
     pub mcp_sessions: Arc<Mutex<HashMap<String, McpSession>>>,
-    pub extensions: Arc<Vec<ExtensionStatus>>,
     pub downloads: Arc<Mutex<HashMap<String, DownloadState>>>,
     pub started: Instant,
 }
 
 impl AppState {
     pub fn build(cfg: ServerConfig) -> Result<AppState, crate::config::anyhow_lite::Error> {
-        let (registry, extensions) = dogubako_tools::build_registry(Some(&cfg.extensions_dir()));
-        Self::build_with(cfg, registry, extensions)
+        let dir = cfg.extensions_dir();
+        let (registry, extensions) = dogubako_tools::build_registry(Some(&dir));
+        let state = Self::build_with(cfg, registry, extensions)?;
+        state
+            .engine
+            .set_loader(Arc::new(move || dogubako_tools::build_registry(Some(&dir))));
+        Ok(state)
     }
 
     /// Build with an explicit registry (used by tests and embedders).
@@ -109,11 +113,10 @@ impl AppState {
             env: Environment::Server,
             worker_exe: cfg.worker_exe.clone(),
         };
-        let engine = Arc::new(Engine::new(
-            registry,
-            engine_cfg,
-            vec![cfg.data_dir.join("bin")],
-        ));
+        let engine = Arc::new(
+            Engine::new(registry, engine_cfg, vec![cfg.data_dir.join("bin")])
+                .with_extensions(extensions),
+        );
         let storage = Arc::new(Storage::new(
             cfg.files_dir(),
             db.clone(),
@@ -159,7 +162,6 @@ impl AppState {
             assistant_inflight: Arc::new(Mutex::new(HashMap::new())),
             setup_token: Arc::new(Mutex::new(setup_token)),
             mcp_sessions: Arc::new(Mutex::new(HashMap::new())),
-            extensions: Arc::new(extensions),
             downloads: Arc::new(Mutex::new(HashMap::new())),
             started: Instant::now(),
         })

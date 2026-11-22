@@ -65,6 +65,8 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/models/{id}/download", post(model_download))
         .route("/models/{id}", delete(model_delete))
         .route("/extensions", get(extensions))
+        .route("/admin/reload", post(admin_reload))
+        .route("/tools/events", get(tools_events))
         .route("/admin/users", get(admin_users).post(admin_create_user))
         .route(
             "/admin/users/{id}",
@@ -88,7 +90,7 @@ async fn status(State(s): State<AppState>) -> Json<Value> {
         "auth": if s.cfg.auth == AuthMode::None { "none" } else { "required" },
         "setup_required": s.setup_required(),
         "mcp_enabled": s.cfg.mcp_enabled,
-        "tools": s.engine.registry.len(),
+        "tools": s.engine.registry().len(),
         "mode": "server",
         "max_upload_mb": s.cfg.max_upload_mb,
         "assistant": s.cfg.assistant_enabled,
@@ -330,12 +332,12 @@ async fn list_tools(
     let specs: Vec<_> = match q.q.as_deref().filter(|x| !x.trim().is_empty()) {
         Some(query) => s
             .engine
-            .registry
+            .registry()
             .search(query)
             .into_iter()
             .cloned()
             .collect(),
-        None => s.engine.registry.specs().cloned().collect(),
+        None => s.engine.registry().specs().cloned().collect(),
     };
     let tools: Vec<Value> = specs
         .iter()
@@ -358,8 +360,9 @@ async fn get_tool(
 ) -> ApiResult<Json<Value>> {
     let t = s
         .engine
-        .registry
+        .registry()
         .find(&id)
+        .cloned()
         .ok_or_else(|| ApiError::not_found("unknown tool"))?;
     if !p.can_use(t.spec()) && !p.is_admin() {
         return Err(ApiError::not_found("unknown tool"));
@@ -373,7 +376,7 @@ async fn categories(State(s): State<AppState>, p: Principal) -> Json<Value> {
         .map(|c| {
             let n = s
                 .engine
-                .registry
+                .registry()
                 .by_category(*c)
                 .filter(|t| p.can_use(t))
                 .count();
@@ -1070,7 +1073,7 @@ async fn revoke_token(
 async fn deps(State(s): State<AppState>, _p: Principal) -> Json<Value> {
     let deps = s.engine.deps.all();
     let mut used_by: std::collections::HashMap<String, Vec<String>> = Default::default();
-    for spec in s.engine.registry.specs() {
+    for spec in s.engine.registry().specs() {
         for d in &spec.requires {
             used_by.entry(d.clone()).or_default().push(spec.id.clone());
         }
@@ -1183,7 +1186,51 @@ async fn model_delete(
 }
 
 async fn extensions(State(s): State<AppState>, Admin(_): Admin) -> Json<Value> {
-    Json(json!({"extensions": *s.extensions, "dir": s.cfg.extensions_dir()}))
+    Json(json!({"extensions": *s.engine.extensions(), "dir": s.cfg.extensions_dir()}))
+}
+
+/// Rebuild the tool registry (builtins, trusted extensions, enabled packs)
+/// without restarting. Running jobs finish with the tool they started with.
+async fn admin_reload(
+    State(s): State<AppState>,
+    Admin(p): Admin,
+    ClientIp(ip): ClientIp,
+) -> ApiResult<Json<Value>> {
+    let engine = s.engine.clone();
+    let report = tokio::task::spawn_blocking(move || engine.reload())
+        .await
+        .map_err(|e| ApiError::internal(format!("reload failed: {e}")))?;
+    s.db.audit(
+        &p.username,
+        "tools.reload",
+        "registry",
+        "ok",
+        &ip,
+        &format!(
+            "{} tools; added {:?}, removed {:?}, changed {:?}",
+            report.tools, report.added, report.removed, report.changed
+        ),
+    );
+    Ok(Json(json!({
+        "reload": report,
+        "extensions": *s.engine.extensions(),
+    })))
+}
+
+/// Server-sent `tools` events whenever a reload changes the tool set, so
+/// open catalogs refresh without a page reload.
+async fn tools_events(State(s): State<AppState>, _p: Principal) -> Response {
+    let rx = s.engine.subscribe();
+    let stream = tokio_stream::wrappers::WatchStream::from_changes(rx).map(|generation| {
+        Ok::<_, std::convert::Infallible>(
+            Event::default()
+                .event("tools")
+                .data(json!({ "generation": generation }).to_string()),
+        )
+    });
+    Sse::new(stream)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+        .into_response()
 }
 
 // ---------------------------------------------------------------- admin

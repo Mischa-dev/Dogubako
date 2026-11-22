@@ -427,7 +427,7 @@ pub fn deps(engine: &Engine, out: &Out) -> i32 {
     }
     for d in &deps {
         let users = engine
-            .registry
+            .registry()
             .specs()
             .filter(|s| s.requires.contains(&d.id))
             .count();
@@ -454,7 +454,8 @@ pub fn deps(engine: &Engine, out: &Out) -> i32 {
 /// Markdown capability matrix generated from the registry.
 pub fn matrix(engine: &Engine) {
     use dogubako_core::spec::{Category, Platform};
-    let specs: Vec<&ToolSpec> = engine.registry.specs().collect();
+    let registry = engine.registry();
+    let specs: Vec<&ToolSpec> = registry.specs().collect();
     println!("# Capability matrix\n");
     println!(
         "Generated from the tool registry by `dogubako tools matrix` (Dogubako {}). {} tools.\n",

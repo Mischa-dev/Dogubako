@@ -164,8 +164,9 @@ impl JobManager {
     ) -> ApiResult<JobView> {
         let tool = self
             .engine
-            .registry
+            .registry()
             .find(tool_id)
+            .cloned()
             .ok_or_else(|| ApiError::not_found(format!("unknown tool '{tool_id}'")))?;
         let spec = tool.spec().clone();
         if !principal.can_use(&spec) {
@@ -225,7 +226,8 @@ impl JobManager {
         let via = via.to_string();
         let quota = principal.quota_bytes(quota_default_mb);
         tokio::spawn(async move {
-            me.execute(job_id, p, params, tx, cancel, via, quota).await;
+            me.execute(tool, job_id, p, params, tx, cancel, via, quota)
+                .await;
         });
         Ok(view)
     }
@@ -233,6 +235,7 @@ impl JobManager {
     #[allow(clippy::too_many_arguments)]
     async fn execute(
         self: Arc<Self>,
+        tool: Arc<dyn dogubako_core::tool::Tool>,
         job_id: String,
         p: Principal,
         params: Map<String, Value>,
@@ -283,18 +286,21 @@ impl JobManager {
         };
         let result = self
             .engine
-            .run(RunRequest {
-                tool_id: &view.tool_id,
-                params,
-                resolver: &resolver,
-                out_dir: out_dir.clone(),
-                permissions: p.permissions(self.host_fs_enabled),
-                authorize: Some(&authorize),
-                progress: Some(progress),
-                cancel: cancel.clone(),
-                timeout: Some(self.max_job),
-                fs,
-            })
+            .run_tool(
+                tool,
+                RunRequest {
+                    tool_id: &view.tool_id,
+                    params,
+                    resolver: &resolver,
+                    out_dir: out_dir.clone(),
+                    permissions: p.permissions(self.host_fs_enabled),
+                    authorize: Some(&authorize),
+                    progress: Some(progress),
+                    cancel: cancel.clone(),
+                    timeout: Some(self.max_job),
+                    fs,
+                },
+            )
             .await;
         let mut view = tx.borrow().clone();
         view.finished_at = Some(now());

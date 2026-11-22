@@ -38,6 +38,12 @@ pub trait Tool: Send + Sync + 'static {
     async fn check(&self, _ctx: ToolContext, _params: Params) -> ToolResult<()> {
         Ok(())
     }
+    /// Identifies this version of the tool's code or manifest, so a registry
+    /// reload can tell a changed tool from an unchanged one. `None` falls back
+    /// to a hash of the spec.
+    fn fingerprint(&self) -> Option<String> {
+        None
+    }
 }
 
 /// An output file produced by a tool.

@@ -64,6 +64,10 @@ export interface Backend {
   discardRun(id: string): Promise<void>;
 
   deps(): Promise<{ dependencies: DepInfo[]; platform?: string; docker_image?: boolean }>;
+  /** Rebuild the tool registry (builtins, trusted extensions, packs) without a restart. Server: admin only. */
+  reloadRegistry?(): Promise<ReloadResult>;
+  /** Called after a reload changed the tool set (any client's). Returns unsubscribe. */
+  onToolsChanged?(cb: () => void): Promise<() => void>;
   models(): Promise<{ models: ModelInfo[]; downloads: ModelDownload[] }>;
   modelDownload(id: string): Promise<void>;
   modelRemove(id: string): Promise<void>;
@@ -74,6 +78,12 @@ export interface Backend {
   assistantChat(target: AssistantTarget, body: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
   /** The endpoint's model ids, for the model picker. */
   assistantModels(target: AssistantTarget): Promise<{ id: string; owned_by?: string }[]>;
+}
+
+/** What a registry reload changed, by tool id. */
+export interface ReloadResult {
+  reload: { added: string[]; removed: string[]; changed: string[]; tools: number; generation: number };
+  extensions: any[];
 }
 
 /** Where assistant requests go. `provider: 'server'` uses the server's own endpoint and key. */

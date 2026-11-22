@@ -159,11 +159,23 @@ function Dependencies() {
     const s = asServer(backend);
     try { if (s) await s.depsRefresh(); await load(); notifyToolsChanged(); toast.success('Rechecked dependencies'); } catch (e) { toast.error(errorText(e)); }
   };
+  const reload = async () => {
+    try {
+      const r = await backend.reloadRegistry!();
+      notifyToolsChanged();
+      const { added, removed, changed, tools } = r.reload;
+      const parts = [added.length && `${added.length} added`, removed.length && `${removed.length} removed`, changed.length && `${changed.length} updated`].filter(Boolean);
+      toast.success(parts.length ? `Reloaded tools: ${parts.join(', ')}` : `Reloaded tools: no changes (${tools} tools)`);
+    } catch (e) { toast.error(errorText(e)); }
+  };
   return (
     <Section
       title="Dependencies"
       description={inImage ? 'External programs built into this Docker image. Tools that need a missing program stay visible but can’t run.' : isServer ? 'External programs installed on the server. Tools that need a missing program stay visible but can’t run.' : 'Optional programs that unlock more tools. Install them, then recheck.'}
-      actions={(!isServer || isAdmin) && <Button size="sm" variant="ghost" icon={RefreshCw} onClick={refresh}>Recheck</Button>}
+      actions={(!isServer || isAdmin) && <>
+        {backend.reloadRegistry && <Button size="sm" variant="ghost" icon={RefreshCw} onClick={reload} title="Pick up installed, removed or edited tools without restarting">Reload tools</Button>}
+        <Button size="sm" variant="ghost" icon={RefreshCw} onClick={refresh}>Recheck</Button>
+      </>}
     >
       {err && <Callout tone="danger">{err}</Callout>}
       {!data && !err && <Spinner />}

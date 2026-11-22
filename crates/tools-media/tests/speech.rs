@@ -240,7 +240,7 @@ async fn video_subtitle_tools() {
     .unwrap();
     assert!(
         h.engine
-            .registry
+            .registry()
             .find("video.subtitles_add")
             .unwrap()
             .spec()
