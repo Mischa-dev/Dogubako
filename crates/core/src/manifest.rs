@@ -609,7 +609,9 @@ fn base_spec(
     let reqs: Vec<&str> = m.tool.requires.iter().map(String::as_str).collect();
     spec = spec.requires(&reqs);
     for p in &m.tool.permissions {
-        let perm = Permission::parse(p).ok_or_else(|| format!("unknown permission '{p}'"))?;
+        let perm = Permission::parse(p)
+            .filter(Permission::is_tool_capability)
+            .ok_or_else(|| format!("unknown permission '{p}'"))?;
         spec = spec.permission(perm);
     }
     spec.destructive = m.tool.destructive;
@@ -1933,6 +1935,23 @@ type = "text"
         assert!(parse_manifest(&PRINT.replace(r"(\S+)'", r"(\p{L}+-\d+)'"), "x").is_ok());
         let caseless = STATUS.replace(r#"{ value = "not found" },"#, "{},");
         assert!(parse_manifest(&caseless, "x").is_err());
+    }
+
+    #[test]
+    fn extensions_author_is_policy_only() {
+        let m = "[tool]\nid = \"text.x\"\nname = \"X\"\ncategory = \"text\"\n\
+                 permissions = [\"extensions_author\"]\n[command]\nprogram = \"echo\"\nargs = []\n";
+        let err = parse_manifest(m, "x").err().unwrap();
+        assert!(
+            err.contains("unknown permission 'extensions_author'"),
+            "{err}"
+        );
+        assert_eq!(
+            Permission::parse("extensions_author"),
+            Some(Permission::ExtensionsAuthor)
+        );
+        assert!(!Permission::ALL.contains(&Permission::ExtensionsAuthor));
+        assert!(!crate::policy::PermissionSet::all().has(Permission::ExtensionsAuthor));
     }
 
     #[cfg(unix)]

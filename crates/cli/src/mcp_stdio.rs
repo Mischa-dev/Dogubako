@@ -6,12 +6,14 @@ use crate::render::Out;
 use clap::ArgMatches;
 use dogubako_core::engine::{Engine, RunRequest, ToolInfo};
 use dogubako_core::error::{ToolError, ToolResult};
+use dogubako_core::extensions::ExtensionReport;
 use dogubako_core::params::{FileResolver, InputFile, LocalFileResolver};
 use dogubako_core::policy::{FsPolicy, PermissionSet};
 use dogubako_core::spec::{Permission, ToolSpec};
 use dogubako_core::tool::ProgressFn;
 use dogubako_mcp::{
-    ArtifactView, DiscoveryMode, FileView, JobStatus, JobView, McpBackend, McpServer, ResultView,
+    ArtifactView, DiscoveryMode, ExtensionView, FileView, JobStatus, JobView, McpBackend,
+    McpServer, ResultView,
 };
 use serde_json::{Map, Value};
 use std::collections::HashMap;
@@ -51,8 +53,25 @@ fn matches(p: &str, spec: &ToolSpec) -> bool {
 }
 
 impl LocalBackend {
+    fn ext_dir() -> PathBuf {
+        dogubako_core::paths::AppDirs::default_local().extensions
+    }
+
+    fn author_allowed(&self) -> Result<(), ToolError> {
+        if self.can_author() {
+            Ok(())
+        } else {
+            Err(dogubako_mcp::author_denied())
+        }
+    }
+
+    fn visible_extensions(&self, id: Option<&str>) -> Vec<ExtensionView> {
+        dogubako_mcp::extension_views(&self.engine, id, |st, spec| {
+            st.dev || spec.is_some_and(|s| self.permitted(s))
+        })
+    }
     fn permitted(&self, spec: &ToolSpec) -> bool {
-        (self.dev || !spec.dev)
+        (self.dev || self.can_author() || !spec.dev)
             && self.allow.iter().any(|p| matches(p, spec))
             && !self.deny.iter().any(|p| matches(p, spec))
             && self.permissions.missing(&spec.permissions).is_empty()
@@ -100,6 +119,71 @@ impl McpBackend for LocalBackend {
     }
     fn file_mode(&self) -> &'static str {
         "path"
+    }
+
+    fn can_author(&self) -> bool {
+        self.permissions.has(Permission::ExtensionsAuthor)
+    }
+
+    async fn extension_install(
+        &self,
+        manifest: &str,
+        replace: bool,
+    ) -> Result<ExtensionReport, ToolError> {
+        use dogubako_core::extensions as ext;
+        self.author_allowed()?;
+        if let Ok(tool) = dogubako_core::manifest::parse_manifest(manifest, "dev") {
+            let mut spec = dogubako_core::tool::Tool::spec(&tool).clone();
+            spec.dev = true;
+            if !self.permitted(&spec) {
+                return Err(ToolError::denied(format!(
+                    "'{}' or its permissions are not permitted for this MCP server",
+                    spec.id
+                )));
+            }
+        }
+        ext::install_dev(
+            &self.engine,
+            &Self::ext_dir(),
+            manifest,
+            dogubako_core::manifest::LOCAL_AUTHOR,
+            ext::InstallOptions { replace },
+        )
+        .await
+    }
+
+    async fn extension_test(&self, id: &str) -> Result<ExtensionReport, ToolError> {
+        self.author_allowed()?;
+        if self.visible_extensions(Some(id)).is_empty() {
+            return Err(ToolError::NotFound {
+                id: format!("{id} (no extension you can see)"),
+            });
+        }
+        dogubako_core::extensions::test(&self.engine, &Self::ext_dir(), id).await
+    }
+
+    async fn extension_status(&self, id: Option<&str>) -> Result<Vec<ExtensionView>, ToolError> {
+        self.author_allowed()?;
+        Ok(self.visible_extensions(id))
+    }
+
+    async fn store_install(&self, id: &str) -> Result<ExtensionReport, ToolError> {
+        use dogubako_core::store;
+        self.author_allowed()?;
+        let url = store::local_url().ok_or_else(store::disabled_error)?;
+        let dir = Self::ext_dir();
+        let index = store::load_index(&url, &dir, &self.engine.config.net).await?;
+        // Checked against the fetched manifest, not the index's summary.
+        store::install_if(&self.engine, &dir, &index, id, &|spec| {
+            if self.permitted(spec) {
+                Ok(())
+            } else {
+                Err(ToolError::denied(format!(
+                    "'{id}' or its permissions are not permitted for this MCP server"
+                )))
+            }
+        })
+        .await
     }
 
     async fn run_tool(

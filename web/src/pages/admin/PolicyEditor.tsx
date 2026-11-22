@@ -12,6 +12,7 @@ export const PERMISSIONS: { id: PermissionId; label: string; description: string
   { id: 'process_info', label: 'Process list', description: 'List running processes on the host' },
   { id: 'host_fs_read', label: 'Read host files', description: 'Read files and folders on the host within allowed roots' },
   { id: 'host_fs_write', label: 'Modify host files', description: 'Modify files and folders on the host within allowed roots' },
+  { id: 'extensions_author', label: 'Author tools (MCP)', description: 'Install and test its own dev-slot tools and install official store tools over MCP; never promotes a tool to trusted' },
 ];
 
 export const emptyPolicy = (): Policy => ({ allow: [], deny: [], permissions: [] });

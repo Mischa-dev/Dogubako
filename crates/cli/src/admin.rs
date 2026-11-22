@@ -36,7 +36,7 @@ fn policy_args(c: Command) -> Command {
             .help("Denied tool patterns"),
     )
     .arg(Arg::new("permissions").long("permissions").help(
-        "Comma-separated capabilities: network,host_fs_read,host_fs_write,system_info,process_info",
+        "Comma-separated capabilities: network,host_fs_read,host_fs_write,system_info,process_info,extensions_author (`all` grants the tool capabilities, never extensions_author)",
     ))
     .arg(
         Arg::new("max-jobs")

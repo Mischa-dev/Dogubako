@@ -11,8 +11,12 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use dogubako_core::engine::ToolInfo;
 use dogubako_core::error::ToolError;
+use dogubako_core::extensions::ExtensionReport;
+use dogubako_core::spec::Permission;
 use dogubako_core::tool::ProgressFn;
-use dogubako_mcp::{DiscoveryMode, FileView, JobStatus, JobView, McpBackend, McpServer, Notifier};
+use dogubako_mcp::{
+    DiscoveryMode, ExtensionView, FileView, JobStatus, JobView, McpBackend, McpServer, Notifier,
+};
 use futures::StreamExt;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -22,6 +26,54 @@ use std::time::{Duration, Instant};
 pub struct ServerBackend {
     pub state: AppState,
     pub principal: Principal,
+}
+
+impl ServerBackend {
+    fn usable(&self, spec: &dogubako_core::spec::ToolSpec) -> bool {
+        let perms = self.principal.permissions(self.state.host_fs_enabled());
+        self.principal.can_use(spec) && perms.missing(&spec.permissions).is_empty()
+    }
+
+    fn author_allowed(&self) -> Result<(), ToolError> {
+        if !self.can_author() {
+            return Err(dogubako_mcp::author_denied());
+        }
+        if !self.state.cfg.allow_extension_install {
+            return Err(ToolError::denied(
+                "installing extensions over HTTP is off on this server; an admin can set \
+                 allow_extension_install (DOGUBAKO_ALLOW_EXTENSION_INSTALL=true)",
+            ));
+        }
+        Ok(())
+    }
+
+    /// The caller's own dev tools and the trusted extensions it may use.
+    fn visible_extensions(&self, id: Option<&str>) -> Vec<ExtensionView> {
+        dogubako_mcp::extension_views(&self.state.engine, id, |st, spec| {
+            if st.dev {
+                self.principal.is_author_key(st.author.as_deref())
+            } else {
+                spec.is_some_and(|s| self.usable(s))
+            }
+        })
+    }
+
+    fn audit(
+        &self,
+        action: &str,
+        r: &Result<ExtensionReport, ToolError>,
+        target: Option<&str>,
+        detail: &str,
+    ) {
+        let (id, outcome) = match r {
+            Ok(r) if r.passed => (r.id.as_str(), "ok"),
+            Ok(r) => (r.id.as_str(), "tests_failed"),
+            Err(_) => (target.unwrap_or(""), "error"),
+        };
+        self.state
+            .db
+            .audit(&self.principal.username, action, id, outcome, "", detail);
+    }
 }
 
 #[async_trait::async_trait]
@@ -58,6 +110,103 @@ impl McpBackend for ServerBackend {
     }
     fn file_mode(&self) -> &'static str {
         "id"
+    }
+
+    fn can_author(&self) -> bool {
+        self.principal
+            .permissions(self.state.host_fs_enabled())
+            .has(Permission::ExtensionsAuthor)
+    }
+
+    async fn extension_install(
+        &self,
+        manifest: &str,
+        replace: bool,
+    ) -> Result<ExtensionReport, ToolError> {
+        use dogubako_core::extensions as ext;
+        self.author_allowed()?;
+        let p = &self.principal;
+        // Its tests run with every permission: install only a tool the
+        // caller could run itself. A manifest that doesn't parse gets
+        // install_dev's size and parse errors.
+        if let Ok(tool) = dogubako_core::manifest::parse_manifest(manifest, "dev") {
+            let mut spec = dogubako_core::tool::Tool::spec(&tool).clone();
+            spec.dev = true;
+            spec.author = Some(p.author_key());
+            if !self.usable(&spec) {
+                return Err(ToolError::denied(format!(
+                    "your policy does not allow '{}' or its permissions ({}); ask an admin to extend it",
+                    spec.id,
+                    spec.permissions.iter().map(|p| p.id()).collect::<Vec<_>>().join(", ")
+                )));
+            }
+        }
+        let r = ext::install_dev(
+            &self.state.engine,
+            &self.state.cfg.extensions_dir(),
+            manifest,
+            &p.author_key(),
+            ext::InstallOptions { replace },
+        )
+        .await;
+        self.audit("extension.install", &r, None, "dev mcp");
+        r
+    }
+
+    async fn extension_test(&self, id: &str) -> Result<ExtensionReport, ToolError> {
+        // Like the REST test endpoint, rerunning tests doesn't need the
+        // install switch. Tests run with every permission, so only a tool
+        // the caller can still run under its current grants.
+        if !self.can_author() {
+            return Err(dogubako_mcp::author_denied());
+        }
+        let runnable = dogubako_mcp::extension_views(&self.state.engine, Some(id), |st, spec| {
+            (!st.dev || self.principal.is_author_key(st.author.as_deref()))
+                && spec.is_some_and(|s| self.usable(s))
+        });
+        if runnable.is_empty() {
+            return Err(ToolError::NotFound {
+                id: format!("{id} (no extension you can see)"),
+            });
+        }
+        dogubako_core::extensions::test(&self.state.engine, &self.state.cfg.extensions_dir(), id)
+            .await
+    }
+
+    async fn extension_status(&self, id: Option<&str>) -> Result<Vec<ExtensionView>, ToolError> {
+        Ok(self.visible_extensions(id))
+    }
+
+    async fn store_install(&self, id: &str) -> Result<ExtensionReport, ToolError> {
+        use dogubako_core::store;
+        self.author_allowed()?;
+        let url = self
+            .state
+            .cfg
+            .store_url()
+            .ok_or_else(store::disabled_error)?;
+        let dir = self.state.cfg.extensions_dir();
+        let index = store::load_index(&url, &dir, &self.state.engine.config.net).await?;
+        if !index.index.tools.iter().any(|t| t.id == id) {
+            return Err(ToolError::NotFound {
+                id: format!("{id} (not in the tool store)"),
+            });
+        }
+        // Installed store tools are visible to everyone the policy allows;
+        // an author may only add one it could run itself, judged by the
+        // fetched manifest rather than the index's summary.
+        let r = store::install_if(&self.state.engine, &dir, &index, id, &|spec| {
+            if self.usable(spec) {
+                Ok(())
+            } else {
+                Err(ToolError::denied(format!(
+                    "your policy does not allow '{id}' or its permissions; ask an admin to extend it"
+                )))
+            }
+        })
+        .await;
+        self.audit("store.install", &r, Some(id), "mcp");
+        r
     }
 
     async fn run_tool(

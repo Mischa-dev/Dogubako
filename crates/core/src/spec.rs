@@ -134,6 +134,10 @@ pub enum Permission {
     SystemInfo,
     /// Read process listings of the host.
     ProcessInfo,
+    /// Policy only, never a tool capability: install and test the caller's
+    /// own dev-slot tools and install official store tools over MCP. Not in
+    /// [`Permission::ALL`], so no role or `all` grant includes it.
+    ExtensionsAuthor,
 }
 
 impl Permission {
@@ -144,6 +148,16 @@ impl Permission {
         Permission::SystemInfo,
         Permission::ProcessInfo,
     ];
+    /// Everything a policy can grant: the tool capabilities plus
+    /// [`Permission::ExtensionsAuthor`].
+    pub const POLICY: [Permission; 6] = [
+        Permission::HostFsRead,
+        Permission::HostFsWrite,
+        Permission::Network,
+        Permission::SystemInfo,
+        Permission::ProcessInfo,
+        Permission::ExtensionsAuthor,
+    ];
     pub fn id(&self) -> &'static str {
         match self {
             Permission::HostFsRead => "host_fs_read",
@@ -151,10 +165,11 @@ impl Permission {
             Permission::Network => "network",
             Permission::SystemInfo => "system_info",
             Permission::ProcessInfo => "process_info",
+            Permission::ExtensionsAuthor => "extensions_author",
         }
     }
     pub fn parse(s: &str) -> Option<Permission> {
-        Permission::ALL.iter().copied().find(|p| p.id() == s)
+        Permission::POLICY.iter().copied().find(|p| p.id() == s)
     }
     pub fn describe(&self) -> &'static str {
         match self {
@@ -163,7 +178,14 @@ impl Permission {
             Permission::Network => "Make outbound network requests",
             Permission::SystemInfo => "Read hardware and operating system information",
             Permission::ProcessInfo => "List running processes",
+            Permission::ExtensionsAuthor => {
+                "Install and test its own dev-slot tools and install official store tools over MCP (never promote to trusted)"
+            }
         }
+    }
+    /// A capability a tool can declare (everything but policy-only grants).
+    pub fn is_tool_capability(&self) -> bool {
+        Permission::ALL.contains(self)
     }
 }
 

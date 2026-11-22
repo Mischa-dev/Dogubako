@@ -40,6 +40,45 @@ their description and in `_meta["dogubako/available"]`.
 `dogubako_run_tool`, or for a tool the agent merely guessed — is checked by the
 engine against the agent's policy and capabilities.
 
+## Authoring tools (`extensions_author`)
+
+Agents can build their own Dogubako tool or install one from the tool store
+when their policy grants the **`extensions_author`** permission. It is off by
+default: no role includes it, `--permissions all` in `dogubako users` and the
+stdio default do not grant it, and a token scope must list it too. An admin
+turns it on under Admin → Users → Capabilities ("Author tools (MCP)") or with
+`dogubako users policy <name> --allow '*' --permissions network,extensions_author`.
+Principals without it see exactly the tool list above; calls to the authoring
+tools are refused with `permission_denied`.
+
+| Meta-tool | Purpose |
+|---|---|
+| `dogubako_extension_install` | Install manifest TOML text into **your dev slot**: validated, loaded untrusted and visible only to you, its `[[tests]]` run. `replace: true` overwrites your earlier copy |
+| `dogubako_extension_test` | Run an installed extension's tests again (your dev tools, or trusted extensions you can use) |
+| `dogubako_extension_status` | Load status of your dev tools and the trusted extensions you can use: loaded or load error, dev/trusted, MCP name, availability |
+| `dogubako_store_install` | Install a tool from the configured tool store by id (the official index unless an admin set `store_url`); the manifest must match the index's SHA-256 |
+
+Install and test return the extension report in `structuredContent`: `mcp_name`,
+`dev`, `trusted`, `tests` (`name`, `status` passed/failed/skipped, `error`),
+`passed`, `missing` programs, `unset_settings`. A manifest that does not parse
+returns `isError: true` with `installed: false` and `parse_error`. After a
+successful install the server sends `notifications/tools/list_changed`, and the
+new tool is callable by its MCP name in the same session.
+
+Limits that hold regardless:
+
+* **No promotion over MCP.** Dev tools stay untrusted and private to their
+  author until a human owner or admin, signed in to the app, promotes them
+  (`POST /api/v1/extensions/<id>/promote` refuses every token).
+* You can only install a tool your allow list and capabilities would let you
+  run (its tests run with every permission), dev or store.
+* Store installs take an id from the store index only — no URLs or manifest
+  text — and install the reviewed manifest as trusted.
+* Over HTTP the server must allow installs (`allow_extension_install` /
+  `DOGUBAKO_ALLOW_EXTENSION_INSTALL=true`); actions are written to the audit
+  log. Locally, `dogubako mcp serve --permissions network,extensions_author`
+  offers the tools; installs go to the local extensions folder.
+
 ## Results
 
 Tool results contain:
@@ -125,7 +164,8 @@ agent ← {"content":[{"type":"text","text":"Output files:\n- clip-compressed.mp
 
 Claude Code: `claude mcp add dogubako -- dogubako mcp serve --discovery compact`.
 
-Options: `--allow/--deny` tool patterns, `--permissions` (comma list; default all),
+Options: `--allow/--deny` tool patterns, `--permissions` (comma list; default all
+tool capabilities, add `extensions_author` for the authoring tools),
 `--fs-root` restricts which local files can be used as inputs, `--discovery full|compact`.
 
 ## Protocol details

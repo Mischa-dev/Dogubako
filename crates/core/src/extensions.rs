@@ -50,6 +50,9 @@ pub struct ExtensionReport {
     pub id: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub name: String,
+    /// The tool's name over MCP (`text.upper` -> `text_upper`).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub mcp_name: String,
     pub version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
@@ -83,6 +86,7 @@ impl ExtensionReport {
         ExtensionReport {
             id: spec.id.clone(),
             name: spec.name.clone(),
+            mcp_name: spec.mcp_name(),
             version: spec.version.clone(),
             permissions: spec.permissions.iter().map(|p| p.id().into()).collect(),
             requires: spec.requires.clone(),

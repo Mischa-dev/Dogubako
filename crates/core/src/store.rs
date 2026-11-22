@@ -678,7 +678,29 @@ pub async fn install(
     id: &str,
     replace: bool,
 ) -> ToolResult<ExtensionReport> {
-    install_for(engine, ext_dir, index, id, replace, APP_VERSION).await
+    install_for(
+        engine,
+        ext_dir,
+        index,
+        id,
+        replace,
+        APP_VERSION,
+        &|_| Ok(()),
+    )
+    .await
+}
+
+/// [`install`], refused by `allow` after the manifest is fetched and
+/// verified, so callers check the tool's real id and capabilities rather
+/// than the index's summary of them.
+pub async fn install_if(
+    engine: &Engine,
+    ext_dir: &Path,
+    index: &LoadedIndex,
+    id: &str,
+    allow: &(dyn Fn(&crate::spec::ToolSpec) -> ToolResult<()> + Sync),
+) -> ToolResult<ExtensionReport> {
+    install_for(engine, ext_dir, index, id, false, APP_VERSION, allow).await
 }
 
 async fn install_for(
@@ -688,12 +710,15 @@ async fn install_for(
     id: &str,
     replace: bool,
     app: &str,
+    allow: &(dyn Fn(&crate::spec::ToolSpec) -> ToolResult<()> + Sync),
 ) -> ToolResult<ExtensionReport> {
     let e = entry(index, id)?;
     if let Some(message) = e.unsupported_by(app) {
         return Err(ToolError::Unsupported { message });
     }
     let text = fetch_entry(index, e, &engine.config.net).await?;
+    let tool = parse_manifest(&text, "store").map_err(|err| ToolError::invalid("manifest", err))?;
+    allow(tool.spec())?;
     let report = extensions::install(engine, ext_dir, &text, InstallOptions { replace }).await?;
     with_installed(ext_dir, |i| {
         i.tools.insert(
@@ -756,7 +781,7 @@ async fn update_for(
     let mut out = vec![];
     for t in targets {
         out.push(
-            match install_for(engine, ext_dir, index, &t, true, app).await {
+            match install_for(engine, ext_dir, index, &t, true, app, &|_| Ok(())).await {
                 Ok(r) => r,
                 Err(e) => ExtensionReport {
                     id: t,
@@ -1255,6 +1280,36 @@ expect = {{ text = "HI" }}
     }
 
     #[tokio::test]
+    async fn install_if_judges_the_fetched_manifest() {
+        let root = tempfile::tempdir().unwrap();
+        let ext = root.path().join("ext");
+        std::fs::create_dir_all(&ext).unwrap();
+        let eng = engine(&ext);
+        let text = manifest_min("1.0.0", "0.0.1").replacen(
+            "keywords =",
+            "permissions = [\"network\"]\nkeywords =",
+            1,
+        );
+        let url = publish_text(root.path(), &text);
+        let mut idx = load_index(&url, &ext, &NetPolicy::default()).await.unwrap();
+        // An index that understates what the manifest needs.
+        assert_eq!(idx.index.tools[0].permissions, ["network"]);
+        idx.index.tools[0].permissions.clear();
+        let err = install_if(&eng, &ext, &idx, "text.shout", &|spec| {
+            assert_eq!(spec.id, "text.shout");
+            if spec.permissions.contains(&crate::spec::Permission::Network) {
+                Err(ToolError::denied("no network"))
+            } else {
+                Ok(())
+            }
+        })
+        .await
+        .unwrap_err();
+        assert_eq!(err.code(), "permission_denied");
+        assert!(!ext.join("text.shout.toml").exists());
+    }
+
+    #[tokio::test]
     async fn older_apps_neither_install_nor_update_to_an_entry_that_needs_a_newer_one() {
         let root = tempfile::tempdir().unwrap();
         let ext = root.path().join("ext");
@@ -1272,7 +1327,7 @@ expect = {{ text = "HI" }}
             .as_deref()
             .unwrap()
             .contains("needs Dogubako 0.2.0"));
-        let err = install_for(&eng, &ext, &idx, "text.shout", false, "0.1.0")
+        let err = install_for(&eng, &ext, &idx, "text.shout", false, "0.1.0", &|_| Ok(()))
             .await
             .unwrap_err();
         assert_eq!(err.code(), "unsupported");
@@ -1280,7 +1335,7 @@ expect = {{ text = "HI" }}
         assert!(!ext.join("text.shout.toml").exists());
 
         // A new enough app installs it; the installed version stays fine.
-        let r = install_for(&eng, &ext, &idx, "text.shout", false, "0.2.0")
+        let r = install_for(&eng, &ext, &idx, "text.shout", false, "0.2.0", &|_| Ok(()))
             .await
             .unwrap();
         assert!(r.passed, "{r:?}");
