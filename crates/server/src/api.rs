@@ -1521,14 +1521,24 @@ async fn store_update(
     )
     .await;
     let target = body.id.clone().unwrap_or_else(|| "*".into());
-    s.db.audit(
-        &p.username,
-        "store.update",
-        &target,
-        if r.is_ok() { "ok" } else { "error" },
-        &ip,
-        "",
-    );
+    let failed: Vec<&str> = r
+        .as_ref()
+        .map(|reports| {
+            reports
+                .iter()
+                .filter(|x| !x.passed)
+                .map(|x| x.id.as_str())
+                .collect()
+        })
+        .unwrap_or_default();
+    let outcome = if r.is_err() || !failed.is_empty() {
+        "error"
+    } else {
+        "ok"
+    };
+    let detail = failed.join(",");
+    s.db.audit(&p.username, "store.update", &target, outcome, &ip, &detail);
+    // Per-tool results: a tool that failed carries its error; the rest updated.
     Ok(Json(json!({ "updated": r? })))
 }
 
