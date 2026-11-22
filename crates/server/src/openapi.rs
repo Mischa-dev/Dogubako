@@ -450,7 +450,8 @@ pub fn spec(engine: &Engine) -> Value {
     );
 
     let mut tool_paths = Map::new();
-    for spec in engine.registry().specs() {
+    // Dev tools are private to their author; this document is public.
+    for spec in engine.registry().specs().filter(|s| !s.dev) {
         let body = json!({
             "type": "object",
             "properties": {

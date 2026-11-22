@@ -1429,16 +1429,18 @@ async fn extension_install(
     if body.dev {
         // Its tests run with every permission: a scoped token may only
         // install a tool it could run itself.
-        let tool =
-            dogubako_core::manifest::parse_manifest(&text, "dev").map_err(ApiError::bad_request)?;
-        let mut spec = dogubako_core::tool::Tool::spec(&tool).clone();
-        spec.dev = true;
-        spec.author = Some(p.author_key());
-        let perms = p.permissions(s.host_fs_enabled());
-        if !p.can_use(&spec) || !perms.missing(&spec.permissions).is_empty() {
-            return Err(ApiError::forbidden(
-                "this token's scope does not cover that tool or its permissions",
-            ));
+        // A manifest that doesn't parse gets install_dev's size and parse
+        // errors.
+        if let Ok(tool) = dogubako_core::manifest::parse_manifest(&text, "dev") {
+            let mut spec = dogubako_core::tool::Tool::spec(&tool).clone();
+            spec.dev = true;
+            spec.author = Some(p.author_key());
+            let perms = p.permissions(s.host_fs_enabled());
+            if !p.can_use(&spec) || !perms.missing(&spec.permissions).is_empty() {
+                return Err(ApiError::forbidden(
+                    "this token's scope does not cover that tool or its permissions",
+                ));
+            }
         }
     }
     let r = if body.dev {

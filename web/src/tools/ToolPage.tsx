@@ -129,7 +129,7 @@ function DevNotice({ tool }: { tool: ToolInfo }) {
   const { backend, isServer, isAdmin, me, reloadTools } = useApp();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const canPromote = !!backend.promoteExtension && (!isServer || (isAdmin && me?.user.via === 'session'));
+  const canPromote = !!backend.promoteExtension && (!isServer || (isAdmin && (me?.user.via === 'session' || me?.user.via === 'none')));
   const promote = async () => {
     setBusy(true);
     try {

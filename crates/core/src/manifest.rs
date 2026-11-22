@@ -901,10 +901,12 @@ impl TrustStore {
         if let Some(p) = path.parent() {
             std::fs::create_dir_all(p)?;
         }
+        let tmp = path.with_extension("toml.tmp");
         std::fs::write(
-            path,
+            &tmp,
             toml::to_string_pretty(self).map_err(std::io::Error::other)?,
-        )
+        )?;
+        std::fs::rename(tmp, path)
     }
 }
 
@@ -1210,6 +1212,9 @@ pub const DEV_DIR: &str = "dev";
 /// Author of dev manifests with no entry in `dev/authors.toml` (dropped in by
 /// hand): the local owner.
 pub const LOCAL_AUTHOR: &str = "local";
+/// Author of dev manifests when `dev/authors.toml` can't be read: matches no
+/// principal, so a damaged file hides drafts instead of handing them out.
+pub const UNKNOWN_AUTHOR: &str = "unknown";
 
 /// Who installed each dev manifest: `id -> author` (`dev/authors.toml`).
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -1222,11 +1227,13 @@ impl DevAuthors {
     pub fn path(extensions_dir: &Path) -> PathBuf {
         extensions_dir.join(DEV_DIR).join("authors.toml")
     }
-    pub fn load(extensions_dir: &Path) -> Self {
-        std::fs::read_to_string(Self::path(extensions_dir))
-            .ok()
-            .and_then(|s| toml::from_str(&s).ok())
-            .unwrap_or_default()
+    pub fn load(extensions_dir: &Path) -> Result<Self, String> {
+        let path = Self::path(extensions_dir);
+        match std::fs::read_to_string(&path) {
+            Ok(s) => toml::from_str(&s).map_err(|e| format!("{}: {e}", path.display())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(e) => Err(format!("{}: {e}", path.display())),
+        }
     }
     pub fn save(&self, extensions_dir: &Path) -> std::io::Result<()> {
         let path = Self::path(extensions_dir);
@@ -1299,7 +1306,7 @@ pub fn load_extensions(dir: &Path, trust_all: bool) -> (Vec<Arc<dyn Tool>>, Vec<
 /// [`ToolSpec::dev`] with its author from `dev/authors.toml`; settings share
 /// the main folder's store so they survive promotion.
 pub fn load_dev_extensions(dir: &Path) -> (Vec<Arc<dyn Tool>>, Vec<ExtensionStatus>) {
-    let authors = DevAuthors::load(dir);
+    let authors = DevAuthors::load(dir).ok();
     let settings = SettingsStore::for_extensions(dir);
     let mut tools: Vec<Arc<dyn Tool>> = vec![];
     let mut status = vec![];
@@ -1319,11 +1326,11 @@ pub fn load_dev_extensions(dir: &Path) -> (Vec<Arc<dyn Tool>>, Vec<ExtensionStat
         };
         match parse_manifest(&text, &file) {
             Ok(mut t) => {
-                let author = authors
-                    .authors
-                    .get(&t.spec.id)
-                    .cloned()
-                    .unwrap_or_else(|| LOCAL_AUTHOR.into());
+                let author = match &authors {
+                    Some(a) => a.authors.get(&t.spec.id).cloned(),
+                    None => Some(UNKNOWN_AUTHOR.into()),
+                }
+                .unwrap_or_else(|| LOCAL_AUTHOR.into());
                 t.spec.dev = true;
                 t.spec.author = Some(author.clone());
                 st.id = Some(t.spec.id.clone());

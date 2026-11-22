@@ -327,7 +327,7 @@ dogubako extensions promote text.wip           # owner: move to trusted, pin SHA
 
 Dev manifests load **without a trust pin** and reload whenever the file
 changes, so an agent can iterate on one. They are marked Dev (`[dev]` in the
-CLI, `"dev": true` over HTTP and MCP, a Dev badge in the app) and only their
+CLI, `"dev": true` over HTTP, `_meta["dogubako/dev"]` over MCP, a Dev badge in the app) and only their
 author can see or run them: `<extensions>/dev/authors.toml` records who
 installed each one (a server user, or the API token an agent used; files placed
 by hand belong to the local owner). Other users, tokens and MCP agents never

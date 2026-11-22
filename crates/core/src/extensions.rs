@@ -354,7 +354,7 @@ pub fn uninstall(
     let trust_path = dir.join("trusted.toml");
     let mut trust = TrustStore::load(&trust_path);
     let was_trusted = trust.trusted.remove(id).is_some();
-    let mut authors = DevAuthors::load(dir);
+    let mut authors = dev_authors(dir)?;
     if authors.authors.remove(id).is_some() {
         authors
             .save(dir)
@@ -396,10 +396,18 @@ pub fn load_into(reg: &mut Registry, dir: &Path) -> Vec<ExtensionStatus> {
     register(reg, tools, &mut statuses);
     let (dev, mut dev_st) = load_dev_extensions(dir);
     let installed: Vec<String> = statuses.iter().filter_map(|s| s.id.clone()).collect();
-    let mut allowed = vec![];
+    let mut allowed: Vec<Arc<dyn Tool>> = vec![];
     for t in dev {
         let spec = t.spec();
-        let clash = if installed.contains(&spec.id) {
+        let sibling = allowed
+            .iter()
+            .find(|o| o.spec().id == spec.id || o.spec().mcp_name() == spec.mcp_name());
+        let clash = if let Some(o) = sibling {
+            Some(format!(
+                "it clashes with the dev tool '{}'",
+                o.spec().source
+            ))
+        } else if installed.contains(&spec.id) {
             Some(format!("'{}' is already an installed extension", spec.id))
         } else if let Some(other) = reg.get(&spec.id) {
             Some(format!(
@@ -462,7 +470,7 @@ pub async fn install_dev(
     let id = tool.spec().id.clone();
     check_id(&id)?;
     let mcp = tool.spec().mcp_name();
-    let mut authors = DevAuthors::load(dir);
+    let mut authors = dev_authors(dir)?;
     let owner = |o: &ToolSpec| o.author.as_deref().unwrap_or(LOCAL_AUTHOR).to_string();
     for t in engine.catalog().iter() {
         let other = t.spec();
@@ -507,9 +515,15 @@ pub async fn install_dev(
             format!("a dev tool with id '{id}' is already installed; install with replace"),
         ));
     }
+    let target = dev.join(format!("{id}.toml"));
+    if target.exists() && !existing.contains(&target) {
+        return Err(ToolError::invalid(
+            "manifest",
+            format!("dev/{id}.toml holds a different tool; rename or remove it first"),
+        ));
+    }
     std::fs::create_dir_all(&dev)
         .map_err(|e| ToolError::failed(format!("creating {}: {e}", dev.display())))?;
-    let target = dev.join(format!("{id}.toml"));
     let backups: Vec<(PathBuf, String)> = existing
         .iter()
         .filter_map(|p| Some((p.clone(), std::fs::read_to_string(p).ok()?)))
@@ -582,8 +596,15 @@ pub async fn promote(engine: &Engine, dir: &Path, id: &str) -> ToolResult<Extens
     let guard = lifecycle_lock();
     let dev = dir.join(DEV_DIR);
     let files = manifests_with_id(&dev, id);
-    let Some(source) = files.first().cloned() else {
-        return Err(ToolError::NotFound { id: id.to_string() });
+    let source = match files.as_slice() {
+        [] => return Err(ToolError::NotFound { id: id.to_string() }),
+        [one] => one.clone(),
+        _ => {
+            return Err(ToolError::invalid(
+                "id",
+                format!("more than one dev manifest declares '{id}'; keep one and retry"),
+            ))
+        }
     };
     let text = std::fs::read_to_string(&source)
         .map_err(|e| ToolError::failed(format!("reading {}: {e}", source.display())))?;
@@ -596,10 +617,16 @@ pub async fn promote(engine: &Engine, dir: &Path, id: &str) -> ToolResult<Extens
     }
     let sha = tool.sha256().to_string();
     let target = dir.join(format!("{id}.toml"));
+    if target.exists() {
+        return Err(ToolError::invalid(
+            "id",
+            format!("{id}.toml holds a different extension; rename or remove it first"),
+        ));
+    }
     let trust_path = dir.join("trusted.toml");
     let mut trust = TrustStore::load(&trust_path);
     let old_trust = trust.trusted.get(id).cloned();
-    let mut authors = DevAuthors::load(dir);
+    let mut authors = dev_authors(dir)?;
     let old_author = authors.authors.remove(id);
     let backups: Vec<(PathBuf, String)> = files
         .iter()
@@ -667,6 +694,10 @@ pub async fn promote(engine: &Engine, dir: &Path, id: &str) -> ToolResult<Extens
     };
     r.tests = run_tests(engine, &src, loaded.spec(), tool.tests()).await;
     Ok(r.finish())
+}
+
+fn dev_authors(dir: &Path) -> ToolResult<DevAuthors> {
+    DevAuthors::load(dir).map_err(|e| ToolError::failed(format!("reading dev authors: {e}")))
 }
 
 fn is_extension(spec: &ToolSpec) -> bool {
@@ -1461,7 +1492,7 @@ http = { json = {} }
         assert!(!dir.join("dev/text.ext_echo.toml").exists());
         let trust = TrustStore::load(&dir.join("trusted.toml"));
         assert_eq!(trust.trusted.get("text.ext_echo"), Some(&r.sha256));
-        assert!(DevAuthors::load(dir).authors.is_empty());
+        assert!(DevAuthors::load(dir).unwrap().authors.is_empty());
         let spec = e.registry().get("text.ext_echo").unwrap().spec().clone();
         assert!(!spec.dev && spec.author.is_none());
         assert!(
@@ -1502,5 +1533,49 @@ http = { json = {} }
         assert!(spec.dev);
         assert_eq!(spec.author.as_deref(), Some(LOCAL_AUTHOR));
         assert_eq!(spec.source, "extension:dev/wip.toml");
+    }
+
+    #[tokio::test]
+    async fn dev_drafts_cannot_clash_or_be_handed_out() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        std::fs::create_dir_all(dir.join("dev")).unwrap();
+        std::fs::write(dir.join("dev/a.toml"), M).unwrap();
+        // Same MCP name (`text_ext_echo`), different id.
+        std::fs::write(
+            dir.join("dev/b.toml"),
+            M.replace("text.ext_echo", "text.ext-echo"),
+        )
+        .unwrap();
+        let e = engine(dir);
+        assert!(e.registry().get("text.ext_echo").is_some());
+        assert!(e.registry().get("text.ext-echo").is_none());
+        let b = e
+            .extensions()
+            .iter()
+            .find(|s| s.file == "dev/b.toml")
+            .cloned();
+        assert!(b.is_some_and(|s| !s.loaded && s.error.unwrap().contains("clashes")));
+
+        // Two drafts declaring one id: promotion refuses to pick.
+        std::fs::write(dir.join("dev/b.toml"), M).unwrap();
+        let err = promote(&e, dir, "text.ext_echo").await.unwrap_err();
+        assert!(err.to_string().contains("more than one"), "{err}");
+        std::fs::remove_file(dir.join("dev/b.toml")).unwrap();
+
+        // A different extension already sits at the promotion target.
+        std::fs::write(dir.join("text.ext_echo.toml"), "not a manifest").unwrap();
+        assert!(promote(&e, dir, "text.ext_echo").await.is_err());
+        assert!(dir.join("dev/a.toml").exists());
+        std::fs::remove_file(dir.join("text.ext_echo.toml")).unwrap();
+
+        // A damaged ownership file hides drafts from everyone.
+        std::fs::write(dir.join("dev/authors.toml"), "authors = [").unwrap();
+        e.reload();
+        let spec = e.registry().get("text.ext_echo").unwrap().spec().clone();
+        assert_eq!(
+            spec.author.as_deref(),
+            Some(crate::manifest::UNKNOWN_AUTHOR)
+        );
     }
 }

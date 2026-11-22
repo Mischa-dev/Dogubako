@@ -11,7 +11,7 @@ import { KeyValue } from '../../results/DataViews';
 export function InstancePanel() {
   const { backend, status, toolMap, me, reloadTools } = useApp();
   const [promoting, setPromoting] = useState<string | null>(null);
-  const humanAdmin = me?.user.is_admin && me.user.via === 'session';
+  const humanAdmin = me?.user.is_admin && (me.user.via === 'session' || me.user.via === 'none');
   const server = asServer(backend)!;
   const [cfg, setCfg] = useState<AdminConfig | null>(null);
   const [jobs, setJobs] = useState<JobView[]>([]);
