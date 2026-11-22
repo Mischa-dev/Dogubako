@@ -12,6 +12,7 @@ pub mod deps;
 pub mod engine;
 pub mod engines;
 pub mod error;
+pub mod extensions;
 pub mod llm;
 pub mod manifest;
 pub mod models;
