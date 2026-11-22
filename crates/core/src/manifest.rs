@@ -44,6 +44,9 @@
 //! required = true
 //! ```
 //!
+//! Instead of `[command]`, a manifest may declare one `[http]` GET request
+//! (see `manifest_http.rs`).
+//!
 //! Security model:
 //! * Every placeholder expands to exactly one argv element; no shell is used.
 //! * Shell interpreters are refused as programs.
@@ -60,6 +63,8 @@
 use crate::deps::dep_spec;
 use crate::engine::setup_message;
 use crate::error::{ToolError, ToolResult};
+pub use crate::manifest_http::RecordedResponse;
+use crate::manifest_http::{HttpOutputDecl, HttpRequest, HttpSection, TableSection};
 use crate::params::Params;
 use crate::policy::FsPolicy;
 use crate::spec::{
@@ -141,12 +146,21 @@ struct OutputSection {
     file: Option<String>,
     /// Capture stdout as text with this MIME type.
     stdout: Option<String>,
+    /// `[http]`: return the response body as text with this MIME type.
+    body: Option<String>,
+    /// `[http]`: data fields picked from a JSON response by JSON path.
+    #[serde(default)]
+    json: BTreeMap<String, String>,
+    /// `[http]`: rows picked from a JSON response.
+    #[serde(default)]
+    table: Option<TableSection>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Manifest {
     tool: ToolSection,
-    command: CommandSection,
+    command: Option<CommandSection>,
+    http: Option<HttpSection>,
     #[serde(default)]
     output: OutputSection,
     #[serde(default)]
@@ -172,7 +186,10 @@ pub struct ExternalTool {
     dep: Option<(String, String)>,
     args: Vec<ArgItem>,
     output: OutputSection,
+    http: Option<HttpRequest>,
     store: Option<SettingsStore>,
+    recorded: Option<RecordedResponse>,
+    fixed_settings: Option<BTreeMap<String, Value>>,
 }
 
 fn fill_label(p: &mut ParamSpec) {
@@ -233,7 +250,18 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     let mut m: Manifest = toml::from_str(text).map_err(|e| format!("invalid manifest: {e}"))?;
     let category = Category::parse(&m.tool.category)
         .ok_or_else(|| format!("unknown category '{}'", m.tool.category))?;
-    let prog_name = Path::new(&m.command.program)
+    let command = match (m.command.take(), m.http.take()) {
+        (Some(_), Some(_)) => {
+            return Err("a manifest has either [command] or [http], never both".into())
+        }
+        (None, None) => return Err("a manifest needs a [command] or an [http] section".into()),
+        (None, Some(http)) => return parse_http_manifest(m, http, category, source),
+        (Some(c), None) => c,
+    };
+    if m.output.body.is_some() || !m.output.json.is_empty() || m.output.table.is_some() {
+        return Err("[output] body, json and table are for [http] manifests".into());
+    }
+    let prog_name = Path::new(&command.program)
         .file_name()
         .map(|s| s.to_string_lossy().to_lowercase())
         .unwrap_or_default();
@@ -244,43 +272,11 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     {
         return Err(format!(
             "program '{}' is an interpreter/shell and is not allowed in manifests",
-            m.command.program
+            command.program
         ));
     }
-    let settings = parse_settings(std::mem::take(&mut m.settings))?;
-    for p in &mut m.params {
-        fill_label(p);
-    }
-    for p in m.params.iter().chain(&settings) {
-        if matches!(p.kind, ParamKind::Path { .. })
-            && !m.tool.permissions.iter().any(|x| x == "host_fs_read")
-        {
-            m.tool.permissions.push("host_fs_read".into());
-        }
-    }
-    let mut spec = ToolSpec::new(&m.tool.id, &m.tool.name, category)
-        .describe(&m.tool.description)
-        .execution(Execution::External);
-    spec.version = m.tool.version.clone();
-    spec.keywords = m.tool.keywords.clone();
-    spec.params = m.params.clone();
-    spec.settings = settings;
-    spec.timeout_secs = m.tool.timeout_secs;
-    if !m.tool.platforms.is_empty() {
-        spec.platforms = m.tool.platforms.clone();
-    }
-    for d in &m.tool.requires {
-        if dep_spec(d).is_none() {
-            return Err(format!("unknown dependency '{d}' in requires"));
-        }
-    }
-    let reqs: Vec<&str> = m.tool.requires.iter().map(String::as_str).collect();
-    spec = spec.requires(&reqs);
-    let dep = program_dep(&m.command.program, &m.tool.requires);
-    for p in &m.tool.permissions {
-        let perm = Permission::parse(p).ok_or_else(|| format!("unknown permission '{p}'"))?;
-        spec = spec.permission(perm);
-    }
+    let mut spec = base_spec(&mut m, category, Execution::External, source)?;
+    let dep = program_dep(&command.program, &m.tool.requires);
     spec.output.kind = if m.output.file.is_some() {
         OutputKind::Files
     } else if m.output.stdout.is_some() {
@@ -289,8 +285,6 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
         OutputKind::Data
     };
     spec.output.text_mime = m.output.stdout.clone();
-    spec.source = format!("extension:{source}");
-    spec.pack = spec.source.clone();
     // Validate placeholders reference known params.
     let known: Vec<&str> = m.params.iter().map(|p| p.name.as_str()).collect();
     let known_settings: Vec<&str> = spec.settings.iter().map(|p| p.name.as_str()).collect();
@@ -314,7 +308,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
         }
         Ok(())
     };
-    for a in &m.command.args {
+    for a in &command.args {
         match a {
             ArgItem::Plain(s) => check(s)?,
             ArgItem::Group { when, args } => {
@@ -334,11 +328,101 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     }
     Ok(ExternalTool {
         spec,
-        program: m.command.program,
+        program: command.program,
         dep,
-        args: m.command.args,
+        args: command.args,
         output: m.output,
+        http: None,
         store: None,
+        recorded: None,
+        fixed_settings: None,
+    })
+}
+
+/// The spec fields shared by `[command]` and `[http]` manifests.
+fn base_spec(
+    m: &mut Manifest,
+    category: Category,
+    execution: Execution,
+    source: &str,
+) -> Result<ToolSpec, String> {
+    let settings = parse_settings(std::mem::take(&mut m.settings))?;
+    for p in &mut m.params {
+        fill_label(p);
+    }
+    for p in m.params.iter().chain(&settings) {
+        if matches!(p.kind, ParamKind::Path { .. })
+            && !m.tool.permissions.iter().any(|x| x == "host_fs_read")
+        {
+            m.tool.permissions.push("host_fs_read".into());
+        }
+    }
+    if execution == Execution::Network && !m.tool.permissions.iter().any(|x| x == "network") {
+        m.tool.permissions.push("network".into());
+    }
+    let mut spec = ToolSpec::new(&m.tool.id, &m.tool.name, category)
+        .describe(&m.tool.description)
+        .execution(execution);
+    spec.version = m.tool.version.clone();
+    spec.keywords = m.tool.keywords.clone();
+    spec.params = m.params.clone();
+    spec.settings = settings;
+    spec.timeout_secs = m.tool.timeout_secs;
+    if !m.tool.platforms.is_empty() {
+        spec.platforms = m.tool.platforms.clone();
+    }
+    for d in &m.tool.requires {
+        if dep_spec(d).is_none() {
+            return Err(format!("unknown dependency '{d}' in requires"));
+        }
+    }
+    let reqs: Vec<&str> = m.tool.requires.iter().map(String::as_str).collect();
+    spec = spec.requires(&reqs);
+    for p in &m.tool.permissions {
+        let perm = Permission::parse(p).ok_or_else(|| format!("unknown permission '{p}'"))?;
+        spec = spec.permission(perm);
+    }
+    spec.source = format!("extension:{source}");
+    spec.pack = spec.source.clone();
+    Ok(spec)
+}
+
+fn parse_http_manifest(
+    mut m: Manifest,
+    http: HttpSection,
+    category: Category,
+    source: &str,
+) -> Result<ExternalTool, String> {
+    if m.output.file.is_some() || m.output.stdout.is_some() {
+        return Err(
+            "[output] file and stdout are for [command] manifests; use body or json".into(),
+        );
+    }
+    let mut spec = base_spec(&mut m, category, Execution::Network, source)?;
+    let output = std::mem::take(&mut m.output);
+    let request = HttpRequest::parse(
+        http,
+        HttpOutputDecl {
+            body: output.body,
+            json: output.json,
+            table: output.table,
+        },
+        &spec.params,
+        &spec.settings,
+        spec.timeout_secs,
+    )?;
+    spec.output.kind = request.output_kind();
+    spec.output.text_mime = request.text_mime();
+    Ok(ExternalTool {
+        spec,
+        program: String::new(),
+        dep: None,
+        args: vec![],
+        output: OutputSection::default(),
+        http: Some(request),
+        store: None,
+        recorded: None,
+        fixed_settings: None,
     })
 }
 
@@ -367,7 +451,7 @@ fn program_dep(program: &str, requires: &[String]) -> Option<(String, String)> {
         .map(|d| (d.id.to_string(), name))
 }
 
-fn placeholders(s: &str) -> Vec<String> {
+pub(crate) fn placeholders(s: &str) -> Vec<String> {
     let mut out = vec![];
     let mut rest = s;
     while let Some(i) = rest.find('{') {
@@ -396,13 +480,51 @@ impl ExternalTool {
         self
     }
 
+    /// Whether this tool sends an `[http]` request instead of running a command.
+    pub fn is_http(&self) -> bool {
+        self.http.is_some()
+    }
+
+    /// Serve `response` instead of the network for `[http]` requests, so
+    /// manifest tests run offline.
+    pub fn with_recorded_response(mut self, response: RecordedResponse) -> Self {
+        self.recorded = Some(response);
+        self
+    }
+
+    /// Use these setting values (validated like a configure call) instead of
+    /// a settings store; unset settings fall back to manifest defaults.
+    pub fn with_setting_values(
+        mut self,
+        values: &serde_json::Map<String, Value>,
+    ) -> ToolResult<Self> {
+        let mut fixed = BTreeMap::new();
+        for (name, v) in values {
+            let p = self
+                .spec
+                .settings
+                .iter()
+                .find(|p| &p.name == name)
+                .ok_or_else(|| ToolError::invalid(name, "is not a setting of this tool"))?;
+            fixed.insert(
+                name.clone(),
+                crate::params::coerce(p, v.clone(), &FsPolicy::unrestricted())?,
+            );
+        }
+        self.fixed_settings = Some(fixed);
+        Ok(self)
+    }
+
     /// Effective setting values: stored values, then manifest defaults.
     fn setting_values(&self) -> BTreeMap<String, Value> {
-        let stored = self
-            .store
-            .as_ref()
-            .map(|s| s.values(&self.spec.id))
-            .unwrap_or_default();
+        let stored = match &self.fixed_settings {
+            Some(fixed) => fixed.clone(),
+            None => self
+                .store
+                .as_ref()
+                .map(|s| s.values(&self.spec.id))
+                .unwrap_or_default(),
+        };
         self.spec
             .settings
             .iter()
@@ -491,6 +613,27 @@ impl Tool for ExternalTool {
 
     async fn run(&self, ctx: ToolContext, params: Params) -> ToolResult<ToolOutput> {
         let settings = self.setting_values();
+        if let Some(http) = &self.http {
+            let lookup =
+                |ph: &str| -> ToolResult<String> {
+                    match ph.strip_prefix("settings.") {
+                        Some(name) => settings.get(name).map(value_str).ok_or_else(|| {
+                            ToolError::NotConfigured {
+                                message: format!(
+                                    "{} (missing: {name})",
+                                    setup_message(&self.spec.name)
+                                ),
+                            }
+                        }),
+                        None => params
+                            .get(ph)
+                            .filter(|v| !v.is_null())
+                            .map(value_str)
+                            .ok_or_else(|| ToolError::invalid(ph, "is required by the request")),
+                    }
+                };
+            return http.run(&ctx, self.recorded.as_ref(), &lookup).await;
+        }
         let mut cmd = if let Some((dep, name)) = &self.dep {
             ctx.command_program(dep, name)?
         } else if Path::new(&self.program).is_absolute() {

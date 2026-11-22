@@ -14,6 +14,7 @@ pub mod engines;
 pub mod error;
 pub mod llm;
 pub mod manifest;
+mod manifest_http;
 pub mod models;
 pub mod net;
 pub mod packs;
