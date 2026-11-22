@@ -711,8 +711,9 @@ impl SettingsStore {
                     },
                 )
             })?;
-            // A key lives in one file only, even if a manifest update reclassified it.
-            let (target, other) = if decl.is_secret() {
+            // A key lives in one file only. A stored secret stays secret until it is
+            // cleared, even if a manifest update declares it as plain.
+            let (target, other) = if decl.is_secret() || secret.contains_key(k) {
                 (&mut secret, &mut plain)
             } else {
                 (&mut plain, &mut secret)
@@ -725,8 +726,9 @@ impl SettingsStore {
                 target.insert(k.clone(), coerced);
             }
         }
-        self.write(id, false, &plain)?;
-        self.write(id, true, &secret)
+        // Secrets first: a value moving into them is never lost if a write fails.
+        self.write(id, true, &secret)?;
+        self.write(id, false, &plain)
     }
 
     /// Settings for display, without secret values.
@@ -1240,16 +1242,29 @@ secret = true
         // A different manifest reusing the id cannot unmask a stored secret.
         let other = store.view("text.ext_say", &[ParamSpec::text("token")]);
         assert!(other[0].secret && other[0].value.is_none());
-        // Saving it as plain moves it out of the secrets file.
+        // A replacement saved under a plain declaration stays secret until cleared.
         let plain_token = [ParamSpec::text("token")];
-        store
-            .set(
-                "text.ext_say",
-                &plain_token,
-                serde_json::json!({"token": null}).as_object().unwrap(),
-            )
-            .unwrap();
+        let set = |decls: &[ParamSpec], v: serde_json::Value| {
+            store
+                .set("text.ext_say", decls, v.as_object().unwrap())
+                .unwrap()
+        };
+        let read = |rel: &str| {
+            std::fs::read_to_string(dir.path().join("settings").join(rel)).unwrap_or_default()
+        };
+        set(&plain_token, serde_json::json!({"token": "n3w"}));
+        assert!(read("secrets/text.ext_say.toml").contains("n3w"));
+        assert!(!read("text.ext_say.toml").contains("n3w"));
+        let view = store.view("text.ext_say", &plain_token);
+        assert!(view[0].secret && view[0].value.is_none());
+        set(&plain_token, serde_json::json!({"token": null}));
         assert!(!store.values("text.ext_say").contains_key("token"));
+        // A plain value saved under a secret declaration moves to the secrets file.
+        set(&plain_token, serde_json::json!({"token": "pl41n"}));
+        assert!(read("text.ext_say.toml").contains("pl41n"));
+        set(&decls, serde_json::json!({"token": "m0ved"}));
+        assert!(read("secrets/text.ext_say.toml").contains("m0ved"));
+        assert!(!read("text.ext_say.toml").contains("token"));
         store
             .set(
                 "text.ext_say",
