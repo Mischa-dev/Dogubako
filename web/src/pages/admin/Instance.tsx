@@ -5,6 +5,7 @@ import { useApp } from '../../lib/app';
 import { asServer } from '../../lib/backend';
 import { formatUptime, formatRelative } from '../../lib/format';
 import { errorText } from '../../lib/errors';
+import { toast } from '../../components/toast';
 import { Badge, Button, Callout, Section, Spinner } from '../../components/ui';
 import { KeyValue } from '../../results/DataViews';
 
@@ -66,9 +67,10 @@ export function InstancePanel() {
                     setPromoting(e.id);
                     try {
                       const r = await server.promoteExtension(e.id);
-                      if (!r.passed) setErr(r.error ?? `Promoted ${e.id}, but a test failed`);
+                      if (r.passed) toast.success(`Promoted ${e.id}`);
+                      else toast.error(r.error ?? `Promoted ${e.id}, but a test failed`);
                       await Promise.all([load(), reloadTools()]);
-                    } catch (x) { setErr(errorText(x)); } finally { setPromoting(null); }
+                    } catch (x) { toast.error(errorText(x)); } finally { setPromoting(null); }
                   }}>Promote</Button>
                 )}
               </li>

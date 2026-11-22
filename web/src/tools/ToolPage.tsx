@@ -9,6 +9,7 @@ import { ToolTopRow } from './ToolTopRow';
 import { favorites as favStore, pushRecent, toggleFavorite, useStore } from '../lib/store';
 import { Button, Callout, CopyButton, Segmented, Spinner, cx } from '../components/ui';
 import { errorText } from '../lib/errors';
+import { toast } from '../components/toast';
 import { NotFound } from '../pages/NotFound';
 import { GenericTool } from './GenericTool';
 import { GetMissing, downloadOffers } from '../components/GetMissing';
@@ -134,7 +135,9 @@ function DevNotice({ tool }: { tool: ToolInfo }) {
     setBusy(true);
     try {
       const r = await backend.promoteExtension!(tool.id);
-      setErr(r.passed ? null : r.error ?? 'Promoted, but a test failed');
+      // The notice unmounts once the tool reloads as trusted.
+      if (r.passed) toast.success(`Promoted ${tool.id}`);
+      else toast.error(r.error ?? `Promoted ${tool.id}, but a test failed`);
       await reloadTools();
     } catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
   };
