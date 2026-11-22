@@ -65,7 +65,7 @@
       ],
       "category": "system",
       "version": "1.0.0",
-      "sha256": "a09c41f5c74e0176a018d1da70e8338e4d7cfee506be34e0c9ac22ff80d69fe0",
+      "sha256": "4476af20e85682818ef6dac89e445624759df818a98abf8a12da1c2e2e785f7d",
       "permissions": [
         "network"
       ],
