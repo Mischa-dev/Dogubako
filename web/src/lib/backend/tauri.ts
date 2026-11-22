@@ -1,4 +1,4 @@
-import type { Artifact, Category, DepInfo, JobView, Me, ModelDownload, ModelInfo, Status, ToolErrorView, ToolInfo } from '../types';
+import type { Artifact, Category, DepInfo, ExtensionSettings, JobView, Me, ModelDownload, ModelInfo, Status, ToolErrorView, ToolInfo } from '../types';
 import { readJson, writeJson } from '../storage';
 import { ApiError, type AssistantInfo, type AssistantTarget, type Backend, type FileRef, type PickOptions, type RunHandle, type RunOptions } from './types';
 
@@ -262,6 +262,8 @@ export class TauriBackend implements Backend {
     const r = await invoke<{ models: ModelInfo[]; downloads?: ModelDownload[] } | ModelInfo[]>('models_list');
     return Array.isArray(r) ? { models: r, downloads: [] } : { models: r.models, downloads: r.downloads ?? [] };
   }
+  extensionSettings() { return invoke<ExtensionSettings[]>('extension_settings'); }
+  configureExtension(id: string, values: Record<string, unknown>) { return invoke<ExtensionSettings>('configure_extension', { id, values }); }
   async modelDownload(id: string) { await invoke('model_download', { id }); }
   async modelRemove(id: string) { await invoke('model_remove', { id }); }
   /** Download an app-managed engine (pinned, checksum-verified) into the app's folder. */

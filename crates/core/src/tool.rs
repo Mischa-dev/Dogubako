@@ -38,6 +38,10 @@ pub trait Tool: Send + Sync + 'static {
     async fn check(&self, _ctx: ToolContext, _params: Params) -> ToolResult<()> {
         Ok(())
     }
+    /// Required settings ([`ToolSpec::settings`]) that have no value yet.
+    fn unset_settings(&self) -> Vec<String> {
+        vec![]
+    }
 }
 
 /// An output file produced by a tool.

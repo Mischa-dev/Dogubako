@@ -69,6 +69,8 @@ export interface Availability {
   platform_supported: boolean;
   missing?: MissingDep[];
   missing_model?: string;
+  /** Required extension settings with no value yet. */
+  unset_settings?: string[];
   /** With `missing_model`: the model group the tool needs and the model to offer. */
   model_group?: string;
   recommended_model?: ModelOffer;
@@ -273,3 +275,8 @@ export interface AdminConfig {
   uptime_secs: number;
   permissions: { id: PermissionId; description: string }[];
 }
+
+/** An extension setting (Settings → Extensions). Secret values are never sent back. */
+export type ExtensionSetting = ParamSpec & { secret: boolean; set: boolean; value?: unknown };
+
+export interface ExtensionSettings { id: string; name: string; settings: ExtensionSetting[] }

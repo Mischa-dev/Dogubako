@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Settings as SettingsIcon, SlidersHorizontal, Package, Brain, Info, Sun, Moon, Monitor, RefreshCw, CircleCheck, CircleDashed,
-  Download, Trash2, ExternalLink, ChevronRight, Sparkles,
+  Download, Trash2, ExternalLink, ChevronRight, Sparkles, Puzzle,
 } from 'lucide-react';
 import { AssistantSettingsPanel } from '../components/ModelPicker';
-import type { DepInfo, ModelDownload, ModelInfo } from '../lib/types';
+import type { DepInfo, ExtensionSetting, ExtensionSettings, ModelDownload, ModelInfo } from '../lib/types';
 import { useApp, notifyToolsChanged } from '../lib/app';
 import { asServer } from '../lib/backend';
 import { href } from '../lib/router';
@@ -20,6 +20,7 @@ const SECTIONS = [
   { id: 'assistant', label: 'Plain words', icon: Sparkles },
   { id: 'dependencies', label: 'Dependencies', icon: Package },
   { id: 'models', label: 'Models', icon: Brain },
+  { id: 'extensions', label: 'Extensions', icon: Puzzle },
   { id: 'about', label: 'About', icon: Info },
 ] as const;
 
@@ -41,6 +42,7 @@ export default function SettingsPage({ section = 'general' }: { section?: string
           {cur.id === 'assistant' && <Section title="Plain words" description="Say what you want done instead of picking a tool."><AssistantSettingsPanel /></Section>}
           {cur.id === 'dependencies' && <Dependencies />}
           {cur.id === 'models' && <Models />}
+          {cur.id === 'extensions' && <Extensions />}
           {cur.id === 'about' && <About />}
         </div>
       </div>
@@ -346,5 +348,94 @@ function About() {
         licenses listed in Settings → Models. Full third-party notices ship with each release.
       </p>
     </Section>
+  );
+}
+
+/** Settings → Extensions: per-installation values kept outside the trusted manifests. */
+export function Extensions() {
+  const { backend, isAdmin, isServer } = useApp();
+  const [list, setList] = useState<ExtensionSettings[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const canEdit = !isServer || isAdmin;
+  const load = useCallback(async () => {
+    if (!backend.extensionSettings) { setList([]); return; }
+    try { setList(await backend.extensionSettings()); setErr(null); } catch (e) { setErr(errorText(e)); }
+  }, [backend]);
+  useEffect(() => { if (canEdit) void load(); }, [load, canEdit]);
+  return (
+    <Section title="Extensions" description="Settings for extension tools on this installation. They are stored outside the manifest, so changing them keeps the tool trusted and sharing a manifest never shares them.">
+      {!canEdit && <Callout tone="info">Only administrators can change extension settings.</Callout>}
+      {err && <Callout tone="danger">{err}</Callout>}
+      {canEdit && !list && !err && <Spinner />}
+      {list && !list.length && <p className="muted">No installed extension declares settings.</p>}
+      {list?.map((ext) => (
+        <ExtensionForm key={ext.id} ext={ext} onSaved={(next) => { setList((l) => l?.map((x) => (x.id === next.id ? next : x)) ?? null); notifyToolsChanged(); }} />
+      ))}
+    </Section>
+  );
+}
+
+function initialValue(s: ExtensionSetting): unknown {
+  if (s.secret) return '';
+  return s.value ?? (s.type === 'boolean' ? undefined : '');
+}
+
+function ExtensionForm({ ext, onSaved }: { ext: ExtensionSettings; onSaved: (e: ExtensionSettings) => void }) {
+  const { backend } = useApp();
+  const init = useMemo(() => Object.fromEntries(ext.settings.map((s) => [s.name, initialValue(s)])), [ext]);
+  const [values, setValues] = useState<Record<string, unknown>>(init);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setValues(init), [init]);
+  // Only changed values are sent; an empty secret field keeps the stored secret, null clears it.
+  const changes = Object.fromEntries(ext.settings.filter((s) => (s.secret ? values[s.name] !== '' : values[s.name] !== init[s.name])).map((s) => [s.name, values[s.name]]));
+  const dirty = Object.keys(changes).length > 0;
+  const save = async (body: Record<string, unknown>) => {
+    if (!backend.configureExtension) return;
+    setSaving(true);
+    try { onSaved(await backend.configureExtension(ext.id, body)); toast.success(`Saved ${ext.name} settings`); } catch (e) { toast.error(errorText(e)); } finally { setSaving(false); }
+  };
+  const set = (name: string, v: unknown) => setValues((x) => ({ ...x, [name]: v }));
+  const unset = ext.settings.filter((s) => s.required && !s.set);
+  return (
+    <form className="settings-card" aria-label={`${ext.name} settings`} onSubmit={(e) => { e.preventDefault(); if (dirty) void save(changes); }}>
+      <div className="setting-row">
+        <div className="setting-text">
+          <span className="setting-label">{ext.name}</span>
+          <span className="setting-desc mono">{ext.id}</span>
+        </div>
+        <div className="setting-control">
+          {unset.length ? <Badge tone="warn">Needs setup</Badge> : <Badge tone="success">Ready</Badge>}
+        </div>
+      </div>
+      {ext.settings.map((s) => {
+        const id = `ext-${ext.id}-${s.name}`;
+        const v = values[s.name];
+        return (
+          <Row key={s.name} label={`${s.label}${s.required ? ' *' : ''}`} desc={s.description || undefined} htmlFor={id}>
+            {s.type === 'boolean' ? (
+              <Switch id={id} checked={!!v} onChange={(b) => set(s.name, b)} />
+            ) : s.type === 'enum' ? (
+              <select id={id} className="input" value={String(v ?? '')} onChange={(e) => set(s.name, e.target.value)}>
+                <option value="">—</option>
+                {s.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            ) : s.secret ? (
+              <span className="row-gap">
+                <input id={id} className="input" type="password" autoComplete="off" value={String(v ?? '')} placeholder={v === null ? 'Cleared on save' : s.set ? 'Saved (type to replace)' : 'Not set'} onChange={(e) => set(s.name, e.target.value)} />
+                {s.set && v !== null && <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => set(s.name, null)}>Clear</Button>}
+              </span>
+            ) : s.type === 'text' && s.multiline ? (
+              <textarea id={id} className="input" rows={3} value={String(v ?? '')} placeholder={s.default != null ? String(s.default) : ''} onChange={(e) => set(s.name, e.target.value)} />
+            ) : (
+              <input id={id} className="input" type={s.type === 'integer' || s.type === 'number' ? 'number' : 'text'} step={s.type === 'number' ? 'any' : undefined} value={String(v ?? '')} placeholder={s.default != null ? String(s.default) : ''} onChange={(e) => set(s.name, e.target.value)} />
+            )}
+          </Row>
+        );
+      })}
+      <div className="setting-row">
+        <span />
+        <div className="setting-control"><Button type="submit" size="sm" disabled={!dirty || saving}>Save</Button></div>
+      </div>
+    </form>
   );
 }

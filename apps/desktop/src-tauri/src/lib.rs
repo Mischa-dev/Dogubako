@@ -174,6 +174,16 @@ async fn check_tool(state: State<'_, Desktop>, tool_id: String, params: Map<Stri
 }
 
 #[tauri::command]
+fn extension_settings(state: State<'_, Desktop>) -> Vec<dogubako_core::manifest::ExtensionSettings> {
+    dogubako_core::manifest::extension_settings(&state.dirs.extensions)
+}
+
+#[tauri::command]
+fn configure_extension(state: State<'_, Desktop>, id: String, values: Map<String, Value>) -> Result<dogubako_core::manifest::ExtensionSettings, String> {
+    dogubako_core::manifest::configure_extension(&state.dirs.extensions, &id, &values).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn cancel_run(state: State<'_, Desktop>, run_id: String) {
     // The web app only cancels runs it has started, so a missing entry means
     // run_tool has not registered yet: leave a cancelled token for it.
@@ -434,6 +444,8 @@ pub fn run() {
             engine_remove,
             assistant_chat,
             assistant_models,
+            extension_settings,
+            configure_extension,
             discard_run_outputs
         ])
         .run(tauri::generate_context!())

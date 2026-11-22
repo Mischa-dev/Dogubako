@@ -67,6 +67,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/models/{id}/download", post(model_download))
         .route("/models/{id}", delete(model_delete))
         .route("/extensions", get(extensions))
+        .route("/extensions/{id}/settings", put(extension_configure))
         .route("/admin/users", get(admin_users).post(admin_create_user))
         .route(
             "/admin/users/{id}",
@@ -1202,7 +1203,29 @@ async fn model_delete(
 }
 
 async fn extensions(State(s): State<AppState>, Admin(_): Admin) -> Json<Value> {
-    Json(json!({"extensions": *s.extensions, "dir": s.cfg.extensions_dir()}))
+    let dir = s.cfg.extensions_dir();
+    let settings = dogubako_core::manifest::extension_settings(&dir);
+    Json(json!({"extensions": *s.extensions, "dir": dir, "settings": settings}))
+}
+
+/// Store an extension's settings. Secret values are accepted but never returned.
+async fn extension_configure(
+    State(s): State<AppState>,
+    Admin(p): Admin,
+    Path(id): Path<String>,
+    Json(changes): Json<Map<String, Value>>,
+) -> ApiResult<Json<Value>> {
+    let ext = dogubako_core::manifest::configure_extension(&s.cfg.extensions_dir(), &id, &changes)?;
+    let keys: Vec<&str> = changes.keys().map(String::as_str).collect();
+    s.db.audit(
+        &p.username,
+        "extension.configure",
+        &id,
+        "ok",
+        &keys.join(","),
+        "",
+    );
+    Ok(Json(json!(ext)))
 }
 
 // ---------------------------------------------------------------- admin

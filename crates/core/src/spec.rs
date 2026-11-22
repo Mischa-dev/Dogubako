@@ -731,6 +731,10 @@ pub struct ToolSpec {
     /// The tool can check its inputs before Run (`Engine::check`).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub prechecks: bool,
+    /// Per-installation settings an extension declares (`[[settings]]`).
+    /// Values are stored outside the manifest; see [`crate::manifest`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub settings: Vec<ParamSpec>,
 }
 
 fn builtin() -> String {
@@ -760,6 +764,7 @@ impl ToolSpec {
             destructive: false,
             source: builtin(),
             prechecks: false,
+            settings: vec![],
         }
     }
     pub fn describe(mut self, d: &str) -> Self {

@@ -1,3 +1,4 @@
+import type { ExtensionSettings } from '../types';
 import type {
   Artifact, Category, DepInfo, JobView, Me, ModelDownload, ModelInfo, Status, ToolErrorView, ToolInfo,
 } from '../types';
@@ -67,6 +68,10 @@ export interface Backend {
   models(): Promise<{ models: ModelInfo[]; downloads: ModelDownload[] }>;
   modelDownload(id: string): Promise<void>;
   modelRemove(id: string): Promise<void>;
+  /** Extension settings, kept outside the manifests (desktop; admins on a server). */
+  extensionSettings?(): Promise<ExtensionSettings[]>;
+  /** Store settings; null or '' clears one. Secrets are write-only. */
+  configureExtension?(id: string, values: Record<string, unknown>): Promise<ExtensionSettings>;
 
   /** Natural-language assistant: what this host offers (relay, server provider). */
   assistantInfo(): Promise<AssistantInfo>;
