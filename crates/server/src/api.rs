@@ -67,6 +67,8 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/models/{id}/download", post(model_download))
         .route("/models/{id}", delete(model_delete))
         .route("/extensions", get(extensions))
+        .route("/admin/reload", post(admin_reload))
+        .route("/tools/events", get(tools_events))
         .route("/extensions/{id}/settings", put(extension_configure))
         .route("/admin/users", get(admin_users).post(admin_create_user))
         .route(
@@ -91,7 +93,7 @@ async fn status(State(s): State<AppState>) -> Json<Value> {
         "auth": if s.cfg.auth == AuthMode::None { "none" } else { "required" },
         "setup_required": s.setup_required(),
         "mcp_enabled": s.cfg.mcp_enabled,
-        "tools": s.engine.registry.len(),
+        "tools": s.engine.registry().len(),
         "mode": "server",
         "max_upload_mb": s.cfg.max_upload_mb,
         "assistant": s.cfg.assistant_enabled,
@@ -341,12 +343,12 @@ async fn list_tools(
     let specs: Vec<_> = match q.q.as_deref().filter(|x| !x.trim().is_empty()) {
         Some(query) => s
             .engine
-            .registry
+            .registry()
             .search(query)
             .into_iter()
             .cloned()
             .collect(),
-        None => s.engine.registry.specs().cloned().collect(),
+        None => s.engine.registry().specs().cloned().collect(),
     };
     let tools: Vec<Value> = specs
         .iter()
@@ -367,15 +369,15 @@ async fn get_tool(
     p: Principal,
     Path(id): Path<String>,
 ) -> ApiResult<Json<Value>> {
-    let visible = s
-        .engine
+    let tools = s.engine.snapshot();
+    let visible = tools
         .catalog
         .find(&id)
         .is_some_and(|t| p.is_admin() || p.can_use(t.spec()));
     if !visible {
         return Err(ApiError::not_found("unknown tool"));
     }
-    let t = s.engine.find(&id).map_err(|e| match e {
+    let t = tools.find(&id).map_err(|e| match e {
         ToolError::NotInstalled { .. } => ApiError::from(e),
         _ => ApiError::not_found("unknown tool"),
     })?;
@@ -393,7 +395,7 @@ async fn categories(State(s): State<AppState>, p: Principal) -> Json<Value> {
         .map(|c| {
             let n = s
                 .engine
-                .registry
+                .registry()
                 .by_category(*c)
                 .filter(|t| p.can_use(t))
                 .count();
@@ -1090,7 +1092,7 @@ async fn revoke_token(
 async fn deps(State(s): State<AppState>, _p: Principal) -> Json<Value> {
     let deps = s.engine.deps.all();
     let mut used_by: std::collections::HashMap<String, Vec<String>> = Default::default();
-    for spec in s.engine.registry.specs() {
+    for spec in s.engine.registry().specs() {
         for d in &spec.requires {
             used_by.entry(d.clone()).or_default().push(spec.id.clone());
         }
@@ -1205,7 +1207,7 @@ async fn model_delete(
 async fn extensions(State(s): State<AppState>, Admin(_): Admin) -> Json<Value> {
     let dir = s.cfg.extensions_dir();
     let settings = dogubako_core::manifest::extension_settings(&dir);
-    Json(json!({"extensions": *s.extensions, "dir": dir, "settings": settings}))
+    Json(json!({"extensions": *s.engine.extensions(), "dir": dir, "settings": settings}))
 }
 
 /// Store an extension's settings. Secret values are accepted but never returned.
@@ -1226,6 +1228,52 @@ async fn extension_configure(
         "",
     );
     Ok(Json(json!(ext)))
+}
+
+/// Rebuild the tool registry (builtins, trusted extensions, enabled packs)
+/// without restarting. Running jobs finish with the tool they started with.
+async fn admin_reload(
+    State(s): State<AppState>,
+    Admin(p): Admin,
+    ClientIp(ip): ClientIp,
+) -> ApiResult<Json<Value>> {
+    let engine = s.engine.clone();
+    let report = tokio::task::spawn_blocking(move || engine.reload())
+        .await
+        .map_err(|e| ApiError::internal(format!("reload failed: {e}")))?;
+    s.db.audit(
+        &p.username,
+        "tools.reload",
+        "registry",
+        "ok",
+        &ip,
+        &format!(
+            "{} tools; added {:?}, removed {:?}, changed {:?}",
+            report.tools, report.added, report.removed, report.changed
+        ),
+    );
+    Ok(Json(json!({
+        "reload": report,
+        "extensions": *s.engine.extensions(),
+    })))
+}
+
+/// Server-sent `tools` events whenever a reload changes the tool set, so
+/// open catalogs refresh without a page reload.
+async fn tools_events(State(s): State<AppState>, _p: Principal) -> Response {
+    let rx = s.engine.subscribe();
+    let stream = tokio_stream::wrappers::WatchStream::from_changes(rx)
+        .take_until(s.shutdown.clone().cancelled_owned())
+        .map(|generation| {
+            Ok::<_, std::convert::Infallible>(
+                Event::default()
+                    .event("tools")
+                    .data(json!({ "generation": generation }).to_string()),
+            )
+        });
+    Sse::new(stream)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+        .into_response()
 }
 
 // ---------------------------------------------------------------- admin

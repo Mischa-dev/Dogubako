@@ -52,7 +52,7 @@ impl TestHarness {
     pub fn available(&self, id: &str) -> bool {
         let spec = self
             .engine
-            .registry
+            .registry()
             .get(id)
             .expect("tool registered")
             .spec()

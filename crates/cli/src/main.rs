@@ -18,14 +18,18 @@ use std::process::ExitCode;
 
 pub fn build_engine(env: Environment) -> Engine {
     let dirs = AppDirs::default_local();
-    let (registry, _) = dogubako_tools::build_registry(Some(&dirs.extensions));
     let mut cfg = EngineConfig::local(env);
     cfg.worker_exe = std::env::current_exe().ok();
     cfg.packs = dogubako_core::packs::PackSelection::local(&dirs);
     cfg.models_dir = std::env::var_os("DOGUBAKO_MODELS_DIR")
         .map(Into::into)
         .unwrap_or(dirs.models.clone());
-    Engine::new(registry, cfg, vec![dirs.bin])
+    let extensions = dirs.extensions.clone();
+    Engine::from_loader(
+        cfg,
+        dogubako_core::deps::DepRegistry::new(vec![dirs.bin]),
+        std::sync::Arc::new(move || dogubako_tools::build_registry(Some(&extensions))),
+    )
 }
 
 fn global_args(cmd: Command) -> Command {
@@ -106,7 +110,8 @@ fn cli(engine: &Engine) -> Command {
     );
     // Generated category / tool commands.
     for cat in Category::ALL {
-        let specs: Vec<_> = engine.registry.by_category(cat).collect();
+        let registry = engine.registry();
+        let specs: Vec<_> = registry.by_category(cat).collect();
         if specs.is_empty() {
             continue;
         }

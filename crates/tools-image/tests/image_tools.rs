@@ -828,7 +828,7 @@ async fn imagemagick_formats_this_install_cannot_write_are_marked_and_rejected()
     let h = harness();
     let spec = h
         .engine
-        .registry
+        .registry()
         .get("image.convert")
         .unwrap()
         .spec()

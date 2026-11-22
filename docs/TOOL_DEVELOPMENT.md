@@ -204,6 +204,10 @@ Unknown `{settings.x}` names are rejected when the manifest is parsed.
   their declared permissions are enforced, and per-agent policies apply
   (`allow = ["image.cwebp"]`).
 * Tool ids may not collide with builtins.
+* No restart is needed: the desktop app and `dogubako mcp serve` reload when the
+  extensions folder changes, and a server admin reloads with **Settings →
+  Dependencies → Reload tools** or `POST /api/v1/admin/reload`. Runs already
+  started finish with the version of the tool they started with.
 
 Compiled extensions are also supported the normal Rust way: add a crate that
 exposes `pub fn tools() -> Vec<Arc<dyn Tool>>` and register it in `crates/tools`.

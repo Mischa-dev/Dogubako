@@ -1,6 +1,6 @@
 import type { Artifact, Category, DepInfo, ExtensionSettings, JobView, Me, ModelDownload, ModelInfo, Status, ToolErrorView, ToolInfo } from '../types';
 import { readJson, writeJson } from '../storage';
-import { ApiError, type AssistantInfo, type AssistantTarget, type Backend, type FileRef, type PickOptions, type RunHandle, type RunOptions } from './types';
+import { ApiError, type AssistantInfo, type AssistantTarget, type Backend, type FileRef, type PickOptions, type ReloadResult, type RunHandle, type RunOptions } from './types';
 
 type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -261,6 +261,11 @@ export class TauriBackend implements Backend {
   async models() {
     const r = await invoke<{ models: ModelInfo[]; downloads?: ModelDownload[] } | ModelInfo[]>('models_list');
     return Array.isArray(r) ? { models: r, downloads: [] } : { models: r.models, downloads: r.downloads ?? [] };
+  }
+  async reloadRegistry() { return invoke<ReloadResult>('reload_tools'); }
+  async onToolsChanged(cb: () => void) {
+    const { listen } = await import('@tauri-apps/api/event');
+    return listen('dogubako://tools-changed', () => cb());
   }
   extensionSettings() { return invoke<ExtensionSettings[]>('extension_settings'); }
   configureExtension(id: string, values: Record<string, unknown>) { return invoke<ExtensionSettings>('configure_extension', { id, values }); }

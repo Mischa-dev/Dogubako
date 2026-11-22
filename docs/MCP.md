@@ -132,5 +132,5 @@ Options: `--allow/--deny` tool patterns, `--permissions` (comma list; default al
 
 * Protocol versions: `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05` (negotiated).
 * Capabilities: `tools`, `resources` (read + templates), `logging`.
-* HTTP: `POST /mcp` (JSON or SSE response), `DELETE /mcp` ends a session, `GET /mcp` → 405 (no server-initiated stream). `Mcp-Session-Id` is issued on `initialize` and bound to the token.
+* HTTP: `POST /mcp` (JSON or SSE response), `DELETE /mcp` ends a session, `GET /mcp` (with `Accept: text/event-stream` and the session id) opens the server-initiated stream, which carries `notifications/tools/list_changed` after a reload changes the tool set; without them it is 405. stdio clients get the same notification when the extensions folder changes. `Mcp-Session-Id` is issued on `initialize` and bound to the token.
 * Tool names: ids with dots replaced by underscores (`video.compress` → `video_compress`); annotations carry `readOnlyHint`, `destructiveHint`, `openWorldHint`.
