@@ -1737,6 +1737,255 @@ expect = { text = "hi" }
     assert!(!dir.join("text.ext_echo.toml").exists());
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn dev_slot_tools_are_private_until_a_human_promotes_them() {
+    let t = setup_with(AuthMode::Required, |c| c.allow_extension_install = true);
+    let (cookie, csrf) = owner_session(&t).await;
+    let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
+    let dir = t.state.cfg.extensions_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    let d = dir.clone();
+    t.state.engine.set_loader(Arc::new(move || {
+        let mut reg = Registry::new();
+        reg.register_all(test_tools());
+        let st = dogubako_core::extensions::load_into(&mut reg, &d);
+        (reg, st)
+    }));
+    let agent = create_agent_token(&t, &cookie, &csrf, "bot", json!({"allow": ["*"]})).await;
+    let agent = format!("Bearer {agent}");
+    let agent = [("authorization", agent.as_str())];
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tokens",
+        &h,
+        Some(json!({"name": "builder", "scope": {"allow": ["*"]}})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    let mine = format!("Bearer {}", r.body["token"].as_str().unwrap());
+    let mine = [("authorization", mine.as_str())];
+    let manifest = r#"
+[tool]
+id = "text.wip_echo"
+name = "Echo (wip)"
+category = "text"
+[command]
+program = "echo"
+args = ["{word}"]
+[output]
+stdout = "text/plain"
+[[params]]
+name = "word"
+type = "text"
+[[tests]]
+params = { word = "hi" }
+expect = { text = "hi" }
+"#;
+    let install = |hdr: &'static str, body: Value| {
+        let hs: Vec<(&str, &str)> = match hdr {
+            "session" => h.to_vec(),
+            "mine" => mine.to_vec(),
+            _ => agent.to_vec(),
+        };
+        let app = t.app.clone();
+        async move {
+            call(
+                &app,
+                Method::POST,
+                "/api/v1/extensions/install",
+                &hs,
+                Some(body),
+            )
+            .await
+        }
+    };
+    // Agent-role tokens cannot install, not even into the dev slot.
+    let r = install("agent", json!({"manifest": manifest, "dev": true})).await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.body);
+    // An owner's scoped token can only use the dev slot.
+    let r = install("mine", json!({"manifest": manifest})).await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.body);
+    // A token scoped away from the tool can't run its tests by installing it.
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/tokens",
+        &h,
+        Some(json!({"name": "images", "scope": {"allow": ["image.*"]}})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    let narrow = format!("Bearer {}", r.body["token"].as_str().unwrap());
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/extensions/install",
+        &[("authorization", narrow.as_str())],
+        Some(json!({"manifest": manifest, "dev": true})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.body);
+    assert!(!dir.join("dev/text.wip_echo.toml").exists());
+    let r = install("mine", json!({"manifest": manifest, "dev": true})).await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["dev"], true);
+    assert_eq!(r.body["trusted"], false);
+    assert_eq!(r.body["passed"], true);
+    assert!(dir.join("dev/text.wip_echo.toml").exists());
+    assert!(
+        !dir.join("trusted.toml").exists()
+            || !std::fs::read_to_string(dir.join("trusted.toml"))
+                .unwrap()
+                .contains("wip_echo")
+    );
+
+    // Only the installing token sees it, with a dev badge.
+    let ids = |r: &Resp| -> Vec<String> {
+        r.body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["id"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let r = call(&t.app, Method::GET, "/api/v1/tools", &mine, None).await;
+    let tool = r.body["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["id"] == "text.wip_echo")
+        .cloned()
+        .expect("author sees it");
+    assert_eq!(tool["dev"], true);
+    for hs in [&h[..], &agent[..]] {
+        let r = call(&t.app, Method::GET, "/api/v1/tools?all=true", hs, None).await;
+        assert!(!ids(&r).contains(&"text.wip_echo".to_string()));
+        let r = call(&t.app, Method::GET, "/api/v1/tools/text.wip_echo", hs, None).await;
+        assert_eq!(r.status, StatusCode::NOT_FOUND);
+    }
+    let mcp_list = |hs: Vec<(&'static str, String)>| {
+        let app = t.app.clone();
+        async move {
+            let mut hs: Vec<(&str, &str)> = hs.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            hs.push(("accept", "application/json, text/event-stream"));
+            call(
+                &app,
+                Method::POST,
+                "/mcp",
+                &hs,
+                Some(json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})),
+            )
+            .await
+        }
+    };
+    let names = |r: &Resp| r.raw.windows(b"wip_echo".len()).any(|w| w == b"wip_echo");
+    assert!(
+        !names(&mcp_list(vec![("authorization", agent[0].1.to_string())]).await),
+        "other MCP agents never see it"
+    );
+    assert!(
+        names(&mcp_list(vec![("authorization", mine[0].1.to_string())]).await),
+        "its author's MCP sees it"
+    );
+
+    // Its tests run its command: not for anyone else either.
+    for hs in [&h[..], &agent[..]] {
+        let r = call(
+            &t.app,
+            Method::POST,
+            "/api/v1/extensions/text.wip_echo/test",
+            hs,
+            None,
+        )
+        .await;
+        assert_ne!(r.status, StatusCode::OK, "{:?}", r.body);
+    }
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/extensions/text.wip_echo/test",
+        &h,
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND, "{:?}", r.body);
+
+    // A dev tool cannot shadow a built-in.
+    let r = install(
+        "mine",
+        json!({"manifest": manifest.replace("text.wip_echo", "text.upper"), "dev": true}),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.body);
+    assert!(r.body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("cannot shadow"));
+
+    // Promotion: never through a token, always by a human admin.
+    for hs in [&mine[..], &agent[..]] {
+        let r = call(
+            &t.app,
+            Method::POST,
+            "/api/v1/extensions/text.wip_echo/promote",
+            hs,
+            None,
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.body);
+    }
+    let r = call(&t.app, Method::GET, "/api/v1/extensions", &h, None).await;
+    let st = r.body["extensions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == "text.wip_echo")
+        .cloned()
+        .unwrap();
+    assert_eq!(st["dev"], true);
+    assert_eq!(st["file"], "dev/text.wip_echo.toml");
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/api/v1/extensions/text.wip_echo/promote",
+        &h,
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["trusted"], true);
+    assert_eq!(r.body["passed"], true);
+    assert!(dir.join("text.wip_echo.toml").exists());
+    assert!(!dir.join("dev/text.wip_echo.toml").exists());
+    assert!(std::fs::read_to_string(dir.join("trusted.toml"))
+        .unwrap()
+        .contains("text.wip_echo"));
+    let r = call(
+        &t.app,
+        Method::GET,
+        "/api/v1/tools/text.wip_echo",
+        &agent,
+        None,
+    )
+    .await;
+    assert_eq!(
+        r.status,
+        StatusCode::OK,
+        "trusted now: visible to everyone allowed"
+    );
+    assert!(r.body.get("dev").is_none());
+
+    // ...and a new dev copy may not shadow the trusted one.
+    let r = install("mine", json!({"manifest": manifest, "dev": true})).await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.body);
+    assert!(r.body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("cannot shadow"));
+}
+
 #[tokio::test]
 async fn admins_turn_packs_on_and_off() {
     let t = setup(AuthMode::Required);

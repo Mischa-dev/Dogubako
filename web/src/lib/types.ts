@@ -98,6 +98,8 @@ export interface ToolInfo {
   /** Run-button label ("Print") instead of "Run". */
   action?: string;
   source: string;
+  /** From the dev slot: untrusted and visible only to its author until promoted. */
+  dev?: boolean;
   /** The tool checks its inputs before Run (`Backend.check`). */
   prechecks?: boolean;
   availability: Availability;
@@ -311,6 +313,6 @@ export interface StoreIndexInfo { url: string; offline: boolean; fetched_at: num
 export interface StoreResult { index: StoreIndexInfo; tools: StoreTool[] }
 /** Outcome of an install or test (`ExtensionReport`). */
 export interface ExtensionReport {
-  id: string; name: string; version: string; sha256: string; passed: boolean; loaded: boolean; trusted: boolean;
+  id: string; name: string; version: string; sha256: string; passed: boolean; loaded: boolean; trusted: boolean; dev?: boolean;
   error?: string | null; tests: { name: string; status: 'passed' | 'failed' | 'skipped'; error?: string | null }[];
 }

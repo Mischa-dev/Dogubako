@@ -342,7 +342,7 @@ pub fn spec(engine: &Engine) -> Value {
         "/api/v1/extensions/install",
         "post",
         op(
-            "Install a manifest in one step: validate, copy, pin its SHA-256, reload and run its tests. Body {manifest | url, replace}; returns {id, version, trusted, loaded, tests, passed, error} (admin)",
+            "Install a manifest in one step: validate, copy, pin its SHA-256, reload and run its tests. Body {manifest | url, replace, dev}; returns {id, version, trusted, loaded, dev, tests, passed, error} (admin). With dev=true it goes to the dev slot instead: no trust pin, usable only by the caller (owner/admin session or their token), reloaded when edited",
             "admin",
             json!({}),
         ),
@@ -352,6 +352,15 @@ pub fn spec(engine: &Engine) -> Value {
         "delete",
         op(
             "Uninstall an extension: remove its manifest and trust entry and reload; ?purge=true also deletes its settings (admin)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/extensions/{id}/promote",
+        "post",
+        op(
+            "Promote a dev tool to trusted: move its manifest out of the dev slot, pin its SHA-256, reload and run its tests (owner or admin signed in; never a token)",
             "admin",
             json!({}),
         ),
@@ -441,7 +450,8 @@ pub fn spec(engine: &Engine) -> Value {
     );
 
     let mut tool_paths = Map::new();
-    for spec in engine.registry().specs() {
+    // Dev tools are private to their author; this document is public.
+    for spec in engine.registry().specs().filter(|s| !s.dev) {
         let body = json!({
             "type": "object",
             "properties": {

@@ -273,7 +273,7 @@ pub fn tool_list(infos: &[ToolInfo], out: &Out) {
     if out.json {
         let v: Vec<Value> = infos
             .iter()
-            .map(|i| json!({"id": i.spec.id, "name": i.spec.name, "category": i.spec.category.id(), "description": i.spec.description, "available": i.availability.available, "reason": i.availability.reason}))
+            .map(|i| json!({"id": i.spec.id, "name": i.spec.name, "category": i.spec.category.id(), "description": i.spec.description, "available": i.availability.available, "reason": i.availability.reason, "dev": i.spec.dev}))
             .collect();
         println!("{}", serde_json::to_string_pretty(&v).unwrap());
         return;
@@ -286,7 +286,8 @@ pub fn tool_list(infos: &[ToolInfo], out: &Out) {
             last_cat = Some(i.spec.category);
         }
         let mark = if i.availability.available { " " } else { "·" };
-        println!("  {mark} {:w$}  {}", i.spec.id, i.spec.description);
+        let dev = if i.spec.dev { "[dev] " } else { "" };
+        println!("  {mark} {:w$}  {dev}{}", i.spec.id, i.spec.description);
     }
     let unavailable = infos.iter().filter(|i| !i.availability.available).count();
     out.info(&format!(

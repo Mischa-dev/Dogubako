@@ -63,6 +63,17 @@ A manifest is **only loaded after you trust it**. Trusting pins its SHA-256 in
 `trusted.toml`; any later edit invalidates the trust until you review and
 trust it again.
 
+While you (or an agent) are still writing a tool, put it in the **dev slot**
+instead: `dogubako extensions install --dev wip.toml` or copy it to
+`extensions/dev/`. Dev tools load without a trust pin and reload on every
+edit, but only their author can see or run them, they are marked **Dev**, and
+they can't shadow a built-in or trusted tool. When it is ready, a human owner
+promotes it, which moves it to the trusted folder and pins its hash:
+
+```sh
+dogubako extensions promote image.cwebp
+```
+
 Extension folders:
 
 | Where | Folder |

@@ -324,7 +324,7 @@ impl McpServer {
                 "idempotentHint": read_only,
                 "openWorldHint": s.permissions.contains(&Permission::Network),
             },
-            "_meta": {"dogubako/id": s.id, "dogubako/category": s.category.id(), "dogubako/available": info.availability.available}
+            "_meta": {"dogubako/id": s.id, "dogubako/category": s.category.id(), "dogubako/available": info.availability.available, "dogubako/dev": s.dev}
         })
     }
 

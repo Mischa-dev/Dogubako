@@ -349,6 +349,29 @@ settings are kept unless `--purge`. The same exist as admin endpoints
 `POST /api/v1/extensions/<id>/test`) and desktop commands
 (`install_extension`, `uninstall_extension`, `test_extension`).
 
+### Dev slot for agent-built tools
+
+A tool still being written goes in the dev slot, `<extensions>/dev/`:
+
+```
+dogubako extensions install --dev ./wip.toml   # or drop it in extensions/dev/
+dogubako extensions promote text.wip           # owner: move to trusted, pin SHA-256
+```
+
+Dev manifests load **without a trust pin** and reload whenever the file
+changes, so an agent can iterate on one. They are marked Dev (`[dev]` in the
+CLI, `"dev": true` over HTTP, `_meta["dogubako/dev"]` over MCP, a Dev badge in the app) and only their
+author can see or run them: `<extensions>/dev/authors.toml` records who
+installed each one (a server user, or the API token an agent used; files placed
+by hand belong to the local owner). Other users, tokens and MCP agents never
+see them, `dogubako mcp` offers them only with `--dev`, and a dev tool can't
+shadow a built-in or trusted id. Promotion is a human step: `extensions
+promote`, the Promote button (desktop, or a server owner/admin signed in to the
+web app) or `POST /api/v1/extensions/<id>/promote` with a session, never an API
+token. It moves the manifest to `<extensions>/<id>.toml`, pins its hash, reloads
+and runs its tests. On a server, `POST /api/v1/extensions/install` with
+`dev: true` installs into the dev slot (owner/admin, or their token).
+
 ### Official tool store
 
 Dogubako ships with the full toolbox; the store adds reviewed extension tools

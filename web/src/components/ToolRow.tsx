@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Pin, TriangleAlert, Lock } from 'lucide-react';
+import { Pin, TriangleAlert, Lock, FlaskConical } from 'lucide-react';
 import type { ToolInfo } from '../lib/types';
 import { href } from '../lib/router';
 import { categoryIcon } from '../lib/icons';
@@ -43,6 +43,7 @@ export const ToolRow = memo(function ToolRow({ tool, favorite, ranges, showCateg
           </span>
         )}
         {denied && <span className="tool-row-badge"><Lock size={12} aria-hidden />No access</span>}
+        {tool.dev && <span className="tool-row-badge" title="Dev tool: untrusted, only you can see it until an owner promotes it"><FlaskConical size={12} aria-hidden />Dev</span>}
       </a>
       <button
         type="button"

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Pin, Cpu, Server, Globe, Brain, Plug, TriangleAlert, Package, ShieldAlert, LayoutPanelLeft, ListChecks,
+  Pin, Cpu, Server, Globe, Brain, Plug, TriangleAlert, Package, ShieldAlert, LayoutPanelLeft, ListChecks, FlaskConical,
 } from 'lucide-react';
 import type { ToolInfo } from '../lib/types';
 import { touchesFiles } from '../lib/format';
@@ -8,7 +8,9 @@ import { useApp } from '../lib/app';
 import { href, useRoute } from '../lib/router';
 import { ToolTopRow } from './ToolTopRow';
 import { favorites as favStore, pushRecent, toggleFavorite, useStore } from '../lib/store';
-import { Callout, CopyButton, Segmented, Spinner, cx } from '../components/ui';
+import { Button, Callout, CopyButton, Segmented, Spinner, cx } from '../components/ui';
+import { errorText } from '../lib/errors';
+import { toast } from '../components/toast';
 import { NotFound } from '../pages/NotFound';
 import { GenericTool } from './GenericTool';
 import { GetMissing, downloadOffers } from '../components/GetMissing';
@@ -118,8 +120,39 @@ function ToolHead({ tool, standalone, children }: { tool: ToolInfo; standalone?:
         </button>
       </div>
       <p className="tool-desc">{tool.description}</p>
+      {tool.dev && <DevNotice tool={tool} />}
       {children}
     </header>
+  );
+}
+
+/** A dev-slot tool: untrusted and private to its author; an owner promotes it. */
+function DevNotice({ tool }: { tool: ToolInfo }) {
+  const { backend, isServer, isAdmin, me, reloadTools } = useApp();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const canPromote = !!backend.promoteExtension && (!isServer || (isAdmin && (me?.user.via === 'session' || me?.user.via === 'none')));
+  const promote = async () => {
+    setBusy(true);
+    try {
+      const r = await backend.promoteExtension!(tool.id);
+      // The notice unmounts once the tool reloads as trusted.
+      if (r.passed) toast.success(`Promoted ${tool.id}`);
+      else toast.error(r.error ?? `Promoted ${tool.id}, but a test failed`);
+      await reloadTools();
+    } catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Callout
+      tone="info"
+      icon={FlaskConical}
+      title="Dev tool"
+      actions={canPromote && <Button size="sm" variant="secondary" onClick={promote} disabled={busy}>Promote</Button>}
+    >
+      Not trusted yet: only its author can see or run it, and it reloads when its manifest changes.
+      {canPromote ? ' Promote it to trust it and share it.' : ' An owner promotes it to trusted.'}
+      {err && <div className="small field-error">{err}</div>}
+    </Callout>
   );
 }
 

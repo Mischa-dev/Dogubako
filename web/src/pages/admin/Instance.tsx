@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, CircleCheck, CircleAlert } from 'lucide-react';
+import { RefreshCw, CircleCheck, CircleAlert, FlaskConical } from 'lucide-react';
 import type { AdminConfig, JobView } from '../../lib/types';
 import { useApp } from '../../lib/app';
 import { asServer } from '../../lib/backend';
 import { formatUptime, formatRelative } from '../../lib/format';
 import { errorText } from '../../lib/errors';
+import { toast } from '../../components/toast';
 import { Badge, Button, Callout, Section, Spinner } from '../../components/ui';
 import { KeyValue } from '../../results/DataViews';
 
 export function InstancePanel() {
-  const { backend, status, toolMap } = useApp();
+  const { backend, status, toolMap, me, reloadTools } = useApp();
+  const [promoting, setPromoting] = useState<string | null>(null);
+  const humanAdmin = me?.user.is_admin && (me.user.via === 'session' || me.user.via === 'none');
   const server = asServer(backend)!;
   const [cfg, setCfg] = useState<AdminConfig | null>(null);
   const [jobs, setJobs] = useState<JobView[]>([]);
@@ -57,7 +60,19 @@ export function InstancePanel() {
                 <span className="ext-name">{e.id ?? e.name ?? `extension ${i + 1}`}</span>
                 {e.version && <span className="mono small muted">{e.version}</span>}
                 {e.tools != null && <Badge>{Array.isArray(e.tools) ? e.tools.length : e.tools} tools</Badge>}
+                {e.dev && <Badge tone="outline"><FlaskConical size={11} aria-hidden /> Dev</Badge>}
                 {e.error && <span className="small field-error">{String(e.error)}</span>}
+                {e.dev && e.loaded && humanAdmin && (
+                  <Button size="sm" variant="secondary" disabled={promoting === e.id} onClick={async () => {
+                    setPromoting(e.id);
+                    try {
+                      const r = await server.promoteExtension(e.id);
+                      if (r.passed) toast.success(`Promoted ${e.id}`);
+                      else toast.error(r.error ?? `Promoted ${e.id}, but a test failed`);
+                      await Promise.all([load(), reloadTools()]);
+                    } catch (x) { toast.error(errorText(x)); } finally { setPromoting(null); }
+                  }}>Promote</Button>
+                )}
               </li>
             ))}
           </ul>

@@ -14,6 +14,12 @@ campaign are added here as they merge.
 
 ### Added
 
+- **Dev slot for agent-built tools**: manifests in `extensions/dev/` (or
+  `dogubako extensions install --dev`) load without a trust pin and reload when
+  edited, are marked Dev, and are visible only to the user or token that
+  installed them. `dogubako extensions promote <id>`, the Promote button or
+  `POST /api/v1/extensions/<id>/promote` (an owner or admin, never an API token)
+  moves one to the trusted folder and pins its hash.
 - yt-dlp's redirects and media downloads in Transcribe Video URL now follow the network policy (private addresses are refused on servers that allow only public ones).
 - **Transcribe Video URL** (`speech.transcribe_url`): paste a YouTube, TED,
   Vimeo or other video-site link and get the full transcript. It uses the

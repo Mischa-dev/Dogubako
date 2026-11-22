@@ -1,7 +1,7 @@
 //! Aggregates all builtin tool crates (feature-gated) and trusted extensions
 //! into a single registry.
 
-use dogubako_core::manifest::{load_extensions, ExtensionStatus};
+use dogubako_core::manifest::ExtensionStatus;
 use dogubako_core::registry::Registry;
 use dogubako_core::tool::Tool;
 use std::path::Path;
@@ -80,23 +80,9 @@ pub fn extensions_stamp(dir: &Path) -> u64 {
 pub fn build_registry(extensions_dir: Option<&Path>) -> (Registry, Vec<ExtensionStatus>) {
     let mut reg = Registry::new();
     reg.register_all(builtin_tools());
-    let mut statuses = vec![];
-    if let Some(dir) = extensions_dir {
-        let (tools, st) = load_extensions(dir, false);
-        statuses = st;
-        for t in tools {
-            let id = t.spec().id.clone();
-            if let Err(e) = reg.register(t) {
-                statuses
-                    .iter_mut()
-                    .filter(|s| s.id.as_deref() == Some(id.as_str()))
-                    .for_each(|s| {
-                        s.loaded = false;
-                        s.error = Some(e.to_string());
-                    });
-            }
-        }
-    }
+    let statuses = extensions_dir
+        .map(|dir| dogubako_core::extensions::load_into(&mut reg, dir))
+        .unwrap_or_default();
     (reg, statuses)
 }
 
