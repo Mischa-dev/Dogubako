@@ -16,6 +16,7 @@ use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use dogubako_core::engine::ToolInfo;
 use dogubako_core::error::ToolError;
+use dogubako_core::manifest::ExtensionStatus;
 use dogubako_core::spec::{Category, Permission};
 use dogubako_mcp::FileView;
 use dogubako_mcp::{JobView, ResultView};
@@ -1499,9 +1500,18 @@ async fn extension_test(
 ) -> ApiResult<Json<Value>> {
     // Tests run the tool's command: a dev tool only for its author.
     let dir = s.cfg.extensions_dir();
-    let hidden = s.engine.extensions().iter().any(|st| {
-        st.dev && st.id.as_deref() == Some(id.as_str()) && !p.is_author_key(st.author.as_deref())
-    });
+    let hidden = match s.engine.registry().get(&id) {
+        Some(t) => t.spec().dev && !p.is_author(t.spec()),
+        None => {
+            let sts = s.engine.extensions();
+            let same = |st: &&ExtensionStatus| st.id.as_deref() == Some(id.as_str());
+            !sts.iter().filter(same).any(|st| !st.dev)
+                && sts
+                    .iter()
+                    .filter(same)
+                    .any(|st| st.dev && !p.is_author_key(st.author.as_deref()))
+        }
+    };
     if hidden {
         return Err(ApiError::not_found(format!("no extension '{id}'")));
     }
