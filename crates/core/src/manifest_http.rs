@@ -526,7 +526,21 @@ impl HttpRequest {
 /// Whether a JSON path can select several nodes (each a row) rather than
 /// one array of rows.
 fn selects_many(src: &str) -> bool {
-    src.contains(['*', '?', ':', ',']) || src.contains("..")
+    let mut syntax = String::new();
+    let mut quote = None;
+    let mut chars = src.chars();
+    while let Some(c) = chars.next() {
+        match (quote, c) {
+            (Some(_), '\\') => {
+                chars.next();
+            }
+            (Some(q), c) if c == q => quote = None,
+            (Some(_), _) => {}
+            (None, '\'' | '"') => quote = Some(c),
+            (None, c) => syntax.push(c),
+        }
+    }
+    syntax.contains(['*', '?', ':', ',']) || syntax.contains("..")
 }
 
 fn too_large(len: u64, limit: usize) -> ToolError {
@@ -852,6 +866,16 @@ json = { temp = "$.current.temperature_2m", unit = "$.current_units.temperature_
     }
 
     /// Serve `reply` (raw HTTP) once on 127.0.0.1; `None` never replies.
+    #[test]
+    fn multi_select_paths() {
+        for p in ["$.items[*]", "$..t", "$.a[?@.x]", "$.a[0:2]", "$.a[0,1]"] {
+            assert!(selects_many(p), "{p}");
+        }
+        for p in ["$.items", "$['data:items']", "$[\"a*b\"]", "$['it\\'s,x']"] {
+            assert!(!selects_many(p), "{p}");
+        }
+    }
+
     #[tokio::test]
     async fn dot_segments_and_secret_urls_stay_out() {
         let text = manifest("url = \"https://example.com/items/{q}?also={q}\"", "");

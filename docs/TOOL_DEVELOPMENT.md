@@ -174,8 +174,7 @@ category = "data"
 
 [http]
 url = "https://api.open-meteo.com/v1/forecast?latitude={settings.lat}&longitude={settings.lon}&current=temperature_2m"
-headers = { Authorization = "Bearer {settings.api_key}" }  # optional
-timeout_secs = 30                                          # optional
+timeout_secs = 30   # optional
 
 [output]
 json = { temp = "$.current.temperature_2m", unit = "$.current_units.temperature_2m" }
@@ -189,12 +188,11 @@ required = true
 name = "lon"
 type = "text"
 required = true
-
-[[settings]]
-name = "api_key"
-type = "text"
-secret = true
 ```
+
+Add `headers = { Authorization = "Bearer {settings.api_key}" }` under `[http]`
+(with an `api_key` setting declared `secret = true`) for APIs that need a key;
+header values may use parameters and settings.
 
 * Only GET; there is no scripting. The scheme and host must be written out —
   placeholders (`{param}`, `{settings.<name>}`) may only fill the path, query
