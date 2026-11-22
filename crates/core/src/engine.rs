@@ -200,6 +200,7 @@ pub struct Engine {
     /// Packs turned on now; starts as `config.packs`, changed by
     /// [`Engine::set_packs`].
     packs: RwLock<PackSelection>,
+    pack_edit: Mutex<()>,
     pub deps: Arc<DepRegistry>,
     pub models: Arc<ModelRegistry>,
     pub config: EngineConfig,
@@ -224,6 +225,7 @@ impl Engine {
             reloading: Mutex::new(()),
             generation: tokio::sync::watch::Sender::new(0),
             packs: RwLock::new(config.packs.clone()),
+            pack_edit: Mutex::new(()),
             deps: Arc::new(deps),
             models: Arc::new(ModelRegistry::new(config.models_dir.clone())),
             config,
@@ -521,6 +523,30 @@ impl Engine {
         self.swap(catalog, extensions)
     }
 
+    /// Turn one pack on or off as a single step: read the current
+    /// selection, `save` the new one, then apply it. Concurrent edits are
+    /// serialized so none is lost.
+    pub fn edit_pack<E>(
+        &self,
+        pack: &str,
+        on: bool,
+        save: impl FnOnce(&PackSelection) -> Result<(), E>,
+    ) -> Result<ReloadReport, E> {
+        self.edit_packs(|cur| cur.with(pack, on), save)
+    }
+
+    /// Like [`Engine::edit_pack`] for any change of the selection.
+    pub fn edit_packs<E>(
+        &self,
+        change: impl FnOnce(&PackSelection) -> PackSelection,
+        save: impl FnOnce(&PackSelection) -> Result<(), E>,
+    ) -> Result<ReloadReport, E> {
+        let _edit = self.pack_edit.lock().unwrap();
+        let next = change(&self.pack_selection());
+        save(&next)?;
+        Ok(self.set_packs(next))
+    }
+
     /// Engines and model groups a tool uses.
     fn uses(spec: &ToolSpec) -> (BTreeSet<String>, BTreeSet<String>) {
         let mut deps: BTreeSet<String> = spec.requires.iter().cloned().collect();
@@ -599,6 +625,10 @@ impl Engine {
             used_deps.extend(d);
             used_models.extend(m);
         }
+        // Format converters other tools fall back to without declaring them.
+        if !tools.installed.is_empty() {
+            used_deps.extend(SHARED_ENGINES.iter().map(|d| d.to_string()));
+        }
         let (mut off_deps, mut off_models) = (BTreeSet::new(), BTreeSet::new());
         for s in tools
             .catalog
@@ -655,11 +685,21 @@ impl Engine {
             if ids.is_some_and(|ids| !ids.contains(&u.id)) {
                 continue;
             }
-            match u.kind {
-                "engine" => self.deps.managed().remove(&u.id)?,
-                _ => self.models.remove(&u.id)?,
-            }
-            removed.push(u);
+            let path = self.deps.managed().install_root().join(&u.id);
+            let left = match u.kind {
+                "engine" => {
+                    self.deps.managed().remove(&u.id)?;
+                    dir_size(&path)
+                }
+                _ => {
+                    self.models.remove(&u.id)?;
+                    model_spec(&u.id).map_or(0, |m| model_bytes(self.models.dir(), m))
+                }
+            };
+            removed.push(UnusedDownload {
+                bytes: u.bytes.saturating_sub(left),
+                ..u
+            });
         }
         if removed.iter().any(|u| u.kind == "engine") {
             self.deps.refresh();
@@ -888,6 +928,12 @@ fn loose_eq(a: &Value, b: &Value) -> bool {
             _ => false,
         }
 }
+
+/// Engines tools may use to read or write formats without listing them in
+/// `requires`; kept while any tool is on.
+use crate::models::model_spec;
+
+const SHARED_ENGINES: &[&str] = &["imagemagick", "ffmpeg"];
 
 fn dir_size(p: &std::path::Path) -> u64 {
     match std::fs::symlink_metadata(p) {
@@ -1538,5 +1584,29 @@ mod tests {
         assert_eq!(removed, unused);
         assert!(!e.models.is_installed(model.id));
         assert!(e.unused_downloads().is_empty());
+    }
+
+    #[test]
+    fn concurrent_pack_edits_are_not_lost() {
+        let e = Arc::new(packs_engine(PackSelection::all()));
+        let saved = Arc::new(std::sync::Mutex::new(PackSelection::all()));
+        let hs: Vec<_> = ["text", "image"]
+            .into_iter()
+            .map(|p| {
+                let (e, saved) = (e.clone(), saved.clone());
+                std::thread::spawn(move || {
+                    e.edit_pack(p, false, |n| {
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                        *saved.lock().unwrap() = n.clone();
+                        Ok::<_, ()>(())
+                    })
+                    .unwrap();
+                })
+            })
+            .collect();
+        hs.into_iter().for_each(|h| h.join().unwrap());
+        let live = e.pack_selection();
+        assert!(!live.is_on("text") && !live.is_on("image"));
+        assert_eq!(*saved.lock().unwrap(), live);
     }
 }

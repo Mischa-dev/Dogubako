@@ -68,7 +68,7 @@ Job failures carry the same tagged error in `job.error`. Codes: `invalid_input`,
 | `GET /packs` | Built-in tool packs: `id`, `name`, `description`, `enabled`, `tools` (count), `engines`, `models`. Tools of a turned-off pack are hidden everywhere and running one returns 404 `not_installed` naming the pack. Each pack also has `download_bytes`/`disk_bytes`: what its optional engines and recommended models take |
 | `GET /admin/packs` | Packs plus `unused` (downloaded engines and models no turned-on pack uses: `kind`, `id`, `name`, `bytes`) and `unused_bytes` (admin) |
 | `PUT /admin/packs/{id}` | `{enabled: bool}` turns a pack on or off for everyone right away and saves it in `<data>/packs.json` (overrides the config's `packs`; `DOGUBAKO_PACKS` still wins). Returns the `GET /admin/packs` body plus `reload` (admin) |
-| `POST /admin/packs/cleanup` | `{ids?: [...]}` deletes the listed unused downloads (all when omitted); returns the packs body plus `removed` and `freed_bytes` (admin) |
+| `POST /admin/packs/cleanup` | `{ids?: [...]}` deletes the listed unused downloads (all when omitted); returns the packs body plus `removed` and `freed_bytes`; 409 `jobs_running` while jobs are queued or running (admin) |
 | `POST /tools/{id}/run` | Run a tool |
 | `GET /jobs`, `GET /jobs/{id}[?wait_seconds=]`, `GET /jobs/{id}/events`, `POST /jobs/{id}/cancel`, `DELETE /jobs/{id}`, `GET /jobs/{id}/artifacts.zip` | Jobs |
 | `GET /files`, `POST /files`, `PUT /files/raw?name=`, `GET /files/{id}`, `GET /files/{id}/content[?inline=1]` (Range supported), `DELETE /files/{id}` | Files |

@@ -117,9 +117,14 @@ async fn set_packs(app: tauri::AppHandle, state: State<'_, Desktop>, enabled: Op
             sel
         }
     };
-    sel.save(&packs_file(&state.dirs.config)).map_err(|e| e.to_string())?;
     let engine = state.engine.clone();
-    let report = tauri::async_runtime::spawn_blocking(move || engine.set_packs(sel)).await.map_err(|e| e.to_string())?;
+    let file = packs_file(&state.dirs.config);
+    let report = tauri::async_runtime::spawn_blocking(move || {
+        engine.edit_packs(|_| sel, |next| next.save(&file))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
     if report.tool_set_changed() {
         let _ = app.emit(TOOLS_CHANGED, &report);
     }
@@ -131,6 +136,9 @@ async fn set_packs(app: tauri::AppHandle, state: State<'_, Desktop>, enabled: Op
 /// Delete engines and models no turned-on pack uses (all when `ids` is null).
 #[tauri::command]
 fn packs_cleanup(state: State<'_, Desktop>, ids: Option<Vec<String>>) -> Result<Value, String> {
+    if !state.runs.lock().unwrap().is_empty() {
+        return Err("Tools are running; delete unused downloads once they finish".into());
+    }
     let removed = state.engine.remove_unused(ids.as_deref()).map_err(|e| e.to_string())?;
     let freed: u64 = removed.iter().map(|u| u.bytes).sum();
     let mut v = packs_view(&state.engine);

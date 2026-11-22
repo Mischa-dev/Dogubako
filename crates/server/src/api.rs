@@ -419,13 +419,13 @@ async fn admin_set_pack(
     if dogubako_core::packs::builtin_pack(&id).is_none() {
         return Err(ApiError::not_found(format!("unknown pack '{id}'")));
     }
-    let next = s.engine.pack_selection().with(&id, body.enabled);
-    next.save(&s.cfg.packs_file())
-        .map_err(|e| ApiError::internal(format!("could not save packs: {e}")))?;
-    let engine = s.engine.clone();
-    let report = tokio::task::spawn_blocking(move || engine.set_packs(next))
-        .await
-        .map_err(|e| ApiError::internal(format!("pack change failed: {e}")))?;
+    let (engine, file, pack) = (s.engine.clone(), s.cfg.packs_file(), id.clone());
+    let report = tokio::task::spawn_blocking(move || {
+        engine.edit_pack(&pack, body.enabled, |next| next.save(&file))
+    })
+    .await
+    .map_err(|e| ApiError::internal(format!("pack change failed: {e}")))?
+    .map_err(|e| ApiError::internal(format!("could not save packs: {e}")))?;
     s.db.audit(
         &p.username,
         if body.enabled {
@@ -443,7 +443,7 @@ async fn admin_set_pack(
     Ok(Json(v))
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize)]
 struct Cleanup {
     #[serde(default)]
     ids: Option<Vec<String>>,
@@ -454,9 +454,16 @@ async fn admin_packs_cleanup(
     State(s): State<AppState>,
     Admin(p): Admin,
     ClientIp(ip): ClientIp,
-    body: Option<Json<Cleanup>>,
+    Json(body): Json<Cleanup>,
 ) -> ApiResult<Json<Value>> {
-    let ids = body.map(|b| b.0).unwrap_or_default().ids;
+    if s.jobs.running_count() > 0 {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "jobs_running",
+            "Jobs are queued or running; delete unused downloads once they finish",
+        ));
+    }
+    let ids = body.ids;
     let removed = s
         .engine
         .remove_unused(ids.as_deref())

@@ -116,19 +116,34 @@ pub fn packs(engine: &Engine, m: &ArgMatches, out: &Out) -> i32 {
             2,
         );
     }
+    let remove = !on && m.subcommand().unwrap().1.get_flag("remove-unused");
     let file = packs_file(&dogubako_core::paths::AppDirs::default_local().config);
-    let next = PackSelection::load(&file).with(pack, on);
-    if let Err(e) = next.save(&file) {
+    let overridden = std::env::var(PACKS_ENV).is_ok_and(|v| !v.trim().is_empty());
+    if overridden && remove {
+        return out.error(
+            &format!("{PACKS_ENV} is set, so the saved packs are not the ones in use; unset it to delete unused downloads"),
+            2,
+        );
+    }
+    let saved = if overridden {
+        PackSelection::load(&file)
+            .with(pack, on)
+            .save(&file)
+            .map(|_| ())
+    } else {
+        engine
+            .edit_pack(pack, on, |next| next.save(&file))
+            .map(|_| ())
+    };
+    if let Err(e) = saved {
         return out.error(&format!("could not save {}: {e}", file.display()), 1);
     }
-    if std::env::var(PACKS_ENV).is_ok_and(|v| !v.trim().is_empty()) {
+    if overridden {
         out.info(&format!(
             "note: {PACKS_ENV} is set and overrides the saved packs"
         ));
     }
-    engine.set_packs(engine.pack_selection().with(pack, on));
-    let remove = !on && m.subcommand().unwrap().1.get_flag("remove-unused");
-    let unused = if on {
+    let unused = if on || overridden {
         vec![]
     } else {
         engine.unused_downloads()
