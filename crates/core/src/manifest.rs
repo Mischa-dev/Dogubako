@@ -1940,7 +1940,7 @@ type = "text"
     #[test]
     fn extensions_author_is_policy_only() {
         let m = "[tool]\nid = \"text.x\"\nname = \"X\"\ncategory = \"text\"\n\
-                 permissions = [\"extensions_author\"]\n[command]\nprogram = \"echo\"\n";
+                 permissions = [\"extensions_author\"]\n[command]\nprogram = \"echo\"\nargs = []\n";
         let err = parse_manifest(m, "x").err().unwrap();
         assert!(
             err.contains("unknown permission 'extensions_author'"),
