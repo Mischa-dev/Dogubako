@@ -41,15 +41,20 @@ export default function ToolPage({ toolId }: { toolId: string }) {
   const last = useRef<ToolInfo | undefined>(undefined);
   const live = toolMap.get(toolId);
   if (live) last.current = live;
-  const tool = live ?? (last.current?.id === toolId ? last.current : undefined);
+  const shown = live ?? (last.current?.id === toolId ? last.current : undefined);
+  const removed = !live && !!shown;
+  const tool = useMemo(
+    () => (shown && removed ? { ...shown, availability: { ...shown.availability, available: false } } : shown),
+    [shown, removed],
+  );
   const route = useRoute();
   const jobId = route.query.get('job');
   useEffect(() => { if (tool) pushRecent(tool.id); }, [tool]);
   if (!tool || tool.permitted === false) return <NotFound />;
-  return <ToolPageInner tool={tool} jobId={jobId} />;
+  return <ToolPageInner tool={tool} jobId={jobId} removed={removed} />;
 }
 
-function ToolPageInner({ tool, jobId }: { tool: ToolInfo; jobId: string | null }) {
+function ToolPageInner({ tool, jobId, removed }: { tool: ToolInfo; jobId: string | null; removed: boolean }) {
   const special = specialUiFor(tool);
   const [mode, setMode] = useState<'editor' | 'form'>('editor');
   const Special = special && mode === 'editor' ? SPECIAL[special] : null;
@@ -72,7 +77,7 @@ function ToolPageInner({ tool, jobId }: { tool: ToolInfo; jobId: string | null }
   return (
     <div className={cx('page tool-page', tool.ui === 'live' && 'is-live', Special && !staged && 'is-special')} ref={root}>
       <ToolTopRow tool={tool} />
-      <Availability tool={tool} />
+      <Availability tool={tool} removed={removed} />
       {Special && !staged && <ToolHead tool={tool} standalone />}
       {Special ? (
         <Suspense fallback={<div className="page-loading"><Spinner /></div>}>
@@ -138,10 +143,13 @@ function ToolMeta({ tool }: { tool: ToolInfo }) {
   );
 }
 
-function Availability({ tool }: { tool: ToolInfo }) {
+function Availability({ tool, removed }: { tool: ToolInfo; removed?: boolean }) {
   const a = tool.availability;
   const { isAdmin, isServer } = useApp();
   const hints = useMemo(() => (a.missing ?? []).map((m) => ({ name: m.name, hint: m.hint })), [a.missing]);
+  if (removed) {
+    return <Callout tone="warn" icon={TriangleAlert} title="This tool was removed">A run already in progress finishes; new runs are off.</Callout>;
+  }
   if (a.available) return null;
   if (!a.platform_supported) {
     return <Callout tone="warn" icon={TriangleAlert} title="Not available on this operating system">{a.reason}</Callout>;

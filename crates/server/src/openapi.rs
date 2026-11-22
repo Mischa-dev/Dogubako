@@ -287,7 +287,10 @@ pub fn spec(engine: &Engine) -> Value {
         op(
             "Server-sent `tools` event each time a reload changes the tool set",
             "tools",
-            json!({}),
+            json!({"responses": {
+                "200": {"description": "Event stream", "content": {"text/event-stream": {"schema": {"type": "string"}}}},
+                "401": {"$ref": "#/components/responses/Error"}
+            }}),
         ),
     );
     add(
@@ -296,7 +299,15 @@ pub fn spec(engine: &Engine) -> Value {
         op(
             "MCP server-initiated stream (notifications/tools/list_changed)",
             "mcp",
-            json!({}),
+            json!({
+                "parameters": [{"name": "Mcp-Session-Id", "in": "header", "required": true, "schema": {"type": "string"}}],
+                "responses": {
+                    "200": {"description": "Event stream (requires `Accept: text/event-stream`)", "content": {"text/event-stream": {"schema": {"type": "string"}}}},
+                    "401": {"$ref": "#/components/responses/Error"},
+                    "404": {"$ref": "#/components/responses/Error"},
+                    "405": {"description": "Missing `Accept: text/event-stream` or `Mcp-Session-Id`"}
+                }
+            }),
         ),
     );
     add(
