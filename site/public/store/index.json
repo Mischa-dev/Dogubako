@@ -29,8 +29,8 @@
     },
     {
       "id": "data.weather",
-      "name": "Current weather",
-      "description": "Current temperature, wind and weather code for a location (Open-Meteo, no API key)",
+      "name": "Weather",
+      "description": "Current conditions and a short daily forecast for a saved or given location (Open-Meteo, no API key)",
       "keywords": [
         "weather",
         "temperature",
@@ -38,8 +38,8 @@
         "open-meteo"
       ],
       "category": "data",
-      "version": "1.0.0",
-      "sha256": "a605a8874e259054dc77f34213aa942d845d56f59234207fcc6b331a0bb2edda",
+      "version": "1.1.0",
+      "sha256": "7a2f937b1e45a8f7b9e4fe510133f7579dcb15ef4ea170474a3ef75ad18a4f0d",
       "permissions": [
         "network"
       ],

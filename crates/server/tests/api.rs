@@ -1515,6 +1515,109 @@ async fn turned_off_tools_stay_unknown_to_restricted_callers() {
 }
 
 #[tokio::test]
+async fn not_installed_tools_are_listed_with_who_may_install() {
+    let t = setup_with(AuthMode::Required, |c| {
+        c.packs = dogubako_core::packs::PackSelection::parse("image");
+        c.store_url = String::new();
+    });
+    let (cookie, csrf) = owner_session(&t).await;
+    let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
+    let r = call(&t.app, Method::GET, "/api/v1/tools/available", &h, None).await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    let tools = r.body["tools"].as_array().unwrap();
+    let upper = tools.iter().find(|x| x["id"] == "text.upper").unwrap();
+    assert_eq!(upper["source"], "pack");
+    assert_eq!(upper["pack"], "text");
+    assert_eq!(upper["can_install"], true);
+    assert!(!tools
+        .iter()
+        .any(|x| x["id"].as_str().unwrap().starts_with("image.")));
+
+    // Non-admins see what they could use, without the right to install it.
+    let token = create_agent_token(&t, &cookie, &csrf, "bot", json!({"allow": ["text.*"]})).await;
+    let bearer = format!("Bearer {token}");
+    let auth = [("authorization", bearer.as_str())];
+    let r = call(&t.app, Method::GET, "/api/v1/tools/available", &auth, None).await;
+    let upper = r.body["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] == "text.upper")
+        .unwrap()
+        .clone();
+    assert_eq!(upper["can_install"], false);
+    let token =
+        create_agent_token(&t, &cookie, &csrf, "imgbot", json!({"allow": ["image.*"]})).await;
+    let bearer = format!("Bearer {token}");
+    let r = call(
+        &t.app,
+        Method::GET,
+        "/api/v1/tools/available",
+        &[("authorization", bearer.as_str())],
+        None,
+    )
+    .await;
+    assert!(!r.raw.windows(10).any(|w| w == b"text.upper"));
+
+    // MCP search lists them only when asked, with installed: false.
+    let mcp = |id: u64, method: &str, params: Value| json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
+    let token = create_agent_token(&t, &cookie, &csrf, "bot2", json!({"allow": ["*"]})).await;
+    let bearer = format!("Bearer {token}");
+    let accept = [
+        ("accept", "application/json, text/event-stream"),
+        ("authorization", bearer.as_str()),
+    ];
+    let r = call(&t.app, Method::POST, "/mcp", &accept, Some(mcp(1, "initialize", json!({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}})))).await;
+    let sid = r
+        .headers
+        .get("mcp-session-id")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let h = [
+        ("accept", "application/json, text/event-stream"),
+        ("authorization", bearer.as_str()),
+        ("mcp-session-id", sid.as_str()),
+    ];
+    let search = |args: Value| {
+        mcp(
+            2,
+            "tools/call",
+            json!({"name": "dogubako_search_tools", "arguments": args}),
+        )
+    };
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &h,
+        Some(search(json!({"query": "upper"}))),
+    )
+    .await;
+    assert!(
+        !r.raw.windows(10).any(|w| w == b"text.upper"),
+        "{:?}",
+        r.body
+    );
+    let r = call(
+        &t.app,
+        Method::POST,
+        "/mcp",
+        &h,
+        Some(search(json!({"query": "upper", "include_available": true}))),
+    )
+    .await;
+    let s = r.body.to_string();
+    assert!(
+        s.contains("text.upper")
+            && (s.contains("\"installed\":false") || s.contains("\\\"installed\\\":false")),
+        "{:?}",
+        r.body
+    );
+}
+
+#[tokio::test]
 async fn packs_default_to_all() {
     let t = setup(AuthMode::None);
     let r = call(&t.app, Method::GET, "/api/v1/packs", &[], None).await;

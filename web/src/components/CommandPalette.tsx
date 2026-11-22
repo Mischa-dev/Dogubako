@@ -5,18 +5,20 @@ import {
 } from 'lucide-react';
 import { useApp } from '../lib/app';
 import { navigate, href } from '../lib/router';
-import { search, fuzzyMatch } from '../lib/search';
+import { search, fuzzyMatch, makeDoc } from '../lib/search';
 import { matchIntent } from '../lib/intent';
 import { cycleTheme, favorites as favStore, recents as recStore, resolvedTheme, useStore } from '../lib/store';
 import { categoryIcon } from '../lib/icons';
-import type { ToolInfo } from '../lib/types';
-import { Highlight, Kbd, cx, modKey } from './ui';
+import type { AvailableTool, ToolInfo } from '../lib/types';
+import { errorText, reportError } from '../lib/errors';
+import { toast } from './toast';
+import { Button, Highlight, Kbd, cx, modKey, useConfirm } from './ui';
 import { unavailableLabel } from './ToolRow';
 import { looksLikeRequest, useAssistant } from '../lib/assistant/useAssistant';
 
 interface Item {
   key: string;
-  kind: 'tool' | 'action' | 'category';
+  kind: 'tool' | 'action' | 'category' | 'available';
   label: string;
   ranges: [number, number][];
   sub?: string;
@@ -25,10 +27,14 @@ interface Item {
   section: string;
   run: () => void;
   tool?: ToolInfo;
+  available?: AvailableTool;
 }
 
 export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boolean; onClose: () => void; initialQuery?: string }) {
-  const { docs, toolMap, categories, isServer, isAdmin, categoryLabel } = useApp();
+  const { backend, docs, toolMap, categories, isServer, isAdmin, categoryLabel, reloadTools } = useApp();
+  const [available, setAvailable] = useState<AvailableTool[]>([]);
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [confirm, confirmNode] = useConfirm();
   const favs = useStore(favStore);
   const recs = useStore(recStore);
   const assistant = useAssistant();
@@ -49,6 +55,17 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !backend.availableTools) return;
+    let live = true;
+    backend.availableTools().then((r) => { if (live) setAvailable(r.tools); }).catch(() => {});
+    return () => { live = false; };
+  }, [open, backend]);
+  const availableDocs = useMemo(
+    () => available.map((t) => ({ doc: makeDoc(t, categoryLabel(t.category)), item: t })),
+    [available, categoryLabel],
+  );
 
   const actions = useMemo<Item[]>(() => {
     const dark = resolvedTheme() === 'dark';
@@ -107,6 +124,11 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
       .filter((t) => !found.has(t.id))
       .slice(0, Math.max(0, 8 - tools.length))
       .map((t) => toolItem(t, [], 'Suggested'));
+    const missing: Item[] = search(availableDocs.filter((d) => !toolMap.has(d.item.id)), query, { limit: 8 })
+      .map(({ item: t, ranges }) => ({
+        key: `n:${t.id}`, kind: 'available', label: t.name, ranges, sub: t.description, icon: categoryIcon(t.category),
+        section: 'Not installed', available: t, run: () => {},
+      }));
     const ql = query.toLowerCase();
     const cats: Item[] = categories
       .filter((c) => c.label.toLowerCase().includes(ql) || c.id.startsWith(ql))
@@ -136,9 +158,9 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
         }]
         : [];
     return sentence || !tools.length
-      ? [...doIt, ...tools, ...meant, ...cats, ...acts]
-      : [...tools, ...doIt, ...meant, ...cats, ...acts];
-  }, [q, docs, recs, favs, toolMap, actions, categories, categoryLabel, assistant.on, assistant.missing, assistant.label]);
+      ? [...doIt, ...tools, ...meant, ...missing, ...cats, ...acts]
+      : [...tools, ...doIt, ...meant, ...missing, ...cats, ...acts];
+  }, [q, docs, availableDocs, recs, favs, toolMap, actions, categories, categoryLabel, assistant.on, assistant.missing, assistant.label]);
 
   useEffect(() => { setActive(0); }, [q]);
   useEffect(() => {
@@ -147,8 +169,34 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
 
   if (!open) return null;
 
+  // Install in place, then open the tool: a pack tool turns its pack on;
+  // a store tool installs after the user has seen what it may do.
+  const install = async (t: AvailableTool) => {
+    if (!t.can_install || installing) return;
+    if (t.source === 'store') {
+      const ok = await confirm({ title: `Install ${t.name}?`, message: <InstallDetails tool={t} />, confirm: 'Install' });
+      if (!ok) return;
+    }
+    setInstalling(t.id);
+    try {
+      if (t.source === 'pack' && t.pack && backend.setPack) await backend.setPack(t.pack, true);
+      else if (backend.storeInstall) {
+        const bad = reportError(await backend.storeInstall(t.id));
+        if (bad) throw new Error(bad);
+      } else throw new Error('Installing tools is not supported here.');
+      await reloadTools();
+      onClose();
+      navigate(href.tool(t.id));
+    } catch (e) {
+      toast.error(`${t.name}: ${errorText(e)}`);
+    } finally {
+      setInstalling(null);
+    }
+  };
+
   const choose = (it: Item | undefined) => {
     if (!it) return;
+    if (it.available) { void install(it.available); return; }
     onClose();
     it.run();
   };
@@ -211,6 +259,10 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
                     {it.sub && <span className="palette-item-sub">{it.sub}</span>}
                   </span>
                   {unavailable && <span className="palette-item-warn">{unavailable}</span>}
+                  {it.available && <span className="badge badge-outline">Not installed</span>}
+                  {it.available && (it.available.can_install
+                    ? <Button size="sm" loading={installing === it.available.id} disabled={!!installing} onClick={(e) => { e.stopPropagation(); void install(it.available!); }}>Install</Button>
+                    : <span className="palette-item-warn">Ask your admin</span>)}
                   {it.hint && <span className="palette-item-hint">{it.hint}</span>}
                   {i === active && <CornerDownLeft size={14} aria-hidden className="palette-enter" />}
                 </div>
@@ -225,8 +277,19 @@ export function CommandPalette({ open, onClose, initialQuery = '' }: { open: boo
           <span><Kbd>Esc</Kbd> close</span>
         </div>
       </div>
+      {confirmNode}
     </div>,
     document.body,
+  );
+}
+
+function InstallDetails({ tool }: { tool: AvailableTool }) {
+  return (
+    <>
+      <span style={{ display: 'block' }}>{tool.description}</span>
+      <span style={{ display: 'block' }}><strong>May:</strong> {tool.permissions.length ? tool.permissions.join(', ') : 'nothing beyond its inputs'}</span>
+      <span style={{ display: 'block' }}><strong>Needs:</strong> {tool.requires.length ? tool.requires.join(', ') : 'no other programs'}</span>
+    </>
   );
 }
 

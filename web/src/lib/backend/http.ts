@@ -1,4 +1,4 @@
-import type { ExtensionReport, ExtensionSettings, StoreResult } from '../types';
+import type { AvailableTool, ExtensionReport, ExtensionSettings, StoreResult } from '../types';
 import type {
   AdminConfig, Artifact, AuditRow, Category, DepInfo, FileView, JobView, Me, ModelDownload, ModelInfo,
   NewToken, Policy, Role, Status, ToolErrorView, ToolInfo, TokenRow, UserRow,
@@ -332,6 +332,7 @@ export class HttpBackend implements Backend {
   configureExtension(id: string, values: Record<string, unknown>) {
     return this.request<ExtensionSettings>('PUT', `/extensions/${encodeURIComponent(id)}/settings`, values);
   }
+  availableTools() { return this.get<{ tools: AvailableTool[] }>('/tools/available'); }
   storeSearch(query = '') { return this.get<StoreResult>(`/store?q=${encodeURIComponent(query)}`); }
   storeInstalled() { return this.get<StoreResult>('/store/installed'); }
   storeInstall(id: string) { return this.post<ExtensionReport>('/store/install', { id }); }

@@ -64,7 +64,7 @@ use crate::deps::dep_spec;
 use crate::engine::setup_message;
 use crate::error::{ToolError, ToolResult};
 pub use crate::manifest_http::RecordedResponse;
-use crate::manifest_http::{HttpOutputDecl, HttpRequest, HttpSection, TableSection};
+use crate::manifest_http::{HttpOutputDecl, HttpRequest, HttpSection, PickDecl, TableSection};
 use crate::params::Params;
 use crate::policy::FsPolicy;
 use crate::spec::{
@@ -161,10 +161,15 @@ struct OutputSection {
     body: Option<String>,
     /// `[http]`: data fields picked from a JSON response by JSON path.
     #[serde(default)]
-    json: BTreeMap<String, String>,
+    json: BTreeMap<String, PickDecl>,
     /// `[http]`: rows picked from a JSON response.
     #[serde(default)]
     table: Option<TableSection>,
+    /// `[http]`: text output filled from the picked fields.
+    text: Option<String>,
+    /// `[http]`: named value -> label maps for json fields and columns.
+    #[serde(default)]
+    labels: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 /// One `[output.extract]` field: a pattern whose first capture group (or
@@ -393,8 +398,13 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
         (None, Some(http)) => return parse_http_manifest(m, http, category, source, text),
         (Some(c), None) => c,
     };
-    if m.output.body.is_some() || !m.output.json.is_empty() || m.output.table.is_some() {
-        return Err("[output] body, json and table are for [http] manifests".into());
+    if m.output.body.is_some()
+        || !m.output.json.is_empty()
+        || m.output.table.is_some()
+        || m.output.text.is_some()
+        || !m.output.labels.is_empty()
+    {
+        return Err("[output] body, json, table, text and labels are for [http] manifests".into());
     }
     if m.output.text.is_some() && m.output.stdout.is_some() {
         return Err("[output] takes stdout or text, not both".into());
@@ -668,6 +678,8 @@ fn parse_http_manifest(
             body: output.body,
             json: output.json,
             table: output.table,
+            text: output.text,
+            labels: output.labels,
         },
         &spec.params,
         &spec.settings,
@@ -1062,24 +1074,26 @@ impl Tool for ExternalTool {
     async fn run(&self, ctx: ToolContext, params: Params) -> ToolResult<ToolOutput> {
         let settings = self.setting_values();
         if let Some(http) = &self.http {
-            let lookup =
-                |ph: &str| -> ToolResult<String> {
-                    match ph.strip_prefix("settings.") {
-                        Some(name) => settings.get(name).map(value_str).ok_or_else(|| {
-                            ToolError::NotConfigured {
-                                message: format!(
-                                    "{} (missing: {name})",
-                                    setup_message(&self.spec.name)
-                                ),
-                            }
-                        }),
-                        None => params
-                            .get(ph)
-                            .filter(|v| !v.is_null())
-                            .map(value_str)
-                            .ok_or_else(|| ToolError::invalid(ph, "is required by the request")),
-                    }
+            // `{a|settings.b}` takes the first alternative that has a value.
+            let lookup = |ph: &str| -> ToolResult<String> {
+                let value = |alt: &str| match alt.strip_prefix("settings.") {
+                    Some(name) => settings.get(name),
+                    None => params.get(alt).filter(|v| !v.is_null()),
                 };
+                if let Some(v) = ph.split('|').find_map(value) {
+                    return Ok(value_str(v));
+                }
+                let last = ph.rsplit('|').next().unwrap_or(ph);
+                match last.strip_prefix("settings.") {
+                    Some(name) => Err(ToolError::NotConfigured {
+                        message: format!("{} (missing: {name})", setup_message(&self.spec.name)),
+                    }),
+                    None => Err(ToolError::invalid(
+                        ph.split('|').next().unwrap_or(ph),
+                        "is required by the request",
+                    )),
+                }
+            };
             return http.run(&ctx, self.recorded.as_ref(), &lookup).await;
         }
         if let Some(fixture) = &self.recorded_command {
