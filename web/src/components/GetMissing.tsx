@@ -107,6 +107,13 @@ export function useErrorOffer(error: ToolErrorView, tool: ToolInfo | undefined):
   const [named, setNamed] = useState<Availability | null>(null);
   const model = error.code === 'missing_model' ? error.model : undefined;
   const dep = error.code === 'missing_dependency' ? error.dependency : undefined;
+  // Look again once something is installed, so a finished download stops being offered.
+  const [installs, setInstalls] = useState(0);
+  useEffect(() => {
+    const bump = () => setInstalls((n) => n + 1);
+    window.addEventListener('dgb:tools-changed', bump);
+    return () => window.removeEventListener('dgb:tools-changed', bump);
+  }, []);
   useEffect(() => {
     let live = true;
     setNamed(null);
@@ -122,7 +129,7 @@ export function useErrorOffer(error: ToolErrorView, tool: ToolInfo | undefined):
       }).catch(() => {});
     }
     return () => { live = false; };
-  }, [backend, model, dep]);
+  }, [backend, model, dep, installs]);
   return named ?? tool?.availability;
 }
 
