@@ -226,6 +226,23 @@ pub fn model_spec(id: &str) -> Option<&'static ModelSpec> {
     KNOWN_MODELS.iter().find(|m| m.id == id)
 }
 
+/// The model offered first when a group has none installed: a good everyday
+/// choice, not the smallest or the most accurate.
+const RECOMMENDED: &[(&str, &str)] = &[
+    ("whisper", "whisper-base"),
+    ("piper", "piper-en_US-lessac-medium"),
+    ("rembg", "rembg-u2net"),
+];
+
+/// The recommended model of a group (its first model when none is named).
+pub fn recommended_model(group: &str) -> Option<&'static ModelSpec> {
+    RECOMMENDED
+        .iter()
+        .find(|(g, _)| *g == group)
+        .and_then(|(_, id)| model_spec(id))
+        .or_else(|| KNOWN_MODELS.iter().find(|m| m.group == group))
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelStatus {
     #[serde(flatten)]
@@ -410,6 +427,23 @@ impl ModelRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_group_has_a_recommended_model_in_that_group() {
+        for g in KNOWN_MODELS.iter().map(|m| m.group) {
+            assert_eq!(recommended_model(g).unwrap().group, g);
+        }
+        assert_eq!(recommended_model("whisper").unwrap().id, "whisper-base");
+        assert_eq!(
+            recommended_model("piper").unwrap().id,
+            "piper-en_US-lessac-medium"
+        );
+        assert_eq!(
+            recommended_model("face-detection").unwrap().id,
+            "seeta-face"
+        );
+        assert!(recommended_model("nope").is_none());
+    }
 
     #[test]
     fn tinydiarize_model_comes_from_its_own_repo() {

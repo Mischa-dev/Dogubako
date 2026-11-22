@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { ChevronRight, CircleAlert, Ban, Package } from 'lucide-react';
-import type { ToolErrorView } from '../lib/types';
+import type { ToolErrorView, ToolInfo } from '../lib/types';
+import { GetMissing } from '../components/GetMissing';
 import { describeError } from '../lib/errors';
 import { href } from '../lib/router';
 import { CopyButton, cx } from '../components/ui';
 
-export function ErrorView({ error }: { error: ToolErrorView }) {
+/** `tool` lets a missing engine or model error offer its download in place. */
+export function ErrorView({ error, tool }: { error: ToolErrorView; tool?: ToolInfo }) {
   const f = describeError(error);
   const [open, setOpen] = useState(false);
   const cancelled = error.code === 'cancelled';
@@ -22,6 +24,7 @@ export function ErrorView({ error }: { error: ToolErrorView }) {
             <CopyButton text={f.hint} iconOnly label="Copy hint" />
           </div>
         )}
+        {tool && (error.code === 'missing_dependency' || error.code === 'missing_model') && <GetMissing availability={tool.availability} />}
         {(error.code === 'missing_dependency' || error.code === 'missing_model') && (
           <a className="link-sm" href={href.settings(error.code === 'missing_model' ? 'models' : 'dependencies')}>
             Open {error.code === 'missing_model' ? 'Models' : 'Dependencies'} settings

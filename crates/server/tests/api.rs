@@ -319,6 +319,32 @@ async fn create_agent_token(t: &T, cookie: &str, csrf: &str, name: &str, policy:
 }
 
 #[tokio::test]
+async fn me_names_the_admins_to_ask() {
+    let t = setup(AuthMode::Required);
+    let (cookie, csrf) = owner_session(&t).await;
+    let token = create_agent_token(
+        &t,
+        &cookie,
+        &csrf,
+        "bot",
+        json!({"allow": ["*"], "permissions": []}),
+    )
+    .await;
+    let bearer = format!("Bearer {token}");
+    let r = call(
+        &t.app,
+        Method::GET,
+        "/api/v1/auth/me",
+        &[("authorization", bearer.as_str())],
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["user"]["is_admin"], false);
+    assert_eq!(r.body["admins"], json!(["owner"]));
+}
+
+#[tokio::test]
 async fn agent_permissions_enforced() {
     let t = setup(AuthMode::Required);
     let (cookie, csrf) = owner_session(&t).await;

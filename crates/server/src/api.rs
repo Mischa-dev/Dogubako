@@ -252,6 +252,13 @@ fn user_json(u: &UserRow) -> Value {
 
 async fn me(State(s): State<AppState>, p: Principal) -> Json<Value> {
     let used = s.db.storage_used(&p.user_id);
+    // Who a user can ask to install a program or model.
+    let admins: Vec<String> =
+        s.db.users()
+            .into_iter()
+            .filter(|u| u.role.is_admin() && !u.disabled)
+            .map(|u| u.username)
+            .collect();
     Json(json!({
         "user": {"id": p.user_id, "username": p.username, "role": p.role, "is_admin": p.is_admin(), "via": p.via},
         "csrf_token": p.csrf,
@@ -260,6 +267,7 @@ async fn me(State(s): State<AppState>, p: Principal) -> Json<Value> {
         "token_scope": p.token_scope,
         "storage": {"used": used, "quota": p.quota_bytes(s.cfg.user_quota_mb)},
         "max_upload": p.max_upload_bytes(s.cfg.max_upload_mb),
+        "admins": admins,
     }))
 }
 
