@@ -19,7 +19,7 @@ export const ResultView = memo(function ResultView({ job, tool, input, live, hid
   collapseArtifacts?: boolean;
 }) {
   if (job.status === 'failed' || job.status === 'cancelled') {
-    return <div className="result"><ErrorView error={job.error ?? { code: job.status === 'cancelled' ? 'cancelled' : 'failed' }} /></div>;
+    return <div className="result"><ErrorView error={job.error ?? { code: job.status === 'cancelled' ? 'cancelled' : 'failed' }} tool={tool} /></div>;
   }
   const r = job.result;
   if (!r) return null;

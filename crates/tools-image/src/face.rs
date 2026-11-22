@@ -29,6 +29,7 @@ fn model_path(ctx: &ToolContext) -> ToolResult<std::path::PathBuf> {
         .ok_or_else(|| ToolError::MissingModel {
             message: "install the 'seeta-face' face detection model (models → face-detection)"
                 .into(),
+            model: Some("seeta-face".into()),
         })
 }
 

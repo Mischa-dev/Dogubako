@@ -347,3 +347,6 @@ a.kv-pill:hover { border-color: var(--border-strong); color: var(--text); }
 .picker-item:hover, .picker-item:focus-visible { background: var(--hover); }
 .picker-item svg { color: var(--text-3); flex: none; }
 .picker-name { flex: 1; font-weight: 500; }
+
+.get-missing { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.get-missing-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
