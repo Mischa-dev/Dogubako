@@ -245,12 +245,17 @@ pub async fn install(
         )));
     };
     let mut r = ExtensionReport::from_spec(loaded.spec(), engine);
-    r.file = Some(file);
+    r.file = Some(file.clone());
     r.sha256 = sha;
     r.trusted = true;
     r.loaded = true;
     r.replaced = !existing.is_empty();
-    r.tests = run_tests(engine, loaded.spec(), tool.tests()).await;
+    let src = Source {
+        dir,
+        file: &file,
+        text,
+    };
+    r.tests = run_tests(engine, &src, loaded.spec(), tool.tests()).await;
     Ok(r.finish())
 }
 
@@ -292,7 +297,12 @@ pub async fn test(engine: &Engine, dir: &Path, id: &str) -> ToolResult<Extension
                 .unwrap_or_else(|| format!("'{id}' is not loaded")),
         );
     } else {
-        r.tests = run_tests(engine, &spec, parsed.tests()).await;
+        let src = Source {
+            dir,
+            file: &status.file,
+            text: &text,
+        };
+        r.tests = run_tests(engine, &src, &spec, parsed.tests()).await;
     }
     Ok(r.finish())
 }
@@ -435,15 +445,33 @@ fn manifests_with_id(dir: &Path, id: &str) -> Vec<PathBuf> {
     out
 }
 
-async fn run_tests(engine: &Engine, spec: &ToolSpec, tests: &[ManifestTest]) -> Vec<TestResult> {
+/// The installed manifest a test run comes from, so a test with a recorded
+/// HTTP response can run its own copy of the tool against it.
+struct Source<'a> {
+    dir: &'a Path,
+    file: &'a str,
+    text: &'a str,
+}
+
+async fn run_tests(
+    engine: &Engine,
+    src: &Source<'_>,
+    spec: &ToolSpec,
+    tests: &[ManifestTest],
+) -> Vec<TestResult> {
     let mut out = vec![];
     for t in tests {
-        out.push(run_test(engine, spec, t).await);
+        out.push(run_test(engine, src, spec, t).await);
     }
     out
 }
 
-async fn run_test(engine: &Engine, spec: &ToolSpec, t: &ManifestTest) -> TestResult {
+async fn run_test(
+    engine: &Engine,
+    src: &Source<'_>,
+    spec: &ToolSpec,
+    t: &ManifestTest,
+) -> TestResult {
     let started = Instant::now();
     let result = |status, error: Option<String>| TestResult {
         name: t.name.clone(),
@@ -451,7 +479,37 @@ async fn run_test(engine: &Engine, spec: &ToolSpec, t: &ManifestTest) -> TestRes
         error,
         duration_ms: started.elapsed().as_millis() as u64,
     };
-    let avail = engine.availability(spec);
+    let tool: Arc<dyn Tool> = if t.http.is_some() || !t.settings.is_empty() {
+        let own = parse_manifest(src.text, src.file)
+            .map_err(|e| ToolError::invalid("manifest", e))
+            .and_then(|tool| {
+                let tool = tool.with_settings_store(SettingsStore::for_extensions(src.dir));
+                let tool = match &t.http {
+                    Some(fixture) => tool.with_recorded_response(fixture.response()),
+                    None => tool,
+                };
+                if t.settings.is_empty() {
+                    Ok(tool)
+                } else {
+                    tool.with_setting_values(&t.settings)
+                }
+            });
+        match own {
+            Ok(tool) => Arc::new(tool),
+            Err(e) => return result(TestStatus::Failed, Some(e.to_string())),
+        }
+    } else {
+        match engine.find(&spec.id) {
+            Ok(tool) => tool,
+            Err(e) => return result(TestStatus::Failed, Some(e.to_string())),
+        }
+    };
+    let mut avail = engine.availability(spec);
+    avail.unset_settings = tool.unset_settings();
+    avail.available = avail.platform_supported
+        && avail.missing.is_empty()
+        && avail.missing_model.is_none()
+        && avail.unset_settings.is_empty();
     if !avail.available {
         let mut why = vec![];
         if !avail.platform_supported {
@@ -502,18 +560,21 @@ async fn run_test(engine: &Engine, spec: &ToolSpec, t: &ManifestTest) -> TestRes
     }
     let resolver = LocalFileResolver::unrestricted();
     let run = engine
-        .run(RunRequest {
-            tool_id: &spec.id,
-            params,
-            resolver: &resolver,
-            out_dir: work.path().join("out"),
-            permissions: PermissionSet::all(),
-            authorize: None,
-            progress: None,
-            cancel: CancellationToken::new(),
-            timeout: Some(Duration::from_secs(TEST_TIMEOUT_SECS)),
-            fs: None,
-        })
+        .run_tool(
+            tool,
+            RunRequest {
+                tool_id: &spec.id,
+                params,
+                resolver: &resolver,
+                out_dir: work.path().join("out"),
+                permissions: PermissionSet::all(),
+                authorize: None,
+                progress: None,
+                cancel: CancellationToken::new(),
+                timeout: Some(Duration::from_secs(TEST_TIMEOUT_SECS)),
+                fs: None,
+            },
+        )
         .await;
     match check(t, run.map(|(o, _)| o)) {
         Ok(()) => result(TestStatus::Passed, None),
@@ -705,6 +766,86 @@ expect = { json = { "$.a[0]" = 1, "a[1].b" = "c" } }
 
         let again = test(&e, dir.path(), "text.ext_echo").await.unwrap();
         assert!(again.passed && again.tests.len() == 2, "{again:?}");
+    }
+
+    const HTTP_M: &str = r#"
+[tool]
+id = "data.ext_weather"
+name = "Weather"
+version = "1.0.0"
+category = "data"
+
+[http]
+url = "https://api.example.com/v1/forecast?lat={settings.lat}&q={city}"
+
+[output]
+json = { temp = "$.current.temp" }
+
+[[params]]
+name = "city"
+type = "text"
+
+[[settings]]
+name = "lat"
+type = "text"
+required = true
+
+[[tests]]
+name = "maps the recorded response"
+params = { city = "Boulder" }
+settings = { lat = "40.0" }
+http = { json = { current = { temp = 21.5 } } }
+expect = { json = { "$.temp" = 21.5 } }
+
+[[tests]]
+name = "fails on a 500"
+params = { city = "x" }
+settings = { lat = "1" }
+http = { status = 500, body = "down" }
+expect = { error = "external_failure" }
+
+[[tests]]
+name = "needs the user's settings"
+params = { city = "x" }
+http = { json = {} }
+"#;
+
+    #[tokio::test]
+    async fn http_tests_use_recorded_responses_and_their_own_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let e = engine(dir.path());
+        let r = install(&e, dir.path(), HTTP_M, InstallOptions::default())
+            .await
+            .unwrap();
+        assert!(r.loaded && r.trusted, "{r:?}");
+        let status: Vec<_> = r.tests.iter().map(|t| t.status).collect();
+        assert_eq!(
+            status,
+            [TestStatus::Passed, TestStatus::Passed, TestStatus::Skipped],
+            "{:?}",
+            r.tests
+        );
+        assert!(r.tests[2].error.as_deref().unwrap().contains("lat"));
+        assert!(r.passed);
+    }
+
+    #[test]
+    fn http_fixtures_are_only_for_http_manifests() {
+        let cmd = M.replacen("[[tests]]", "[[tests]]\nhttp = { body = \"x\" }", 1);
+        assert!(parse_manifest(&cmd, "x")
+            .map(|_| ())
+            .unwrap_err()
+            .contains("only for [http] manifests"));
+        let both = HTTP_M.replace("http = { json = {} }", "http = { json = {}, body = \"x\" }");
+        assert!(parse_manifest(&both, "x")
+            .map(|_| ())
+            .unwrap_err()
+            .contains("not both"));
+        let bad = HTTP_M.replace("settings = { lat = \"1\" }", "settings = { nope = \"1\" }");
+        assert!(parse_manifest(&bad, "x")
+            .map(|_| ())
+            .unwrap_err()
+            .contains("unknown setting 'nope'"));
     }
 
     #[cfg(unix)]

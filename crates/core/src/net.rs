@@ -47,6 +47,16 @@ impl reqwest::dns::Resolve for GuardedResolver {
 
 /// Build an HTTP client honoring the policy.
 pub fn guarded_client(policy: NetPolicy) -> ToolResult<reqwest::Client> {
+    build_guarded(policy, false)
+}
+
+/// Like [`guarded_client`], but redirects must stay on the original origin,
+/// so request headers (credentials) never reach another host.
+pub fn guarded_client_same_origin(policy: NetPolicy) -> ToolResult<reqwest::Client> {
+    build_guarded(policy, true)
+}
+
+fn build_guarded(policy: NetPolicy, same_origin: bool) -> ToolResult<reqwest::Client> {
     let policy = Arc::new(policy);
     let redirect_policy = policy.clone();
     reqwest::Client::builder()
@@ -66,6 +76,15 @@ pub fn guarded_client(policy: NetPolicy) -> ToolResult<reqwest::Client> {
                 return attempt.error("too many redirects");
             }
             let url = attempt.url().clone();
+            if same_origin
+                && attempt
+                    .previous()
+                    .first()
+                    .is_some_and(|first| first.origin() != url.origin())
+            {
+                return attempt
+                    .error("cross-origin redirect refused: the request sends manifest headers");
+            }
             match url.host_str() {
                 Some(h) if redirect_policy.check_host(h).is_ok() => {
                     if !matches!(url.scheme(), "http" | "https") {
