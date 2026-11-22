@@ -830,6 +830,25 @@ expect = {{ text = "HI" }}
         assert_eq!(tools[0].installed_version.as_deref(), Some("1.1.0"));
         assert!(!tools[0].update_available);
 
+        // A manifest that fails its SHA check is reported, not raised.
+        publish(root.path(), "1.2.0");
+        let idx = load_index(&url, &ext, &net).await.unwrap();
+        std::fs::write(
+            root.path().join("public/text.shout/manifest.toml"),
+            manifest("9.9.9"),
+        )
+        .unwrap();
+        let reports = update(&eng, &ext, &idx, None).await.unwrap();
+        assert_eq!(reports.len(), 1);
+        assert!(!reports[0].passed);
+        assert!(reports[0].error.as_deref().unwrap().contains("refusing"));
+        assert_eq!(
+            annotate(&idx.index, &eng, &ext)[0]
+                .installed_version
+                .as_deref(),
+            Some("1.1.0")
+        );
+
         // The index can't be fetched: search uses the cache, install refuses.
         std::fs::remove_file(root.path().join("public/index.json")).unwrap();
         let idx = load_index(&url, &ext, &net).await.unwrap();
