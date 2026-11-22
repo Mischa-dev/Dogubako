@@ -46,6 +46,21 @@ describe('Settings → Tool store', () => {
     expect(calls).toContain('update:data.weather');
   });
 
+  it('does not offer an entry that needs a newer Dogubako, and says why', async () => {
+    const why = 'needs a newer Dogubako';
+    result = { index: online, tools: [
+      tool({ min_dogubako: '0.2.0', unsupported: why }),
+      tool({ id: 'text.define', name: 'Define', installed: true, installed_version: '1.0.0', min_dogubako: '0.3.0', unsupported: why }),
+    ] };
+    render(<ToolStore />);
+    await flush();
+    expect(screen.queryByRole('button', { name: /Install|Update/ })).toBeNull();
+    expect(screen.getByText('Needs Dogubako 0.2.0')).toBeTruthy();
+    expect(screen.getByText(/Needs Dogubako 0\.2\.0 or newer\. Update Dogubako to install it/)).toBeTruthy();
+    expect(screen.getByText(/Version 1\.1\.0 needs Dogubako 0\.3\.0 or newer/)).toBeTruthy();
+    expect(screen.getByText('Installed')).toBeTruthy();
+  });
+
   it('searches the cached index offline and turns Install off', async () => {
     result = { index: { ...online, offline: true, error: 'no route' }, tools: [tool()] };
     render(<ToolStore />);

@@ -369,7 +369,7 @@ pub fn spec(engine: &Engine) -> Value {
         "/api/v1/store",
         "get",
         op(
-            "Search the official tool store (?q=words); returns {index: {url, offline, fetched_at}, tools: [{id, name, version, sha256, installed, installed_version, update_available, ...}]}. Uses the cached index when offline (admin)",
+            "Search the official tool store (?q=words); returns {index: {url, offline, fetched_at}, tools: [{id, name, version, sha256, installed, installed_version, update_available, min_dogubako?, unsupported?, ...}]}; `unsupported` says why an entry needing a newer Dogubako can't be installed or updated to. Uses the cached index when offline (admin)",
             "admin",
             json!({}),
         ),

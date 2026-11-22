@@ -146,10 +146,25 @@ pub async fn run(m: &ArgMatches, out: &Out) -> i32 {
         }
         Some(("update", s)) => {
             let id = s.get_one::<String>("id").map(String::as_str);
+            let mut skipped = 0;
+            if id.is_none() {
+                for t in store::annotate(&index.index, &engine, &dir) {
+                    if let (true, Some(why)) = (t.installed, &t.unsupported) {
+                        skipped += 1;
+                        if !out.json && !out.quiet {
+                            eprintln!("skipped: {why}");
+                        }
+                    }
+                }
+            }
             match store::update(&engine, &dir, &index, id).await {
                 Ok(reports) if reports.is_empty() => {
                     if out.json {
                         println!("[]");
+                    } else if skipped > 0 {
+                        println!(
+                            "no updates this Dogubako can install; {skipped} need a newer Dogubako"
+                        );
                     } else {
                         println!("everything from the store is up to date");
                     }
@@ -210,6 +225,9 @@ fn print_tools(out: &Out, index: &LoadedIndex, tools: &[StoreTool], empty: &str)
         };
         println!("{} {}{state}", t.entry.id, t.entry.version);
         println!("    {}", t.entry.description);
+        if let Some(why) = &t.unsupported {
+            println!("    {why}");
+        }
     }
 }
 

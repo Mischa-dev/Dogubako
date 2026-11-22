@@ -15,6 +15,9 @@ Reviewed extension manifests, one folder per tool: `store/<id>/manifest.toml`
   ```
 
   CI fails when `site/public/store/` is stale (`dogubako store build --check`).
+* A manifest that uses manifest fields added since the last release sets
+  `min_dogubako = "<next release>"` in `[tool]`, so older apps don't offer it
+  (as an install or an update) and say why instead.
 * The index is published with the docs site at
   https://docs.dogubako.app/store/index.json. Installs refuse a manifest whose
   SHA-256 differs from its index entry.

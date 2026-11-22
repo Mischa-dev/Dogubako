@@ -298,9 +298,13 @@ export interface AvailableTool {
 export interface StoreTool {
   id: string; name: string; description: string; keywords: string[]; category: string;
   version: string; sha256: string; permissions: string[]; requires: string[]; platforms: string[]; url: string;
+  /** Oldest Dogubako that can load this entry. */
+  min_dogubako?: string;
   installed: boolean;
   installed_version?: string;
   update_available: boolean;
+  /** Why this app can't install or update to the entry (it needs a newer Dogubako). */
+  unsupported?: string;
 }
 /** The store index in use: `offline` means the cached copy (fetching failed). */
 export interface StoreIndexInfo { url: string; offline: boolean; fetched_at: number; error?: string }
