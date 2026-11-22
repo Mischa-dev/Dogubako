@@ -443,6 +443,7 @@ async fn transcribe_audio(
     if ctx.models().installed_in_group("whisper").is_empty() {
         return Err(ToolError::MissingModel {
             message: format!("{why}: download a Whisper model in Settings → Models"),
+            model: dogubako_core::models::recommended_model("whisper").map(|m| m.id.to_string()),
         });
     }
     let max = p.int_or("max_minutes", 240).max(1);

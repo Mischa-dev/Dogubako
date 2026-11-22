@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight, CircleAlert, Ban, Package } from 'lucide-react';
 import type { ToolErrorView, ToolInfo } from '../lib/types';
-import { GetMissing } from '../components/GetMissing';
+import { GetMissing, useErrorOffer } from '../components/GetMissing';
 import { notifyToolsChanged } from '../lib/app';
 import { describeError } from '../lib/errors';
 import { href } from '../lib/router';
@@ -29,7 +29,7 @@ export function ErrorView({ error, tool }: { error: ToolErrorView; tool?: ToolIn
             <CopyButton text={f.hint} iconOnly label="Copy hint" />
           </div>
         )}
-        {tool && (error.code === 'missing_dependency' || error.code === 'missing_model') && <GetMissing availability={tool.availability} />}
+        {tool && missing && <ErrorOffer error={error} tool={tool} />}
         {(error.code === 'missing_dependency' || error.code === 'missing_model') && (
           <a className="link-sm" href={href.settings(error.code === 'missing_model' ? 'models' : 'dependencies')}>
             Open {error.code === 'missing_model' ? 'Models' : 'Dependencies'} settings
@@ -46,4 +46,8 @@ export function ErrorView({ error, tool }: { error: ToolErrorView; tool?: ToolIn
       </div>
     </div>
   );
+}
+
+function ErrorOffer({ error, tool }: { error: ToolErrorView; tool: ToolInfo }) {
+  return <GetMissing availability={useErrorOffer(error, tool)} />;
 }

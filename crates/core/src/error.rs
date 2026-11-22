@@ -15,7 +15,12 @@ pub enum ToolError {
     #[error("missing dependency '{dependency}': {hint}")]
     MissingDependency { dependency: String, hint: String },
     #[error("missing model: {message}")]
-    MissingModel { message: String },
+    MissingModel {
+        message: String,
+        /// The model to install, when the tool knows which one it needs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+    },
     #[error("unsupported: {message}")]
     Unsupported { message: String },
     #[error("permission denied: {message}")]

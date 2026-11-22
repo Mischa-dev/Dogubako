@@ -132,6 +132,8 @@ export interface ToolErrorView {
   param?: string | null;
   dependency?: string;
   hint?: string;
+  /** missing_model: the model the run needed, when the tool knows. */
+  model?: string;
   program?: string;
   exit_code?: number | null;
   stderr?: string;

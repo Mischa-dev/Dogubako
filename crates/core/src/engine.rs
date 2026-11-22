@@ -311,7 +311,10 @@ impl Engine {
             });
         }
         if let Some(m) = avail.missing_model {
-            return Err(ToolError::MissingModel { message: m });
+            return Err(ToolError::MissingModel {
+                message: m,
+                model: avail.recommended_model.map(|r| r.id),
+            });
         }
 
         let fs = req.fs.clone().unwrap_or_else(|| self.config.fs.clone());
@@ -768,6 +771,12 @@ mod tests {
         let v = serde_json::to_value(engine.info(&spec).availability).unwrap();
         assert_eq!(v["recommended_model"]["name"], "Whisper base");
         assert!(v["missing"][0].get("downloadable").is_none());
+
+        let e = ToolError::MissingModel {
+            message: "x".into(),
+            model: Some(m.id.clone()),
+        };
+        assert_eq!(serde_json::to_value(&e).unwrap()["model"], "whisper-base");
 
         let ok = ToolSpec::new("text.fake", "Fine", Category::Text).describe("needs nothing");
         let v = serde_json::to_value(engine.availability(&ok)).unwrap();

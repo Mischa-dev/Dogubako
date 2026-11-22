@@ -91,9 +91,11 @@ describe('one-click engine and model downloads', () => {
       models: vi.fn(async () => ({ models: [], downloads: [{ model: 'whisper-base', done: 1, total: 1, status: ++calls > 1 ? 'done' : 'downloading' }] })),
     };
     app.state = { backend, isServer: true, isAdmin: true, me: null };
-    render(<GetMissing availability={modelMissing} />);
+    const view = render(<GetMissing availability={modelMissing} />);
     fireEvent.click(screen.getByRole('button', { name: /Download Whisper base/ }));
+    view.unmount(); // leaving the page does not lose the download
     await waitFor(() => expect(app.changed).toHaveBeenCalled(), { timeout: 4000 });
+    expect(backend.models).toHaveBeenCalledTimes(2);
     expect(backend.modelDownload).toHaveBeenCalledWith('whisper-base');
   });
 
@@ -117,5 +119,35 @@ describe('one-click engine and model downloads', () => {
     const tool = { id: 'audio.tts', name: 'Speak', availability: { available: true, platform_supported: true } } as unknown as ToolInfo;
     render(<ErrorView error={{ code: 'missing_model', message: 'Model not installed' }} tool={tool} />);
     expect(app.changed).toHaveBeenCalledTimes(1);
+  });
+
+  it('joins a download already running instead of starting another', async () => {
+    let finish!: () => void;
+    const b = desktop({ modelDownload: vi.fn(() => new Promise<void>((r) => { finish = r; })) });
+    render(<><GetMissing availability={modelMissing} /><GetMissing availability={modelMissing} /></>);
+    const [a, c] = screen.getAllByRole('button', { name: /Download Whisper base/ });
+    fireEvent.click(a);
+    fireEvent.click(c);
+    await waitFor(() => expect(b.modelDownload).toHaveBeenCalledTimes(1));
+    finish();
+    await waitFor(() => expect(app.changed).toHaveBeenCalledTimes(1));
+  });
+
+  it('offers the model a failed run named when an option needs its own', async () => {
+    desktop({
+      models: vi.fn(async () => ({ models: [{ id: 'whisper-small.en-tdrz', group: 'whisper', name: 'Whisper small.en (tinydiarize)', size_bytes: 487_614_201, installed: false }], downloads: [] })),
+    });
+    const tool = { id: 'audio.transcribe', name: 'Transcribe', availability: { available: true, platform_supported: true } } as unknown as ToolInfo;
+    render(<ErrorView error={{ code: 'missing_model', message: 'speaker turns', model: 'whisper-small.en-tdrz' }} tool={tool} />);
+    expect(await screen.findByRole('button', { name: 'Download Whisper small.en (tinydiarize) (465 MB)' })).toBeTruthy();
+  });
+
+  it('offers a downloadable engine a failed run named', async () => {
+    desktop({
+      deps: vi.fn(async () => ({ dependencies: [{ id: 'whisper', name: 'whisper.cpp', found: false, downloadable: 'whisper', download_bytes: 5 * 1024 * 1024 }] })),
+    });
+    const tool = { id: 'web.transcript', name: 'URL transcript', availability: { available: true, platform_supported: true } } as unknown as ToolInfo;
+    render(<ErrorView error={{ code: 'missing_dependency', dependency: 'whisper', hint: 'needs whisper.cpp' }} tool={tool} />);
+    expect(await screen.findByRole('button', { name: 'Download whisper.cpp (5.0 MB)' })).toBeTruthy();
   });
 });

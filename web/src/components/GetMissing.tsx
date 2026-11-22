@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Download } from 'lucide-react';
-import type { Availability } from '../lib/types';
+import type { Availability, ToolErrorView, ToolInfo } from '../lib/types';
 import type { Backend } from '../lib/backend/types';
 import { useApp, notifyToolsChanged } from '../lib/app';
 import { href } from '../lib/router';
@@ -20,7 +20,7 @@ interface ModelProgressBackend {
   onModelProgress(cb: (p: Progress) => void): Promise<() => void>;
 }
 
-interface Offer {
+export interface Offer {
   kind: 'engine' | 'model';
   id: string;
   name: string;
@@ -44,8 +44,25 @@ export function downloadOffers(a: Availability | undefined, backend: Backend): O
 
 const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
 
+/** Downloads in flight, kept outside components so one survives navigation and is never started twice. */
+interface Job { done: number; total: number; running: boolean; error?: string }
+const jobs = new Map<string, Job>();
+const running = new Map<string, Promise<void>>();
+const listeners = new Set<() => void>();
+let version = 0;
+const keyOf = (o: Offer) => `${o.kind}:${o.id}`;
+function setJob(key: string, job: Job | null) {
+  if (job) jobs.set(key, job); else jobs.delete(key);
+  version++;
+  listeners.forEach((l) => l());
+}
+function useJobs() {
+  useSyncExternalStore((l) => { listeners.add(l); return () => { listeners.delete(l); }; }, () => version);
+  return jobs;
+}
+
 /** Download one engine or model, reporting progress; resolves once it is installed. */
-async function fetchOffer(backend: Backend, o: Offer, onProgress: (p: Progress) => void, alive: () => boolean) {
+async function fetchOffer(backend: Backend, o: Offer, onProgress: (p: Progress) => void) {
   if (o.kind === 'engine') {
     const engines = backend as unknown as EngineBackend;
     const stop = await engines.onEngineProgress?.((p) => { if (p.id === o.id) onProgress(p); });
@@ -57,9 +74,9 @@ async function fetchOffer(backend: Backend, o: Offer, onProgress: (p: Progress) 
     try { await backend.modelDownload(o.id); } finally { stop?.(); }
     return;
   }
-  // The server downloads in the background; follow it until it finishes.
-  await backend.modelDownload(o.id);
-  while (alive()) {
+  // The server downloads in the background (or already is, started elsewhere); follow it until it finishes.
+  try { await backend.modelDownload(o.id); } catch (e) { if (!/already downloading/i.test(errorText(e))) throw e; }
+  for (;;) {
     await sleep(1000);
     const { downloads } = await backend.models();
     const d = downloads.find((x) => x.model === o.id);
@@ -70,13 +87,49 @@ async function fetchOffer(backend: Backend, o: Offer, onProgress: (p: Progress) 
   }
 }
 
+/** Start (or join) the download of `o`. */
+export function startDownload(backend: Backend, o: Offer): Promise<void> {
+  const key = keyOf(o);
+  const cur = running.get(key);
+  if (cur) return cur;
+  setJob(key, { done: 0, total: o.bytes ?? 0, running: true });
+  const p = fetchOffer(backend, o, (pr) => setJob(key, { done: pr.done, total: pr.total, running: true }))
+    .then(() => { setJob(key, null); toast.success(`${o.name} is ready`); notifyToolsChanged(); })
+    .catch((e) => { setJob(key, { done: 0, total: 0, running: false, error: errorText(e) }); })
+    .finally(() => { running.delete(key); });
+  running.set(key, p);
+  return p;
+}
+
+/** What a failed run needs: the model or engine it named (an option may need its own), else the tool's own status. */
+export function useErrorOffer(error: ToolErrorView, tool: ToolInfo | undefined): Availability | undefined {
+  const { backend } = useApp();
+  const [named, setNamed] = useState<Availability | null>(null);
+  const model = error.code === 'missing_model' ? error.model : undefined;
+  const dep = error.code === 'missing_dependency' ? error.dependency : undefined;
+  useEffect(() => {
+    let live = true;
+    setNamed(null);
+    if (model) {
+      void backend.models().then(({ models }) => {
+        const m = models.find((x) => x.id === model && !x.installed);
+        if (live && m) setNamed({ available: false, platform_supported: true, recommended_model: { id: m.id, name: m.name, size_bytes: m.size_bytes } });
+      }).catch(() => {});
+    } else if (dep && (backend as Partial<EngineBackend>).engineInstall) {
+      void backend.deps().then(({ dependencies }) => {
+        const d = dependencies.find((x) => x.id === dep && x.downloadable && !x.found);
+        if (live && d) setNamed({ available: false, platform_supported: true, missing: [{ id: d.id, name: d.name, hint: d.install_hint ?? '', downloadable: d.downloadable, download_bytes: d.download_bytes }] });
+      }).catch(() => {});
+    }
+    return () => { live = false; };
+  }, [backend, model, dep]);
+  return named ?? tool?.availability;
+}
+
 /** One-click downloads for the engines and model a tool is missing, in place on the tool page and error view. */
 export function GetMissing({ availability }: { availability: Availability | undefined }) {
   const { backend, isServer, isAdmin, me } = useApp();
-  const [busy, setBusy] = useState<Progress | null>(null);
-  const [failed, setFailed] = useState<{ id: string; message: string } | null>(null);
-  const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+  const jobs = useJobs();
   const offers = downloadOffers(availability, backend);
   if (!offers.length) return null;
 
@@ -90,29 +143,16 @@ export function GetMissing({ availability }: { availability: Availability | unde
     );
   }
 
-  const get = async (o: Offer) => {
-    setFailed(null);
-    setBusy({ id: o.id, done: 0, total: o.bytes ?? 0 });
-    try {
-      await fetchOffer(backend, o, (p) => { if (mounted.current) setBusy(p); }, () => mounted.current);
-      toast.success(`${o.name} is ready`);
-      notifyToolsChanged();
-    } catch (e) {
-      if (mounted.current) setFailed({ id: o.id, message: errorText(e) });
-    } finally {
-      if (mounted.current) setBusy(null);
-    }
-  };
-
   return (
     <div className="get-missing">
       {offers.map((o) => {
-        const mine = busy?.id === o.id;
-        const prog = mine && busy!.total ? busy!.done / busy!.total : undefined;
+        const job = jobs.get(keyOf(o));
+        const mine = !!job?.running;
+        const prog = mine && job.total ? job.done / job.total : undefined;
         return (
           <div key={`${o.kind}:${o.id}`} className="get-missing-item">
             <div className="get-missing-row">
-              <Button size="sm" variant="primary" icon={Download} loading={mine} disabled={!!busy && !mine} onClick={() => void get(o)}>
+              <Button size="sm" variant="primary" icon={Download} loading={mine} onClick={() => void startDownload(backend, o)}>
                 Download {o.name} ({formatBytes(o.bytes)})
               </Button>
               {o.kind === 'model' && <a className="link-sm" href={href.settings('models')}>Choose another model</a>}
@@ -120,10 +160,10 @@ export function GetMissing({ availability }: { availability: Availability | unde
             {mine && (
               <div className="model-progress">
                 <ProgressBar value={prog} indeterminate={prog == null} label={`Downloading ${o.name}`} />
-                <span className="muted small">{formatBytes(busy!.done)}{prog != null ? ` · ${Math.round(prog * 100)}%` : ''}</span>
+                <span className="muted small">{formatBytes(job.done)}{prog != null ? ` · ${Math.round(prog * 100)}%` : ''}</span>
               </div>
             )}
-            {failed?.id === o.id && <span className="field-error" role="alert">Couldn't download {o.name}: {failed.message}</span>}
+            {job?.error && <span className="field-error" role="alert">Couldn't download {o.name}: {job.error}</span>}
           </div>
         );
       })}
