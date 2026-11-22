@@ -18,6 +18,9 @@ pub enum ToolError {
     MissingModel { message: String },
     #[error("unsupported: {message}")]
     Unsupported { message: String },
+    /// A required extension setting has no value yet.
+    #[error("not configured: {message}")]
+    NotConfigured { message: String },
     #[error("permission denied: {message}")]
     PermissionDenied { message: String },
     #[error("cancelled")]
@@ -77,6 +80,7 @@ impl ToolError {
             ToolError::MissingDependency { .. } => "missing_dependency",
             ToolError::MissingModel { .. } => "missing_model",
             ToolError::Unsupported { .. } => "unsupported",
+            ToolError::NotConfigured { .. } => "not_configured",
             ToolError::PermissionDenied { .. } => "permission_denied",
             ToolError::Cancelled => "cancelled",
             ToolError::Timeout { .. } => "timeout",
@@ -92,7 +96,8 @@ impl ToolError {
             ToolError::InvalidInput { .. } | ToolError::NotFound { .. } => 2,
             ToolError::MissingDependency { .. }
             | ToolError::MissingModel { .. }
-            | ToolError::Unsupported { .. } => 3,
+            | ToolError::Unsupported { .. }
+            | ToolError::NotConfigured { .. } => 3,
             ToolError::PermissionDenied { .. } => 4,
             ToolError::Timeout { .. } | ToolError::LimitExceeded { .. } => 5,
             ToolError::Cancelled => 130,
@@ -105,6 +110,7 @@ impl ToolError {
         match self {
             ToolError::InvalidInput { .. } => 400,
             ToolError::NotFound { .. } => 404,
+            ToolError::NotConfigured { .. } => 409,
             ToolError::PermissionDenied { .. } => 403,
             ToolError::MissingDependency { .. }
             | ToolError::MissingModel { .. }

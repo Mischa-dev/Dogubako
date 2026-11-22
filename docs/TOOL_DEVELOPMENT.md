@@ -151,6 +151,35 @@ true / non-empty. Parameters use the same schema as Rust tools (`type` =
 `text`, `secret`, `integer`, `number`, `boolean`, `enum` (`options = [{value, label}]`),
 `color`, `file`, `path`, `json`).
 
+### Settings
+
+Values that belong to one installation (a printer queue, a saved location, an
+API key) are declared as `[[settings]]` and used as `{settings.<name>}`; a group
+can also use `when = "settings.<name>"`. Settings take the same fields as
+`[[params]]` (except `file` and `json` types) plus `secret = true` for text:
+
+```toml
+[[settings]]
+name = "queue"
+type = "text"
+required = true
+
+[[settings]]
+name = "api_key"
+type = "text"
+secret = true
+```
+
+Values are stored **outside the manifest**, in `<extensions>/settings/<id>.toml`
+(secrets in `<id>.secrets.toml`, owner-only on Unix), so editing them keeps the
+trust pin and sharing a manifest never shares its settings. Each installation
+has its own values. A tool with a required setting unset is shown unavailable
+("Set up <tool> in Settings") and is rejected before it runs. Edit them in
+Settings → Extensions (desktop, or admins on a server), with
+`dogubako extensions config <id> key=value` (`key=` clears), or
+`PUT /api/v1/extensions/<id>/settings`. Secret values are never echoed back.
+Unknown `{settings.x}` names are rejected when the manifest is parsed.
+
 ### Trust and permissions
 
 * Manifests live in the per-user extensions folder (`~/.local/share/dogubako/extensions`,

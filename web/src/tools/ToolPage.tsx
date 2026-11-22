@@ -142,6 +142,18 @@ function Availability({ tool }: { tool: ToolInfo }) {
   if (!a.platform_supported) {
     return <Callout tone="warn" icon={TriangleAlert} title="Not available on this operating system">{a.reason}</Callout>;
   }
+  if (a.unset_settings?.length && !hints.length && !a.missing_model) {
+    return (
+      <Callout
+        tone="warn"
+        icon={TriangleAlert}
+        title={a.reason ?? `Set up ${tool.name} in Settings`}
+        actions={(!isServer || isAdmin) && <a className="btn btn-secondary btn-sm" href={href.settings('extensions')}>Extensions</a>}
+      >
+        {isServer && !isAdmin ? 'Ask an administrator to set it up.' : `Needs: ${a.unset_settings.join(', ')}.`}
+      </Callout>
+    );
+  }
   return (
     <Callout
       tone="warn"

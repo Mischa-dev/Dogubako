@@ -67,6 +67,9 @@ pub struct Availability {
     pub missing: Vec<MissingDep>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub missing_model: Option<String>,
+    /// Required extension settings that are not set yet.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unset_settings: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -99,6 +102,11 @@ pub struct RunRequest<'a> {
 #[derive(Debug, Clone, Serialize)]
 pub struct RunStats {
     pub duration_ms: u64,
+}
+
+/// What a tool with unset required settings tells the user.
+pub fn setup_message(tool_name: &str) -> String {
+    format!("Set up {tool_name} in Settings")
 }
 
 pub struct Engine {
@@ -140,6 +148,11 @@ impl Engine {
         let missing_model = spec.requires_model.as_ref().filter(|g| !self.models.group_available(g)).map(|g| {
             format!("No '{g}' model installed. Download one in Settings → Models or with `dogubako models download <id>`.")
         });
+        let unset_settings = self
+            .registry
+            .get(&spec.id)
+            .map(|t| t.unset_settings())
+            .unwrap_or_default();
         let reason = if !platform_supported {
             Some(format!(
                 "Not supported on {:?}",
@@ -147,14 +160,22 @@ impl Engine {
             ))
         } else if let Some(m) = missing.first() {
             Some(format!("Requires {}", m.name))
-        } else {
+        } else if missing_model.is_some() {
             missing_model.clone()
+        } else if !unset_settings.is_empty() {
+            Some(setup_message(&spec.name))
+        } else {
+            None
         };
         Availability {
-            available: platform_supported && missing.is_empty() && missing_model.is_none(),
+            available: platform_supported
+                && missing.is_empty()
+                && missing_model.is_none()
+                && unset_settings.is_empty(),
             platform_supported,
             missing,
             missing_model,
+            unset_settings,
             reason,
         }
     }
@@ -278,6 +299,15 @@ impl Engine {
         }
         if let Some(m) = avail.missing_model {
             return Err(ToolError::MissingModel { message: m });
+        }
+        if !avail.unset_settings.is_empty() {
+            return Err(ToolError::NotConfigured {
+                message: format!(
+                    "{} (missing: {})",
+                    setup_message(&spec.name),
+                    avail.unset_settings.join(", ")
+                ),
+            });
         }
 
         let fs = req.fs.clone().unwrap_or_else(|| self.config.fs.clone());
