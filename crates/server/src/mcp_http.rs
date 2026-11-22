@@ -12,7 +12,7 @@ use axum::Json;
 use dogubako_core::engine::ToolInfo;
 use dogubako_core::error::ToolError;
 use dogubako_core::extensions::ExtensionReport;
-use dogubako_core::spec::{Category, Permission};
+use dogubako_core::spec::Permission;
 use dogubako_core::tool::ProgressFn;
 use dogubako_mcp::{
     DiscoveryMode, ExtensionView, FileView, JobStatus, JobView, McpBackend, McpServer, Notifier,
@@ -154,8 +154,17 @@ impl McpBackend for ServerBackend {
     }
 
     async fn extension_test(&self, id: &str) -> Result<ExtensionReport, ToolError> {
-        self.author_allowed()?;
-        if self.visible_extensions(Some(id)).is_empty() {
+        // Like the REST test endpoint, rerunning tests doesn't need the
+        // install switch. Tests run with every permission, so only a tool
+        // the caller can still run under its current grants.
+        if !self.can_author() {
+            return Err(dogubako_mcp::author_denied());
+        }
+        let runnable = dogubako_mcp::extension_views(&self.state.engine, Some(id), |st, spec| {
+            (!st.dev || self.principal.is_author_key(st.author.as_deref()))
+                && spec.is_some_and(|s| self.usable(s))
+        });
+        if runnable.is_empty() {
             return Err(ToolError::NotFound {
                 id: format!("{id} (no extension you can see)"),
             });
@@ -178,35 +187,24 @@ impl McpBackend for ServerBackend {
             .ok_or_else(store::disabled_error)?;
         let dir = self.state.cfg.extensions_dir();
         let index = store::load_index(&url, &dir, &self.state.engine.config.net).await?;
-        let e = index
-            .index
-            .tools
-            .iter()
-            .find(|t| t.id == id)
-            .ok_or_else(|| ToolError::NotFound {
+        if !index.index.tools.iter().any(|t| t.id == id) {
+            return Err(ToolError::NotFound {
                 id: format!("{id} (not in the tool store)"),
-            })?;
+            });
+        }
         // Installed store tools are visible to everyone the policy allows;
-        // an author may only add one it could run itself.
-        let category = Category::parse(&e.category).unwrap_or(Category::Dev);
-        let mut spec = dogubako_core::spec::ToolSpec::new(&e.id, &e.name, category);
-        for p in &e.permissions {
-            match Permission::parse(p).filter(Permission::is_tool_capability) {
-                Some(p) => spec = spec.permission(p),
-                None => {
-                    return Err(ToolError::invalid(
-                        "id",
-                        format!("store entry '{id}' needs unknown permission '{p}'"),
-                    ))
-                }
+        // an author may only add one it could run itself, judged by the
+        // fetched manifest rather than the index's summary.
+        let r = store::install_if(&self.state.engine, &dir, &index, id, &|spec| {
+            if self.usable(spec) {
+                Ok(())
+            } else {
+                Err(ToolError::denied(format!(
+                    "your policy does not allow '{id}' or its permissions; ask an admin to extend it"
+                )))
             }
-        }
-        if !self.usable(&spec) {
-            return Err(ToolError::denied(format!(
-                "your policy does not allow '{id}' or its permissions; ask an admin to extend it"
-            )));
-        }
-        let r = store::install(&self.state.engine, &dir, &index, id, false).await;
+        })
+        .await;
         self.audit("store.install", &r, Some(id), "mcp");
         r
     }

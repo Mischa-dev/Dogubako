@@ -9,7 +9,7 @@ use dogubako_core::error::{ToolError, ToolResult};
 use dogubako_core::extensions::ExtensionReport;
 use dogubako_core::params::{FileResolver, InputFile, LocalFileResolver};
 use dogubako_core::policy::{FsPolicy, PermissionSet};
-use dogubako_core::spec::{Category, Permission, ToolSpec};
+use dogubako_core::spec::{Permission, ToolSpec};
 use dogubako_core::tool::ProgressFn;
 use dogubako_mcp::{
     ArtifactView, DiscoveryMode, ExtensionView, FileView, JobStatus, JobView, McpBackend,
@@ -173,23 +173,17 @@ impl McpBackend for LocalBackend {
         let url = store::local_url().ok_or_else(store::disabled_error)?;
         let dir = Self::ext_dir();
         let index = store::load_index(&url, &dir, &self.engine.config.net).await?;
-        if let Some(e) = index.index.tools.iter().find(|t| t.id == id) {
-            let category = Category::parse(&e.category).unwrap_or(Category::Dev);
-            let mut spec = ToolSpec::new(&e.id, &e.name, category);
-            let mut known = true;
-            for p in &e.permissions {
-                match Permission::parse(p).filter(Permission::is_tool_capability) {
-                    Some(p) => spec = spec.permission(p),
-                    None => known = false,
-                }
-            }
-            if !known || !self.permitted(&spec) {
-                return Err(ToolError::denied(format!(
+        // Checked against the fetched manifest, not the index's summary.
+        store::install_if(&self.engine, &dir, &index, id, &|spec| {
+            if self.permitted(spec) {
+                Ok(())
+            } else {
+                Err(ToolError::denied(format!(
                     "'{id}' or its permissions are not permitted for this MCP server"
-                )));
+                )))
             }
-        }
-        store::install(&self.engine, &dir, &index, id, false).await
+        })
+        .await
     }
 
     async fn run_tool(

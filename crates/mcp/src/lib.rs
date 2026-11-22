@@ -377,7 +377,7 @@ fn author_tools() -> Vec<Value> {
             "title": "Test an installed tool",
             "description": "Run an installed extension's [[tests]] again (your dev tools, or trusted extensions you can use) without reinstalling it.",
             "inputSchema": {"type": "object", "properties": {"id": id}, "required": ["id"], "additionalProperties": false},
-            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false}
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true}
         }),
         json!({
             "name": "dogubako_extension_status",
@@ -966,7 +966,11 @@ impl McpServer {
                 };
                 Ok(ok_result(text, json!({"files": files})))
             }
-            n if AUTHOR_TOOLS.contains(&n) => self.author_call(n, &args).await,
+            n if AUTHOR_TOOLS.contains(&n) && self.backend.can_author() => {
+                self.author_call(n, &args).await
+            }
+            // Without the permission an extension may still own the name.
+            n if AUTHOR_TOOLS.contains(&n) && self.find(n).is_err() => Err(author_denied()),
             other => {
                 // Direct invocation by MCP name. Works in compact mode too:
                 // listing is about context size, not authorization.
