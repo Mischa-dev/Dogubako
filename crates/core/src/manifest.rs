@@ -738,6 +738,11 @@ fn regex_placeholders(s: &str) -> Vec<String> {
         regex::Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)?)\}").unwrap()
     })
     .captures_iter(s)
+    // `\p{Greek}` is a Unicode class, not a placeholder.
+    .filter(|c| {
+        let before = &s[..c.get(0).unwrap().start()];
+        !(before.ends_with("\\p") || before.ends_with("\\P"))
+    })
     .map(|c| c[1].to_string())
     .collect()
 }
@@ -1795,6 +1800,7 @@ type = "text"
         assert!(bad("[output]", "[output]\nstdout = \"text/plain\"").contains("not both"));
         // `{3}` is a quantifier, not a placeholder.
         assert!(parse_manifest(STATUS, "x").is_ok());
+        assert!(parse_manifest(&PRINT.replace(r"(\S+)'", r"(\p{L}+-\d+)'"), "x").is_ok());
         let caseless = STATUS.replace(r#"{ value = "not found" },"#, "{},");
         assert!(parse_manifest(&caseless, "x").is_err());
     }

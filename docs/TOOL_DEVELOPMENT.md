@@ -168,8 +168,11 @@ from that folder before PATH is searched.
 extract = { job_id = 'request id is (\S+)' }   # first group, or the whole match
 text = "Queued, job {job_id}"                  # extract fields and params
 
-# Cases: the first whose regex matches gives its value; no regex = fallback.
-# {param} / {settings.x} in a pattern match the value literally.
+```
+
+Or cases: the first whose regex matches gives its value; no regex is the fallback. `{param}` / `{settings.x}` in a pattern match the value literally.
+
+```toml
 [output.extract]
 state = [{ regex = '(?m)^printer \S+ now printing {job_id}\.', value = "printing" }, { value = "not found" }]
 ```

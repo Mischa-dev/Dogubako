@@ -21,9 +21,9 @@ text = "Job {job_id}: {state}"
 
 [output.extract]
 state = [
-  { regex = '(?m)^printer \S+ now printing {job_id}\.', value = "printing" },
-  { regex = '(?m)^{job_id}\s.*\n\t', value = "queued" },
-  { regex = '(?m)^{job_id}\s', value = "completed" },
+  { regex = '(?mi)^printer \S+ now printing {job_id}\.', value = "printing" },
+  { regex = '(?mi)^{job_id}\s.*\n\t', value = "queued" },
+  { regex = '(?mi)^{job_id}\s', value = "completed" },
   { value = "not found" },
 ]
 
@@ -50,6 +50,12 @@ expect = { json = { "$.state" = "queued" } }
 name = "completed"
 params = { job_id = "Office-12" }
 command = { stdout = "printer Office is idle.  enabled since Sun Nov 22 10:00:00 2026\nOffice-12               mischa            1024   Sun Nov 22 10:00:00 2026\nOffice-13               mischa            1024   Sun Nov 22 10:01:00 2026\n\tAlerts: none\n\tqueued for Office\n" }
+expect = { json = { "$.state" = "completed" } }
+
+[[tests]]
+name = "matches the queue name in any case"
+params = { job_id = "office-12" }
+command = { stdout = "printer Office is idle.  enabled since Sun Nov 22 10:00:00 2026\nOffice-12               mischa            1024   Sun Nov 22 10:00:00 2026\n" }
 expect = { json = { "$.state" = "completed" } }
 
 [[tests]]

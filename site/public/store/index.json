@@ -65,7 +65,7 @@
       ],
       "category": "system",
       "version": "1.0.0",
-      "sha256": "3a419ed4b82c72593fb1761e0000c534904676deab43ed07c58a53fae8b7769a",
+      "sha256": "a09c41f5c74e0176a018d1da70e8338e4d7cfee506be34e0c9ac22ff80d69fe0",
       "permissions": [
         "network"
       ],
@@ -93,7 +93,7 @@
       ],
       "category": "system",
       "version": "1.0.0",
-      "sha256": "e99ffe929367bbeb5e5adfe084ec214b54745d5826201b88aa4dbf51f52db5aa",
+      "sha256": "366b98e9e6d12daf1f8143e1d5b8f21a355ded8a5b1b3a2361bbadca17cc7f3f",
       "permissions": [
         "network"
       ],

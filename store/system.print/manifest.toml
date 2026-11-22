@@ -25,7 +25,8 @@ args = [
 ]
 
 [output]
-extract = { job_id = 'request id is (\S+)' }
+# The job ID is <queue>-<n>; matched alone since lp localizes the sentence.
+extract = { job_id = '([^\s(]+-\d+)' }
 text = "Queued, job {job_id}"
 
 [[params]]
@@ -63,6 +64,14 @@ files = { file = "%PDF-1.4\n%%EOF\n" }
 settings = { queue = "Office" }
 command = { stdout = "request id is Office-12 (1 file(s))\n" }
 expect = { text = "Queued, job Office-12", json = { "$.job_id" = "Office-12" } }
+
+[[tests]]
+name = "reads a localized reply"
+params = { file = "report.pdf" }
+files = { file = "%PDF-1.4\n%%EOF\n" }
+settings = { queue = "Office" }
+command = { stdout = "Anfrage-ID ist Office-12 (1 Datei(en))\n" }
+expect = { json = { "$.job_id" = "Office-12" } }
 
 [[tests]]
 name = "reports lp failing"
