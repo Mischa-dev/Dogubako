@@ -15,6 +15,7 @@ max_concurrent_jobs = 4
 per_user_concurrency = 2
 fs_roots = []                # e.g. ["/srv/media"] to allow folder tools
 allow_private_network = false # SSRF protection for network tools
+allow_extension_install = false # let admins install extension manifests over HTTP
 mcp_enabled = true
 mcp_discovery = "full"       # or "compact"
 allowed_origins = []

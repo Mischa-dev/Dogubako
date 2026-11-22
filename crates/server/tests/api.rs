@@ -1530,7 +1530,20 @@ async fn packs_default_to_all() {
 #[cfg(unix)]
 #[tokio::test]
 async fn extensions_install_test_and_uninstall_over_http() {
-    let t = setup(AuthMode::Required);
+    let off = setup(AuthMode::Required);
+    let (cookie, csrf) = owner_session(&off).await;
+    let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
+    let r = call(
+        &off.app,
+        Method::POST,
+        "/api/v1/extensions/install",
+        &h,
+        Some(json!({ "manifest": "x" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN);
+
+    let t = setup_with(AuthMode::Required, |c| c.allow_extension_install = true);
     let (cookie, csrf) = owner_session(&t).await;
     let h = [("cookie", cookie.as_str()), ("x-csrf-token", csrf.as_str())];
     let dir = t.state.cfg.extensions_dir();

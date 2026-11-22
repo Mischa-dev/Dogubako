@@ -46,6 +46,9 @@ pub struct ServerConfig {
     pub fs_roots: Vec<PathBuf>,
     /// Allow network tools to reach private/loopback addresses (SSRF risk).
     pub allow_private_network: bool,
+    /// Let admins install extension manifests over HTTP. Off by default:
+    /// a manifest runs a host program, outside any sandbox unless one is set.
+    pub allow_extension_install: bool,
     pub mcp_enabled: bool,
     /// Default MCP discovery mode: "full" or "compact".
     pub mcp_discovery: String,
@@ -104,6 +107,7 @@ impl Default for ServerConfig {
             per_user_concurrency: 2,
             fs_roots: vec![],
             allow_private_network: false,
+            allow_extension_install: false,
             mcp_enabled: true,
             mcp_discovery: "full".into(),
             packs: PackSelection::all(),
@@ -224,6 +228,9 @@ impl ServerConfig {
         }
         if let Some(v) = env_bool("ALLOW_PRIVATE_NETWORK") {
             cfg.allow_private_network = v;
+        }
+        if let Some(v) = env_bool("ALLOW_EXTENSION_INSTALL") {
+            cfg.allow_extension_install = v;
         }
         if let Some(v) = env_bool("MCP_ENABLED") {
             cfg.mcp_enabled = v;

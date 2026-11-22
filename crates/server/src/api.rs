@@ -1254,6 +1254,12 @@ async fn extension_install(
     Json(body): Json<InstallBody>,
 ) -> ApiResult<Json<Value>> {
     use dogubako_core::extensions as ext;
+    if !s.cfg.allow_extension_install {
+        return Err(ApiError::forbidden(
+            "installing extensions over HTTP is off; set allow_extension_install \
+             (DOGUBAKO_ALLOW_EXTENSION_INSTALL=true) or run `dogubako extensions install` on the host",
+        ));
+    }
     let text = match (body.manifest, body.url) {
         (Some(m), None) => m,
         (None, Some(u)) if u.starts_with("http://") || u.starts_with("https://") => {

@@ -268,9 +268,11 @@ expect = { text = "...", contains = ["ok"], json = { "$.ok" = true } }
 `json` maps a path (`$.a.b[0]`) to the expected value, checked against JSON
 text output (or the structured data). A test whose tool is unavailable here
 (missing program, unset required setting) is reported `skipped`, never passed.
+Tests run with every permission but only see their own sample files.
 
 `[http]` manifests can record the response a test gets instead of calling the
-network, and any test can give its own `settings` instead of the user's:
+network, and any test can give its own `settings` instead of the user's
+(`settings = {}` uses the manifest defaults):
 
 ```toml
 [[tests]]
@@ -297,7 +299,8 @@ another extension fails and changes nothing; `--replace` updates an installed
 extension. A failing test leaves the extension installed and reports it
 failing. Uninstall removes the manifest and its trust entry and reloads;
 settings are kept unless `--purge`. The same exist as admin endpoints
-(`POST /api/v1/extensions/install`, `DELETE /api/v1/extensions/<id>`,
+(`POST /api/v1/extensions/install`, off unless the server sets
+`allow_extension_install`, `DELETE /api/v1/extensions/<id>`,
 `POST /api/v1/extensions/<id>/test`) and desktop commands
 (`install_extension`, `uninstall_extension`, `test_extension`).
 

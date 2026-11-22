@@ -73,7 +73,7 @@ Job failures carry the same tagged error in `job.error`. Codes: `invalid_input`,
 | `GET /deps`, `POST /deps/refresh` | External dependency status |
 | `GET /models`, `POST /models/{id}/download`, `DELETE /models/{id}` | Models (admin for changes) |
 | `GET /extensions` | Extension status (admin) |
-| `POST /extensions/install` | Install a manifest in one step (`{manifest}` text or `{url}`, optional `replace`): validate, copy, pin its SHA-256, reload and run its `[[tests]]`; returns `{id, version, trusted, loaded, tests, passed, error}`. Id collisions fail with 400 and change nothing (admin) |
+| `POST /extensions/install` | Install a manifest in one step (`{manifest}` text or `{url}`, optional `replace`): validate, copy, pin its SHA-256, reload and run its `[[tests]]`; returns `{id, version, trusted, loaded, tests, passed, error}`. Id collisions fail with 400 and change nothing. 403 unless the server sets `allow_extension_install` (admin) |
 | `DELETE /extensions/{id}` | Uninstall: remove the manifest and its trust entry and reload; settings are kept unless `?purge=true` (admin) |
 | `POST /extensions/{id}/test` | Run an installed extension's tests without reinstalling (admin) |
 | `POST /admin/reload` | Rebuild the tool registry without a restart; returns `{reload: {added, removed, changed, tools, generation}, extensions}` (admin) |

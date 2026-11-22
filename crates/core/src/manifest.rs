@@ -184,8 +184,8 @@ pub struct ManifestTest {
     #[serde(default)]
     pub files: BTreeMap<String, String>,
     /// Setting values used instead of the installation's settings.
-    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
-    pub settings: serde_json::Map<String, Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings: Option<serde_json::Map<String, Value>>,
     #[serde(default)]
     pub expect: TestExpect,
     /// For `[http]` manifests: the response served instead of the network.
@@ -490,7 +490,7 @@ fn validate_tests(tests: &mut [ManifestTest], spec: &ToolSpec, http: bool) -> Re
                 return Err(format!("{}: '{k}' is not a file parameter", t.name));
             }
         }
-        for k in t.settings.keys() {
+        for k in t.settings.iter().flat_map(|m| m.keys()) {
             if !spec.settings.iter().any(|p| p.name == *k) {
                 return Err(format!("{}: unknown setting '{k}'", t.name));
             }

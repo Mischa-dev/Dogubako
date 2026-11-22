@@ -8,7 +8,7 @@ use crate::manifest::{
 };
 use crate::params::LocalFileResolver;
 use crate::policy::NetPolicy;
-use crate::policy::PermissionSet;
+use crate::policy::{FsPolicy, PermissionSet};
 use crate::registry::Registry;
 use crate::spec::ToolSpec;
 use crate::tool::{Tool, ToolOutput};
@@ -129,14 +129,19 @@ pub async fn fetch_manifest(source: &str, net: &NetPolicy) -> ToolResult<String>
         if resp.content_length().unwrap_or(0) > MAX_MANIFEST_BYTES as u64 {
             return Err(too_big());
         }
-        let bytes = resp
-            .bytes()
+        let mut resp = resp;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = resp
+            .chunk()
             .await
-            .map_err(|e| ToolError::failed(format!("downloading manifest: {e}")))?;
-        if bytes.len() > MAX_MANIFEST_BYTES {
-            return Err(too_big());
+            .map_err(|e| ToolError::failed(format!("downloading manifest: {e}")))?
+        {
+            if bytes.len() + chunk.len() > MAX_MANIFEST_BYTES {
+                return Err(too_big());
+            }
+            bytes.extend_from_slice(&chunk);
         }
-        String::from_utf8(bytes.to_vec())
+        String::from_utf8(bytes)
             .map_err(|_| ToolError::invalid("manifest", "manifest is not UTF-8 text"))
     } else {
         let meta = std::fs::metadata(source)
@@ -147,6 +152,14 @@ pub async fn fetch_manifest(source: &str, net: &NetPolicy) -> ToolResult<String>
         std::fs::read_to_string(source)
             .map_err(|e| ToolError::invalid("source", format!("cannot read '{source}': {e}")))
     }
+}
+
+/// Serializes changes to extension directories (manifests and `trusted.toml`),
+/// so concurrent installs and uninstalls cannot overwrite each other's pins.
+static LIFECYCLE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn lifecycle_lock() -> std::sync::MutexGuard<'static, ()> {
+    LIFECYCLE.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 fn too_big() -> ToolError {
@@ -180,6 +193,7 @@ pub async fn install(
     text: &str,
     opts: InstallOptions,
 ) -> ToolResult<ExtensionReport> {
+    let guard = lifecycle_lock();
     let (tool, existing) = validate(engine, dir, text, opts)?;
     let id = tool.spec().id.clone();
     let sha = tool.sha256().to_string();
@@ -250,6 +264,7 @@ pub async fn install(
     r.trusted = true;
     r.loaded = true;
     r.replaced = !existing.is_empty();
+    drop(guard);
     let src = Source {
         dir,
         file: &file,
@@ -264,7 +279,8 @@ pub async fn test(engine: &Engine, dir: &Path, id: &str) -> ToolResult<Extension
     let statuses = engine.extensions();
     let status = statuses
         .iter()
-        .find(|s| s.id.as_deref() == Some(id))
+        .filter(|s| s.id.as_deref() == Some(id))
+        .max_by_key(|s| s.loaded)
         .ok_or_else(|| ToolError::NotFound { id: id.to_string() })?;
     let trusted = TrustStore::load(&dir.join("trusted.toml"))
         .trusted
@@ -315,6 +331,7 @@ pub fn uninstall(
     id: &str,
     purge: bool,
 ) -> ToolResult<UninstallReport> {
+    let _guard = lifecycle_lock();
     if let Some(t) = engine.catalog().get(id) {
         if !is_extension(t.spec()) {
             return Err(ToolError::invalid(
@@ -421,7 +438,7 @@ fn validate(
     Ok((tool, existing))
 }
 
-/// Manifest files in `dir` whose (parseable) id is `id`.
+/// Manifest files in `dir` whose id is `id`, plus an unparsable `<id>.toml`.
 fn manifests_with_id(dir: &Path, id: &str) -> Vec<PathBuf> {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return vec![];
@@ -441,6 +458,14 @@ fn manifests_with_id(dir: &Path, id: &str) -> Vec<PathBuf> {
                 .is_some_and(|t| t.spec().id == id)
         })
         .collect();
+    // A manifest at `<id>.toml` that no longer parses is still this id's.
+    let target = dir.join(format!("{id}.toml"));
+    let unparsable = std::fs::read_to_string(&target)
+        .ok()
+        .is_some_and(|t| parse_manifest(&t, "").is_err());
+    if unparsable && !out.contains(&target) {
+        out.push(target);
+    }
     out.sort();
     out
 }
@@ -459,9 +484,10 @@ async fn run_tests(
     spec: &ToolSpec,
     tests: &[ManifestTest],
 ) -> Vec<TestResult> {
+    let installed = engine.find(&spec.id);
     let mut out = vec![];
     for t in tests {
-        out.push(run_test(engine, src, spec, t).await);
+        out.push(run_test(engine, src, spec, installed.as_ref(), t).await);
     }
     out
 }
@@ -470,6 +496,7 @@ async fn run_test(
     engine: &Engine,
     src: &Source<'_>,
     spec: &ToolSpec,
+    installed: Result<&Arc<dyn Tool>, &ToolError>,
     t: &ManifestTest,
 ) -> TestResult {
     let started = Instant::now();
@@ -479,7 +506,7 @@ async fn run_test(
         error,
         duration_ms: started.elapsed().as_millis() as u64,
     };
-    let tool: Arc<dyn Tool> = if t.http.is_some() || !t.settings.is_empty() {
+    let tool: Arc<dyn Tool> = if t.http.is_some() || t.settings.is_some() {
         let own = parse_manifest(src.text, src.file)
             .map_err(|e| ToolError::invalid("manifest", e))
             .and_then(|tool| {
@@ -488,10 +515,9 @@ async fn run_test(
                     Some(fixture) => tool.with_recorded_response(fixture.response()),
                     None => tool,
                 };
-                if t.settings.is_empty() {
-                    Ok(tool)
-                } else {
-                    tool.with_setting_values(&t.settings)
+                match &t.settings {
+                    Some(values) => tool.with_setting_values(values),
+                    None => Ok(tool),
                 }
             });
         match own {
@@ -499,8 +525,8 @@ async fn run_test(
             Err(e) => return result(TestStatus::Failed, Some(e.to_string())),
         }
     } else {
-        match engine.find(&spec.id) {
-            Ok(tool) => tool,
+        match installed {
+            Ok(tool) => tool.clone(),
             Err(e) => return result(TestStatus::Failed, Some(e.to_string())),
         }
     };
@@ -558,7 +584,9 @@ async fn run_test(
         }
         params.insert(param.clone(), Value::String(path.to_string_lossy().into()));
     }
-    let resolver = LocalFileResolver::unrestricted();
+    // Tests only see their own sample files, never other host paths.
+    let fs = FsPolicy::roots(vec![work.path().to_path_buf()]);
+    let resolver = LocalFileResolver { policy: fs.clone() };
     let run = engine
         .run_tool(
             tool,
@@ -572,10 +600,15 @@ async fn run_test(
                 progress: None,
                 cancel: CancellationToken::new(),
                 timeout: Some(Duration::from_secs(TEST_TIMEOUT_SECS)),
-                fs: None,
+                fs: Some(fs),
             },
         )
         .await;
+    if let Err(err @ ToolError::MissingDependency { .. }) = &run {
+        if t.expect.error.as_deref() != Some(err.code()) {
+            return result(TestStatus::Skipped, Some(err.to_string()));
+        }
+    }
     match check(t, run.map(|(o, _)| o)) {
         Ok(()) => result(TestStatus::Passed, None),
         Err(e) => result(TestStatus::Failed, Some(e)),
@@ -635,9 +668,26 @@ pub fn check(t: &ManifestTest, run: ToolResult<ToolOutput>) -> Result<(), String
 }
 
 /// Equal, treating integer and float forms of the same number as equal.
+/// JSON equality where `1` equals `1.0`; integers compare exactly.
 fn json_eq(a: &Value, b: &Value) -> bool {
+    let int = |n: &serde_json::Number| {
+        n.as_i64()
+            .map(i128::from)
+            .or_else(|| n.as_u64().map(i128::from))
+    };
     match (a, b) {
-        (Value::Number(x), Value::Number(y)) => x.as_f64() == y.as_f64(),
+        (Value::Number(x), Value::Number(y)) => match (int(x), int(y)) {
+            (Some(p), Some(q)) => p == q,
+            _ => x.as_f64() == y.as_f64(),
+        },
+        (Value::Array(x), Value::Array(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(p, q)| json_eq(p, q))
+        }
+        (Value::Object(x), Value::Object(y)) => {
+            x.len() == y.len()
+                && x.iter()
+                    .all(|(k, v)| y.get(k).is_some_and(|w| json_eq(v, w)))
+        }
         _ => a == b,
     }
 }
@@ -809,6 +859,40 @@ name = "needs the user's settings"
 params = { city = "x" }
 http = { json = {} }
 "#;
+
+    #[test]
+    fn json_eq_is_exact_for_integers_and_recursive() {
+        use serde_json::json;
+        assert!(json_eq(&json!(1), &json!(1.0)));
+        assert!(json_eq(
+            &json!({"a": [1, {"b": 2.0}]}),
+            &json!({"a": [1.0, {"b": 2}]})
+        ));
+        assert!(!json_eq(
+            &json!(9007199254740993_u64),
+            &json!(9007199254740992_u64)
+        ));
+        assert!(!json_eq(&json!([1]), &json!([1, 2])));
+    }
+
+    #[tokio::test]
+    async fn uninstall_and_replace_handle_a_broken_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        let e = engine(dir.path());
+        install(&e, dir.path(), HTTP_M, InstallOptions::default())
+            .await
+            .unwrap();
+        let file = dir.path().join("data.ext_weather.toml");
+        std::fs::write(&file, "not [valid").unwrap();
+        let replaced = install(&e, dir.path(), HTTP_M, InstallOptions { replace: true })
+            .await
+            .unwrap();
+        assert!(replaced.loaded && replaced.replaced, "{replaced:?}");
+        std::fs::write(&file, "not [valid").unwrap();
+        let r = uninstall(&e, dir.path(), "data.ext_weather", false).unwrap();
+        assert_eq!(r.removed, ["data.ext_weather.toml"]);
+        assert!(!file.exists());
+    }
 
     #[tokio::test]
     async fn http_tests_use_recorded_responses_and_their_own_settings() {
