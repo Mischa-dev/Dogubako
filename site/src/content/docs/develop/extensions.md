@@ -86,13 +86,14 @@ Extension folders:
 | `keywords` | | Extra search words |
 | `permissions` | | Capabilities the tool needs, such as `["network"]` |
 | `platforms` | | Limit to `linux`, `macos` and/or `windows` |
+| `requires` | | Programs the tool needs, as dependency ids such as `["cups"]` (listed by `dogubako deps`). A missing one marks the tool unavailable with an install hint; an unknown id is an error |
 | `timeout_secs` | | Default 300 |
 
 ### `[command]`
 
 | Key | Meaning |
 |---|---|
-| `program` | The program to run, found like an engine (`PATH`, Dogubako's `bin` folder) |
+| `program` | The program to run, found like an engine (`PATH`, Dogubako's `bin` folder). When it is a required dependency's id or one of its programs (`whisper`, or `lpstat` for `cups`), it is found the same way that dependency is, including Dogubako's own engines and `DOGUBAKO_<ID>_PATH`; another program installed next to a required dependency (`pdftotext` with `poppler`) is taken from that folder |
 | `args` | A list of arguments. Strings may contain placeholders; `{ when = "param", args = [...] }` groups are included only when the parameter is true or non-empty |
 
 ### `[output]`
