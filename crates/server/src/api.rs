@@ -70,6 +70,9 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/admin/reload", post(admin_reload))
         .route("/tools/events", get(tools_events))
         .route("/extensions/{id}/settings", put(extension_configure))
+        .route("/extensions/install", post(extension_install))
+        .route("/extensions/{id}", delete(extension_uninstall))
+        .route("/extensions/{id}/test", post(extension_test))
         .route("/admin/users", get(admin_users).post(admin_create_user))
         .route(
             "/admin/users/{id}",
@@ -1322,6 +1325,92 @@ async fn extension_configure(
         "",
     );
     Ok(Json(json!(ext)))
+}
+
+#[derive(Deserialize)]
+struct InstallBody {
+    /// Manifest text.
+    #[serde(default)]
+    manifest: Option<String>,
+    /// http(s) URL of a manifest, fetched through the network policy.
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    replace: bool,
+}
+
+/// Install a manifest in one step: validate, copy, pin its SHA-256, reload
+/// and run its tests. Id collisions and invalid manifests change nothing.
+async fn extension_install(
+    State(s): State<AppState>,
+    Admin(p): Admin,
+    ClientIp(ip): ClientIp,
+    Json(body): Json<InstallBody>,
+) -> ApiResult<Json<Value>> {
+    use dogubako_core::extensions as ext;
+    if !s.cfg.allow_extension_install {
+        return Err(ApiError::forbidden(
+            "installing extensions over HTTP is off; set allow_extension_install \
+             (DOGUBAKO_ALLOW_EXTENSION_INSTALL=true), or on the host run \
+             `dogubako extensions --dir <server extensions folder> install` and restart the server",
+        ));
+    }
+    let text = match (body.manifest, body.url) {
+        (Some(m), None) => m,
+        (None, Some(u)) if u.starts_with("http://") || u.starts_with("https://") => {
+            ext::fetch_manifest(&u, &s.engine.config.net).await?
+        }
+        (None, Some(_)) => return Err(ApiError::bad_request("url must be http(s)")),
+        _ => return Err(ApiError::bad_request("give exactly one of manifest or url")),
+    };
+    let opts = ext::InstallOptions {
+        replace: body.replace,
+    };
+    let r = ext::install(&s.engine, &s.cfg.extensions_dir(), &text, opts).await;
+    let (id, outcome) = match &r {
+        Ok(r) if r.passed => (r.id.clone(), "ok"),
+        Ok(r) => (r.id.clone(), "tests_failed"),
+        Err(_) => (String::new(), "error"),
+    };
+    s.db.audit(&p.username, "extension.install", &id, outcome, &ip, "");
+    Ok(Json(json!(r?)))
+}
+
+#[derive(Deserialize)]
+struct UninstallQuery {
+    #[serde(default)]
+    purge: bool,
+}
+
+/// Remove an extension and its trust entry and reload; `?purge=true` also
+/// deletes its settings.
+async fn extension_uninstall(
+    State(s): State<AppState>,
+    Admin(p): Admin,
+    ClientIp(ip): ClientIp,
+    Path(id): Path<String>,
+    Query(q): Query<UninstallQuery>,
+) -> ApiResult<Json<Value>> {
+    let r = dogubako_core::extensions::uninstall(&s.engine, &s.cfg.extensions_dir(), &id, q.purge)?;
+    s.db.audit(
+        &p.username,
+        "extension.uninstall",
+        &id,
+        "ok",
+        &ip,
+        if q.purge { "purge" } else { "" },
+    );
+    Ok(Json(json!(r)))
+}
+
+/// Run an installed extension's tests without reinstalling it.
+async fn extension_test(
+    State(s): State<AppState>,
+    Admin(_): Admin,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    let r = dogubako_core::extensions::test(&s.engine, &s.cfg.extensions_dir(), &id).await?;
+    Ok(Json(json!(r)))
 }
 
 /// Rebuild the tool registry (builtins, trusted extensions, enabled packs)

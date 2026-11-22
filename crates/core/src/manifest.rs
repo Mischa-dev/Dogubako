@@ -167,6 +167,84 @@ struct Manifest {
     params: Vec<ParamSpec>,
     #[serde(default)]
     settings: Vec<SettingDecl>,
+    #[serde(default)]
+    tests: Vec<ManifestTest>,
+}
+
+/// A `[[tests]]` entry: sample params run after install and by
+/// `dogubako extensions test`, with checks on the result.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ManifestTest {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub params: serde_json::Map<String, Value>,
+    /// Contents of sample input files, keyed by file parameter.
+    #[serde(default)]
+    pub files: BTreeMap<String, String>,
+    /// Setting values used instead of the installation's settings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings: Option<serde_json::Map<String, Value>>,
+    #[serde(default)]
+    pub expect: TestExpect,
+    /// For `[http]` manifests: the response served instead of the network.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http: Option<HttpFixture>,
+}
+
+/// A recorded HTTP response for a manifest test: `body` as text or `json`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HttpFixture {
+    #[serde(default = "default_status")]
+    pub status: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub json: Option<Value>,
+}
+
+fn default_status() -> u16 {
+    200
+}
+
+impl HttpFixture {
+    pub fn response(&self) -> RecordedResponse {
+        let r = match (&self.json, &self.body) {
+            (Some(v), _) => {
+                RecordedResponse::new(self.status, v.to_string()).content_type("application/json")
+            }
+            (None, b) => RecordedResponse::new(self.status, b.clone().unwrap_or_default()),
+        };
+        match &self.content_type {
+            Some(ct) => r.content_type(ct),
+            None => r,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TestExpect {
+    /// Exact text output (trailing whitespace ignored).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Substrings the text output must contain.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contains: Vec<String>,
+    /// JSON path (`$.a.b[0]`) -> expected value, checked against the JSON
+    /// text output, or the structured data when the text is not JSON.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub json: BTreeMap<String, Value>,
+    /// Number of output files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files: Option<usize>,
+    /// The run must fail with this error code (e.g. `invalid_input`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +269,7 @@ pub struct ExternalTool {
     store: Option<SettingsStore>,
     recorded: Option<RecordedResponse>,
     fixed_settings: Option<BTreeMap<String, Value>>,
+    tests: Vec<ManifestTest>,
 }
 
 fn fill_label(p: &mut ParamSpec) {
@@ -327,6 +406,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     if let Some(f) = &m.output.file {
         check(f)?;
     }
+    validate_tests(&mut m.tests, &spec, false)?;
     Ok(ExternalTool {
         spec,
         sha256: sha256_hex(text.as_bytes()),
@@ -338,6 +418,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
         store: None,
         recorded: None,
         fixed_settings: None,
+        tests: m.tests,
     })
 }
 
@@ -389,6 +470,55 @@ fn base_spec(
     Ok(spec)
 }
 
+/// Name unnamed tests and check them against the manifest's parameters.
+fn validate_tests(tests: &mut [ManifestTest], spec: &ToolSpec, http: bool) -> Result<(), String> {
+    let params = &spec.params;
+    for (i, t) in tests.iter_mut().enumerate() {
+        if t.name.is_empty() {
+            t.name = format!("test {}", i + 1);
+        }
+        for k in t.params.keys() {
+            if !params.iter().any(|p| p.name == *k) {
+                return Err(format!("{}: unknown parameter '{k}'", t.name));
+            }
+        }
+        for k in t.files.keys() {
+            let file_param = params
+                .iter()
+                .any(|p| p.name == *k && matches!(p.kind, ParamKind::File { .. }));
+            if !file_param {
+                return Err(format!("{}: '{k}' is not a file parameter", t.name));
+            }
+        }
+        for k in t.settings.iter().flat_map(|m| m.keys()) {
+            if !spec.settings.iter().any(|p| p.name == *k) {
+                return Err(format!("{}: unknown setting '{k}'", t.name));
+            }
+        }
+        for path in t.expect.json.keys() {
+            json_path_segments(path).map_err(|e| format!("{}: {e}", t.name))?;
+        }
+        if let Some(f) = &t.http {
+            if !http {
+                return Err(format!(
+                    "{}: [tests.http] is only for [http] manifests",
+                    t.name
+                ));
+            }
+            if f.body.is_some() && f.json.is_some() {
+                return Err(format!(
+                    "{}: [tests.http] takes body or json, not both",
+                    t.name
+                ));
+            }
+            if !(100..=599).contains(&f.status) {
+                return Err(format!("{}: invalid HTTP status {}", t.name, f.status));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn parse_http_manifest(
     mut m: Manifest,
     http: HttpSection,
@@ -402,6 +532,7 @@ fn parse_http_manifest(
         );
     }
     let mut spec = base_spec(&mut m, category, Execution::Network, source)?;
+    validate_tests(&mut m.tests, &spec, true)?;
     let output = std::mem::take(&mut m.output);
     let request = HttpRequest::parse(
         http,
@@ -427,6 +558,7 @@ fn parse_http_manifest(
         store: None,
         recorded: None,
         fixed_settings: None,
+        tests: std::mem::take(&mut m.tests),
     })
 }
 
@@ -478,6 +610,15 @@ fn value_str(v: &Value) -> String {
 }
 
 impl ExternalTool {
+    /// The manifest's `[[tests]]`.
+    pub fn tests(&self) -> &[ManifestTest] {
+        &self.tests
+    }
+
+    pub fn sha256(&self) -> &str {
+        &self.sha256
+    }
+
     /// Read setting values from `store` (one installation's settings).
     pub fn with_settings_store(mut self, store: SettingsStore) -> Self {
         self.store = Some(store);
@@ -780,6 +921,19 @@ impl SettingsStore {
         Self::new(extensions_dir.join("settings"))
     }
 
+    /// Delete every stored value, plain and secret, for `id`.
+    pub fn remove(&self, id: &str) -> ToolResult<()> {
+        for secret in [false, true] {
+            match std::fs::remove_file(self.path(id, secret)?) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(ToolError::failed(format!("removing settings: {e}")))
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     fn path(&self, id: &str, secret: bool) -> ToolResult<PathBuf> {
         if id.is_empty()
             || !id
@@ -955,6 +1109,61 @@ pub fn configure_extension(
         name: spec.name.clone(),
         settings: store.view(id, &spec.settings),
     })
+}
+
+/// A step in a test's JSON path: an object key or an array index.
+#[derive(Debug, Clone, PartialEq)]
+pub enum JsonStep {
+    Key(String),
+    Index(usize),
+}
+
+/// Parse `$.a.b[0]`, `a.b[0]` or `$` into steps.
+pub fn json_path_segments(path: &str) -> Result<Vec<JsonStep>, String> {
+    let rest = path.trim();
+    let rest = rest.strip_prefix('$').unwrap_or(rest);
+    let rest = rest.strip_prefix('.').unwrap_or(rest);
+    let mut steps = vec![];
+    if rest.is_empty() {
+        return Ok(steps);
+    }
+    for part in rest.split('.') {
+        let (key, mut idx) = match part.find('[') {
+            Some(i) => (&part[..i], &part[i..]),
+            None => (part, ""),
+        };
+        if key.is_empty() && idx.is_empty() {
+            return Err(format!("invalid JSON path '{path}'"));
+        }
+        if !key.is_empty() {
+            steps.push(JsonStep::Key(key.to_string()));
+        }
+        while !idx.is_empty() {
+            let close = idx
+                .find(']')
+                .ok_or_else(|| format!("invalid JSON path '{path}'"))?;
+            let n = idx[1..close]
+                .parse()
+                .map_err(|_| format!("invalid index in JSON path '{path}'"))?;
+            steps.push(JsonStep::Index(n));
+            idx = &idx[close + 1..];
+            if !idx.is_empty() && !idx.starts_with('[') {
+                return Err(format!("invalid JSON path '{path}'"));
+            }
+        }
+    }
+    Ok(steps)
+}
+
+/// The value at `path` in `doc`, if any.
+pub fn json_path_get<'a>(doc: &'a Value, path: &str) -> Option<&'a Value> {
+    json_path_segments(path)
+        .ok()?
+        .iter()
+        .try_fold(doc, |v, step| match step {
+            JsonStep::Key(k) => v.get(k),
+            JsonStep::Index(i) => v.get(*i),
+        })
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {

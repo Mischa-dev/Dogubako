@@ -17,6 +17,11 @@ use dogubako_core::tool::Environment;
 use std::process::ExitCode;
 
 pub fn build_engine(env: Environment) -> Engine {
+    build_engine_with(env, AppDirs::default_local().extensions)
+}
+
+/// [`build_engine`] loading extensions from `extensions`.
+pub fn build_engine_with(env: Environment, extensions: std::path::PathBuf) -> Engine {
     let dirs = AppDirs::default_local();
     let mut cfg = EngineConfig::local(env);
     cfg.worker_exe = std::env::current_exe().ok();
@@ -24,7 +29,6 @@ pub fn build_engine(env: Environment) -> Engine {
     cfg.models_dir = std::env::var_os("DOGUBAKO_MODELS_DIR")
         .map(Into::into)
         .unwrap_or(dirs.models.clone());
-    let extensions = dirs.extensions.clone();
     Engine::from_loader(
         cfg,
         dogubako_core::deps::DepRegistry::new(vec![dirs.bin]),
@@ -314,7 +318,10 @@ async fn dispatch(engine: Engine, m: &ArgMatches, out: &render::Out) -> i32 {
         Some(("packs", sub)) => local::packs(&engine, sub, out),
         Some(("users", sub)) => admin::users(sub, out),
         Some(("tokens", sub)) => admin::tokens(sub, out),
-        Some(("extensions", sub)) => admin::extensions(sub, out),
+        Some(("extensions", sub)) => match sub.subcommand_name() {
+            Some("install" | "uninstall" | "test") => admin::extension_lifecycle(sub, out).await,
+            _ => admin::extensions(sub, out),
+        },
         Some(("api", sub)) => match sub.subcommand() {
             Some(("openapi", _)) => {
                 println!(

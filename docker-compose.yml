@@ -39,6 +39,9 @@ services:
       # Built-in tool packs to turn on, e.g. "image,video,pdf" or "all,-speech".
       # Empty = the config file's setting (every pack by default).
       DOGUBAKO_PACKS: ${DOGUBAKO_PACKS:-}
+      # Let admins install extension manifests over HTTP (they run host programs).
+      # Empty = the config file's setting (off by default).
+      DOGUBAKO_ALLOW_EXTENSION_INSTALL: ${DOGUBAKO_ALLOW_EXTENSION_INSTALL:-}
       # Plain-words mode. Users can bring their own model; these optionally
       # offer one shared model to everyone ("This server"). Empty = unset.
       # The API key stays on the server and is never sent to browsers.

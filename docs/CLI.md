@@ -78,6 +78,8 @@ dogubako run text.case --params '{"text":"Hello","case":"snake"}'
 | `dogubako users list\|create\|policy\|set-password\|disable\|enable\|delete` | Server accounts and agents (offline, `--data-dir`) |
 | `dogubako tokens list\|create --user U --name N [--allow …]\|revoke ID` | API tokens |
 | `dogubako extensions list\|trust ID\|untrust ID` | Declarative tool extensions |
+| `dogubako extensions install FILE\|URL [--replace] [--yes]` | Validate, copy, trust, reload and test a manifest in one step |
+| `dogubako extensions uninstall ID [--purge]\|test ID` | Remove an extension (settings kept unless `--purge`) / rerun its tests |
 | `dogubako api openapi` | Print the OpenAPI document |
 
 Environment: `DOGUBAKO_HOME` (base dir for models/extensions/bin),
