@@ -140,9 +140,10 @@ pub async fn serve(cfg: ServerConfig) -> Result<(), config::anyhow_lite::Error> 
         .filter(|d| d.found)
         .map(|d| d.name.clone())
         .collect();
-    tracing::info!(tools = state.engine.registry.len(), deps = %found.join(", "), "Dogubako server starting on http://{bind}");
+    tracing::info!(tools = state.engine.registry().len(), deps = %found.join(", "), "Dogubako server starting on http://{bind}");
     spawn_cleanup(state.clone());
     let jobs = state.jobs.clone();
+    let streams = state.shutdown.clone();
     let listener = tokio::net::TcpListener::bind(bind).await?;
     axum::serve(
         listener,
@@ -152,6 +153,7 @@ pub async fn serve(cfg: ServerConfig) -> Result<(), config::anyhow_lite::Error> 
         shutdown_signal().await;
         tracing::info!("shutting down; cancelling running jobs");
         jobs.cancel_all();
+        streams.cancel();
     })
     .await?;
     Ok(())

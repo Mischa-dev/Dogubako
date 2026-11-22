@@ -73,9 +73,11 @@ Job failures carry the same tagged error in `job.error`. Codes: `invalid_input`,
 | `GET /deps`, `POST /deps/refresh` | External dependency status |
 | `GET /models`, `POST /models/{id}/download`, `DELETE /models/{id}` | Models (admin for changes) |
 | `GET /extensions` | Extension status (admin) |
+| `POST /admin/reload` | Rebuild the tool registry without a restart; returns `{reload: {added, removed, changed, tools, generation}, extensions}` (admin) |
+| `GET /tools/events` | SSE `tools` event each time a reload changes the tool set |
 | `GET/POST /admin/users`, `PATCH/DELETE /admin/users/{id}`, `POST /admin/users/{id}/password` | Users & agents (admin) |
 | `GET/POST /admin/tokens` | Tokens for anyone (admin) |
 | `GET /admin/audit?limit=&before=` | Audit log (admin) |
 | `GET /admin/config` | Effective config and runtime stats (admin) |
-| `POST/DELETE /mcp` | MCP Streamable HTTP (see [MCP.md](MCP.md)) |
+| `GET/POST/DELETE /mcp` | MCP Streamable HTTP (see [MCP.md](MCP.md)) |
 | `GET /healthz` | Liveness |

@@ -133,3 +133,34 @@ describe('HttpBackend', () => {
     expect(b.downloadUrl({ id: 'f_2', name: 'b', mime: 'x', size: 1, url: '/api/v1/files/f_2/content' })).toBe('/api/v1/files/f_2/content');
   });
 });
+
+describe('HttpBackend registry reload', () => {
+  beforeEach(() => { (globalThis as any).EventSource = FakeEventSource; FakeEventSource.last = null; });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('posts the admin reload and returns what changed', async () => {
+    const report = { reload: { added: ['text.ext_echo'], removed: [], changed: [], tools: 3, generation: 1 }, extensions: [] };
+    const calls = mockFetch(() => ({ status: 200, body: report }));
+    const b = new HttpBackend('/api/v1');
+    b.csrf = 'tok';
+    expect(await b.reloadRegistry()).toEqual(report);
+    expect(calls[0].url).toBe('/api/v1/admin/reload');
+    expect(calls[0].init.method).toBe('POST');
+  });
+
+  it('calls back on every tools event until unsubscribed', async () => {
+    const b = new HttpBackend('/api/v1');
+    const cb = vi.fn();
+    const stop = await b.onToolsChanged(cb);
+    const es = FakeEventSource.last!;
+    expect(es.url).toBe('/api/v1/tools/events');
+    es.listeners.tools.forEach((l) => l({ data: '{"generation":1}' } as MessageEvent));
+    expect(cb).toHaveBeenCalledTimes(1);
+    es.listeners.open.forEach((l) => l({} as MessageEvent));
+    expect(cb).toHaveBeenCalledTimes(1);
+    es.listeners.open.forEach((l) => l({} as MessageEvent));
+    expect(cb).toHaveBeenCalledTimes(2);
+    stop();
+    expect(es.closed).toBe(true);
+  });
+});

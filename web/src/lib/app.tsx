@@ -118,6 +118,16 @@ export function AppProvider(props: {
     return () => window.removeEventListener('dgb:tools-changed', h);
   }, [reloadTools]);
 
+  // …and when a registry reload adds, removes or changes tools.
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    let gone = false;
+    void backend.onToolsChanged?.(() => notifyToolsChanged())
+      .then((s) => { if (gone) s(); else stop = s; })
+      .catch(() => { /* live updates are best-effort */ });
+    return () => { gone = true; stop?.(); };
+  }, [backend]);
+
   return <Ctx.Provider value={value}>{props.children}</Ctx.Provider>;
 }
 

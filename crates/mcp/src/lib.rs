@@ -194,6 +194,11 @@ impl McpServer {
         })
     }
 
+    /// Sent to connected clients when the tool set changes.
+    pub fn tools_list_changed() -> Value {
+        json!({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+    }
+
     fn initialize(&self, params: &Value) -> Value {
         let requested = params
             .get("protocolVersion")
@@ -217,7 +222,7 @@ impl McpServer {
         json!({
             "protocolVersion": version,
             "capabilities": {
-                "tools": {"listChanged": false},
+                "tools": {"listChanged": true},
                 "resources": {"subscribe": false, "listChanged": false},
                 "logging": {}
             },

@@ -34,12 +34,48 @@ fn valid_run_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+const TOOLS_CHANGED: &str = "dogubako://tools-changed";
+
+/// Rebuild the tool registry (builtins, trusted extensions, enabled packs)
+/// without restarting; runs in progress keep the tool they started with.
+#[tauri::command]
+async fn reload_tools(app: tauri::AppHandle, state: State<'_, Desktop>) -> Result<Value, String> {
+    let engine = state.engine.clone();
+    let report = tauri::async_runtime::spawn_blocking(move || engine.reload()).await.map_err(|e| e.to_string())?;
+    if report.tool_set_changed() {
+        let _ = app.emit(TOOLS_CHANGED, &report);
+    }
+    Ok(json!({ "reload": report, "extensions": *state.engine.extensions() }))
+}
+
+/// Reload when the extensions folder changes (a manifest added, removed or
+/// edited, or the trust file updated), and tell the UI.
+fn watch_extensions(app: tauri::AppHandle, engine: Arc<Engine>, dir: PathBuf) {
+    tauri::async_runtime::spawn(async move {
+        let mut last = dogubako_tools::extensions_stamp(&dir);
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let stamp = dogubako_tools::extensions_stamp(&dir);
+            if stamp == last {
+                continue;
+            }
+            last = stamp;
+            let e = engine.clone();
+            if let Ok(report) = tauri::async_runtime::spawn_blocking(move || e.reload()).await {
+                if report.tool_set_changed() {
+                    let _ = app.emit(TOOLS_CHANGED, &report);
+                }
+            }
+        }
+    });
+}
+
 #[tauri::command]
 fn app_info(state: State<'_, Desktop>) -> Value {
     json!({
         "version": env!("CARGO_PKG_VERSION"),
         "platform": dogubako_core::spec::Platform::current(),
-        "tools": state.engine.registry.len(),
+        "tools": state.engine.registry().len(),
         "output_dir": state.output_dir,
         "data_dir": state.dirs.data,
         "mode": "desktop",
@@ -280,7 +316,7 @@ fn reveal_path(app: AppHandle, path: String) -> Result<(), String> {
 #[tauri::command]
 fn deps_status(state: State<'_, Desktop>) -> Vec<Value> {
     let mut used_by: HashMap<String, Vec<String>> = HashMap::new();
-    for s in state.engine.registry.specs() {
+    for s in state.engine.registry().specs() {
         for d in &s.requires {
             used_by.entry(d.clone()).or_default().push(s.id.clone());
         }
@@ -395,7 +431,6 @@ pub fn run() {
         std::process::exit(code);
     }
     let dirs = AppDirs::default_local();
-    let (registry, _ext) = dogubako_tools::build_registry(Some(&dirs.extensions));
     let mut cfg = EngineConfig::local(Environment::Desktop);
     cfg.models_dir = dirs.models.clone();
     cfg.temp_root = std::env::temp_dir().join("dogubako");
@@ -405,7 +440,9 @@ pub fn run() {
     // downloads into its own folder (docs/ENGINES.md).
     let managed = ManagedEngines::load(default_bundled_root(), dirs.data.join("engines"));
     let deps = DepRegistry::with_managed(vec![dirs.bin.clone()], managed);
-    let engine = Arc::new(Engine::with_deps(registry, cfg, deps));
+    let ext_dir = dirs.extensions.clone();
+    let engine = Arc::new(Engine::from_loader(cfg, deps, Arc::new(move || dogubako_tools::build_registry(Some(&ext_dir)))));
+    let watched = (engine.clone(), dirs.extensions.clone());
     let output_dir = dirs.data.join("outputs");
     let staging_dir = std::env::temp_dir().join("dogubako-staging");
     let _ = std::fs::create_dir_all(&output_dir);
@@ -420,6 +457,7 @@ pub fn run() {
             let scope = app.asset_protocol_scope();
             let _ = scope.allow_directory(&output_dir, true);
             let _ = scope.allow_directory(&staging_dir, true);
+            watch_extensions(app.handle().clone(), watched.0.clone(), watched.1.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -446,7 +484,8 @@ pub fn run() {
             assistant_models,
             extension_settings,
             configure_extension,
-            discard_run_outputs
+            discard_run_outputs,
+            reload_tools
         ])
         .run(tauri::generate_context!())
         .expect("error while running Dogubako");

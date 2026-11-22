@@ -179,6 +179,7 @@ struct SettingDecl {
 
 pub struct ExternalTool {
     spec: ToolSpec,
+    sha256: String,
     program: String,
     /// The required dependency `program` belongs to and the program's name
     /// there, if any; the program is then found through the dependency
@@ -255,7 +256,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
             return Err("a manifest has either [command] or [http], never both".into())
         }
         (None, None) => return Err("a manifest needs a [command] or an [http] section".into()),
-        (None, Some(http)) => return parse_http_manifest(m, http, category, source),
+        (None, Some(http)) => return parse_http_manifest(m, http, category, source, text),
         (Some(c), None) => c,
     };
     if m.output.body.is_some() || !m.output.json.is_empty() || m.output.table.is_some() {
@@ -328,6 +329,7 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     }
     Ok(ExternalTool {
         spec,
+        sha256: sha256_hex(text.as_bytes()),
         program: command.program,
         dep,
         args: command.args,
@@ -392,6 +394,7 @@ fn parse_http_manifest(
     http: HttpSection,
     category: Category,
     source: &str,
+    text: &str,
 ) -> Result<ExternalTool, String> {
     if m.output.file.is_some() || m.output.stdout.is_some() {
         return Err(
@@ -415,6 +418,7 @@ fn parse_http_manifest(
     spec.output.text_mime = request.text_mime();
     Ok(ExternalTool {
         spec,
+        sha256: sha256_hex(text.as_bytes()),
         program: String::new(),
         dep: None,
         args: vec![],
@@ -599,6 +603,10 @@ impl ExternalTool {
 impl Tool for ExternalTool {
     fn spec(&self) -> &ToolSpec {
         &self.spec
+    }
+
+    fn fingerprint(&self) -> Option<String> {
+        Some(self.sha256.clone())
     }
 
     fn unset_settings(&self) -> Vec<String> {
@@ -1136,7 +1144,8 @@ stdout = "text/plain"
         let rust =
             ToolSpec::new("system.rust_printers", "Printers", Category::System).requires(&deps);
         let h = crate::testing::TestHarness::new(vec![std::sync::Arc::new(ext)]);
-        let ext_spec = h.engine.registry.get("system.ext_printers").unwrap().spec();
+        let registry = h.engine.registry();
+        let ext_spec = registry.get("system.ext_printers").unwrap().spec();
         let a = serde_json::to_value(h.engine.availability(ext_spec)).unwrap();
         let b = serde_json::to_value(h.engine.availability(&rust)).unwrap();
         assert_eq!(a, b);
@@ -1317,9 +1326,8 @@ secret = true
         let tool = installed(dir.path());
         let h = crate::testing::TestHarness::new(vec![tool]);
         assert!(!h.available("text.ext_say"));
-        let info = h
-            .engine
-            .info(h.engine.registry.get("text.ext_say").unwrap().spec());
+        let registry = h.engine.registry();
+        let info = h.engine.info(registry.get("text.ext_say").unwrap().spec());
         assert_eq!(
             info.availability.reason.as_deref(),
             Some("Set up Say in Settings")

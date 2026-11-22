@@ -79,7 +79,7 @@ impl FileResolver for SessionResolver {
 impl McpBackend for LocalBackend {
     fn tools(&self) -> Vec<ToolInfo> {
         self.engine
-            .registry
+            .registry()
             .specs()
             .filter(|s| self.permitted(s))
             .map(|s| self.engine.info(s))
@@ -100,7 +100,8 @@ impl McpBackend for LocalBackend {
         progress: Option<ProgressFn>,
         wait: Duration,
     ) -> Result<JobView, ToolError> {
-        let spec = self.engine.find(tool_id)?.spec().clone();
+        let tool = self.engine.find(tool_id)?;
+        let spec = tool.spec().clone();
         if !self.permitted(&spec) {
             return Err(ToolError::denied(format!(
                 "'{}' is not permitted for this MCP server",
@@ -159,18 +160,21 @@ impl McpBackend for LocalBackend {
                 allow.iter().any(|p| matches(p, s)) && !deny.iter().any(|p| matches(p, s))
             };
             let res = engine
-                .run(RunRequest {
-                    tool_id: &spec.id,
-                    params: args,
-                    resolver: &resolver,
-                    out_dir,
-                    permissions,
-                    authorize: Some(&authorize),
-                    progress: Some(progress_fn),
-                    cancel,
-                    timeout: None,
-                    fs: Some(fs),
-                })
+                .run_tool(
+                    tool,
+                    RunRequest {
+                        tool_id: &spec.id,
+                        params: args,
+                        resolver: &resolver,
+                        out_dir,
+                        permissions,
+                        authorize: Some(&authorize),
+                        progress: Some(progress_fn),
+                        cancel,
+                        timeout: None,
+                        fs: Some(fs),
+                    },
+                )
                 .await;
             let mut v = tx2.borrow().clone();
             v.finished_at = Some(now());
@@ -365,8 +369,9 @@ pub async fn serve(engine: Engine, m: &ArgMatches) -> i32 {
             .unwrap_or("full"),
     )
     .unwrap_or(DiscoveryMode::Full);
+    let engine = Arc::new(engine);
     let backend = Arc::new(LocalBackend {
-        engine: Arc::new(engine),
+        engine: engine.clone(),
         allow,
         deny,
         permissions,
@@ -379,6 +384,19 @@ pub async fn serve(engine: Engine, m: &ArgMatches) -> i32 {
     let stdout = Arc::new(tokio::sync::Mutex::new(tokio::io::stdout()));
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     let mut inflight = tokio::task::JoinSet::new();
+    watch_extensions(
+        engine.clone(),
+        dogubako_core::paths::AppDirs::default_local().extensions,
+    );
+    {
+        let mut changes = engine.subscribe();
+        let stdout = stdout.clone();
+        tokio::spawn(async move {
+            while changes.changed().await.is_ok() {
+                write_line(&stdout, &McpServer::tools_list_changed()).await;
+            }
+        });
+    }
     tracing::info!("dogubako MCP stdio server ready");
     while let Ok(Some(line)) = lines.next_line().await {
         if line.trim().is_empty() {
@@ -409,6 +427,29 @@ pub async fn serve(engine: Engine, m: &ArgMatches) -> i32 {
     // Client closed stdin: finish answering in-flight requests before exiting.
     while inflight.join_next().await.is_some() {}
     0
+}
+
+/// Reload the registry when the extensions folder changes, so installed or
+/// removed tools show up without restarting the MCP client.
+fn watch_extensions(engine: Arc<Engine>, dir: PathBuf) {
+    tokio::spawn(async move {
+        let mut last = dogubako_tools::extensions_stamp(&dir);
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(2));
+        loop {
+            tick.tick().await;
+            let stamp = dogubako_tools::extensions_stamp(&dir);
+            if stamp == last {
+                continue;
+            }
+            last = stamp;
+            let engine = engine.clone();
+            if let Ok(r) = tokio::task::spawn_blocking(move || engine.reload()).await {
+                if r.tool_set_changed() {
+                    tracing::info!(added = ?r.added, removed = ?r.removed, changed = ?r.changed, "reloaded tools");
+                }
+            }
+        }
+    });
 }
 
 async fn write_line(out: &Arc<tokio::sync::Mutex<tokio::io::Stdout>>, v: &Value) {

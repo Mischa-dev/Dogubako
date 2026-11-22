@@ -282,6 +282,44 @@ pub fn spec(engine: &Engine) -> Value {
         op("Security & execution audit log (admin)", "admin", json!({})),
     );
     add(
+        "/api/v1/admin/reload",
+        "post",
+        op(
+            "Rebuild the tool registry without a restart; reports added, removed and changed tools (admin)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/tools/events",
+        "get",
+        op(
+            "Server-sent `tools` event each time a reload changes the tool set",
+            "tools",
+            json!({"responses": {
+                "200": {"description": "Event stream", "content": {"text/event-stream": {"schema": {"type": "string"}}}},
+                "401": {"$ref": "#/components/responses/Error"}
+            }}),
+        ),
+    );
+    add(
+        "/mcp",
+        "get",
+        op(
+            "MCP server-initiated stream (notifications/tools/list_changed)",
+            "mcp",
+            json!({
+                "parameters": [{"name": "Mcp-Session-Id", "in": "header", "required": true, "schema": {"type": "string"}}],
+                "responses": {
+                    "200": {"description": "Event stream (requires `Accept: text/event-stream`)", "content": {"text/event-stream": {"schema": {"type": "string"}}}},
+                    "401": {"$ref": "#/components/responses/Error"},
+                    "404": {"$ref": "#/components/responses/Error"},
+                    "405": {"description": "Missing `Accept: text/event-stream` or `Mcp-Session-Id`"}
+                }
+            }),
+        ),
+    );
+    add(
         "/mcp",
         "post",
         op(
@@ -292,7 +330,7 @@ pub fn spec(engine: &Engine) -> Value {
     );
 
     let mut tool_paths = Map::new();
-    for spec in engine.registry.specs() {
+    for spec in engine.registry().specs() {
         let body = json!({
             "type": "object",
             "properties": {

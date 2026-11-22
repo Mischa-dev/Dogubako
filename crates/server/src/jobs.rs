@@ -162,8 +162,8 @@ impl JobManager {
         via: &str,
         quota_default_mb: u64,
     ) -> ApiResult<JobView> {
-        let spec = self
-            .engine
+        let tools = self.engine.snapshot();
+        let spec = tools
             .catalog
             .find(tool_id)
             .ok_or_else(|| ApiError::not_found(format!("unknown tool '{tool_id}'")))?
@@ -183,9 +183,10 @@ impl JobManager {
                 spec.id
             )));
         }
-        if let Some(e) = self.engine.not_installed(tool_id) {
+        if let Some(e) = tools.not_installed(tool_id) {
             return Err(ApiError::from(e));
         }
+        let tool = tools.find(tool_id).map_err(ApiError::from)?;
         if self.db.storage_used(&principal.user_id) >= principal.quota_bytes(quota_default_mb) {
             return Err(ApiError::too_large(
                 "storage quota exceeded; delete some files first",
@@ -229,7 +230,8 @@ impl JobManager {
         let via = via.to_string();
         let quota = principal.quota_bytes(quota_default_mb);
         tokio::spawn(async move {
-            me.execute(job_id, p, params, tx, cancel, via, quota).await;
+            me.execute(tool, job_id, p, params, tx, cancel, via, quota)
+                .await;
         });
         Ok(view)
     }
@@ -237,6 +239,7 @@ impl JobManager {
     #[allow(clippy::too_many_arguments)]
     async fn execute(
         self: Arc<Self>,
+        tool: Arc<dyn dogubako_core::tool::Tool>,
         job_id: String,
         p: Principal,
         params: Map<String, Value>,
@@ -287,18 +290,21 @@ impl JobManager {
         };
         let result = self
             .engine
-            .run(RunRequest {
-                tool_id: &view.tool_id,
-                params,
-                resolver: &resolver,
-                out_dir: out_dir.clone(),
-                permissions: p.permissions(self.host_fs_enabled),
-                authorize: Some(&authorize),
-                progress: Some(progress),
-                cancel: cancel.clone(),
-                timeout: Some(self.max_job),
-                fs,
-            })
+            .run_tool(
+                tool,
+                RunRequest {
+                    tool_id: &view.tool_id,
+                    params,
+                    resolver: &resolver,
+                    out_dir: out_dir.clone(),
+                    permissions: p.permissions(self.host_fs_enabled),
+                    authorize: Some(&authorize),
+                    progress: Some(progress),
+                    cancel: cancel.clone(),
+                    timeout: Some(self.max_job),
+                    fs,
+                },
+            )
             .await;
         let mut view = tx.borrow().clone();
         view.finished_at = Some(now());

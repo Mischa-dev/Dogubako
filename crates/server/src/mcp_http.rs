@@ -30,7 +30,7 @@ impl McpBackend for ServerBackend {
         let perms = self.principal.permissions(self.state.host_fs_enabled());
         self.state
             .engine
-            .registry
+            .registry()
             .specs()
             .filter(|s| self.principal.can_use(s) && perms.missing(&s.permissions).is_empty())
             .map(|s| self.state.engine.info(s))
@@ -39,11 +39,12 @@ impl McpBackend for ServerBackend {
 
     fn not_installed(&self, name: &str) -> Option<ToolError> {
         let perms = self.principal.permissions(self.state.host_fs_enabled());
-        let spec = self.state.engine.catalog.find(name)?.spec();
+        let tools = self.state.engine.snapshot();
+        let spec = tools.catalog.find(name)?.spec();
         if !self.principal.can_use(spec) || !perms.missing(&spec.permissions).is_empty() {
             return None;
         }
-        self.state.engine.not_installed(name)
+        tools.not_installed(name)
     }
     fn file_mode(&self) -> &'static str {
         "id"
@@ -287,6 +288,7 @@ pub async fn mcp_post(
                 token_id: principal.token_id.clone(),
                 created: Instant::now(),
                 last_used: Instant::now(),
+                closed: Default::default(),
             },
         );
         new_session = Some(sid);
@@ -362,13 +364,50 @@ pub async fn mcp_post(
     Ok(resp)
 }
 
-pub async fn mcp_get() -> Response {
-    // We don't offer a standalone server-initiated SSE stream.
-    (
-        StatusCode::METHOD_NOT_ALLOWED,
-        [(header::ALLOW, "POST, DELETE")],
-    )
-        .into_response()
+/// The standalone server-initiated stream for an initialized session: sends
+/// `notifications/tools/list_changed` after a reload that changed the tools.
+pub async fn mcp_get(
+    State(state): State<AppState>,
+    principal: Principal,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let accepts_sse = headers
+        .get(header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .map(|a| a.contains("text/event-stream"))
+        .unwrap_or(false);
+    let sid = headers.get("mcp-session-id").and_then(|v| v.to_str().ok());
+    let (true, Some(sid)) = (accepts_sse, sid) else {
+        return Ok((
+            StatusCode::METHOD_NOT_ALLOWED,
+            [(header::ALLOW, "POST, DELETE")],
+        )
+            .into_response());
+    };
+    let closed = {
+        let mut sessions = state.mcp_sessions.lock().unwrap();
+        match sessions.get_mut(sid) {
+            Some(s) if s.user_id == principal.user_id && s.token_id == principal.token_id => {
+                s.last_used = Instant::now();
+                s.closed.clone()
+            }
+            _ => return Err(ApiError::not_found("unknown MCP session; re-initialize")),
+        }
+    };
+    let rx = state.engine.subscribe();
+    let stream = tokio_stream::wrappers::WatchStream::from_changes(rx)
+        .take_until(closed.cancelled_owned())
+        .take_until(state.shutdown.clone().cancelled_owned())
+        .map(|_| {
+            Ok::<_, std::convert::Infallible>(
+                Event::default()
+                    .event("message")
+                    .data(McpServer::tools_list_changed().to_string()),
+            )
+        });
+    Ok(Sse::new(stream)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+        .into_response())
 }
 
 pub async fn mcp_delete(
@@ -382,7 +421,9 @@ pub async fn mcp_delete(
             .map(|x| x.user_id == principal.user_id)
             .unwrap_or(false)
         {
-            s.remove(sid);
+            if let Some(gone) = s.remove(sid) {
+                gone.closed.cancel();
+            }
         }
     }
     StatusCode::NO_CONTENT.into_response()
