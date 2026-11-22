@@ -649,7 +649,8 @@ stdout = "text/plain"
         let rust =
             ToolSpec::new("system.rust_printers", "Printers", Category::System).requires(&deps);
         let h = crate::testing::TestHarness::new(vec![std::sync::Arc::new(ext)]);
-        let ext_spec = h.engine.registry.get("system.ext_printers").unwrap().spec();
+        let registry = h.engine.registry();
+        let ext_spec = registry.get("system.ext_printers").unwrap().spec();
         let a = serde_json::to_value(h.engine.availability(ext_spec)).unwrap();
         let b = serde_json::to_value(h.engine.availability(&rust)).unwrap();
         assert_eq!(a, b);
