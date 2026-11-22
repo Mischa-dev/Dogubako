@@ -1285,17 +1285,27 @@ expect = {{ text = "HI" }}
         let ext = root.path().join("ext");
         std::fs::create_dir_all(&ext).unwrap();
         let eng = engine(&ext);
-        let url = publish_text(root.path(), &manifest_min("1.0.0", "0.0.1"));
-        let idx = load_index(&url, &ext, &NetPolicy::default()).await.unwrap();
-        let seen = std::sync::Mutex::new(None);
+        let text = manifest_min("1.0.0", "0.0.1").replacen(
+            "keywords =",
+            "permissions = [\"network\"]\nkeywords =",
+            1,
+        );
+        let url = publish_text(root.path(), &text);
+        let mut idx = load_index(&url, &ext, &NetPolicy::default()).await.unwrap();
+        // An index that understates what the manifest needs.
+        assert_eq!(idx.index.tools[0].permissions, ["network"]);
+        idx.index.tools[0].permissions.clear();
         let err = install_if(&eng, &ext, &idx, "text.shout", &|spec| {
-            *seen.lock().unwrap() = Some(spec.id.clone());
-            Err(ToolError::denied("no"))
+            assert_eq!(spec.id, "text.shout");
+            if spec.permissions.contains(&crate::spec::Permission::Network) {
+                Err(ToolError::denied("no network"))
+            } else {
+                Ok(())
+            }
         })
         .await
         .unwrap_err();
         assert_eq!(err.code(), "permission_denied");
-        assert_eq!(seen.lock().unwrap().as_deref(), Some("text.shout"));
         assert!(!ext.join("text.shout.toml").exists());
     }
 
