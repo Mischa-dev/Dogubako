@@ -4,7 +4,8 @@
 use crate::engine::{Engine, RunRequest};
 use crate::error::{ToolError, ToolResult};
 use crate::manifest::{
-    json_path_get, parse_manifest, sha256_hex, ManifestTest, SettingsStore, TrustStore,
+    json_path_get, load_dev_extensions, load_extensions, parse_manifest, sha256_hex, DevAuthors,
+    ExtensionStatus, ManifestTest, SettingsStore, TrustStore, DEV_DIR, LOCAL_AUTHOR,
 };
 use crate::params::LocalFileResolver;
 use crate::policy::NetPolicy;
@@ -64,6 +65,9 @@ pub struct ExtensionReport {
     pub unset_settings: Vec<String>,
     pub trusted: bool,
     pub loaded: bool,
+    /// In the dev slot: untrusted, usable only by its author.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub dev: bool,
     /// Install replaced an earlier copy of the same extension.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub replaced: bool,
@@ -284,10 +288,11 @@ pub async fn test(engine: &Engine, dir: &Path, id: &str) -> ToolResult<Extension
         .filter(|s| s.id.as_deref() == Some(id))
         .max_by_key(|s| s.loaded)
         .ok_or_else(|| ToolError::NotFound { id: id.to_string() })?;
-    let trusted = TrustStore::load(&dir.join("trusted.toml"))
-        .trusted
-        .get(id)
-        .is_some_and(|s| *s == status.sha256);
+    let trusted = !status.dev
+        && TrustStore::load(&dir.join("trusted.toml"))
+            .trusted
+            .get(id)
+            .is_some_and(|s| *s == status.sha256);
     let text = std::fs::read_to_string(dir.join(&status.file))
         .map_err(|e| ToolError::failed(format!("reading {}: {e}", status.file)))?;
     let parsed =
@@ -301,6 +306,7 @@ pub async fn test(engine: &Engine, dir: &Path, id: &str) -> ToolResult<Extension
     r.file = Some(status.file.clone());
     r.sha256 = status.sha256.clone();
     r.trusted = trusted;
+    r.dev = status.dev;
     r.loaded = status.loaded && loaded.is_some();
     if sha256_hex(text.as_bytes()) != status.sha256 {
         r.error = Some(format!(
@@ -343,10 +349,17 @@ pub fn uninstall(
             ));
         }
     }
-    let files = manifests_with_id(dir, id);
+    let mut files = manifests_with_id(dir, id);
+    files.extend(manifests_with_id(&dir.join(DEV_DIR), id));
     let trust_path = dir.join("trusted.toml");
     let mut trust = TrustStore::load(&trust_path);
     let was_trusted = trust.trusted.remove(id).is_some();
+    let mut authors = DevAuthors::load(dir);
+    if authors.authors.remove(id).is_some() {
+        authors
+            .save(dir)
+            .map_err(|e| ToolError::failed(format!("saving dev authors: {e}")))?;
+    }
     if files.is_empty() && !was_trusted {
         return Err(ToolError::NotFound { id: id.to_string() });
     }
@@ -354,7 +367,11 @@ pub fn uninstall(
     for p in &files {
         std::fs::remove_file(p)
             .map_err(|e| ToolError::failed(format!("removing {}: {e}", p.display())))?;
-        removed.push(p.file_name().unwrap().to_string_lossy().to_string());
+        let name = p.file_name().unwrap().to_string_lossy().to_string();
+        removed.push(match p.parent() == Some(dir) {
+            true => name,
+            false => format!("{DEV_DIR}/{name}"),
+        });
     }
     trust
         .save(&trust_path)
@@ -369,6 +386,287 @@ pub fn uninstall(
         removed,
         purged: purge,
     })
+}
+
+/// Load an extensions folder into `reg`: trusted manifests first, then the
+/// dev slot. A dev tool never shadows a built-in or an installed extension
+/// (trusted or not), by id or by MCP name.
+pub fn load_into(reg: &mut Registry, dir: &Path) -> Vec<ExtensionStatus> {
+    let (tools, mut statuses) = load_extensions(dir, false);
+    register(reg, tools, &mut statuses);
+    let (dev, mut dev_st) = load_dev_extensions(dir);
+    let installed: Vec<String> = statuses.iter().filter_map(|s| s.id.clone()).collect();
+    let mut allowed = vec![];
+    for t in dev {
+        let spec = t.spec();
+        let clash = if installed.contains(&spec.id) {
+            Some(format!("'{}' is already an installed extension", spec.id))
+        } else if let Some(other) = reg.get(&spec.id) {
+            Some(format!(
+                "'{}' is already the tool '{}'",
+                spec.id,
+                other.spec().source
+            ))
+        } else {
+            reg.find(&spec.mcp_name())
+                .map(|o| format!("its MCP name clashes with '{}'", o.spec().id))
+        };
+        match clash {
+            Some(e) => mark_failed(&mut dev_st, spec, format!("dev tool cannot shadow: {e}")),
+            None => allowed.push(t),
+        }
+    }
+    register(reg, allowed, &mut dev_st);
+    statuses.extend(dev_st);
+    statuses
+}
+
+fn register(reg: &mut Registry, tools: Vec<Arc<dyn Tool>>, statuses: &mut [ExtensionStatus]) {
+    for t in tools {
+        let spec = t.spec().clone();
+        if let Err(e) = reg.register(t) {
+            mark_failed(statuses, &spec, e.to_string());
+        }
+    }
+}
+
+fn mark_failed(statuses: &mut [ExtensionStatus], spec: &ToolSpec, error: String) {
+    let file = spec.source.strip_prefix("extension:").unwrap_or_default();
+    for s in statuses.iter_mut().filter(|s| s.file == file) {
+        s.loaded = false;
+        s.error = Some(error.clone());
+    }
+}
+
+/// Install a manifest into the dev slot (`<dir>/dev/<id>.toml`) for
+/// `author`: no trust pin, visible only to its author, reloaded on edit.
+/// It may not take an id or MCP name already used by a built-in, an
+/// installed extension or another author's dev tool.
+pub async fn install_dev(
+    engine: &Engine,
+    dir: &Path,
+    text: &str,
+    author: &str,
+    opts: InstallOptions,
+) -> ToolResult<ExtensionReport> {
+    let guard = lifecycle_lock();
+    if text.len() > MAX_MANIFEST_BYTES {
+        return Err(too_big());
+    }
+    let tool = parse_manifest(text, "install").map_err(|e| ToolError::invalid("manifest", e))?;
+    Registry::new()
+        .register(Arc::new(
+            parse_manifest(text, "install").map_err(|e| ToolError::invalid("manifest", e))?,
+        ))
+        .map_err(|e| ToolError::invalid("manifest", e.to_string()))?;
+    let id = tool.spec().id.clone();
+    check_id(&id)?;
+    let mcp = tool.spec().mcp_name();
+    let mut authors = DevAuthors::load(dir);
+    let owner = |o: &ToolSpec| o.author.as_deref().unwrap_or(LOCAL_AUTHOR).to_string();
+    for t in engine.catalog().iter() {
+        let other = t.spec();
+        if other.id != id && other.mcp_name() != mcp {
+            continue;
+        }
+        let why = if !is_extension(other) {
+            format!("the built-in tool '{}'", other.id)
+        } else if !other.dev {
+            format!("the installed extension '{}'", other.id)
+        } else if other.id != id {
+            format!("the dev tool '{}'", other.id)
+        } else if owner(other) != author {
+            format!("another author's dev tool '{id}'")
+        } else {
+            continue;
+        };
+        return Err(ToolError::invalid(
+            "manifest",
+            format!("'{id}' cannot shadow {why}"),
+        ));
+    }
+    if !manifests_with_id(dir, &id).is_empty() {
+        return Err(ToolError::invalid(
+            "manifest",
+            format!("'{id}' cannot shadow the installed extension '{id}'"),
+        ));
+    }
+    let dev = dir.join(DEV_DIR);
+    let existing = manifests_with_id(&dev, &id);
+    if let Some(a) = authors.authors.get(&id).filter(|a| *a != author) {
+        if !existing.is_empty() {
+            return Err(ToolError::invalid(
+                "manifest",
+                format!("'{id}' cannot shadow another author's dev tool ({a})"),
+            ));
+        }
+    }
+    if !existing.is_empty() && !opts.replace {
+        return Err(ToolError::invalid(
+            "manifest",
+            format!("a dev tool with id '{id}' is already installed; install with replace"),
+        ));
+    }
+    std::fs::create_dir_all(&dev)
+        .map_err(|e| ToolError::failed(format!("creating {}: {e}", dev.display())))?;
+    let target = dev.join(format!("{id}.toml"));
+    let backups: Vec<(PathBuf, String)> = existing
+        .iter()
+        .filter_map(|p| Some((p.clone(), std::fs::read_to_string(p).ok()?)))
+        .collect();
+    let old_author = authors.authors.get(&id).cloned();
+    let rollback = |authors: &mut DevAuthors| {
+        let _ = std::fs::remove_file(&target);
+        for (p, text) in &backups {
+            let _ = std::fs::write(p, text);
+        }
+        match &old_author {
+            Some(a) => authors.authors.insert(id.clone(), a.clone()),
+            None => authors.authors.remove(&id),
+        };
+        let _ = authors.save(dir);
+    };
+    let write = (|| -> ToolResult<()> {
+        for p in &existing {
+            if *p != target {
+                std::fs::remove_file(p)
+                    .map_err(|e| ToolError::failed(format!("removing {}: {e}", p.display())))?;
+            }
+        }
+        authors.authors.insert(id.clone(), author.to_string());
+        authors
+            .save(dir)
+            .map_err(|e| ToolError::failed(format!("saving dev authors: {e}")))?;
+        let tmp = dev.join(format!(".{id}.toml.tmp"));
+        std::fs::write(&tmp, text)
+            .and_then(|_| std::fs::rename(&tmp, &target))
+            .map_err(|e| ToolError::failed(format!("writing {}: {e}", target.display())))
+    })();
+    if let Err(e) = write {
+        rollback(&mut authors);
+        return Err(e);
+    }
+    engine.reload();
+    let file = format!("{DEV_DIR}/{id}.toml");
+    let status = engine.extensions().iter().find(|s| s.file == file).cloned();
+    let loaded = engine.registry().get(&id).cloned();
+    let (Some(loaded), Some(true)) = (loaded, status.as_ref().map(|s| s.loaded)) else {
+        let why = status
+            .and_then(|s| s.error)
+            .unwrap_or_else(|| "extension did not load".into());
+        rollback(&mut authors);
+        engine.reload();
+        return Err(ToolError::failed(format!("'{id}' did not load: {why}")));
+    };
+    let mut r = ExtensionReport::from_spec(loaded.spec(), engine);
+    r.file = Some(file.clone());
+    r.sha256 = tool.sha256().to_string();
+    r.loaded = true;
+    r.dev = true;
+    r.replaced = !existing.is_empty();
+    drop(guard);
+    let src = Source {
+        dir,
+        file: &file,
+        text,
+    };
+    r.tests = run_tests(engine, &src, loaded.spec(), tool.tests()).await;
+    Ok(r.finish())
+}
+
+/// Promote a dev tool to a trusted extension: move `dev/<id>.toml` to
+/// `<id>.toml`, pin its SHA-256, reload and run its tests. Callers must make
+/// sure a human owner or admin asked for it.
+pub async fn promote(engine: &Engine, dir: &Path, id: &str) -> ToolResult<ExtensionReport> {
+    check_id(id)?;
+    let guard = lifecycle_lock();
+    let dev = dir.join(DEV_DIR);
+    let files = manifests_with_id(&dev, id);
+    let Some(source) = files.first().cloned() else {
+        return Err(ToolError::NotFound { id: id.to_string() });
+    };
+    let text = std::fs::read_to_string(&source)
+        .map_err(|e| ToolError::failed(format!("reading {}: {e}", source.display())))?;
+    let tool = parse_manifest(&text, "promote").map_err(|e| ToolError::invalid("manifest", e))?;
+    if !manifests_with_id(dir, id).is_empty() {
+        return Err(ToolError::invalid(
+            "id",
+            format!("an extension with id '{id}' is already installed; uninstall it first"),
+        ));
+    }
+    let sha = tool.sha256().to_string();
+    let target = dir.join(format!("{id}.toml"));
+    let trust_path = dir.join("trusted.toml");
+    let mut trust = TrustStore::load(&trust_path);
+    let old_trust = trust.trusted.get(id).cloned();
+    let mut authors = DevAuthors::load(dir);
+    let old_author = authors.authors.remove(id);
+    let backups: Vec<(PathBuf, String)> = files
+        .iter()
+        .filter_map(|p| Some((p.clone(), std::fs::read_to_string(p).ok()?)))
+        .collect();
+    let rollback = |trust: &mut TrustStore, authors: &mut DevAuthors| {
+        let _ = std::fs::remove_file(&target);
+        for (p, text) in &backups {
+            let _ = std::fs::write(p, text);
+        }
+        match &old_trust {
+            Some(s) => trust.trusted.insert(id.to_string(), s.clone()),
+            None => trust.trusted.remove(id),
+        };
+        let _ = trust.save(&trust_path);
+        if let Some(a) = &old_author {
+            authors.authors.insert(id.to_string(), a.clone());
+            let _ = authors.save(dir);
+        }
+    };
+    let write = (|| -> ToolResult<()> {
+        let tmp = dir.join(format!(".{id}.toml.tmp"));
+        std::fs::write(&tmp, &text)
+            .and_then(|_| std::fs::rename(&tmp, &target))
+            .map_err(|e| ToolError::failed(format!("writing {}: {e}", target.display())))?;
+        trust.trusted.insert(id.to_string(), sha.clone());
+        trust
+            .save(&trust_path)
+            .map_err(|e| ToolError::failed(format!("saving trust: {e}")))?;
+        for p in &files {
+            std::fs::remove_file(p)
+                .map_err(|e| ToolError::failed(format!("removing {}: {e}", p.display())))?;
+        }
+        authors
+            .save(dir)
+            .map_err(|e| ToolError::failed(format!("saving dev authors: {e}")))
+    })();
+    if let Err(e) = write {
+        rollback(&mut trust, &mut authors);
+        engine.reload();
+        return Err(e);
+    }
+    engine.reload();
+    let file = format!("{id}.toml");
+    let status = engine.extensions().iter().find(|s| s.file == file).cloned();
+    let loaded = engine.registry().get(id).cloned();
+    let (Some(loaded), Some(true)) = (loaded, status.as_ref().map(|s| s.loaded)) else {
+        let why = status
+            .and_then(|s| s.error)
+            .unwrap_or_else(|| "extension did not load".into());
+        rollback(&mut trust, &mut authors);
+        engine.reload();
+        return Err(ToolError::failed(format!("'{id}' did not load: {why}")));
+    };
+    let mut r = ExtensionReport::from_spec(loaded.spec(), engine);
+    r.file = Some(file.clone());
+    r.sha256 = sha;
+    r.trusted = true;
+    r.loaded = true;
+    drop(guard);
+    let src = Source {
+        dir,
+        file: &file,
+        text: &text,
+    };
+    r.tests = run_tests(engine, &src, loaded.spec(), tool.tests()).await;
+    Ok(r.finish())
 }
 
 fn is_extension(spec: &ToolSpec) -> bool {
@@ -727,7 +1025,7 @@ fn truncate(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::engine::EngineConfig;
-    use crate::manifest::load_extensions;
+
     use crate::params::Params;
     use crate::spec::Category;
     use crate::tool::{Environment, ToolContext};
@@ -758,18 +1056,7 @@ mod tests {
                     "Builtin",
                     Category::Text,
                 )))]);
-                let (tools, mut st) = load_extensions(&d, false);
-                for t in tools {
-                    let id = t.spec().id.clone();
-                    if let Err(e) = reg.register(t) {
-                        st.iter_mut()
-                            .filter(|s| s.id.as_deref() == Some(id.as_str()))
-                            .for_each(|s| {
-                                s.loaded = false;
-                                s.error = Some(e.to_string());
-                            });
-                    }
-                }
+                let st = load_into(&mut reg, &d);
                 (reg, st)
             }),
         )
@@ -1108,5 +1395,111 @@ http = { json = {} }
         let doc = serde_json::json!({"a": [{"b": true}]});
         assert_eq!(json_path_get(&doc, "a[0].b"), Some(&Value::Bool(true)));
         assert_eq!(json_path_get(&doc, "a[3]"), None);
+    }
+
+    #[tokio::test]
+    async fn dev_slot_loads_untrusted_reloads_and_promotes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        let e = engine(dir);
+        let opts = InstallOptions::default();
+        let r = install_dev(&e, dir, M, "token:t1", opts).await.unwrap();
+        assert!(r.dev && r.loaded && !r.trusted && r.passed, "{r:?}");
+        assert!(dir.join("dev/text.ext_echo.toml").exists());
+        assert!(TrustStore::load(&dir.join("trusted.toml"))
+            .trusted
+            .is_empty());
+        let spec = e.registry().get("text.ext_echo").unwrap().spec().clone();
+        assert!(spec.dev);
+        assert_eq!(spec.author.as_deref(), Some("token:t1"));
+        let st = e.extensions().iter().find(|s| s.dev).cloned().unwrap();
+        assert_eq!(st.file, "dev/text.ext_echo.toml");
+        assert_eq!(st.author.as_deref(), Some("token:t1"));
+
+        // Edited in place: the next reload picks it up with no trust step.
+        let edited = M.replace("Echo", "Echo v2");
+        std::fs::write(dir.join("dev/text.ext_echo.toml"), &edited).unwrap();
+        assert!(e.reload().changed.contains(&"text.ext_echo".to_string()));
+        assert!(e
+            .registry()
+            .get("text.ext_echo")
+            .unwrap()
+            .spec()
+            .name
+            .contains("v2"));
+
+        // Another author cannot take the id; the same author replaces it.
+        let err = install_dev(&e, dir, M, "token:t2", InstallOptions { replace: true })
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("another author"), "{err}");
+        assert!(install_dev(&e, dir, M, "token:t1", opts).await.is_err());
+        install_dev(&e, dir, M, "token:t1", InstallOptions { replace: true })
+            .await
+            .unwrap();
+
+        // Built-ins are never shadowed.
+        let err = install_dev(
+            &e,
+            dir,
+            &M.replace("text.ext_echo", "text.builtin_x"),
+            "local",
+            opts,
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("cannot shadow the built-in"),
+            "{err}"
+        );
+
+        // Promote: moved to the trusted slot and pinned.
+        let r = promote(&e, dir, "text.ext_echo").await.unwrap();
+        assert!(r.trusted && r.loaded && !r.dev && r.passed, "{r:?}");
+        assert!(dir.join("text.ext_echo.toml").exists());
+        assert!(!dir.join("dev/text.ext_echo.toml").exists());
+        let trust = TrustStore::load(&dir.join("trusted.toml"));
+        assert_eq!(trust.trusted.get("text.ext_echo"), Some(&r.sha256));
+        assert!(DevAuthors::load(dir).authors.is_empty());
+        let spec = e.registry().get("text.ext_echo").unwrap().spec().clone();
+        assert!(!spec.dev && spec.author.is_none());
+        assert!(
+            promote(&e, dir, "text.ext_echo").await.is_err(),
+            "nothing left to promote"
+        );
+
+        // A dev copy may not shadow the trusted extension, even dropped in by hand.
+        let err = install_dev(&e, dir, M, "token:t1", opts).await.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("cannot shadow the installed extension"),
+            "{err}"
+        );
+        std::fs::write(dir.join("dev/text.ext_echo.toml"), M).unwrap();
+        e.reload();
+        let st = e.extensions().iter().find(|s| s.dev).cloned().unwrap();
+        assert!(!st.loaded);
+        assert!(st.error.unwrap().contains("cannot shadow"));
+        assert!(!e.registry().get("text.ext_echo").unwrap().spec().dev);
+
+        // Uninstall removes both copies.
+        let u = uninstall(&e, dir, "text.ext_echo", false).unwrap();
+        assert_eq!(
+            u.removed,
+            vec!["text.ext_echo.toml", "dev/text.ext_echo.toml"]
+        );
+    }
+
+    #[test]
+    fn hand_placed_dev_manifests_belong_to_the_local_owner() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        std::fs::create_dir_all(dir.join("dev")).unwrap();
+        std::fs::write(dir.join("dev/wip.toml"), M).unwrap();
+        let e = engine(dir);
+        let spec = e.registry().get("text.ext_echo").unwrap().spec().clone();
+        assert!(spec.dev);
+        assert_eq!(spec.author.as_deref(), Some(LOCAL_AUTHOR));
+        assert_eq!(spec.source, "extension:dev/wip.toml");
     }
 }

@@ -332,6 +332,7 @@ export class HttpBackend implements Backend {
   configureExtension(id: string, values: Record<string, unknown>) {
     return this.request<ExtensionSettings>('PUT', `/extensions/${encodeURIComponent(id)}/settings`, values);
   }
+  promoteExtension(id: string) { return this.post<ExtensionReport>(`/extensions/${encodeURIComponent(id)}/promote`); }
   storeSearch(query = '') { return this.get<StoreResult>(`/store?q=${encodeURIComponent(query)}`); }
   storeInstalled() { return this.get<StoreResult>('/store/installed'); }
   storeInstall(id: string) { return this.post<ExtensionReport>('/store/install', { id }); }

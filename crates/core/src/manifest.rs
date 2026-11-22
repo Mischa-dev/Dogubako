@@ -1177,6 +1177,62 @@ pub struct ExtensionStatus {
     pub sha256: String,
     pub loaded: bool,
     pub error: Option<String>,
+    /// From the dev slot: loaded without trust, usable only by `author`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub dev: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+}
+
+/// The dev slot inside an extensions folder: manifests an agent (or anyone)
+/// is still building. They load without a trust pin, reload when edited, and
+/// only their author can see or run them until a human promotes them.
+pub const DEV_DIR: &str = "dev";
+/// Author of dev manifests with no entry in `dev/authors.toml` (dropped in by
+/// hand): the local owner.
+pub const LOCAL_AUTHOR: &str = "local";
+
+/// Who installed each dev manifest: `id -> author` (`dev/authors.toml`).
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct DevAuthors {
+    #[serde(default)]
+    pub authors: BTreeMap<String, String>,
+}
+
+impl DevAuthors {
+    pub fn path(extensions_dir: &Path) -> PathBuf {
+        extensions_dir.join(DEV_DIR).join("authors.toml")
+    }
+    pub fn load(extensions_dir: &Path) -> Self {
+        std::fs::read_to_string(Self::path(extensions_dir))
+            .ok()
+            .and_then(|s| toml::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+    pub fn save(&self, extensions_dir: &Path) -> std::io::Result<()> {
+        let path = Self::path(extensions_dir);
+        if let Some(p) = path.parent() {
+            std::fs::create_dir_all(p)?;
+        }
+        std::fs::write(
+            path,
+            toml::to_string_pretty(self).map_err(std::io::Error::other)?,
+        )
+    }
+}
+
+fn manifest_files(dir: &Path, skip: &str) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return vec![];
+    };
+    let mut files: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file() && p.extension().map(|e| e == "toml").unwrap_or(false))
+        .filter(|p| p.file_name().map(|n| n != skip).unwrap_or(false))
+        .collect();
+    files.sort();
+    files
 }
 
 /// Load trusted extension manifests from a directory.
@@ -1185,58 +1241,80 @@ pub fn load_extensions(dir: &Path, trust_all: bool) -> (Vec<Arc<dyn Tool>>, Vec<
     let settings = SettingsStore::for_extensions(dir);
     let mut tools: Vec<Arc<dyn Tool>> = vec![];
     let mut status = vec![];
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return (tools, status);
-    };
-    let mut files: Vec<PathBuf> = entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().map(|e| e == "toml").unwrap_or(false))
-        .collect();
-    files.sort();
-    for path in files {
+    for path in manifest_files(dir, "trusted.toml") {
         let file = path.file_name().unwrap().to_string_lossy().to_string();
-        if file == "trusted.toml" {
-            continue;
-        }
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
         };
         let sha = sha256_hex(text.as_bytes());
+        let mut st = ExtensionStatus {
+            file: file.clone(),
+            id: None,
+            sha256: sha.clone(),
+            loaded: false,
+            error: None,
+            dev: false,
+            author: None,
+        };
         match parse_manifest(&text, &file) {
             Ok(t) => {
                 let id = t.spec.id.clone();
-                let trusted =
-                    trust_all || trust.trusted.get(&id).map(|h| *h == sha).unwrap_or(false);
-                if trusted {
+                st.id = Some(id.clone());
+                if trust_all || trust.trusted.get(&id).map(|h| *h == sha).unwrap_or(false) {
                     tools.push(Arc::new(t.with_settings_store(settings.clone())));
-                    status.push(ExtensionStatus {
-                        file,
-                        id: Some(id),
-                        sha256: sha,
-                        loaded: true,
-                        error: None,
-                    });
+                    st.loaded = true;
                 } else {
-                    status.push(ExtensionStatus {
-                        file,
-                        id: Some(id.clone()),
-                        sha256: sha,
-                        loaded: false,
-                        error: Some(format!(
-                            "not trusted (run `dogubako extensions trust {id}` after reviewing it)"
-                        )),
-                    });
+                    st.error = Some(format!(
+                        "not trusted (run `dogubako extensions trust {id}` after reviewing it)"
+                    ));
                 }
             }
-            Err(e) => status.push(ExtensionStatus {
-                file,
-                id: None,
-                sha256: sha,
-                loaded: false,
-                error: Some(e),
-            }),
+            Err(e) => st.error = Some(e),
         }
+        status.push(st);
+    }
+    (tools, status)
+}
+
+/// Load the dev slot (`<dir>/dev/*.toml`) without trust. Each tool is marked
+/// [`ToolSpec::dev`] with its author from `dev/authors.toml`; settings share
+/// the main folder's store so they survive promotion.
+pub fn load_dev_extensions(dir: &Path) -> (Vec<Arc<dyn Tool>>, Vec<ExtensionStatus>) {
+    let authors = DevAuthors::load(dir);
+    let settings = SettingsStore::for_extensions(dir);
+    let mut tools: Vec<Arc<dyn Tool>> = vec![];
+    let mut status = vec![];
+    for path in manifest_files(&dir.join(DEV_DIR), "authors.toml") {
+        let file = format!("{DEV_DIR}/{}", path.file_name().unwrap().to_string_lossy());
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let mut st = ExtensionStatus {
+            file: file.clone(),
+            id: None,
+            sha256: sha256_hex(text.as_bytes()),
+            loaded: false,
+            error: None,
+            dev: true,
+            author: None,
+        };
+        match parse_manifest(&text, &file) {
+            Ok(mut t) => {
+                let author = authors
+                    .authors
+                    .get(&t.spec.id)
+                    .cloned()
+                    .unwrap_or_else(|| LOCAL_AUTHOR.into());
+                t.spec.dev = true;
+                t.spec.author = Some(author.clone());
+                st.id = Some(t.spec.id.clone());
+                st.author = Some(author);
+                st.loaded = true;
+                tools.push(Arc::new(t.with_settings_store(settings.clone())));
+            }
+            Err(e) => st.error = Some(e),
+        }
+        status.push(st);
     }
     (tools, status)
 }

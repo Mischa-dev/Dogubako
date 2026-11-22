@@ -78,6 +78,29 @@ pub fn app(state: AppState) -> Router {
         .with_state(state)
 }
 
+/// Reload when the extensions folder changes: a dev-slot manifest edited, a
+/// manifest added or removed, or the trust file updated.
+pub fn spawn_extension_watch(state: AppState) {
+    tokio::spawn(async move {
+        let dir = state.cfg.extensions_dir();
+        let mut last = dogubako_tools::extensions_stamp(&dir);
+        loop {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            let stamp = dogubako_tools::extensions_stamp(&dir);
+            if stamp == last {
+                continue;
+            }
+            last = stamp;
+            let engine = state.engine.clone();
+            if let Ok(r) = tokio::task::spawn_blocking(move || engine.reload()).await {
+                if r.tool_set_changed() {
+                    tracing::info!(added = ?r.added, removed = ?r.removed, changed = ?r.changed, "extensions reloaded");
+                }
+            }
+        }
+    });
+}
+
 /// Periodic cleanup of expired files, jobs, sessions and audit entries.
 pub fn spawn_cleanup(state: AppState) {
     tokio::spawn(async move {
@@ -142,6 +165,7 @@ pub async fn serve(cfg: ServerConfig) -> Result<(), config::anyhow_lite::Error> 
         .collect();
     tracing::info!(tools = state.engine.registry().len(), deps = %found.join(", "), "Dogubako server starting on http://{bind}");
     spawn_cleanup(state.clone());
+    spawn_extension_watch(state.clone());
     let jobs = state.jobs.clone();
     let streams = state.shutdown.clone();
     let listener = tokio::net::TcpListener::bind(bind).await?;

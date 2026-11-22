@@ -735,6 +735,13 @@ pub struct ToolSpec {
     /// Values are stored outside the manifest; see [`crate::manifest`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub settings: Vec<ParamSpec>,
+    /// An extension from the dev slot (`extensions/dev/`): loaded without
+    /// trust and usable only by [`ToolSpec::author`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dev: bool,
+    /// Who installed a dev tool (see [`crate::manifest::DevAuthors`]).
+    #[serde(skip)]
+    pub author: Option<String>,
 }
 
 fn builtin() -> String {
@@ -765,6 +772,8 @@ impl ToolSpec {
             source: builtin(),
             prechecks: false,
             settings: vec![],
+            dev: false,
+            author: None,
         }
     }
     pub fn describe(mut self, d: &str) -> Self {

@@ -193,6 +193,7 @@ fn cli(engine: &Engine) -> Command {
                     .about("Serve MCP over stdio for a local agent (local paths in, files out)")
                     .arg(Arg::new("allow").long("allow").action(ArgAction::Append).help("Allowed tool patterns (default: *), e.g. 'image.*'"))
                     .arg(Arg::new("deny").long("deny").action(ArgAction::Append).help("Denied tool patterns"))
+                    .arg(Arg::new("dev").long("dev").action(ArgAction::SetTrue).help("Also offer dev-slot tools (extensions/dev/) to this agent; hidden by default"))
                     .arg(Arg::new("permissions").long("permissions").help("Comma-separated capabilities to grant (default: all): network,host_fs_read,host_fs_write,system_info,process_info"))
                     .arg(Arg::new("discovery").long("discovery").value_parser(["full", "compact"]).default_value("full"))
                     .arg(Arg::new("output-dir").long("output-dir").help("Where output files are written"))
@@ -321,7 +322,9 @@ async fn dispatch(engine: Engine, m: &ArgMatches, out: &render::Out) -> i32 {
         Some(("users", sub)) => admin::users(sub, out),
         Some(("tokens", sub)) => admin::tokens(sub, out),
         Some(("extensions", sub)) => match sub.subcommand_name() {
-            Some("install" | "uninstall" | "test") => admin::extension_lifecycle(sub, out).await,
+            Some("install" | "uninstall" | "test" | "promote") => {
+                admin::extension_lifecycle(sub, out).await
+            }
             _ => admin::extensions(sub, out),
         },
         Some(("store", sub)) => store::run(sub, out).await,

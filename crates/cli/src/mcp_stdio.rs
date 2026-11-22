@@ -33,6 +33,8 @@ struct LocalBackend {
     engine: Arc<Engine>,
     allow: Vec<String>,
     deny: Vec<String>,
+    /// Offer dev-slot tools (`--dev`).
+    dev: bool,
     permissions: PermissionSet,
     fs: FsPolicy,
     output_dir: PathBuf,
@@ -50,7 +52,8 @@ fn matches(p: &str, spec: &ToolSpec) -> bool {
 
 impl LocalBackend {
     fn permitted(&self, spec: &ToolSpec) -> bool {
-        self.allow.iter().any(|p| matches(p, spec))
+        (self.dev || !spec.dev)
+            && self.allow.iter().any(|p| matches(p, spec))
             && !self.deny.iter().any(|p| matches(p, spec))
             && self.permissions.missing(&spec.permissions).is_empty()
     }
@@ -374,6 +377,7 @@ pub async fn serve(engine: Engine, m: &ArgMatches) -> i32 {
         engine: engine.clone(),
         allow,
         deny,
+        dev: m.get_flag("dev"),
         permissions,
         fs,
         output_dir,

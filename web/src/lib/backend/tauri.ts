@@ -277,6 +277,7 @@ export class TauriBackend implements Backend {
   }
   extensionSettings() { return invoke<ExtensionSettings[]>('extension_settings'); }
   configureExtension(id: string, values: Record<string, unknown>) { return invoke<ExtensionSettings>('configure_extension', { id, values }); }
+  promoteExtension(id: string) { return invoke<ExtensionReport>('promote_extension', { id }); }
   storeSearch(query = '') { return invoke<StoreResult>('store_search', { query }); }
   storeInstalled() { return invoke<StoreResult>('store_installed'); }
   storeInstall(id: string) { return invoke<ExtensionReport>('store_install', { id }); }

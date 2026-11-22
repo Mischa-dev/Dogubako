@@ -298,6 +298,27 @@ fn uninstall_extension(app: tauri::AppHandle, state: State<'_, Desktop>, id: Str
     Ok(report)
 }
 
+/// Install a manifest into the dev slot: untrusted, reloaded when edited,
+/// hidden from agents until promoted.
+#[tauri::command]
+async fn install_dev_extension(app: tauri::AppHandle, state: State<'_, Desktop>, source: String, replace: Option<bool>) -> Result<dogubako_core::extensions::ExtensionReport, String> {
+    use dogubako_core::extensions as ext;
+    let text = ext::fetch_manifest(&source, &state.engine.config.net).await.map_err(|e| e.to_string())?;
+    let opts = ext::InstallOptions { replace: replace.unwrap_or(false) };
+    let author = dogubako_core::manifest::LOCAL_AUTHOR;
+    let report = ext::install_dev(&state.engine, &state.dirs.extensions, &text, author, opts).await.map_err(|e| e.to_string())?;
+    let _ = app.emit(TOOLS_CHANGED, json!({ "added": [report.id.clone()] }));
+    Ok(report)
+}
+
+/// Promote a dev tool to trusted (the desktop user is the owner).
+#[tauri::command]
+async fn promote_extension(app: tauri::AppHandle, state: State<'_, Desktop>, id: String) -> Result<dogubako_core::extensions::ExtensionReport, String> {
+    let report = dogubako_core::extensions::promote(&state.engine, &state.dirs.extensions, &id).await.map_err(|e| e.to_string())?;
+    let _ = app.emit(TOOLS_CHANGED, json!({ "changed": [id] }));
+    Ok(report)
+}
+
 /// Run an installed extension's tests without reinstalling it.
 #[tauri::command]
 async fn test_extension(state: State<'_, Desktop>, id: String) -> Result<dogubako_core::extensions::ExtensionReport, String> {
@@ -621,6 +642,8 @@ pub fn run() {
             install_extension,
             uninstall_extension,
             test_extension,
+            install_dev_extension,
+            promote_extension,
             discard_run_outputs,
             reload_tools
         ])

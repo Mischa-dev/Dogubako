@@ -3,7 +3,7 @@
 
 use crate::render::Out;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use dogubako_core::manifest::{load_extensions, parse_manifest, sha256_hex, TrustStore};
+use dogubako_core::manifest::{parse_manifest, sha256_hex, TrustStore};
 use dogubako_core::spec::Permission;
 use dogubako_server::auth;
 use dogubako_server::authz::{Policy, Role};
@@ -160,6 +160,10 @@ pub fn extensions_cmd() -> Command {
                         .action(ArgAction::SetTrue)
                         .help("Replace an installed extension with the same id"),
                 )
+                .arg(Arg::new("dev").long("dev").action(ArgAction::SetTrue).help(
+                    "Install into the dev slot (extensions/dev/): no trust pin, reloaded \
+                             when edited, hidden from other users and agents until promoted",
+                ))
                 .arg(
                     Arg::new("yes")
                         .long("yes")
@@ -177,6 +181,21 @@ pub fn extensions_cmd() -> Command {
                         .long("purge")
                         .action(ArgAction::SetTrue)
                         .help("Also delete its saved settings"),
+                ),
+        )
+        .subcommand(
+            Command::new("promote")
+                .about(
+                    "Promote a dev tool to trusted: move it out of extensions/dev/, pin its \
+                     SHA-256, reload and run its tests",
+                )
+                .arg(Arg::new("id").required(true))
+                .arg(
+                    Arg::new("yes")
+                        .long("yes")
+                        .short('y')
+                        .action(ArgAction::SetTrue)
+                        .help("Do not ask for confirmation"),
                 ),
         )
         .subcommand(
@@ -515,6 +534,16 @@ pub async fn extension_lifecycle(m: &ArgMatches, out: &Out) -> i32 {
                 Ok(t) => t,
                 Err(e) => return print_report(out, &failed(String::new(), e.to_string())),
             };
+            if s.get_flag("dev") {
+                let author = dogubako_core::manifest::LOCAL_AUTHOR;
+                return print_report(
+                    out,
+                    &match ext::install_dev(&engine, &dir, &text, author, opts).await {
+                        Ok(r) => r,
+                        Err(e) => failed(String::new(), e.to_string()),
+                    },
+                );
+            }
             let preview = match ext::preview(&engine, &dir, &text, opts) {
                 Ok(p) => p,
                 Err(e) => {
@@ -553,6 +582,29 @@ pub async fn extension_lifecycle(m: &ArgMatches, out: &Out) -> i32 {
             match ext::install(&engine, &dir, &text, opts).await {
                 Ok(r) => r,
                 Err(e) => failed(preview.id, e.to_string()),
+            }
+        }
+        Some(("promote", s)) => {
+            let id = s.get_one::<String>("id").unwrap();
+            let ask = !s.get_flag("yes")
+                && !out.json
+                && std::io::stdin().is_terminal()
+                && std::io::stderr().is_terminal();
+            if ask {
+                eprint!("Promote dev tool '{id}' to a trusted extension for everyone? [y/N] ");
+                let mut line = String::new();
+                let _ = std::io::stdin().read_line(&mut line);
+                if !matches!(line.trim(), "y" | "Y" | "yes") {
+                    return out.error("cancelled", 1);
+                }
+            }
+            match ext::promote(&engine, &dir, id).await {
+                Ok(r) => r,
+                Err(e) => ext::ExtensionReport {
+                    id: id.clone(),
+                    error: Some(e.to_string()),
+                    ..Default::default()
+                },
             }
         }
         Some(("test", s)) => {
@@ -652,16 +704,17 @@ pub fn extensions(m: &ArgMatches, out: &Out) -> i32 {
     let trust_path = dir.join("trusted.toml");
     match m.subcommand() {
         Some(("list", _)) => {
-            let (_, status) = load_extensions(&dir, false);
+            let (_, status) = dogubako_tools::build_registry(Some(&dir));
             if out.json {
                 println!("{}", serde_json::to_string_pretty(&status).unwrap());
             } else {
                 println!("Extensions directory: {}", dir.display());
                 for s in status {
                     println!(
-                        "  {} {:<28} {:<24} {}",
+                        "  {} {:<28} {:<5} {:<24} {}",
                         if s.loaded { "✓" } else { "·" },
                         s.id.unwrap_or_default(),
+                        if s.dev { "[dev]" } else { "" },
                         s.file,
                         s.error.unwrap_or_default()
                     );

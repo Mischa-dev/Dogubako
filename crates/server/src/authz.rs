@@ -150,7 +150,40 @@ impl Principal {
         self.role.is_admin() && self.token_scope.is_none()
     }
 
+    /// The author a dev tool installed by this principal is recorded under:
+    /// the token for token requests, else the user (the local owner when
+    /// auth is off).
+    pub fn author_key(&self) -> String {
+        match (&self.token_id, self.via) {
+            (Some(t), _) => format!("token:{t}"),
+            (None, "none") => dogubako_core::manifest::LOCAL_AUTHOR.into(),
+            (None, _) => format!("user:{}", self.user_id),
+        }
+    }
+
+    /// Dev tools are visible only to their author. Hand-placed ones
+    /// (author `local`) belong to the owner signed in as a human.
+    pub fn is_author(&self, spec: &ToolSpec) -> bool {
+        let author = spec
+            .author
+            .as_deref()
+            .unwrap_or(dogubako_core::manifest::LOCAL_AUTHOR);
+        author == self.author_key()
+            || (author == dogubako_core::manifest::LOCAL_AUTHOR
+                && self.role == Role::Owner
+                && self.token_id.is_none())
+    }
+
+    /// A human owner or admin signed in (or the local owner), never a token:
+    /// who may promote a dev tool to trusted.
+    pub fn is_human_admin(&self) -> bool {
+        self.is_admin() && self.token_id.is_none() && matches!(self.via, "session" | "none")
+    }
+
     pub fn can_use(&self, spec: &ToolSpec) -> bool {
+        if spec.dev && !self.is_author(spec) {
+            return false;
+        }
         self.policy.allows_tool(spec)
             && self
                 .token_scope
@@ -299,6 +332,59 @@ mod tests {
         assert!(perms.has(Permission::Network));
         assert!(!perms.has(Permission::SystemInfo));
         assert!(!perms.has(Permission::HostFsRead));
+    }
+
+    #[test]
+    fn dev_tools_only_for_their_author() {
+        let mut dev = spec("text.wip", Category::Text);
+        dev.dev = true;
+        dev.author = Some("token:t1".into());
+        let owner = Principal {
+            user_id: "o".into(),
+            username: "owner".into(),
+            role: Role::Owner,
+            policy: Policy::for_role(Role::Owner),
+            token_scope: None,
+            token_id: None,
+            via: "session",
+            csrf: None,
+        };
+        let with_token = |tid: &str| Principal {
+            token_id: Some(tid.into()),
+            via: "token",
+            ..owner.clone()
+        };
+        assert!(with_token("t1").can_use(&dev));
+        assert!(!with_token("t2").can_use(&dev), "another token");
+        assert!(!owner.can_use(&dev), "the owner's session is not the token");
+        assert_eq!(with_token("t1").author_key(), "token:t1");
+        assert_eq!(owner.author_key(), "user:o");
+
+        dev.author = Some("user:o".into());
+        assert!(owner.can_use(&dev));
+        assert!(!with_token("t1").can_use(&dev));
+        let admin = Principal {
+            user_id: "a".into(),
+            role: Role::Admin,
+            policy: Policy::for_role(Role::Admin),
+            ..owner.clone()
+        };
+        assert!(!admin.can_use(&dev), "other users never see it");
+
+        dev.author = Some(dogubako_core::manifest::LOCAL_AUTHOR.into());
+        assert!(owner.can_use(&dev), "hand-placed dev tools are the owner's");
+        assert!(!admin.can_use(&dev));
+        assert!(!with_token("t1").can_use(&dev));
+
+        assert!(owner.is_human_admin());
+        assert!(admin.is_human_admin());
+        assert!(!with_token("t1").is_human_admin(), "never through a token");
+        assert!(!Principal {
+            role: Role::User,
+            policy: Policy::for_role(Role::User),
+            ..owner.clone()
+        }
+        .is_human_admin());
     }
 
     #[test]

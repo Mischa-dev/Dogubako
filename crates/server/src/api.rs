@@ -73,6 +73,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/extensions/install", post(extension_install))
         .route("/extensions/{id}", delete(extension_uninstall))
         .route("/extensions/{id}/test", post(extension_test))
+        .route("/extensions/{id}/promote", post(extension_promote))
         .route("/store", get(store_search))
         .route("/store/installed", get(store_installed))
         .route("/store/install", post(store_install))
@@ -368,7 +369,7 @@ async fn list_tools(
                 .map(|c| spec.category.id() == c)
                 .unwrap_or(true)
         })
-        .filter(|spec| q.all && p.is_admin() || p.can_use(spec))
+        .filter(|spec| q.all && p.is_admin() && !spec.dev || p.can_use(spec))
         .map(|spec| tool_json(&s, &p, &s.engine.info(spec)))
         .collect();
     Json(json!({"tools": tools, "count": tools.len()}))
@@ -383,7 +384,7 @@ async fn get_tool(
     let visible = tools
         .catalog
         .find(&id)
-        .is_some_and(|t| p.is_admin() || p.can_use(t.spec()));
+        .is_some_and(|t| p.is_admin() && !t.spec().dev || p.can_use(t.spec()));
     if !visible {
         return Err(ApiError::not_found("unknown tool"));
     }
@@ -1341,17 +1342,31 @@ struct InstallBody {
     url: Option<String>,
     #[serde(default)]
     replace: bool,
+    /// Install into the dev slot instead: untrusted, usable only by the
+    /// caller (this token, or this user), reloaded when edited.
+    #[serde(default)]
+    dev: bool,
 }
 
 /// Install a manifest in one step: validate, copy, pin its SHA-256, reload
 /// and run its tests. Id collisions and invalid manifests change nothing.
 async fn extension_install(
     State(s): State<AppState>,
-    Admin(p): Admin,
+    p: Principal,
     ClientIp(ip): ClientIp,
     Json(body): Json<InstallBody>,
 ) -> ApiResult<Json<Value>> {
     use dogubako_core::extensions as ext;
+    // Trusted installs need an unscoped admin; a dev install also accepts an
+    // owner's or admin's scoped token (an agent building a tool with it).
+    let allowed = if body.dev {
+        p.role.is_admin()
+    } else {
+        p.is_admin()
+    };
+    if !allowed {
+        return Err(ApiError::forbidden("administrator privileges required"));
+    }
     if !s.cfg.allow_extension_install {
         return Err(ApiError::forbidden(
             "installing extensions over HTTP is off; set allow_extension_install \
@@ -1370,13 +1385,43 @@ async fn extension_install(
     let opts = ext::InstallOptions {
         replace: body.replace,
     };
-    let r = ext::install(&s.engine, &s.cfg.extensions_dir(), &text, opts).await;
+    let dir = s.cfg.extensions_dir();
+    let r = if body.dev {
+        ext::install_dev(&s.engine, &dir, &text, &p.author_key(), opts).await
+    } else {
+        ext::install(&s.engine, &dir, &text, opts).await
+    };
     let (id, outcome) = match &r {
         Ok(r) if r.passed => (r.id.clone(), "ok"),
         Ok(r) => (r.id.clone(), "tests_failed"),
         Err(_) => (String::new(), "error"),
     };
-    s.db.audit(&p.username, "extension.install", &id, outcome, &ip, "");
+    let detail = if body.dev { "dev" } else { "" };
+    s.db.audit(&p.username, "extension.install", &id, outcome, &ip, detail);
+    Ok(Json(json!(r?)))
+}
+
+/// Promote a dev tool to trusted: move it out of the dev slot, pin its
+/// SHA-256, reload and run its tests. Only a human owner or admin, never a
+/// token.
+async fn extension_promote(
+    State(s): State<AppState>,
+    p: Principal,
+    ClientIp(ip): ClientIp,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    if !p.is_human_admin() {
+        return Err(ApiError::forbidden(
+            "promoting a dev tool needs an owner or admin signed in, not a token",
+        ));
+    }
+    let r = dogubako_core::extensions::promote(&s.engine, &s.cfg.extensions_dir(), &id).await;
+    let outcome = match &r {
+        Ok(r) if r.passed => "ok",
+        Ok(_) => "tests_failed",
+        Err(_) => "error",
+    };
+    s.db.audit(&p.username, "extension.promote", &id, outcome, &ip, "");
     Ok(Json(json!(r?)))
 }
 
