@@ -597,10 +597,11 @@ impl HttpRequest {
             data.insert("table".into(), json!({ "columns": columns, "rows": rows }));
         }
         let out = ToolOutput::new().with_data(Value::Object(data));
-        Ok(if self.has_text() {
-            out.with_text(lines.join("\n"), "text/plain")
-        } else {
+        let text = lines.join("\n");
+        Ok(if text.is_empty() {
             out
+        } else {
+            out.with_text(text, "text/plain")
         })
     }
 
@@ -1021,6 +1022,21 @@ text = "{day}: {sky}, {high}{unit_label}"
                 "https://api.example.com/f?lat=-33.9&unit=f"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn empty_row_text_leaves_data_only() {
+        let rows_only = manifest(
+            "url = \"https://example.com/\"",
+            "\n[output.table]\nrows = \"$.items\"\ncolumns = [{ name = \"a\", path = \"$.a\" }]\ntext = \"{a}\"\n",
+        );
+        let rec = RecordedResponse::json(&json!({ "items": [] }));
+        let t = parse_manifest(&rows_only, "x")
+            .unwrap()
+            .with_recorded_response(rec);
+        let out = harness(t).run("ext.t", json!({})).await.unwrap();
+        assert_eq!(out.text, None);
+        assert_eq!(out.data["table"]["rows"], json!([]));
     }
 
     #[tokio::test]
