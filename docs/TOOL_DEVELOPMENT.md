@@ -156,7 +156,7 @@ true / non-empty. Parameters use the same schema as Rust tools (`type` =
 Values that belong to one installation (a printer queue, a saved location, an
 API key) are declared as `[[settings]]` and used as `{settings.<name>}`; a group
 can also use `when = "settings.<name>"`. Settings take the same fields as
-`[[params]]` (except `file` and `json` types) plus `secret = true` for text:
+`[[params]]` (except `file`, `path`, `json` and multi-choice `enum`) plus `secret = true` for text:
 
 ```toml
 [[settings]]

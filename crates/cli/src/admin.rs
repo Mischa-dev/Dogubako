@@ -476,14 +476,25 @@ pub fn extensions(m: &ArgMatches, out: &Out) -> i32 {
         Some(("config", s)) => {
             let id = s.get_one::<String>("id").unwrap();
             let mut changes = serde_json::Map::new();
+            let mut stdin_used = false;
             for kv in s.get_many::<String>("values").into_iter().flatten() {
                 let Some((k, v)) = kv.split_once('=') else {
                     return out.error(&format!("expected key=value, got '{kv}'"), 2);
                 };
                 let v = if v == "-" {
                     // Read the value from stdin so secrets stay out of shell history.
+                    if stdin_used {
+                        return out.error("only one key=- value can be read from stdin", 2);
+                    }
+                    stdin_used = true;
                     match read_password(true) {
-                        Ok(v) => v,
+                        Ok(v) if !v.is_empty() => v,
+                        Ok(_) => {
+                            return out.error(
+                                &format!("no value for '{k}' on stdin (use {k}= to clear)"),
+                                2,
+                            )
+                        }
                         Err(e) => return out.error(&e, 1),
                     }
                 } else {

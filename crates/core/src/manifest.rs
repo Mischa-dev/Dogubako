@@ -648,11 +648,13 @@ impl SettingsStore {
                     },
                 )
             })?;
-            let target = if decl.is_secret() {
-                &mut secret
+            // A key lives in one file only, even if a manifest update reclassified it.
+            let (target, other) = if decl.is_secret() {
+                (&mut secret, &mut plain)
             } else {
-                &mut plain
+                (&mut plain, &mut secret)
             };
+            other.remove(k);
             if v.is_null() || v.as_str() == Some("") {
                 target.remove(k);
             } else {
@@ -1045,6 +1047,23 @@ secret = true
         // A different manifest reusing the id cannot unmask a stored secret.
         let other = store.view("text.ext_say", &[ParamSpec::text("token")]);
         assert!(other[0].secret && other[0].value.is_none());
+        // Saving it as plain moves it out of the secrets file.
+        let plain_token = [ParamSpec::text("token")];
+        store
+            .set(
+                "text.ext_say",
+                &plain_token,
+                serde_json::json!({"token": null}).as_object().unwrap(),
+            )
+            .unwrap();
+        assert!(!store.values("text.ext_say").contains_key("token"));
+        store
+            .set(
+                "text.ext_say",
+                &decls,
+                serde_json::json!({"token": "s3cret"}).as_object().unwrap(),
+            )
+            .unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
