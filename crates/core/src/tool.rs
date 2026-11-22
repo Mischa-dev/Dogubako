@@ -327,27 +327,66 @@ impl ToolContext {
     /// next to `pdftoppm` for Poppler, `ffprobe` next to `ffmpeg`).
     pub fn command_sibling(&self, dep_id: &str, binary: &str) -> ToolResult<Exec> {
         let status = self.inner.deps.status(dep_id);
-        let Some(p) = status.path else {
+        if status.path.is_none() {
             return Err(ToolError::MissingDependency {
                 dependency: dep_id.to_string(),
                 hint: status.install_hint,
             });
-        };
-        let exe = if cfg!(windows) {
-            format!("{binary}.exe")
-        } else {
-            binary.to_string()
-        };
-        let sib = p.parent().map(|d| d.join(&exe)).filter(|c| c.is_file());
+        }
         // An app-managed engine's siblings come from the same folder only.
         let system = self.inner.deps.system_lookup_allowed(dep_id);
-        let path = sib
-            .or_else(|| system.then(|| which::which(binary).ok()).flatten())
+        let path = self
+            .sibling_path(dep_id, binary)
+            .or_else(|| system.then(|| self.inner.deps.search(binary)).flatten())
             .ok_or_else(|| ToolError::MissingDependency {
                 dependency: binary.to_string(),
                 hint: status.install_hint.clone(),
             })?;
         Ok(Exec::new(self.clone(), path, binary.to_string()))
+    }
+
+    /// `binary` in the folder the dependency's own binary was found in.
+    pub fn sibling_path(&self, dep_id: &str, binary: &str) -> Option<PathBuf> {
+        let p = self.inner.deps.path(dep_id)?;
+        let exe = if cfg!(windows) {
+            format!("{binary}.exe")
+        } else {
+            binary.to_string()
+        };
+        p.parent().map(|d| d.join(exe)).filter(|c| c.is_file())
+    }
+
+    /// Command for `program` of a dependency: the binary the registry found
+    /// when `program` is the dependency id, that binary's own name, or the
+    /// main executable a renamed `DOGUBAKO_<ID>_PATH` stands in for;
+    /// otherwise the sibling of that name.
+    pub fn command_program(&self, dep_id: &str, program: &str) -> ToolResult<Exec> {
+        let same = |a: &str, b: &str| {
+            if cfg!(windows) {
+                a.eq_ignore_ascii_case(b)
+            } else {
+                a == b
+            }
+        };
+        if let (Some(p), Some(spec)) = (self.inner.deps.path(dep_id), crate::deps::dep_spec(dep_id))
+        {
+            let file = p
+                .file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let found = if cfg!(windows) && file.to_ascii_lowercase().ends_with(".exe") {
+                &file[..file.len() - 4]
+            } else {
+                &file
+            };
+            let mut names = spec.binaries.iter().chain(spec.unix_only_binaries);
+            let renamed = !names.any(|b| same(b, found));
+            let main = spec.binaries.first().is_some_and(|b| same(b, program));
+            if same(spec.id, program) || same(found, program) || (renamed && main) {
+                return self.command(dep_id);
+            }
+        }
+        self.command_sibling(dep_id, program)
     }
 
     /// A separate, killable worker process for in-process engines that cannot

@@ -154,9 +154,11 @@ true / non-empty. Parameters use the same schema as Rust tools (`type` =
 
 `requires` takes the same dependency ids as `.requires(&[..])` (an unknown id is
 a parse error): a missing one marks the tool unavailable with the usual install
-hint. When `program` is one of a required dependency's executables (`lp` or
-`lpstat` for `cups`), it is found through the dependency registry, so managed
-engines and `DOGUBAKO_<ID>_PATH` apply.
+hint. A `program` that is a required dependency's id or one of its executables
+(`whisper`, `lpstat` for `cups`) is found through the dependency registry, so
+managed engines and `DOGUBAKO_<ID>_PATH` apply; any other bare program next to a
+required dependency's binary (`pdftotext` beside Poppler's `pdftoppm`) is run
+from that folder before PATH is searched.
 
 ### Trust and permissions
 

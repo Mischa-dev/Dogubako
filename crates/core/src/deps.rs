@@ -551,6 +551,12 @@ impl DepRegistry {
         self.status(id).found
     }
 
+    /// Finds `name` where an unmanaged dependency would be found: the extra
+    /// bin folders, PATH, then the platform fallbacks.
+    pub fn search(&self, name: &str) -> Option<PathBuf> {
+        search_binary(&[name], &self.extra_dirs, &self.fallback_dirs)
+    }
+
     fn find_binary(&self, spec: &DepSpec) -> (Option<PathBuf>, Lookup) {
         let env_key = format!(
             "DOGUBAKO_{}_PATH",

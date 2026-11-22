@@ -40,8 +40,9 @@
 //!
 //! `requires = ["cups"]` in `[tool]` names dependencies from
 //! [`crate::deps::KNOWN_DEPS`], checked like a Rust tool's `.requires(..)`. A
-//! `program` that is one of their executables is found through the
-//! dependency registry (managed engines, `DOGUBAKO_<ID>_PATH`).
+//! `program` that is one of their ids or executables is found through the
+//! dependency registry (managed engines, `DOGUBAKO_<ID>_PATH`); another bare
+//! program beside a required dependency's binary is taken from that folder.
 
 use crate::deps::dep_spec;
 use crate::error::{ToolError, ToolResult};
@@ -140,9 +141,10 @@ struct Manifest {
 pub struct ExternalTool {
     spec: ToolSpec,
     program: String,
-    /// The required dependency `program` belongs to, if any; the program is
-    /// then found through the dependency registry.
-    dep: Option<String>,
+    /// The required dependency `program` belongs to and the program's name
+    /// there, if any; the program is then found through the dependency
+    /// registry.
+    dep: Option<(String, String)>,
     args: Vec<ArgItem>,
     output: OutputSection,
 }
@@ -251,13 +253,18 @@ pub fn parse_manifest(text: &str, source: &str) -> Result<ExternalTool, String> 
     })
 }
 
-/// The required dependency whose id or executable names match `program`.
-fn program_dep(program: &str, requires: &[String]) -> Option<String> {
+/// The required dependency whose id or one of whose executables `program`
+/// names (ignoring case and `.exe` on Windows), with the bare program name.
+fn program_dep(program: &str, requires: &[String]) -> Option<(String, String)> {
     if Path::new(program).components().count() != 1 {
         return None;
     }
-    let name = program.to_ascii_lowercase();
-    let name = name.strip_suffix(".exe").unwrap_or(&name);
+    let name = if cfg!(windows) {
+        let lower = program.to_ascii_lowercase();
+        lower.strip_suffix(".exe").unwrap_or(&lower).to_string()
+    } else {
+        program.to_string()
+    };
     requires
         .iter()
         .filter_map(|d| dep_spec(d))
@@ -268,7 +275,7 @@ fn program_dep(program: &str, requires: &[String]) -> Option<String> {
                     .chain(d.unix_only_binaries)
                     .any(|b| *b == name)
         })
-        .map(|d| d.id.to_string())
+        .map(|d| (d.id.to_string(), name))
 }
 
 fn placeholders(s: &str) -> Vec<String> {
@@ -350,14 +357,24 @@ impl Tool for ExternalTool {
     }
 
     async fn run(&self, ctx: ToolContext, params: Params) -> ToolResult<ToolOutput> {
-        let mut cmd = if let Some(dep) = &self.dep {
-            let name = self.program.strip_suffix(".exe").unwrap_or(&self.program);
-            ctx.command_sibling(dep, name)?
+        let mut cmd = if let Some((dep, name)) = &self.dep {
+            ctx.command_program(dep, name)?
         } else if Path::new(&self.program).is_absolute() {
             ctx.command_path(PathBuf::from(&self.program), &self.program)
         } else {
-            let program =
-                which::which(&self.program).map_err(|_| ToolError::MissingDependency {
+            // Another program shipped beside a required dependency (e.g.
+            // `pdftotext` next to Poppler's `pdftoppm`) comes from that folder.
+            let beside = (Path::new(&self.program).components().count() == 1)
+                .then(|| {
+                    self.spec
+                        .requires
+                        .iter()
+                        .find_map(|d| ctx.sibling_path(d, &self.program))
+                })
+                .flatten();
+            let program = beside
+                .or_else(|| which::which(&self.program).ok())
+                .ok_or_else(|| ToolError::MissingDependency {
                     dependency: self.program.clone(),
                     hint: format!("'{}' was not found on PATH", self.program),
                 })?;
@@ -593,10 +610,14 @@ stdout = "text/plain"
     fn requires_accepts_known_deps_only() {
         let t = parse_manifest(LPSTAT, "x").unwrap();
         assert_eq!(t.spec.requires, vec!["cups".to_string()]);
-        assert_eq!(t.dep.as_deref(), Some("cups"));
+        assert_eq!(t.dep, Some(("cups".into(), "lpstat".into())));
         let multi = LPSTAT.replace(r#"["cups"]"#, r#"["ffmpeg", "cups"]"#);
         assert_eq!(
-            parse_manifest(&multi, "x").unwrap().dep.as_deref(),
+            parse_manifest(&multi, "x")
+                .unwrap()
+                .dep
+                .map(|d| d.0)
+                .as_deref(),
             Some("cups")
         );
         let bad = LPSTAT.replace(r#"["cups"]"#, r#"["cups", "nope"]"#);
@@ -633,26 +654,73 @@ stdout = "text/plain"
     }
 
     #[cfg(unix)]
-    #[tokio::test]
-    async fn program_is_resolved_through_the_dependency_registry() {
+    fn fake_bins(names: &[&str]) -> tempfile::TempDir {
         use std::os::unix::fs::PermissionsExt;
         let bin = tempfile::tempdir().unwrap();
-        for name in ["lp", "lpstat"] {
+        for name in names {
             let p = bin.path().join(name);
             std::fs::write(&p, format!("#!/bin/sh\necho fake-{name} \"$@\"\n")).unwrap();
             std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
-        let tool = parse_manifest(LPSTAT, "test.toml").unwrap();
+        bin
+    }
+
+    #[cfg(unix)]
+    async fn run_with_bins(manifest: &str, bin: &Path) -> String {
+        let tool = parse_manifest(manifest, "test.toml").unwrap();
+        let id = tool.spec.id.clone();
         let h = crate::testing::TestHarness::with_bin_dirs(
             vec![std::sync::Arc::new(tool)],
-            vec![bin.path().to_path_buf()],
+            vec![bin.to_path_buf()],
         );
-        assert!(h.available("system.ext_printers"));
-        let out = h
-            .run("system.ext_printers", serde_json::json!({}))
-            .await
-            .unwrap();
-        assert_eq!(out.text.as_deref(), Some("fake-lpstat -a\n"));
+        assert!(h.available(&id));
+        let out = h.run(&id, serde_json::json!({})).await.unwrap();
+        out.text.unwrap()
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn program_is_resolved_through_the_dependency_registry() {
+        let bin = fake_bins(&["lp", "lpstat"]);
+        assert_eq!(run_with_bins(LPSTAT, bin.path()).await, "fake-lpstat -a\n");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn dependency_id_runs_the_binary_the_registry_found() {
+        let bin = fake_bins(&["whisper-cli"]);
+        let m = LPSTAT
+            .replace(r#"["cups"]"#, r#"["whisper"]"#)
+            .replace(r#""lpstat""#, r#""whisper""#);
+        assert_eq!(run_with_bins(&m, bin.path()).await, "fake-whisper-cli -a\n");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn other_programs_beside_a_required_dep_are_used() {
+        let bin = fake_bins(&["pdftoppm", "pdftotext"]);
+        let m = LPSTAT
+            .replace(r#"["cups"]"#, r#"["poppler"]"#)
+            .replace(r#""lpstat""#, r#""pdftotext""#);
+        assert_eq!(run_with_bins(&m, bin.path()).await, "fake-pdftotext -a\n");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_renamed_path_override_runs_as_the_main_program() {
+        // Only this test sets DOGUBAKO_PANDOC_PATH.
+        let bin = fake_bins(&["pandoc-3", "pandoc-lua"]);
+        std::env::set_var("DOGUBAKO_PANDOC_PATH", bin.path().join("pandoc-3"));
+        let main = LPSTAT
+            .replace(r#"["cups"]"#, r#"["pandoc"]"#)
+            .replace(r#""lpstat""#, r#""pandoc""#);
+        let sibling = main.replace(r#"program = "pandoc""#, r#"program = "pandoc-lua""#);
+        let empty = tempfile::tempdir().unwrap();
+        let main_out = run_with_bins(&main, empty.path()).await;
+        let sibling_out = run_with_bins(&sibling, empty.path()).await;
+        std::env::remove_var("DOGUBAKO_PANDOC_PATH");
+        assert_eq!(main_out, "fake-pandoc-3 -a\n");
+        assert_eq!(sibling_out, "fake-pandoc-lua -a\n");
     }
 
     #[test]

@@ -93,7 +93,7 @@ Extension folders:
 
 | Key | Meaning |
 |---|---|
-| `program` | The program to run, found like an engine (`PATH`, Dogubako's `bin` folder). When it is one of a required dependency's programs (`lp` or `lpstat` for `cups`), it is found the same way that dependency is, including Dogubako's own engines and `DOGUBAKO_<ID>_PATH` |
+| `program` | The program to run, found like an engine (`PATH`, Dogubako's `bin` folder). When it is a required dependency's id or one of its programs (`whisper`, or `lpstat` for `cups`), it is found the same way that dependency is, including Dogubako's own engines and `DOGUBAKO_<ID>_PATH`; another program installed next to a required dependency (`pdftotext` with `poppler`) is taken from that folder |
 | `args` | A list of arguments. Strings may contain placeholders; `{ when = "param", args = [...] }` groups are included only when the parameter is true or non-empty |
 
 ### `[output]`
