@@ -368,15 +368,15 @@ async fn get_tool(
     p: Principal,
     Path(id): Path<String>,
 ) -> ApiResult<Json<Value>> {
-    let visible = s
-        .engine
-        .catalog()
+    let tools = s.engine.snapshot();
+    let visible = tools
+        .catalog
         .find(&id)
         .is_some_and(|t| p.is_admin() || p.can_use(t.spec()));
     if !visible {
         return Err(ApiError::not_found("unknown tool"));
     }
-    let t = s.engine.find(&id).map_err(|e| match e {
+    let t = tools.find(&id).map_err(|e| match e {
         ToolError::NotInstalled { .. } => ApiError::from(e),
         _ => ApiError::not_found("unknown tool"),
     })?;

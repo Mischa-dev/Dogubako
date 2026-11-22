@@ -148,12 +148,41 @@ impl ReloadReport {
     }
 }
 
-pub struct Engine {
+/// One consistent view of the tools, swapped whole by a reload.
+#[derive(Clone)]
+pub struct Registries {
     /// Installed tools: those whose pack is turned on. Every interface lists
-    /// and runs tools from here; read it with [`Engine::registry`].
-    registry: RwLock<Arc<Registry>>,
+    /// and runs tools from here.
+    pub installed: Arc<Registry>,
     /// Every registered tool, including those of turned-off packs.
-    catalog: RwLock<Arc<Registry>>,
+    pub catalog: Arc<Registry>,
+}
+
+impl Registries {
+    /// An installed tool by id or MCP name; a known tool of a turned-off pack
+    /// is [`ToolError::NotInstalled`].
+    pub fn find(&self, id: &str) -> ToolResult<Arc<dyn Tool>> {
+        if let Some(t) = self.installed.find(id) {
+            return Ok(t.clone());
+        }
+        Err(self
+            .not_installed(id)
+            .unwrap_or_else(|| ToolError::NotFound { id: id.to_string() }))
+    }
+
+    /// The error for a tool that exists but whose pack is turned off.
+    pub fn not_installed(&self, id: &str) -> Option<ToolError> {
+        if self.installed.find(id).is_some() {
+            return None;
+        }
+        self.catalog
+            .find(id)
+            .map(|t| ToolError::not_installed(&t.spec().id, &t.spec().pack))
+    }
+}
+
+pub struct Engine {
+    tools: RwLock<Registries>,
     extensions: RwLock<Arc<Vec<ExtensionStatus>>>,
     loader: RwLock<Option<RegistryLoader>>,
     /// Serializes reloads so two cannot interleave their diff and swap.
@@ -174,8 +203,10 @@ impl Engine {
     pub fn with_deps(registry: Registry, config: EngineConfig, deps: DepRegistry) -> Self {
         let installed = registry.filtered(|s| config.packs.is_on(&s.pack));
         Engine {
-            registry: RwLock::new(Arc::new(installed)),
-            catalog: RwLock::new(Arc::new(registry)),
+            tools: RwLock::new(Registries {
+                installed: Arc::new(installed),
+                catalog: Arc::new(registry),
+            }),
             extensions: RwLock::new(Arc::new(vec![])),
             loader: RwLock::new(None),
             reloading: Mutex::new(()),
@@ -207,12 +238,18 @@ impl Engine {
     /// The current tool set. Hold the returned snapshot for the length of one
     /// request; a reload swaps in a new one without affecting it.
     pub fn registry(&self) -> Arc<Registry> {
-        self.registry.read().unwrap().clone()
+        self.tools.read().unwrap().installed.clone()
     }
 
     /// Every registered tool, including those of turned-off packs.
     pub fn catalog(&self) -> Arc<Registry> {
-        self.catalog.read().unwrap().clone()
+        self.tools.read().unwrap().catalog.clone()
+    }
+
+    /// Installed and catalog tools from the same load; use it when a request
+    /// reads both, so a reload in between cannot mix two versions.
+    pub fn snapshot(&self) -> Registries {
+        self.tools.read().unwrap().clone()
     }
 
     /// Extension manifests found by the last load, trusted or not.
@@ -287,8 +324,10 @@ impl Engine {
         report.added.sort();
         report.removed.sort();
         report.changed.sort();
-        *self.registry.write().unwrap() = Arc::new(registry);
-        *self.catalog.write().unwrap() = Arc::new(catalog);
+        *self.tools.write().unwrap() = Registries {
+            installed: Arc::new(registry),
+            catalog: Arc::new(catalog),
+        };
         *self.extensions.write().unwrap() = Arc::new(extensions);
         if report.tool_set_changed() {
             self.generation.send_modify(|g| *g += 1);
@@ -426,22 +465,12 @@ impl Engine {
     /// An installed tool by id or MCP name; a known tool of a turned-off pack
     /// is [`ToolError::NotInstalled`].
     pub fn find(&self, id: &str) -> ToolResult<Arc<dyn Tool>> {
-        if let Some(t) = self.registry().find(id) {
-            return Ok(t.clone());
-        }
-        Err(self
-            .not_installed(id)
-            .unwrap_or_else(|| ToolError::NotFound { id: id.to_string() }))
+        self.snapshot().find(id)
     }
 
     /// The error for a tool that exists but whose pack is turned off.
     pub fn not_installed(&self, id: &str) -> Option<ToolError> {
-        if self.registry().find(id).is_some() {
-            return None;
-        }
-        self.catalog()
-            .find(id)
-            .map(|t| ToolError::not_installed(&t.spec().id, &t.spec().pack))
+        self.snapshot().not_installed(id)
     }
 
     /// Every built-in pack, with its tool count, state and what it uses.

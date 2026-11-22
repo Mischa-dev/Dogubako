@@ -162,9 +162,9 @@ impl JobManager {
         via: &str,
         quota_default_mb: u64,
     ) -> ApiResult<JobView> {
-        let spec = self
-            .engine
-            .catalog()
+        let tools = self.engine.snapshot();
+        let spec = tools
+            .catalog
             .find(tool_id)
             .ok_or_else(|| ApiError::not_found(format!("unknown tool '{tool_id}'")))?
             .spec()
@@ -183,10 +183,10 @@ impl JobManager {
                 spec.id
             )));
         }
-        if let Some(e) = self.engine.not_installed(tool_id) {
+        if let Some(e) = tools.not_installed(tool_id) {
             return Err(ApiError::from(e));
         }
-        let tool = self.engine.find(tool_id).map_err(ApiError::from)?;
+        let tool = tools.find(tool_id).map_err(ApiError::from)?;
         if self.db.storage_used(&principal.user_id) >= principal.quota_bytes(quota_default_mb) {
             return Err(ApiError::too_large(
                 "storage quota exceeded; delete some files first",

@@ -39,12 +39,12 @@ impl McpBackend for ServerBackend {
 
     fn not_installed(&self, name: &str) -> Option<ToolError> {
         let perms = self.principal.permissions(self.state.host_fs_enabled());
-        let catalog = self.state.engine.catalog();
-        let spec = catalog.find(name)?.spec();
+        let tools = self.state.engine.snapshot();
+        let spec = tools.catalog.find(name)?.spec();
         if !self.principal.can_use(spec) || !perms.missing(&spec.permissions).is_empty() {
             return None;
         }
-        self.state.engine.not_installed(name)
+        tools.not_installed(name)
     }
     fn file_mode(&self) -> &'static str {
         "id"
