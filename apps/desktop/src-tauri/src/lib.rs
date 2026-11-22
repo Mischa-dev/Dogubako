@@ -304,6 +304,48 @@ async fn test_extension(state: State<'_, Desktop>, id: String) -> Result<dogubak
     dogubako_core::extensions::test(&state.engine, &state.dirs.extensions, &id).await.map_err(|e| e.to_string())
 }
 
+async fn store_index(state: &Desktop) -> Result<dogubako_core::store::LoadedIndex, String> {
+    let url = dogubako_core::store::local_url().ok_or_else(|| dogubako_core::store::disabled_error().to_string())?;
+    dogubako_core::store::load_index(&url, &state.dirs.extensions, &state.engine.config.net).await.map_err(|e| e.to_string())
+}
+
+/// Search the tool store (cached index when offline).
+#[tauri::command]
+async fn store_search(state: State<'_, Desktop>, query: Option<String>) -> Result<Value, String> {
+    use dogubako_core::store;
+    let index = store_index(&state).await?;
+    let tools = store::search(store::annotate(&index.index, &state.engine, &state.dirs.extensions), query.as_deref().unwrap_or(""));
+    Ok(json!({ "index": index, "tools": tools }))
+}
+
+/// Tools installed from the store with their version and available updates.
+#[tauri::command]
+async fn store_installed(state: State<'_, Desktop>) -> Result<Value, String> {
+    use dogubako_core::store;
+    let index = store_index(&state).await?;
+    let tools: Vec<_> = store::annotate(&index.index, &state.engine, &state.dirs.extensions).into_iter().filter(|t| t.installed).collect();
+    Ok(json!({ "index": index, "tools": tools }))
+}
+
+/// Install a store tool after checking its SHA-256 against the index.
+#[tauri::command]
+async fn store_install(app: tauri::AppHandle, state: State<'_, Desktop>, id: String) -> Result<dogubako_core::extensions::ExtensionReport, String> {
+    let index = store_index(&state).await?;
+    let report = dogubako_core::store::install(&state.engine, &state.dirs.extensions, &index, &id, false).await.map_err(|e| e.to_string())?;
+    let _ = app.emit(TOOLS_CHANGED, json!({ "added": [report.id.clone()] }));
+    Ok(report)
+}
+
+/// Update store tools with a newer version in the index (one, or all).
+#[tauri::command]
+async fn store_update(app: tauri::AppHandle, state: State<'_, Desktop>, id: Option<String>) -> Result<Value, String> {
+    let index = store_index(&state).await?;
+    let reports = dogubako_core::store::update(&state.engine, &state.dirs.extensions, &index, id.as_deref()).await.map_err(|e| e.to_string())?;
+    let changed: Vec<String> = reports.iter().map(|r| r.id.clone()).collect();
+    let _ = app.emit(TOOLS_CHANGED, json!({ "changed": changed }));
+    Ok(json!({ "updated": reports }))
+}
+
 #[tauri::command]
 fn cancel_run(state: State<'_, Desktop>, run_id: String) {
     // The web app only cancels runs it has started, so a missing entry means
@@ -547,6 +589,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
+            store_search,
+            store_installed,
+            store_install,
+            store_update,
             list_tools,
             list_packs,
             packs_status,

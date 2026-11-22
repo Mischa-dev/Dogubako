@@ -280,3 +280,20 @@ export interface AdminConfig {
 export type ExtensionSetting = ParamSpec & { secret: boolean; set: boolean; value?: unknown };
 
 export interface ExtensionSettings { id: string; name: string; settings: ExtensionSetting[] }
+
+/** A tool in the official store, with what is installed here. */
+export interface StoreTool {
+  id: string; name: string; description: string; keywords: string[]; category: string;
+  version: string; sha256: string; permissions: string[]; requires: string[]; platforms: string[]; url: string;
+  installed: boolean;
+  installed_version?: string;
+  update_available: boolean;
+}
+/** The store index in use: `offline` means the cached copy (fetching failed). */
+export interface StoreIndexInfo { url: string; offline: boolean; fetched_at: number; error?: string }
+export interface StoreResult { index: StoreIndexInfo; tools: StoreTool[] }
+/** Outcome of an install or test (`ExtensionReport`). */
+export interface ExtensionReport {
+  id: string; name: string; version: string; sha256: string; passed: boolean; loaded: boolean; trusted: boolean;
+  error?: string | null; tests: { name: string; status: 'passed' | 'failed' | 'skipped'; error?: string | null }[];
+}

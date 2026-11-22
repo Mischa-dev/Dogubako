@@ -1,0 +1,38 @@
+[tool]
+id = "data.exchange-rates"
+name = "Exchange rates"
+category = "data"
+description = "Latest reference exchange rates from the European Central Bank (Frankfurter, no API key)"
+version = "1.0.0"
+keywords = ["currency", "exchange", "rates", "forex", "ecb", "money"]
+
+[http]
+url = "https://api.frankfurter.app/latest?from={from}&to={to}"
+timeout_secs = 30
+
+[output]
+json = { base = "$.base", date = "$.date", rates = "$.rates" }
+
+[[params]]
+name = "from"
+label = "From currency"
+type = "text"
+default = "USD"
+
+[[params]]
+name = "to"
+label = "To currencies (comma-separated)"
+type = "text"
+default = "EUR,GBP,JPY"
+
+[[tests]]
+name = "returns rates for the base currency"
+params = { from = "USD", to = "EUR" }
+http = { json = { amount = 1.0, base = "USD", date = "2026-11-20", rates = { EUR = 0.92 } } }
+expect = { json = { "$.base" = "USD", "$.rates.EUR" = 0.92 } }
+
+[[tests]]
+name = "reports an unknown currency"
+params = { from = "XXX", to = "EUR" }
+http = { status = 404, json = { message = "not found" } }
+expect = { error = "external_failure" }

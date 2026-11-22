@@ -49,6 +49,9 @@ pub struct ServerConfig {
     /// Let admins install extension manifests over HTTP. Off by default:
     /// a manifest runs a host program, outside any sandbox unless one is set.
     pub allow_extension_install: bool,
+    /// Tool store index URL (`DOGUBAKO_STORE_URL`); empty turns the store off.
+    /// Self-hosters can point it at their own copy of the index.
+    pub store_url: String,
     pub mcp_enabled: bool,
     /// Default MCP discovery mode: "full" or "compact".
     pub mcp_discovery: String,
@@ -108,6 +111,7 @@ impl Default for ServerConfig {
             fs_roots: vec![],
             allow_private_network: false,
             allow_extension_install: false,
+            store_url: dogubako_core::store::OFFICIAL_INDEX_URL.into(),
             mcp_enabled: true,
             mcp_discovery: "full".into(),
             packs: PackSelection::all(),
@@ -232,6 +236,9 @@ impl ServerConfig {
         if let Some(v) = env_bool("ALLOW_EXTENSION_INSTALL") {
             cfg.allow_extension_install = v;
         }
+        if let Ok(v) = std::env::var("DOGUBAKO_STORE_URL") {
+            cfg.store_url = v;
+        }
         if let Some(v) = env_bool("MCP_ENABLED") {
             cfg.mcp_enabled = v;
         }
@@ -334,6 +341,11 @@ impl ServerConfig {
             .clone()
             .unwrap_or_else(|| self.data_dir.join("models"))
     }
+    /// The tool store index URL, or `None` when the store is turned off.
+    pub fn store_url(&self) -> Option<String> {
+        dogubako_core::store::resolve_url(Some(&self.store_url))
+    }
+
     pub fn extensions_dir(&self) -> PathBuf {
         self.extensions_dir
             .clone()

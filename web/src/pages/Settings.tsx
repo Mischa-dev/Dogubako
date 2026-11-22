@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Settings as SettingsIcon, SlidersHorizontal, Package, Brain, Info, Sun, Moon, Monitor, RefreshCw, CircleCheck, CircleDashed,
-  Download, Trash2, ExternalLink, ChevronRight, Sparkles, Puzzle, Wrench,
+  Download, Trash2, ExternalLink, ChevronRight, Sparkles, Puzzle, Wrench, Store, Search,
 } from 'lucide-react';
 import { AssistantSettingsPanel } from '../components/ModelPicker';
 import { ToolsSettings } from '../components/Packs';
-import type { DepInfo, ExtensionSetting, ExtensionSettings, ModelDownload, ModelInfo } from '../lib/types';
+import type { DepInfo, ExtensionReport, ExtensionSetting, ExtensionSettings, ModelDownload, ModelInfo, StoreResult, StoreTool } from '../lib/types';
 import { useApp, notifyToolsChanged } from '../lib/app';
 import { asServer } from '../lib/backend';
 import { href } from '../lib/router';
@@ -22,6 +22,7 @@ const SECTIONS = [
   { id: 'tools', label: 'Tools', icon: Wrench },
   { id: 'dependencies', label: 'Dependencies', icon: Package },
   { id: 'models', label: 'Models', icon: Brain },
+  { id: 'store', label: 'Tool store', icon: Store },
   { id: 'extensions', label: 'Extensions', icon: Puzzle },
   { id: 'about', label: 'About', icon: Info },
 ] as const;
@@ -45,6 +46,7 @@ export default function SettingsPage({ section = 'general' }: { section?: string
           {cur.id === 'tools' && <ToolsSection />}
           {cur.id === 'dependencies' && <Dependencies />}
           {cur.id === 'models' && <Models />}
+          {cur.id === 'store' && <ToolStore />}
           {cur.id === 'extensions' && <Extensions />}
           {cur.id === 'about' && <About />}
         </div>
@@ -367,6 +369,75 @@ function About() {
         used under their own licenses and are not bundled unless stated by your distribution. Downloadable models are distributed under the
         licenses listed in Settings → Models. Full third-party notices ship with each release.
       </p>
+    </Section>
+  );
+}
+
+function reportError(r: ExtensionReport): string | null {
+  if (r.error) return r.error;
+  const failed = r.tests?.filter((t) => t.status === 'failed') ?? [];
+  return failed.length ? `${failed.length} test${failed.length > 1 ? 's' : ''} failed: ${failed.map((t) => t.name).join(', ')}` : null;
+}
+
+/** Settings → Tool store: install official tools on top of the bundled ones, and update them. */
+export function ToolStore() {
+  const { backend, isAdmin, isServer } = useApp();
+  const canEdit = !isServer || isAdmin;
+  const [query, setQuery] = useState('');
+  const [res, setRes] = useState<StoreResult | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = useCallback(async (q: string) => {
+    if (!backend.storeSearch) { setErr('The tool store is not available here.'); return; }
+    try { setRes(await backend.storeSearch(q)); setErr(null); } catch (e) { setErr(errorText(e)); }
+  }, [backend]);
+  useEffect(() => { if (canEdit) void load(''); }, [load, canEdit]);
+  const act = async (t: StoreTool, update: boolean) => {
+    setBusy(t.id);
+    try {
+      const reports = update && backend.storeUpdate ? (await backend.storeUpdate(t.id)).updated : backend.storeInstall ? [await backend.storeInstall(t.id)] : [];
+      const bad = reports.map(reportError).find(Boolean);
+      if (bad) toast.error(`${t.name}: ${bad}`); else toast.success(`${update ? 'Updated' : 'Installed'} ${t.name} ${t.version}`);
+      notifyToolsChanged();
+      await load(query);
+    } catch (e) { toast.error(errorText(e)); } finally { setBusy(null); }
+  };
+  const tools = res?.tools ?? [];
+  const updates = tools.filter((t) => t.update_available);
+  return (
+    <Section title="Tool store" description="Official tools you can add on top of the bundled ones. Each is reviewed, pinned to the SHA-256 in the store index, and tested when installed.">
+      {!canEdit && <Callout tone="info">Only administrators can install tools from the store.</Callout>}
+      {res?.index.offline && <Callout tone="warn">Offline: showing the store as of {new Date(res.index.fetched_at * 1000).toLocaleString()}. Installing and updating need the network.</Callout>}
+      {err && <Callout tone="danger">{err}</Callout>}
+      {canEdit && (
+        <form className="row-gap" role="search" onSubmit={(e) => { e.preventDefault(); void load(query); }}>
+          <input className="input" type="search" aria-label="Search the tool store" placeholder="Search the tool store" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <Button type="submit" size="sm" variant="ghost"><Search size={14} aria-hidden />Search</Button>
+          {updates.length > 1 && <Button type="button" size="sm" disabled={!!busy} onClick={async () => { for (const t of updates) await act(t, true); }}>Update all ({updates.length})</Button>}
+        </form>
+      )}
+      {canEdit && !res && !err && <Spinner />}
+      {res && !tools.length && <p className="muted">No store tools match.</p>}
+      {tools.map((t) => (
+        <div key={t.id} className="settings-card" aria-label={t.name}>
+          <div className="setting-row">
+            <div className="setting-text">
+              <span className="setting-label">{t.name} <span className="muted mono">{t.installed_version ?? t.version}</span></span>
+              <span className="setting-desc">{t.description}</span>
+              <span className="setting-desc mono">{t.id}{t.permissions.length ? ` · ${t.permissions.join(', ')}` : ''}{t.requires.length ? ` · needs ${t.requires.join(', ')}` : ''}</span>
+            </div>
+            <div className="setting-control">
+              {t.update_available ? (
+                <Button size="sm" disabled={!!busy} onClick={() => void act(t, true)}>{busy === t.id ? <Spinner /> : `Update to ${t.version}`}</Button>
+              ) : t.installed ? (
+                <Badge tone="success">Installed</Badge>
+              ) : (
+                <Button size="sm" variant="ghost" disabled={!!busy || res?.index.offline} onClick={() => void act(t, false)}>{busy === t.id ? <Spinner /> : <><Download size={14} aria-hidden />Install</>}</Button>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
     </Section>
   );
 }

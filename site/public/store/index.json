@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "tools": [
+    {
+      "id": "data.exchange-rates",
+      "name": "Exchange rates",
+      "description": "Latest reference exchange rates from the European Central Bank (Frankfurter, no API key)",
+      "keywords": [
+        "currency",
+        "exchange",
+        "rates",
+        "forex",
+        "ecb",
+        "money"
+      ],
+      "category": "data",
+      "version": "1.0.0",
+      "sha256": "6a5b73486906cd75488e8c45886c8a011e6efb43b63f725e1b88820936fe2b66",
+      "permissions": [
+        "network"
+      ],
+      "requires": [],
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "url": "data.exchange-rates/manifest.toml"
+    },
+    {
+      "id": "data.weather",
+      "name": "Current weather",
+      "description": "Current temperature, wind and weather code for a location (Open-Meteo, no API key)",
+      "keywords": [
+        "weather",
+        "temperature",
+        "forecast",
+        "open-meteo"
+      ],
+      "category": "data",
+      "version": "1.0.0",
+      "sha256": "a605a8874e259054dc77f34213aa942d845d56f59234207fcc6b331a0bb2edda",
+      "permissions": [
+        "network"
+      ],
+      "requires": [],
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "url": "data.weather/manifest.toml"
+    },
+    {
+      "id": "text.define",
+      "name": "Define a word",
+      "description": "English dictionary definitions, parts of speech and phonetics (Free Dictionary API)",
+      "keywords": [
+        "dictionary",
+        "definition",
+        "meaning",
+        "word",
+        "english"
+      ],
+      "category": "text",
+      "version": "1.0.0",
+      "sha256": "06e4dcd2a1f2fb3b4ca536d0e5ea3275f81384cc0c731183c2793dbad9e20244",
+      "permissions": [
+        "network"
+      ],
+      "requires": [],
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "url": "text.define/manifest.toml"
+    }
+  ]
+}

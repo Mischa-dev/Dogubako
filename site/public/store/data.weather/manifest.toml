@@ -1,0 +1,34 @@
+[tool]
+id = "data.weather"
+name = "Current weather"
+category = "data"
+description = "Current temperature, wind and weather code for a location (Open-Meteo, no API key)"
+version = "1.0.0"
+keywords = ["weather", "temperature", "forecast", "open-meteo"]
+
+[http]
+url = "https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m,wind_speed_10m,weather_code"
+timeout_secs = 30
+
+[output]
+json = { temperature = "$.current.temperature_2m", temperature_unit = "$.current_units.temperature_2m", wind_speed = "$.current.wind_speed_10m", wind_speed_unit = "$.current_units.wind_speed_10m", weather_code = "$.current.weather_code" }
+
+[[params]]
+name = "latitude"
+type = "number"
+min = -90
+max = 90
+required = true
+
+[[params]]
+name = "longitude"
+type = "number"
+min = -180
+max = 180
+required = true
+
+[[tests]]
+name = "reads the current conditions"
+params = { latitude = 40.01, longitude = -105.27 }
+http = { json = { current = { temperature_2m = 21.5, wind_speed_10m = 8.2, weather_code = 1 }, current_units = { temperature_2m = "°C", wind_speed_10m = "km/h" } } }
+expect = { json = { "$.temperature" = 21.5, "$.temperature_unit" = "°C", "$.weather_code" = 1 } }

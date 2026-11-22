@@ -357,6 +357,42 @@ pub fn spec(engine: &Engine) -> Value {
         ),
     );
     add(
+        "/api/v1/store",
+        "get",
+        op(
+            "Search the official tool store (?q=words); returns {index: {url, offline, fetched_at}, tools: [{id, name, version, sha256, installed, installed_version, update_available, ...}]}. Uses the cached index when offline (admin)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/store/installed",
+        "get",
+        op(
+            "Tools installed from the store with their store version and whether an update is available (admin)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/store/install",
+        "post",
+        op(
+            "Install a store tool by id: refuses a manifest whose SHA-256 differs from the index, then validates, trusts, reloads and tests it. Body {id} (admin; needs allow_extension_install)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
+        "/api/v1/store/update",
+        "post",
+        op(
+            "Update store tools that have a newer version in the index. Body {id?}; returns {updated: [reports]} (admin; needs allow_extension_install)",
+            "admin",
+            json!({}),
+        ),
+    );
+    add(
         "/api/v1/tools/events",
         "get",
         op(
